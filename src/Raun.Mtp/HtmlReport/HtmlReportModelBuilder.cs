@@ -97,14 +97,18 @@ internal sealed class HtmlReportModelBuilder
 
         public Type? WaitedFor { get; set; }
 
-        public bool HasSteps => _results.Count > 0;
+        // SkipScenarioAsync reports a scenario that never ran with StartedAt = default; such results
+        // have no place on a timeline.
+        private IEnumerable<StepResult> Timed => _results.Where(r => r.StartedAt != default);
 
-        public DateTimeOffset Start => _results.Count == 0 ? DateTimeOffset.UnixEpoch : _results.Min(r => r.StartedAt);
+        public bool HasSteps => Timed.Any();
 
-        /// <summary>Latest step end relative to <see cref="Start"/>, in ms; 0 with no steps.</summary>
-        public double DurationMs => _results.Count == 0
-            ? 0
-            : _results.Max(r => Ms(r.StartedAt - Start) + Ms(r.Duration));
+        public DateTimeOffset Start => Timed.Any() ? Timed.Min(r => r.StartedAt) : DateTimeOffset.UnixEpoch;
+
+        /// <summary>Latest step end relative to <see cref="Start"/>, in ms; 0 with no timed steps.</summary>
+        public double DurationMs => Timed.Any()
+            ? Timed.Max(r => Ms(r.StartedAt - Start) + Ms(r.Duration))
+            : 0;
 
         public void Add(StepResult result) => _results.Add(result);
 
@@ -119,6 +123,9 @@ internal sealed class HtmlReportModelBuilder
             for (var i = 0; i < ordered.Count; i++)
             {
                 var r = ordered[i];
+                // A result with StartedAt = default never ran (SkipScenarioAsync); it has no real
+                // offset from start, so pin it to 0 rather than subtracting into a huge negative span.
+                var offset = r.StartedAt == default ? 0 : Ms(r.StartedAt - start);
                 steps.Add(new ReportStep
                 {
                     StepId = r.Node.StepId,
@@ -127,7 +134,7 @@ internal sealed class HtmlReportModelBuilder
                     Phase = r.Node.Phase,
                     DisplayName = r.DisplayName,
                     Status = StatusText(r.Status),
-                    OffsetMs = Ms(r.StartedAt - start),
+                    OffsetMs = offset,
                     DurationMs = Ms(r.Duration),
                     Lane = lanes[i],
                     DependsOn = r.Node.DependsOn,
@@ -229,7 +236,7 @@ internal sealed class HtmlReportModelBuilder
             var lanes = new int[ordered.Count];
             for (var i = 0; i < ordered.Count; i++)
             {
-                var s = Ms(ordered[i].StartedAt - start);
+                var s = ordered[i].StartedAt == default ? 0 : Ms(ordered[i].StartedAt - start);
                 var e = s + Ms(ordered[i].Duration);
                 var lane = -1;
                 for (var l = 0; l < laneEnds.Count; l++)

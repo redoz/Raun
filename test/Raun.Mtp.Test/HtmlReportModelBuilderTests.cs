@@ -304,6 +304,33 @@ public class HtmlReportModelBuilderTests
     }
 
     [Fact]
+    public void Scenarios_skipped_by_a_failed_preflight_carry_no_time_and_leave_the_wall_span_to_what_ran()
+    {
+        // A failed preflight (the "raun" scenario) really ran for 40 ms; the two selected scenarios
+        // were skip-published with StartedAt = default (see RaunRunLoop.SkipScenarioAsync). Their
+        // default timestamps must not become the wall-span origin.
+        var preflight = Def("raun", Node(0, "pf", "Given", "Preflight"));
+        var a = Def("a", Node(0, "a0", "Given", "a0"));
+        var b = Def("b", Node(0, "b0", "Given", "b0"));
+
+        var builder = new HtmlReport.HtmlReportModelBuilder();
+        builder.OnRunStarted([preflight, a, b]);
+        builder.OnScenarioStarted(preflight);
+        builder.OnStepFinished(preflight, Result(preflight.Nodes[0], T0, 40, StepStatus.Failed));
+        builder.OnScenarioStarted(a);
+        builder.OnStepFinished(a, Result(a.Nodes[0], default, 0, StepStatus.Skipped));
+        builder.OnScenarioStarted(b);
+        builder.OnStepFinished(b, Result(b.Nodes[0], default, 0, StepStatus.Skipped));
+
+        var model = builder.Build("2026-09-06T00:00:00Z");
+        Assert.Equal(40, model.Summary.TotalMs);
+        Assert.Equal(["raun", "a", "b"], model.Scenarios.Select(s => s.ScenarioId));
+        Assert.Equal(0, model.Scenarios[1].Steps[0].OffsetMs);
+        Assert.Equal(0, model.Scenarios[1].DurationMs);
+        Assert.Equal("skipped", model.Scenarios[1].Status);
+    }
+
+    [Fact]
     public void Uses_and_wait_are_carried_per_scenario()
     {
         var def = new ScenarioDefinition
