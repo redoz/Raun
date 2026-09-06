@@ -1,7 +1,7 @@
 # Concurrent scenarios and contended resources — Design
 
 - **Date:** 2026-09-06
-- **Status:** Approved in brainstorm (Patrik, 2026-09-06). Not yet built.
+- **Status:** Built 2026-09-06 (plan: docs/superpowers/plans/2026-09-06-concurrent-scenarios.md).
 - **Supersedes:** the "Tier 3 — deferred: type-level admission across scenarios" section of
   `2026-09-05-resource-conflict-detection-design.md`. Admission is now *declared* by the suite, not
   derived from lifecycle roles. Lifecycle roles (`[Created]`, `[Edited]`, `[Read]`, …), the
@@ -225,9 +225,9 @@ Code sets the suite default; the command line overrides per run.
 - `ReportSummary.TotalMs` becomes the wall span: latest scenario end minus earliest scenario start
   over the scenarios that ran. The template already labels it "wall clock"; the builder was
   summing, which double-counts once scenarios overlap. The Verify snapshot updates.
-- `ReportScenario` gains `Uses` (a list of `"Type:Mode"` strings) and `WaitedMs`. The template shows
-  one line in the scenario header when `WaitedMs > 0`: `waited 1.2 s for Database`. Nothing else
-  in the template changes.
+- `ReportScenario` gains `Uses` (a list of `"Type:Mode"` strings), `WaitedMs`, and `WaitedFor` (the
+  refusing type's name, for the header line). The template shows one line in the scenario header
+  when `WaitedMs > 0`: `waited 1.2 s for Database`. Nothing else in the template changes.
 
 ## Tracing (amendment to `2026-09-06-tracing-design.md`)
 

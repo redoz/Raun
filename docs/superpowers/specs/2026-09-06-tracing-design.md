@@ -122,3 +122,11 @@ process is needed. Needs an experiment against the testing builder's port random
 - **Links from step to scenario:** one trace per step, story scattered.
 - **Spans for skipped steps:** noise; an event on the scenario span carries the same information.
 - **Simulated timestamps on spans:** a viewer would show 2026-06-19 for a run made today.
+
+## Amendment 2026-09-06 — concurrent scenarios
+
+Scenario spans gain `raun.scenario.uses` (`Type:Mode` list, absent when none), and, when admission
+held the scenario back behind a contended resource, `raun.scenario.waited_ms` and
+`raun.scenario.waited_for`. Scenario spans stay roots linked to the run span; concurrent scenarios
+are separate traces (`RunLoopTests.Concurrent_scenarios_keep_their_own_traces_and_step_parents`).
+See `2026-09-06-concurrent-scenarios-design.md`.

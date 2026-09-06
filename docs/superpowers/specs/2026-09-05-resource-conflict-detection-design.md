@@ -160,6 +160,9 @@ an explicit opt-in only when a real scenario needs it. No design until then.
 
 ## Tier 3 — deferred: type-level admission across scenarios
 
+> **Superseded 2026-09-06** by `2026-09-06-concurrent-scenarios-design.md`: cross-scenario admission
+> is declared with `[ContendedResource]`/`[Uses<T>]`, not derived from roles.
+
 When scenarios run concurrently (they do not yet — `RaunRunLoop` is sequential), the run loop
 gains admission control: a scenario starts only when its **static, type-level claim set** (every
 role-bearing parameter/return type with its `LockMode`, emitted by the generator onto the

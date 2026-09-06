@@ -30,7 +30,8 @@ dotnet run --project samples/AppointmentTests/AppointmentTests.csproj
 dotnet run --project samples/AspireAppointments/AspireAppointments.Tests/AspireAppointments.Tests.csproj
 ```
 
-- MTP rejects `--nologo` and `--filter` on the command line. Run whole projects.
+- MTP rejects `--nologo` and `--filter` on the command line. Run whole projects;
+  `--max-parallel-scenarios 1` makes a run sequential when you need deterministic output order.
 - Verify snapshots: a changed snapshot leaves a `*.received.*` file next to the `*.verified.*` one
   under `test/Raun.Generator.Test/Snapshots`. Review the diff, then move received over verified.
 - `AnalysisLevel=latest-all` with `TreatWarningsAsErrors`: expect CA/IDE rules to fail the build;
@@ -59,3 +60,8 @@ dotnet run --project samples/AspireAppointments/AspireAppointments.Tests/AspireA
   a `TypeLoadException` after tests pass is a version mismatch, not a coverage bug.
 - All Aspire work must happen inside the preflight delegate; building a `DistributedApplication`
   during discovery disposes an unstarted one and probes for a container runtime.
+- Scenarios run concurrently by default (`--max-parallel-scenarios 1` makes a run sequential), so
+  console and step-completion order across scenarios varies run to run. The HTML report lists
+  scenarios in registration order regardless.
+- A scenario header reading "waited 1.2 s for Database" is admission control, not slowness: an
+  `[Uses<T>]` declaration held it back behind a running scenario.

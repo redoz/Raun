@@ -64,7 +64,7 @@ for Roslyn 5.3 and newer.
    never executed directly.
 3. The generator lowers each body into a dependency graph (`ScenarioDefinition`): one node per
    step, with **source-order + dataflow** edges, and tuple/array forms lowered to parallel
-   sibling groups. An analyzer (`RAUN000`–`RAUN014`) rejects anything outside the supported subset
+   sibling groups. An analyzer (`RAUN000`–`RAUN015`) rejects anything outside the supported subset
    and catches authoring mistakes at compile time.
 4. At run time, the MTP test framework discovers each `[Scenario]`, runs the graph through a DAG
    scheduler, and reports **every step as its own test** — passed, failed, skipped, or not taken.
@@ -98,6 +98,47 @@ The HTML report shows every step on a timeline (a Gantt of the actual concurrenc
 timer from scenario start, its resource effects, and a resource lane across the scenario. In an IDE's
 test explorer each step is a test node; selecting one step runs everything up to and including it —
 its dependencies, merge sources, guard conditions, and teardown — and nothing after it.
+
+### Scenarios run in parallel
+
+Scenarios are independent by contract: each gets its own DI scope, context, and trace, and you own
+the isolation of the data it touches — unique patients per scenario, not a shared `"Jane"`. The same
+goes for anything registered `AddSingleton` and for process-wide state: several scenarios now touch
+it at once. Raun runs them concurrently, up to the processor count by default. Steps inside a
+scenario still follow the graph; the degree counts scenarios.
+
+```bash
+dotnet run --project MyScenarios -- --max-parallel-scenarios 1   # one scenario at a time
+dotnet run --project MyScenarios -- --max-parallel-scenarios 4
+```
+
+The code default is the `maxParallelScenarios` argument of `RaunTestApplication.RunAsync` (or
+`MaxParallelScenarios` on the Aspire options); the command line overrides it per run.
+
+When scenarios genuinely contend for something — one database a few scenarios need to themselves,
+three SMTP servers, a serial port — declare it with a token type and `[Uses<T>]`:
+
+```csharp
+[SharedResource]     public sealed class Database : IContendedResource;   // any number; Exclusive serializes
+[ExclusiveResource]  public sealed class SerialPort : IContendedResource; // one at a time
+[PooledResource(3)]  public sealed class Smtp : IContendedResource;       // up to three
+
+[Uses<Database>]                        // shared use; put it on a step, a scenario, a class, or the assembly
+[Uses<Database>(LockMode.Exclusive)]    // waits for every holder to finish, then keeps them out
+[Scenario("the schema migrates cleanly")]
+public static async Task SchemaMigrates() { … }
+```
+
+| | Shared use (default) | Exclusive use |
+|---|---|---|
+| `[ExclusiveResource]` | the one slot | the one slot |
+| `[SharedResource]` | free | waits for zero holders, blocks new ones |
+| `[PooledResource(N)]` | one of N | all N |
+
+A scenario's whole set is acquired before it starts and released after its teardown, so nothing ever
+waits while holding: no deadlocks. Time spent waiting shows on the scenario's span
+(`raun.scenario.waited_ms`) and in the HTML report's scenario header. The token is a name, not a
+service — register it in DI yourself if it is also one.
 
 ## Supported scenario subset
 
@@ -272,7 +313,7 @@ to one collector.
 | Project | What it is |
 | --- | --- |
 | `src/Raun` | Runner-neutral core: phase markers, parallel awaiters, `ScenarioContext`, the graph model, resources, teardown, tracing, and the DAG scheduler. |
-| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN014`). netstandard2.0, shipped inside `Raun.Mtp`. |
+| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN015`). netstandard2.0, shipped inside `Raun.Mtp`. |
 | `src/Raun.Mtp` | Microsoft.Testing.Platform test framework: `[Scenario]`, discovery, run loop, per-step node reporter, HTML report. |
 | `src/Raun.Aspire` | Aspire integration: builds the AppHost, starts it as the run's preflight while waiting for the resources you declare, registers it for your steps. Plumbing only — no phase markers, no steps. |
 | `samples/AppointmentTests` | End-to-end sample: linear, tuple, array, LINQ, conditionals, resources, teardown, logging, a custom phase marker; run with `--report-html` for the report showcase. |
