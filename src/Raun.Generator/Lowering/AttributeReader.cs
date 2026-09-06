@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -148,6 +149,28 @@ internal static class AttributeReader
         }
 
         return null;
+    }
+
+    /// <summary>Numeric value of <c>Raun.LockMode.Exclusive</c>. MUST stay identical to the runtime enum (separate assembly).</summary>
+    private const int LockModeExclusive = 1;
+
+    /// <summary>
+    /// Every <c>[Uses&lt;T&gt;]</c> among <paramref name="attributes"/>: the token type and the mode
+    /// name, <c>Shared</c> unless the attribute was given <c>LockMode.Exclusive</c>.
+    /// </summary>
+    public static IEnumerable<(INamedTypeSymbol Resource, string Mode)> Uses(ImmutableArray<AttributeData> attributes)
+    {
+        foreach (var attr in attributes)
+        {
+            if (attr.AttributeClass is { Name: "UsesAttribute", IsGenericType: true, TypeArguments.Length: 1 } cls
+                && cls.TypeArguments[0] is INamedTypeSymbol resource)
+            {
+                var exclusive = attr.ConstructorArguments.Length == 1
+                    && attr.ConstructorArguments[0].Value is int mode
+                    && mode == LockModeExclusive;
+                yield return (resource, exclusive ? "Exclusive" : "Shared");
+            }
+        }
     }
 
     private static int TimeoutMs(AttributeData? attr, string namedArgument)

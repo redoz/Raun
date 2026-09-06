@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -27,6 +28,10 @@ internal sealed class ScenarioParser
     // Namespaces that contain the invoked DSL extension members; imported into the generated file
     // so `Given.PatientExists(...)` resolves there too.
     private readonly HashSet<string> _dslNamespaces = [];
+
+    // Contended-resource uses accumulated from every [Uses<T>] site the scenario is subject to
+    // (fqn -> mode); Exclusive wins per type.
+    private readonly Dictionary<string, string> _uses = new(System.StringComparer.Ordinal);
 
     // Indices introduced by the previous top-level statement (source-order barrier / join target).
     private List<int> _prevFrontier = [];
@@ -96,6 +101,16 @@ internal sealed class ScenarioParser
             DependsOn = [],
         });
 
+        // Uses declared on the scenario itself, its containing classes (nested outward), and the
+        // assembly; the steps' DSL methods were merged as each step was lowered.
+        AddUses(_method.GetAttributes());
+        for (var type = _method.ContainingType; type is not null; type = type.ContainingType)
+        {
+            AddUses(type.GetAttributes());
+        }
+
+        AddUses(_model.Compilation.Assembly.GetAttributes());
+
         var usings = CollectUsings().ToList();
         foreach (var ns in _dslNamespaces)
         {
@@ -115,7 +130,21 @@ internal sealed class ScenarioParser
             SourceLine = line,
             Steps = [.. _steps],
             Usings = usings,
+            Uses = _uses.OrderBy(p => p.Key, System.StringComparer.Ordinal).Select(p => new ParsedUse(p.Key, p.Value)).ToList(),
         };
+    }
+
+    /// <summary>Merges the [Uses] on one site into the scenario's set; Exclusive wins per type.</summary>
+    private void AddUses(ImmutableArray<AttributeData> attributes)
+    {
+        foreach (var (resource, mode) in AttributeReader.Uses(attributes))
+        {
+            var fqn = resource.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (!_uses.TryGetValue(fqn, out var existing) || existing != "Exclusive")
+            {
+                _uses[fqn] = mode;
+            }
+        }
     }
 
     private bool ParseStatement(StatementSyntax statement)
@@ -661,6 +690,7 @@ internal sealed class ScenarioParser
         var wantsCtx = SymbolHelpers.WantsContext(method, invocation.ArgumentList.Arguments.Count);
         var callText = BuildCallText(invocation, member, replacements, wantsCtx);
         var resourceClaims = BuildResourceClaims(invocation, method, resultType is not null, replacements);
+        AddUses(method.GetAttributes());
 
         var (template, formatExpr) = DisplayNameBuilder.Build(_model, method, invocation.ArgumentList.Arguments, replacements);
 

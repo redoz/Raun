@@ -27,6 +27,11 @@ internal readonly record struct ResourceRoleClaim(string Verb, string Expression
 /// and its condition evaluates to <see cref="WhenValue"/>. Mirrors <c>Raun.Model.Guard</c>.</summary>
 internal readonly record struct ParsedGuard(int ConditionIndex, bool WhenValue);
 
+/// <summary>One reduced contended-resource use of a scenario: the token type's fully-qualified
+/// name (with <c>global::</c>) and the mode name (<c>Shared</c> or <c>Exclusive</c>) as spelled on
+/// <c>Raun.LockMode</c>.</summary>
+internal readonly record struct ParsedUse(string ResourceFqn, string Mode);
+
 /// <summary>A lowered scenario ready for emission.</summary>
 internal sealed record ParsedScenario
 {
@@ -43,6 +48,10 @@ internal sealed record ParsedScenario
 
     /// <summary>The scenario teardown policy as the underlying <c>Raun.Run</c> value.</summary>
     public int TeardownPolicy { get; init; }
+
+    /// <summary>Every [Uses&lt;T&gt;] the scenario is subject to, one per type (Exclusive wins),
+    /// sorted by <see cref="ParsedUse.ResourceFqn"/> so emission is deterministic. Empty ⇒ no initializer.</summary>
+    public IReadOnlyList<ParsedUse> Uses { get; init; } = [];
 }
 
 /// <summary>One lowered step (graph node).</summary>

@@ -579,4 +579,78 @@ public static class SampleSources
             }
         }
         """;
+
+    // Contended resources: an assembly-level use, a class-level use, a scenario-level use, and uses
+    // on DSL step methods. The expected reduction is Audit:Shared (assembly), Database:Exclusive
+    // (the step's Exclusive beats the class's Shared), Smtp:Shared (method and step agree).
+    public const string UsesDsl =
+        """
+        using System.Threading.Tasks;
+        using Raun;
+
+        [assembly: Uses<UsesDemo.Audit>]
+
+        namespace UsesDemo;
+
+        [SharedResource]
+        public sealed class Database : IContendedResource;
+
+        [ExclusiveResource]
+        public sealed class Smtp : IContendedResource;
+
+        [SharedResource]
+        public sealed class Audit : IContendedResource;
+
+        public static class UsesDsl
+        {
+            extension(Given)
+            {
+                [StepName("the schedule is empty")]
+                [Uses<Database>(LockMode.Exclusive)]
+                public static Task ScheduleIsEmpty() => Task.CompletedTask;
+
+                [StepName("a patient exists")]
+                public static Task PatientExists() => Task.CompletedTask;
+            }
+
+            extension(When)
+            {
+                [StepName("a reminder is sent")]
+                [Uses<Smtp>]
+                public static Task ReminderIsSent() => Task.CompletedTask;
+            }
+        }
+        """;
+
+    // Scenario appended to UsesDsl, continuing its file-scoped `namespace UsesDemo;`.
+    public const string UsesScenario =
+        """
+
+        [Uses<Database>]
+        public static class UsesScenarios
+        {
+            [Scenario("clears and reminds")]
+            [Uses<Smtp>]
+            public static async Task ClearAndRemind()
+            {
+                await Given.ScheduleIsEmpty();
+                await When.ReminderIsSent();
+            }
+        }
+        """;
+
+    // A scenario in the same DSL that touches no [Uses] site of its own: only the assembly and the
+    // step methods it calls count.
+    public const string UsesFreeScenario =
+        """
+
+        public static class PlainScenarios
+        {
+            [Scenario("just a patient")]
+            public static async Task JustAPatient()
+            {
+                await Given.PatientExists();
+            }
+        }
+        """;
 }

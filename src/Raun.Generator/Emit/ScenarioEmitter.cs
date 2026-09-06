@@ -159,19 +159,30 @@ internal static class ScenarioEmitter
             statements.Add(ExpressionStatement(assignment));
         }
 
+        var members = new List<ExpressionSyntax>
+        {
+            Set("ScenarioId", Lit(scenario.ScenarioId)),
+            Set("DisplayName", Lit(scenario.DisplayName)),
+            Set("MethodName", Lit(scenario.MethodFullName)),
+            Set("ClassDisplayName", Lit(scenario.ClassDisplayName)),
+            Set("SourceFile", Lit(scenario.SourceFile)),
+            Set("SourceLine", Num(scenario.SourceLine)),
+            Set("Timeout", Timeout(scenario.TimeoutMs)),
+            Set("TeardownPolicy", ParseExpression($"(global::Raun.Run){scenario.TeardownPolicy}")),
+            Set("Nodes", IdentifierName("nodes")),
+        };
+
+        // Only when declared, so use-free scenarios emit exactly what they did before.
+        if (scenario.Uses.Count > 0)
+        {
+            var entries = scenario.Uses.Select(u =>
+                $"new global::Raun.ContendedResourceUse(typeof({u.ResourceFqn}), global::Raun.LockMode.{u.Mode})");
+            members.Add(Set("Uses", ParseExpression(
+                "new global::Raun.ContendedResourceUse[] { " + string.Join(", ", entries) + " }")));
+        }
+
         var definition = ObjectCreationExpression(ParseTypeName("global::Raun.Model.ScenarioDefinition"))
-            .WithInitializer(InitializerExpression(SyntaxKind.ObjectInitializerExpression, SeparatedList<ExpressionSyntax>(
-            [
-                Set("ScenarioId", Lit(scenario.ScenarioId)),
-                Set("DisplayName", Lit(scenario.DisplayName)),
-                Set("MethodName", Lit(scenario.MethodFullName)),
-                Set("ClassDisplayName", Lit(scenario.ClassDisplayName)),
-                Set("SourceFile", Lit(scenario.SourceFile)),
-                Set("SourceLine", Num(scenario.SourceLine)),
-                Set("Timeout", Timeout(scenario.TimeoutMs)),
-                Set("TeardownPolicy", ParseExpression($"(global::Raun.Run){scenario.TeardownPolicy}")),
-                Set("Nodes", IdentifierName("nodes")),
-            ])));
+            .WithInitializer(InitializerExpression(SyntaxKind.ObjectInitializerExpression, SeparatedList(members)));
 
         statements.Add(ReturnStatement(definition));
 
