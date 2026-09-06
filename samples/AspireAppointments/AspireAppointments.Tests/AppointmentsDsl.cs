@@ -47,6 +47,16 @@ public static class AppointmentsDsl
             var response = await Api(ctx).As(Actor.Patient).CreateAsync(patient, slot);
             return response.StatusCode;
         }
+
+        [StepName("an admin clears the schedule")]
+        public static async Task AdminClearsSchedule(ScenarioContext? ctx = null)
+        {
+            var response = await Api(ctx).As(Actor.Admin).ClearAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"clear failed: {response.StatusCode}");
+            }
+        }
     }
 
     extension(Then)
@@ -68,5 +78,15 @@ public static class AppointmentsDsl
             => status == HttpStatusCode.Forbidden
                 ? Task.CompletedTask
                 : throw new InvalidOperationException($"expected Forbidden, got {status}");
+
+        [StepName("the schedule is empty")]
+        public static async Task ScheduleIsEmpty(ScenarioContext? ctx = null)
+        {
+            var remaining = await Api(ctx).As(Actor.Patient).ListAsync();
+            if (remaining.Length != 0)
+            {
+                throw new InvalidOperationException($"expected an empty schedule, found {remaining.Length} appointment(s)");
+            }
+        }
     }
 }

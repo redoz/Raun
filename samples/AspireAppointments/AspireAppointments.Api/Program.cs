@@ -51,6 +51,19 @@ app.MapGet("/appointments", (HttpContext http) =>
         ? Results.StatusCode(StatusCodes.Status401Unauthorized)
         : Results.Ok(appointments.Values.OrderBy(a => a.Id).ToArray()));
 
+// Admin-only. The suite's "clear the schedule" scenario uses this exclusively: run alongside a
+// booking scenario it would empty the schedule between "admin books" and "patient reads".
+app.MapDelete("/appointments", (HttpContext http) =>
+{
+    if (RoleOf(http) is not "admin")
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+
+    appointments.Clear();
+    return Results.NoContent();
+});
+
 app.Run();
 
 static string? RoleOf(HttpContext http) =>

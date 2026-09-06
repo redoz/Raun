@@ -65,6 +65,10 @@ public sealed class AppointmentsClient(HttpClient http)
     /// <summary>Reads every appointment.</summary>
     public async Task<AppointmentDto[]> ListAsync() =>
         await http.GetFromJsonAsync<AppointmentDto[]>("/appointments") ?? [];
+
+    /// <summary>Removes every appointment. The API allows this for <see cref="Actor.Admin"/> only.</summary>
+    public async Task<HttpResponseMessage> ClearAsync() =>
+        await http.DeleteAsync(new Uri("/appointments", UriKind.Relative));
 }
 
 /// <summary>An appointment as the API returns it.</summary>
