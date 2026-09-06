@@ -436,6 +436,10 @@ public class RunLoopTests
         var loop = new RaunRunLoop(() => [a, bad, never], maxParallelScenarios: 3);
 
         var run = loop.RunAsync(uids: null, sink, CancellationToken.None).AsTask();
+
+        // The run must still be in flight here: it is draining "a". Without the catch around
+        // TryAcquire the gate's throw would have faulted the whole run synchronously already.
+        Assert.False(run.IsCompleted);
         release.TrySetResult();
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await run);
 
