@@ -653,4 +653,30 @@ public static class SampleSources
             }
         }
         """;
+
+    // Proves the scenario-method and containing-class sites on their own: Cache comes only from the
+    // class, Queue only from the scenario method, and the one step called declares nothing. Cache and
+    // Queue are declared here rather than in UsesDsl: UsesDsl is a shared prefix for other snapshotted
+    // scenarios (e.g. Uses_scenario), and inserting lines there would shift the SourceLine values baked
+    // into those already-accepted snapshots without changing any behavior.
+    public const string UsesSitesScenario =
+        """
+
+        [SharedResource]
+        public sealed class Cache : IContendedResource;
+
+        [SharedResource]
+        public sealed class Queue : IContendedResource;
+
+        [Uses<Cache>]
+        public static class SiteScenarios
+        {
+            [Scenario("class and method sites")]
+            [Uses<Queue>(LockMode.Exclusive)]
+            public static async Task ClassAndMethodSites()
+            {
+                await Given.PatientExists();
+            }
+        }
+        """;
 }

@@ -41,6 +41,18 @@ public class UsesLoweringTests
     }
 
     [Fact]
+    public void Scenario_method_and_containing_class_sites_are_collected_on_their_own()
+    {
+        var definition = Lower(SampleSources.UsesSitesScenario);
+
+        var uses = definition.Uses.OrderBy(u => u.Resource.Name, StringComparer.Ordinal).ToList();
+        Assert.Equal(["Audit", "Cache", "Queue"], uses.Select(u => u.Resource.Name));
+        Assert.Equal(LockMode.Shared, uses[0].Mode);     // assembly
+        Assert.Equal(LockMode.Shared, uses[1].Mode);     // containing class only
+        Assert.Equal(LockMode.Exclusive, uses[2].Mode);  // scenario method only
+    }
+
+    [Fact]
     public void A_scenario_subject_to_no_uses_emits_no_Uses_initializer()
     {
         var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.LinearScenario);
