@@ -10,3 +10,6 @@ public sealed class SharedCatalog : IContendedResource;
 
 [PooledResource(2)]
 public sealed class PooledSmtp : IContendedResource;
+
+/// <summary>Invalid on purpose: no kind attribute.</summary>
+public sealed class MisdeclaredToken : IContendedResource;

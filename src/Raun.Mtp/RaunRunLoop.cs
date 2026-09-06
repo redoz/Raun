@@ -227,7 +227,24 @@ internal sealed class RaunRunLoop
                 }
 
                 var definition = pending[i];
-                if (!gate.TryAcquire(definition.Uses, out var refusedBy))
+                bool admitted;
+                Type? refusedBy;
+                try
+                {
+                    admitted = gate.TryAcquire(definition.Uses, out refusedBy);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // A mis-declared resource token (no kind attribute, or a pool capacity below 1) is
+                    // a suite bug, not a step failure: stop admitting further scenarios and let the
+                    // drain loop below run everything already in flight to completion before this is
+                    // rethrown, exactly like any other fault.
+                    (faults ??= []).Add(ex);
+                    halted = true;
+                    break;
+                }
+
+                if (!admitted)
                 {
                     // A slot was free and the gate said no: that is contention, worth reporting.
                     if (!waits.ContainsKey(definition))

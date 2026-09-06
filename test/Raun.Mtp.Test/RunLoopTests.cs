@@ -337,10 +337,17 @@ public class RunLoopTests
     [Fact]
     public async Task Pooled_capacity_caps_concurrent_holders_below_the_degree()
     {
+        // Degree 4, pool capacity 2. The rendezvous trips one PAST capacity (current == 3) rather
+        // than at capacity itself: tripping at capacity would let the test's own synchronization pin
+        // max at 2 even with the gate removed (every body's await would then resume synchronously
+        // and decrement before the next launch gets scheduled). Un-gated, all four bodies run and
+        // current reaches 3, tripping the breach and pushing max past 2 -> red. Gated, only two
+        // bodies ever run at once, current never reaches 3, breach never trips, and the fallback
+        // delay is what releases each pair instead -> green, and the fallback keeps this from hanging.
         var current = 0;
         var max = 0;
         var sync = new object();
-        var pair = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var breach = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         async Task<object?> Body(IStepInputs _, ScenarioContext __)
         {
@@ -348,10 +355,10 @@ public class RunLoopTests
             {
                 current++;
                 max = Math.Max(max, current);
-                if (current == 2) { pair.TrySetResult(); }
+                if (current == 3) { breach.TrySetResult(); }
             }
 
-            await pair.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.WhenAny(breach.Task, Task.Delay(TimeSpan.FromMilliseconds(250)));
             lock (sync) { current--; }
             return null;
         }
@@ -413,6 +420,29 @@ public class RunLoopTests
         Assert.Equal("ExclusiveDb:Shared", waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioUses));
         Assert.NotNull(waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioWaitedMs));
         Assert.Equal("ExclusiveDb", waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioWaitedFor));
+    }
+
+    [Fact]
+    public async Task A_misdeclared_resource_token_halts_launching_drains_siblings_and_surfaces_the_error()
+    {
+        // Degree 3: "a" is running and blocked until "release" is set; "bad" declares a token with no
+        // kind attribute, so the gate throws when the scan reaches it. The loop must stop launching,
+        // let "a" finish, publish RunFinished once, and surface the gate's error from RunAsync.
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var a = Definition("a", "A", Node(0, "x", "x", invoke: async (_, _) => { await release.Task.WaitAsync(TimeSpan.FromSeconds(10)); return null; }));
+        var bad = Definition("bad", "Bad", [new ContendedResourceUse(typeof(MisdeclaredToken), LockMode.Shared)], Node(0, "y", "y"));
+        var never = Definition("never", "Never", Node(0, "z", "z"));
+        var sink = new RecordingSink();
+        var loop = new RaunRunLoop(() => [a, bad, never], maxParallelScenarios: 3);
+
+        var run = loop.RunAsync(uids: null, sink, CancellationToken.None).AsTask();
+        release.TrySetResult();
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await run);
+
+        Assert.Contains(nameof(MisdeclaredToken), ex.Message, StringComparison.Ordinal);
+        Assert.Equal(["a"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId));
+        Assert.DoesNotContain("never", sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
+        Assert.Single(sink.Events.OfType<RunFinished>());
     }
 
     [Fact]
