@@ -62,4 +62,64 @@ public class RunEventBusTests
     {
         public ValueTask PublishAsync(RunEvent evt) { onEvent(evt); return default; }
     }
+
+    [Fact]
+    public async Task Concurrent_publishers_are_delivered_one_at_a_time_and_a_throwing_sink_stays_isolated()
+    {
+        var sink = new NonReentrantSink();
+        var bad = new ThrowingSink();
+        var bus = new RunEventBus([sink, bad]);
+
+        var publishers = Enumerable.Range(0, 32)
+            .Select(_ => Task.Run(async () =>
+            {
+                for (var i = 0; i < 20; i++)
+                {
+                    await bus.PublishAsync(new RunStarted(1));
+                }
+            }))
+            .ToArray();
+        await Task.WhenAll(publishers);
+
+        Assert.Equal(32 * 20, sink.Delivered);
+        Assert.Equal(0, sink.Overlaps);
+        Assert.Single(bus.Failures);
+    }
+
+    [Fact]
+    public void ScenarioStarted_defaults_to_no_wait_and_RunStarted_to_no_ordering()
+    {
+        var started = new ScenarioStarted(new Raun.Model.ScenarioDefinition
+        {
+            ScenarioId = "s", DisplayName = "s", MethodName = "N.s", Nodes = [],
+        });
+        Assert.Equal(TimeSpan.Zero, started.Waited);
+        Assert.Null(started.WaitedFor);
+
+        var run = new RunStarted(3);
+        Assert.Equal(3, run.ScenarioCount);
+        Assert.Null(run.Scenarios);
+    }
+
+    /// <summary>Counts deliveries and any delivery that begins before the previous one ended.</summary>
+    private sealed class NonReentrantSink : IRunEventSink
+    {
+        private int _inside;
+
+        public int Delivered { get; private set; }
+
+        public int Overlaps { get; private set; }
+
+        public async ValueTask PublishAsync(RunEvent evt)
+        {
+            if (Interlocked.Increment(ref _inside) != 1)
+            {
+                Overlaps++;
+            }
+
+            await Task.Yield(); // give a concurrent publisher every chance to overlap
+            Delivered++;
+            Interlocked.Decrement(ref _inside);
+        }
+    }
 }

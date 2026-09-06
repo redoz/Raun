@@ -11,6 +11,8 @@ public sealed class RunEventBus : IRunEventSink
     private readonly IReadOnlyList<IRunEventSink> _sinks;
     private readonly Exception?[] _firstError;
     private readonly List<Exception> _failures = [];
+    private readonly object _turns = new();
+    private Task _tail = Task.CompletedTask;
 
     public RunEventBus(IReadOnlyList<IRunEventSink> sinks)
     {
@@ -22,13 +24,36 @@ public sealed class RunEventBus : IRunEventSink
     /// <summary>The first error each failed sink raised, in sink order; empty when all sinks held.</summary>
     public IReadOnlyList<Exception> Failures => _failures;
 
-    // THREADING: not thread-safe. Correctness relies on the serial-emission invariant: at most one
-    // PublishAsync call is in flight at a time (enforced by RaunRunLoop's sequential event emission).
-    // If a future change parallelises scenarios or makes the scheduler notify observers concurrently,
-    // both _failures/_firstError and the sink accumulators (e.g. HtmlReportModelBuilder) would race.
+    // THREADING: scenarios run concurrently, so PublishAsync is called from several async flows at
+    // once. Publications take turns in call order: each waits for the previous one to finish before
+    // delivering, so every sink still sees one event at a time and the accumulators behind them
+    // (HtmlReportModelBuilder, _failures) need no locking. Within one scenario the scheduler raises
+    // callbacks serially, so a scenario's own events stay in order; different scenarios interleave.
     public async ValueTask PublishAsync(RunEvent evt)
     {
         ArgumentNullException.ThrowIfNull(evt);
+
+        var turn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task previous;
+        lock (_turns)
+        {
+            previous = _tail;
+            _tail = turn.Task;
+        }
+
+        await previous.ConfigureAwait(false); // never faults: every turn completes in the finally below
+        try
+        {
+            await DeliverAsync(evt).ConfigureAwait(false);
+        }
+        finally
+        {
+            turn.SetResult();
+        }
+    }
+
+    private async Task DeliverAsync(RunEvent evt)
+    {
         for (var i = 0; i < _sinks.Count; i++)
         {
             try
