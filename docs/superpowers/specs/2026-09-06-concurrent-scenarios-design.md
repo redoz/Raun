@@ -15,6 +15,10 @@
 - **Non-goals:** Raun constructing, injecting, or scoping the resource token; slot assignment
   ("which of the three SMTP servers do I hold"); step-scoped holds; a global cap on steps across
   scenarios; any change to the lifecycle-role machinery.
+- **Deviations recorded at review:**
+  - `RunStarted` kept its `int ScenarioCount` (selected scenarios only) and gained an optional
+    `Scenarios` list that includes preflight, so existing call sites kept compiling.
+  - RAUN015 uses one message covering both the kind-count and capacity cases.
 
 ## Summary
 
@@ -330,3 +334,8 @@ Behavioral test first, then the smallest change, per AGENTS.md.
 - A synthetic "waited for Database" node in the report Gantt.
 - Step-scoped holds as an opt-in.
 - A global cap on concurrently running steps across scenarios.
+- Writer preference in admission: today a refused exclusive user can be overtaken by every later-
+  registered shared user of the same resource and is admitted only when that stream drains
+  ("registration order among admissible scenarios"). Skipping later same-resource users in the pass
+  a scenario was refused in would preserve no-hold-and-wait and the finite-run guarantee. Open
+  decision.

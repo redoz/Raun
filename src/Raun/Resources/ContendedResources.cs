@@ -26,6 +26,7 @@ public sealed class SharedResourceAttribute : Attribute;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false)]
 public sealed class PooledResourceAttribute : Attribute
 {
+    /// <summary>A pool of <paramref name="capacity"/> holders.</summary>
     /// <param name="capacity">How many scenarios may hold the resource at once; at least 1.</param>
     public PooledResourceAttribute(int capacity) => Capacity = capacity;
 
@@ -49,6 +50,7 @@ public sealed class UsesAttribute<T> : Attribute
     {
     }
 
+    /// <summary>A use with an explicit mode.</summary>
     /// <param name="mode"><see cref="LockMode.Shared"/> takes one slot; <see cref="LockMode.Exclusive"/> takes every slot.</param>
     public UsesAttribute(LockMode mode) => Mode = mode;
 

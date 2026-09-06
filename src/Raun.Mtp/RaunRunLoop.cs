@@ -227,11 +227,10 @@ internal sealed class RaunRunLoop
                 }
 
                 var definition = pending[i];
-                bool admitted;
                 Type? refusedBy;
                 try
                 {
-                    admitted = gate.TryAcquire(definition.Uses, out refusedBy);
+                    gate.TryAcquire(definition.Uses, out refusedBy);
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -244,12 +243,14 @@ internal sealed class RaunRunLoop
                     break;
                 }
 
-                if (!admitted)
+                // TryAcquire's [NotNullWhen(false)] means refusedBy is set exactly when it refused;
+                // check refusedBy itself rather than the bool result, so the compiler can narrow it.
+                if (refusedBy is not null)
                 {
                     // A slot was free and the gate said no: that is contention, worth reporting.
                     if (!waits.ContainsKey(definition))
                     {
-                        waits[definition] = new Wait(Stopwatch.GetTimestamp(), refusedBy!);
+                        waits[definition] = new Wait(Stopwatch.GetTimestamp(), refusedBy);
                     }
 
                     i++;

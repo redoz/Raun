@@ -29,6 +29,8 @@ public sealed class RunEventBus : IRunEventSink
     // delivering, so every sink still sees one event at a time and the accumulators behind them
     // (HtmlReportModelBuilder, _failures) need no locking. Within one scenario the scheduler raises
     // callbacks serially, so a scenario's own events stay in order; different scenarios interleave.
+    // A sink must not call back into the bus from inside its own PublishAsync before yielding — the
+    // turn queue is not reentrant and such a call would wait on itself.
     public async ValueTask PublishAsync(RunEvent evt)
     {
         ArgumentNullException.ThrowIfNull(evt);

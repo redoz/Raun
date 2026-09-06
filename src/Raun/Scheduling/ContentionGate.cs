@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace Raun.Scheduling;
@@ -30,7 +31,7 @@ public sealed class ContentionGate
     /// </summary>
     /// <exception cref="InvalidOperationException">A resource type does not carry exactly one kind
     /// attribute, or its pool capacity is below 1.</exception>
-    public bool TryAcquire(IReadOnlyList<ContendedResourceUse> uses, out Type? refusedBy)
+    public bool TryAcquire(IReadOnlyList<ContendedResourceUse> uses, [NotNullWhen(false)] out Type? refusedBy)
     {
         ArgumentNullException.ThrowIfNull(uses);
         var reduced = Reduce(uses);

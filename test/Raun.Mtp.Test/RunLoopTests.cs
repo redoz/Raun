@@ -418,7 +418,7 @@ public class RunLoopTests
 
         var waiterSpan = Assert.Single(capture.ForScenario(waiterId), s => s.DisplayName == "waiter");
         Assert.Equal("ExclusiveDb:Shared", waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioUses));
-        Assert.NotNull(waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioWaitedMs));
+        Assert.True(Convert.ToInt64(waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioWaitedMs), System.Globalization.CultureInfo.InvariantCulture) >= 1);
         Assert.Equal("ExclusiveDb", waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioWaitedFor));
     }
 
