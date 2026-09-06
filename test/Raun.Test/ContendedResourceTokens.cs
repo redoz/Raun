@@ -11,3 +11,15 @@ public sealed class SharedCatalog : IContendedResource;
 
 [PooledResource(2)]
 public sealed class PooledSmtp : IContendedResource;
+
+/// <summary>Invalid on purpose: no kind attribute.</summary>
+public sealed class NoKind : IContendedResource;
+
+/// <summary>Invalid on purpose: two kinds.</summary>
+[ExclusiveResource]
+[SharedResource]
+public sealed class TwoKinds : IContendedResource;
+
+/// <summary>Invalid on purpose: a pool of nothing.</summary>
+[PooledResource(0)]
+public sealed class ZeroCapacity : IContendedResource;
