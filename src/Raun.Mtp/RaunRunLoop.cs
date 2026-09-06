@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using Raun.Model;
 using Microsoft.Extensions.DependencyInjection;
 using Raun.Reporting;
@@ -151,31 +152,38 @@ internal sealed class RaunRunLoop
         Activity.Current = null;
         var runContext = runActivity?.Context;
 
-        // Run-level setup, before any scenario. It runs even when the filter selected nothing: a
-        // filtered run of one step still needs whatever preflight brings up.
-        var preflightFailed = false;
-        if (preflightDefinition is not null)
+        try
         {
-            var results = await RunOneAsync(preflightDefinition, bus, uids: null, runContext, runId, waited: TimeSpan.Zero, waitedFor: null, cancellationToken)
-                .ConfigureAwait(false);
-            preflightFailed = results.Any(r => r.Status is StepStatus.Failed or StepStatus.Skipped);
-        }
-
-        if (preflightFailed)
-        {
-            // Attribute the failure to a row rather than to an exit code: every step reports skipped
-            // naming preflight, and the run still completes so the report is whole.
-            foreach (var definition in selected)
+            // Run-level setup, before any scenario. It runs even when the filter selected nothing: a
+            // filtered run of one step still needs whatever preflight brings up.
+            var preflightFailed = false;
+            if (preflightDefinition is not null)
             {
-                await SkipScenarioAsync(definition, bus, runContext, runId).ConfigureAwait(false);
+                var results = await RunOneAsync(preflightDefinition, bus, uids: null, runContext, runId, waited: TimeSpan.Zero, waitedFor: null, cancellationToken)
+                    .ConfigureAwait(false);
+                preflightFailed = results.Any(r => r.Status is StepStatus.Failed or StepStatus.Skipped);
+            }
+
+            if (preflightFailed)
+            {
+                // Attribute the failure to a row rather than to an exit code: every step reports skipped
+                // naming preflight, and the run still completes so the report is whole.
+                foreach (var definition in selected)
+                {
+                    await SkipScenarioAsync(definition, bus, runContext, runId).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                await LaunchAsync(selected, bus, uids, runContext, runId, cancellationToken).ConfigureAwait(false);
             }
         }
-        else
+        finally
         {
-            await LaunchAsync(selected, bus, uids, runContext, runId, cancellationToken).ConfigureAwait(false);
+            // RunFinished always publishes, even when the body above throws (a launcher can orphan a
+            // scenario fault; the old sequential foreach never had a second scenario to orphan).
+            await bus.PublishAsync(new RunFinished()).ConfigureAwait(false);
         }
-
-        await bus.PublishAsync(new RunFinished()).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -183,7 +191,11 @@ internal sealed class RaunRunLoop
     /// Scenarios launch in registration order as slots free up. Cancellation keeps the sequential
     /// loop's contract: the first scenario always launches (an up-front cancellation still reports
     /// its steps as skipped through the scheduler); after any launch, an observed cancellation
-    /// stops further launches; whatever is running drains through its own linked token.
+    /// stops further launches; whatever is running drains through its own linked token. A faulted or
+    /// canceled scenario task (always a loop/scheduler bug, never a step failure — see the comment
+    /// below) stops further launches the same way, but every sibling already in flight still drains
+    /// through this loop and gets reported before the fault is rethrown, so nothing is orphaned and
+    /// <c>RunFinished</c> still gets its chance to publish from the caller's <c>finally</c>.
     /// </summary>
     private async ValueTask LaunchAsync(
         IReadOnlyList<ScenarioDefinition> selected,
@@ -196,13 +208,15 @@ internal sealed class RaunRunLoop
         var pending = new List<ScenarioDefinition>(selected);
         var running = new Dictionary<Task<IReadOnlyList<StepResult>>, ScenarioDefinition>();
         var started = false;
+        var halted = false;
+        List<Exception>? faults = null;
 
         while (pending.Count > 0 || running.Count > 0)
         {
             var i = 0;
             while (i < pending.Count && running.Count < maxParallelScenarios)
             {
-                if (started && cancellationToken.IsCancellationRequested)
+                if ((started && cancellationToken.IsCancellationRequested) || halted)
                 {
                     break;
                 }
@@ -221,7 +235,31 @@ internal sealed class RaunRunLoop
 
             var finished = await Task.WhenAny(running.Keys).ConfigureAwait(false);
             running.Remove(finished);
-            await finished.ConfigureAwait(false); // surfaces a loop bug; step failures never throw here
+
+            // Step failures never fault a scenario task — RunOneAsync/the scheduler turn them into
+            // StepResult.Failed and return normally — so a faulted or canceled task here is a loop or
+            // scheduler bug. Record it, stop admitting new scenarios, and keep looping so every
+            // in-flight sibling still drains through this same WhenAny path instead of being left
+            // running unobserved against a bus whose run has already returned.
+            if (finished.IsFaulted)
+            {
+                halted = true;
+                (faults ??= []).AddRange(finished.Exception!.InnerExceptions);
+            }
+            else if (finished.IsCanceled)
+            {
+                halted = true;
+                (faults ??= []).Add(new TaskCanceledException(finished));
+            }
+        }
+
+        if (faults is { Count: 1 })
+        {
+            ExceptionDispatchInfo.Capture(faults[0]).Throw();
+        }
+        else if (faults is { Count: > 1 })
+        {
+            throw new AggregateException(faults);
         }
     }
 

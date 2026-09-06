@@ -413,6 +413,53 @@ public class RunLoopTests
     }
 
     [Fact]
+    public async Task A_faulted_scenario_task_drains_its_siblings_publishes_RunFinished_and_rethrows()
+    {
+        // Three scenarios at degree 3. "boom" faults from the run seam once every scenario has
+        // started; the others must still finish and be reported, RunFinished must still publish,
+        // and the fault must surface from RunAsync rather than vanish.
+        var allStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var startedCount = 0;
+
+        Task<IReadOnlyList<StepResult>> Seam(
+            ScenarioDefinition definition, IStepObserver observer, IServiceProvider? services,
+            IReadOnlySet<int>? targets, CancellationToken token)
+            => SeamAsync(definition);
+
+        async Task<IReadOnlyList<StepResult>> SeamAsync(ScenarioDefinition definition)
+        {
+            if (Interlocked.Increment(ref startedCount) == 3)
+            {
+                allStarted.TrySetResult();
+            }
+
+            await allStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            if (definition.ScenarioId == "boom")
+            {
+                throw new InvalidOperationException("scheduler bug");
+            }
+
+            return definition.Nodes.Select(n => new StepResult
+            {
+                Node = n, DisplayName = n.DisplayNameTemplate, Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
+            }).ToList();
+        }
+
+        var a = Definition("a", "A", Node(0, "x", "x"));
+        var boom = Definition("boom", "Boom", Node(0, "y", "y"));
+        var c = Definition("c", "C", Node(0, "z", "z"));
+        var sink = new RecordingSink();
+        var loop = new RaunRunLoop(() => [a, boom, c], runScenario: Seam, maxParallelScenarios: 3);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await loop.RunAsync(uids: null, sink, CancellationToken.None));
+
+        Assert.Equal("scheduler bug", ex.Message);
+        Assert.Equal(["a", "c"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId).Order());
+        Assert.Single(sink.Events.OfType<RunFinished>());
+    }
+
+    [Fact]
     public async Task Through_the_framework_run_request_executes_the_registered_scenario()
     {
         // End-to-end through RaunTestFramework.OnExecute (registry-backed), proving the framework
