@@ -56,6 +56,15 @@ public static class RaunTelemetry
         /// <summary>DSL operation (method) name.</summary>
         public const string StepOperation = "raun.step.operation";
 
+        /// <summary>The scenario's contended-resource uses, <c>Type:Mode</c> comma-separated; absent when none.</summary>
+        public const string ScenarioUses = "raun.scenario.uses";
+
+        /// <summary>Milliseconds admission held the scenario back behind a contended resource; absent when zero.</summary>
+        public const string ScenarioWaitedMs = "raun.scenario.waited_ms";
+
+        /// <summary>Name of the resource that first refused the scenario; set with <see cref="ScenarioWaitedMs"/>.</summary>
+        public const string ScenarioWaitedFor = "raun.scenario.waited_for";
+
         /// <summary>Source file of the step's statement (semconv).</summary>
         public const string CodeFilePath = "code.file.path";
 

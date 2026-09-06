@@ -187,15 +187,18 @@ internal sealed class RaunRunLoop
     }
 
     /// <summary>
-    /// Runs the selected scenarios with at most <see cref="MaxParallelScenarios"/> in flight.
-    /// Scenarios launch in registration order as slots free up. Cancellation keeps the sequential
-    /// loop's contract: the first scenario always launches (an up-front cancellation still reports
-    /// its steps as skipped through the scheduler); after any launch, an observed cancellation
-    /// stops further launches; whatever is running drains through its own linked token. A faulted or
-    /// canceled scenario task (always a loop/scheduler bug, never a step failure — see the comment
-    /// below) stops further launches the same way, but every sibling already in flight still drains
-    /// through this loop and gets reported before the fault is rethrown, so nothing is orphaned and
-    /// <c>RunFinished</c> still gets its chance to publish from the caller's <c>finally</c>.
+    /// Runs the selected scenarios with at most <see cref="MaxParallelScenarios"/> in flight, each
+    /// admitted only when its contended-resource uses are compatible with everything running.
+    /// Scenarios launch in registration order as slots free up; a refused scenario is retried each
+    /// time a running one finishes, and is admitted at the latest when everything else has drained.
+    /// Cancellation keeps the sequential loop's contract: the first scenario always launches (an
+    /// up-front cancellation still reports its steps as skipped through the scheduler); after any
+    /// launch, an observed cancellation stops further launches; whatever is running drains through
+    /// its own linked token. A faulted or canceled scenario task (always a loop/scheduler bug, never
+    /// a step failure — see the comment below) stops further launches the same way, but every
+    /// sibling already in flight still drains through this loop and gets reported before the fault
+    /// is rethrown, so nothing is orphaned and <c>RunFinished</c> still gets its chance to publish
+    /// from the caller's <c>finally</c>.
     /// </summary>
     private async ValueTask LaunchAsync(
         IReadOnlyList<ScenarioDefinition> selected,
@@ -207,6 +210,8 @@ internal sealed class RaunRunLoop
     {
         var pending = new List<ScenarioDefinition>(selected);
         var running = new Dictionary<Task<IReadOnlyList<StepResult>>, ScenarioDefinition>();
+        var waits = new Dictionary<ScenarioDefinition, Wait>();
+        var gate = new ContentionGate();
         var started = false;
         var halted = false;
         List<Exception>? faults = null;
@@ -222,19 +227,41 @@ internal sealed class RaunRunLoop
                 }
 
                 var definition = pending[i];
+                if (!gate.TryAcquire(definition.Uses, out var refusedBy))
+                {
+                    // A slot was free and the gate said no: that is contention, worth reporting.
+                    if (!waits.ContainsKey(definition))
+                    {
+                        waits[definition] = new Wait(Stopwatch.GetTimestamp(), refusedBy!);
+                    }
+
+                    i++;
+                    continue;
+                }
+
                 pending.RemoveAt(i);
-                var run = RunOneAsync(definition, bus, uids, runContext, runId, waited: TimeSpan.Zero, waitedFor: null, cancellationToken).AsTask();
+                var waited = TimeSpan.Zero;
+                Type? waitedFor = null;
+                if (waits.Remove(definition, out var wait))
+                {
+                    waited = Stopwatch.GetElapsedTime(wait.Since);
+                    waitedFor = wait.By;
+                }
+
+                var run = RunOneAsync(definition, bus, uids, runContext, runId, waited, waitedFor, cancellationToken).AsTask();
                 running[run] = definition;
                 started = true;
             }
 
             if (running.Count == 0)
             {
-                break; // cancelled with nothing left in flight
+                break; // cancelled with nothing left in flight; the gate is empty, so nothing else can be blocked
             }
 
             var finished = await Task.WhenAny(running.Keys).ConfigureAwait(false);
+            var done = running[finished];
             running.Remove(finished);
+            gate.Release(done.Uses);
 
             // Step failures never fault a scenario task — RunOneAsync/the scheduler turn them into
             // StepResult.Failed and return normally — so a faulted or canceled task here is a loop or
@@ -262,6 +289,9 @@ internal sealed class RaunRunLoop
             throw new AggregateException(faults);
         }
     }
+
+    /// <summary>When a scenario was first refused by the gate, and by which resource.</summary>
+    private readonly record struct Wait(long Since, Type By);
 
     /// <summary>Reports every step of a scenario that never ran because preflight failed.</summary>
     private static async ValueTask SkipScenarioAsync(
@@ -364,6 +394,20 @@ internal sealed class RaunRunLoop
         {
             activity.SetTag(RaunTelemetry.Attributes.CodeFilePath, definition.SourceFile);
             activity.SetTag(RaunTelemetry.Attributes.CodeLineNumber, definition.SourceLine);
+        }
+
+        if (definition.Uses.Count > 0)
+        {
+            activity.SetTag(
+                RaunTelemetry.Attributes.ScenarioUses,
+                string.Join(",", definition.Uses.Select(u => $"{u.Resource.Name}:{u.Mode}")));
+        }
+
+        if (waited > TimeSpan.Zero)
+        {
+            // A refused scenario waited, even when the clock rounds it to 0 ms: report at least 1 so the tag exists.
+            activity.SetTag(RaunTelemetry.Attributes.ScenarioWaitedMs, Math.Max(1L, (long)waited.TotalMilliseconds));
+            activity.SetTag(RaunTelemetry.Attributes.ScenarioWaitedFor, waitedFor?.Name);
         }
 
         return activity;

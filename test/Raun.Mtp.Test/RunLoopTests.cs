@@ -3,6 +3,7 @@ using Microsoft.Testing.Platform.CommandLine;
 using Microsoft.Testing.Platform.Extensions.Messages;
 using Microsoft.Testing.Platform.Messages;
 using Microsoft.Testing.Platform.TestHost;
+using Raun;
 using Raun.Model;
 using Raun.Reporting;
 using Raun.Scheduling;
@@ -54,6 +55,19 @@ public class RunLoopTests
         MethodName = $"Ns.{id}",
         Nodes = nodes,
     };
+
+    private static ScenarioDefinition Definition(string id, string display, ContendedResourceUse[] uses, params ScenarioNode[] nodes) => new()
+    {
+        ScenarioId = id,
+        DisplayName = display,
+        MethodName = $"Ns.{id}",
+        Nodes = nodes,
+        Uses = uses,
+    };
+
+    private static ContendedResourceUse Shared<T>() where T : IContendedResource => new(typeof(T), LockMode.Shared);
+
+    private static ContendedResourceUse Exclusive<T>() where T : IContendedResource => new(typeof(T), LockMode.Exclusive);
 
     private static string Uid(string scenarioId, string stepId) => scenarioId + ":" + stepId;
 
@@ -252,6 +266,153 @@ public class RunLoopTests
 
         Assert.Equal(3, max);
         Assert.Equal(6, sink.PassedUids.Count());
+    }
+
+    // -- Admission through the ContentionGate: overlap, order, and wait accounting ----------------
+
+    [Fact]
+    public async Task Exclusive_users_of_one_resource_never_overlap_while_an_unrelated_scenario_does()
+    {
+        // A holds the db until C has started (so A and C overlap); B also wants the db and must wait
+        // for A. Degree 3 leaves room for all three, so only the gate can hold B back.
+        var cStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dbCurrent = 0;
+        var dbMax = 0;
+        var sync = new object();
+
+        async Task<object?> DbBody(IStepInputs _, ScenarioContext __)
+        {
+            lock (sync) { dbCurrent++; dbMax = Math.Max(dbMax, dbCurrent); }
+            await cStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            lock (sync) { dbCurrent--; }
+            return null;
+        }
+
+        var a = Definition("a", "A", [Exclusive<ExclusiveDb>()], Node(0, "x", "x", invoke: DbBody));
+        var b = Definition("b", "B", [Exclusive<ExclusiveDb>()], Node(0, "y", "y", invoke: DbBody));
+        var c = Definition("c", "C", Node(0, "z", "z", invoke: (_, _) => { cStarted.TrySetResult(); return Task.FromResult<object?>(null); }));
+
+        var sink = new RecordingSink();
+        await new RaunRunLoop(() => [a, b, c], maxParallelScenarios: 3).RunAsync(uids: null, sink, CancellationToken.None);
+
+        Assert.Equal(1, dbMax);
+        Assert.Equal(3, sink.PassedUids.Count());
+        Assert.Equal(["a", "c", "b"], sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
+    }
+
+    [Fact]
+    public async Task Shared_users_overlap_and_an_exclusive_user_waits_for_all_of_them()
+    {
+        var both = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sharedInFlight = 0;
+        var sharedFinished = 0;
+        var seenBySweeper = -1;
+
+        async Task<object?> SharedBody(IStepInputs _, ScenarioContext __)
+        {
+            if (Interlocked.Increment(ref sharedInFlight) == 2)
+            {
+                both.TrySetResult();
+            }
+
+            await both.Task.WaitAsync(TimeSpan.FromSeconds(10)); // proves the two shared users overlap
+            Interlocked.Increment(ref sharedFinished);
+            return null;
+        }
+
+        var s1 = Definition("s1", "S1", [Shared<SharedCatalog>()], Node(0, "x", "x", invoke: SharedBody));
+        var s2 = Definition("s2", "S2", [Shared<SharedCatalog>()], Node(0, "y", "y", invoke: SharedBody));
+        var sweeper = Definition("sweep", "Sweep", [Exclusive<SharedCatalog>()],
+            Node(0, "z", "z", invoke: (_, _) => { seenBySweeper = Volatile.Read(ref sharedFinished); return Task.FromResult<object?>(null); }));
+
+        var sink = new RecordingSink();
+        await new RaunRunLoop(() => [s1, s2, sweeper], maxParallelScenarios: 3).RunAsync(uids: null, sink, CancellationToken.None);
+
+        Assert.Equal(2, seenBySweeper);
+        var sweepStarted = Assert.Single(sink.Events.OfType<ScenarioStarted>(), e => e.Definition.ScenarioId == "sweep");
+        Assert.True(sweepStarted.Waited > TimeSpan.Zero);
+        Assert.Equal(typeof(SharedCatalog), sweepStarted.WaitedFor);
+    }
+
+    [Fact]
+    public async Task Pooled_capacity_caps_concurrent_holders_below_the_degree()
+    {
+        var current = 0;
+        var max = 0;
+        var sync = new object();
+        var pair = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<object?> Body(IStepInputs _, ScenarioContext __)
+        {
+            lock (sync)
+            {
+                current++;
+                max = Math.Max(max, current);
+                if (current == 2) { pair.TrySetResult(); }
+            }
+
+            await pair.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            lock (sync) { current--; }
+            return null;
+        }
+
+        var definitions = Enumerable.Range(0, 4)
+            .Select(i => Definition($"m{i}", $"M{i}", [Shared<PooledSmtp>()], Node(0, "x", "x", invoke: Body)))
+            .ToArray();
+
+        var sink = new RecordingSink();
+        await new RaunRunLoop(() => definitions, maxParallelScenarios: 4).RunAsync(uids: null, sink, CancellationToken.None);
+
+        Assert.Equal(2, max);
+        Assert.Equal(4, sink.PassedUids.Count());
+    }
+
+    [Fact]
+    public async Task Admission_prefers_registration_order_among_admissible_scenarios()
+    {
+        // Degree 2. A holds the db until D starts; B wants the db; C and D are free. Expected launch
+        // order: A, C (pass one), D (when C finishes; B is still refused), B (when A releases).
+        var dStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var a = Definition("a", "A", [Exclusive<ExclusiveDb>()], Node(0, "x", "x", invoke: async (_, _) =>
+        {
+            await dStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            return null;
+        }));
+        var b = Definition("b", "B", [Exclusive<ExclusiveDb>()], Node(0, "y", "y"));
+        var c = Definition("c", "C", Node(0, "z", "z"));
+        var d = Definition("d", "D", Node(0, "w", "w", invoke: (_, _) => { dStarted.TrySetResult(); return Task.FromResult<object?>(null); }));
+
+        var sink = new RecordingSink();
+        await new RaunRunLoop(() => [a, b, c, d], maxParallelScenarios: 2).RunAsync(uids: null, sink, CancellationToken.None);
+
+        Assert.Equal(["a", "c", "d", "b"], sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
+    }
+
+    [Fact]
+    public async Task Waiting_scenarios_report_their_wait_on_the_span_and_uses_are_tagged()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var holderId = "hold-" + Guid.NewGuid().ToString("N")[..8];
+        var waiterId = "wait-" + Guid.NewGuid().ToString("N")[..8];
+
+        var holder = Definition(holderId, "holder", [Exclusive<ExclusiveDb>(), Shared<SharedCatalog>()],
+            Node(0, "x", "x", invoke: async (_, _) => { await release.Task.WaitAsync(TimeSpan.FromSeconds(10)); return null; }));
+        var waiter = Definition(waiterId, "waiter", [Shared<ExclusiveDb>()], Node(0, "y", "y"));
+        var opener = Definition("open", "opener", Node(0, "z", "z", invoke: (_, _) => { release.TrySetResult(); return Task.FromResult<object?>(null); }));
+        using var capture = new SpanCapture();
+
+        await new RaunRunLoop(() => [holder, waiter, opener], maxParallelScenarios: 3)
+            .RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
+
+        var holderSpan = Assert.Single(capture.ForScenario(holderId), s => s.DisplayName == "holder");
+        Assert.Equal("ExclusiveDb:Exclusive,SharedCatalog:Shared", holderSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioUses));
+        Assert.Null(holderSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioWaitedMs));
+
+        var waiterSpan = Assert.Single(capture.ForScenario(waiterId), s => s.DisplayName == "waiter");
+        Assert.Equal("ExclusiveDb:Shared", waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioUses));
+        Assert.NotNull(waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioWaitedMs));
+        Assert.Equal("ExclusiveDb", waiterSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioWaitedFor));
     }
 
     [Fact]
