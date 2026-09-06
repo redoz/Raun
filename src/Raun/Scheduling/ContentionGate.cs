@@ -67,13 +67,17 @@ public sealed class ContentionGate
     }
 
     /// <summary>Gives back every use in <paramref name="uses"/>, which must have been acquired.</summary>
+    /// <exception cref="InvalidOperationException">A reduced use was not held that way — never
+    /// acquired, already released, or held under a different mode. Nothing is released in that
+    /// case, even uses earlier in <paramref name="uses"/> that were validly held.</exception>
     public void Release(IReadOnlyList<ContendedResourceUse> uses)
     {
         ArgumentNullException.ThrowIfNull(uses);
+        var reduced = Reduce(uses);
 
         lock (_lock)
         {
-            foreach (var use in Reduce(uses))
+            foreach (var use in reduced)
             {
                 if (!_slots.TryGetValue(use.Resource, out var slots)
                     || (use.Mode == LockMode.Exclusive ? !slots.Exclusive : slots.Holders == 0))
@@ -81,7 +85,11 @@ public sealed class ContentionGate
                     throw new InvalidOperationException(
                         $"'{use.Resource.Name}' was released with mode {use.Mode} but was not held that way.");
                 }
+            }
 
+            foreach (var use in reduced)
+            {
+                var slots = _slots[use.Resource];
                 if (use.Mode == LockMode.Exclusive)
                 {
                     slots.Exclusive = false;

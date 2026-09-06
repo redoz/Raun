@@ -133,4 +133,38 @@ public class ContentionGateTests
         var gate = new ContentionGate();
         Assert.Throws<InvalidOperationException>(() => gate.Release([Shared<SharedCatalog>()]));
     }
+
+    [Fact]
+    public void Releasing_the_same_use_twice_is_an_error()
+    {
+        var gate = new ContentionGate();
+        Assert.True(gate.TryAcquire([Shared<SharedCatalog>()], out _));
+        gate.Release([Shared<SharedCatalog>()]);
+
+        Assert.Throws<InvalidOperationException>(() => gate.Release([Shared<SharedCatalog>()]));
+    }
+
+    [Fact]
+    public void Releasing_with_a_different_mode_than_it_was_acquired_is_an_error()
+    {
+        var gate = new ContentionGate();
+        Assert.True(gate.TryAcquire([Shared<SharedCatalog>()], out _));
+
+        Assert.Throws<InvalidOperationException>(() => gate.Release([Exclusive<SharedCatalog>()]));
+    }
+
+    [Fact]
+    public void A_failed_release_leaves_every_use_in_the_set_still_held()
+    {
+        var gate = new ContentionGate();
+        Assert.True(gate.TryAcquire([Shared<SharedCatalog>(), Exclusive<ExclusiveDb>()], out _));
+
+        // SharedCatalog is validly held; PooledSmtp was never acquired. The whole release must
+        // fail without touching SharedCatalog's slot.
+        Assert.Throws<InvalidOperationException>(
+            () => gate.Release([Shared<SharedCatalog>(), Shared<PooledSmtp>()]));
+
+        // Still held shared: an exclusive acquire is refused.
+        Assert.False(gate.TryAcquire([Exclusive<SharedCatalog>()], out _));
+    }
 }
