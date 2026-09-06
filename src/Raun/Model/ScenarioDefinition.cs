@@ -32,6 +32,14 @@ public sealed class ScenarioDefinition
     /// <c>[Teardown(Run.…)]</c>, defaulting to <see cref="Run.Always"/> when the attribute is absent.</summary>
     public Run TeardownPolicy { get; init; } = Run.Always;
 
+    /// <summary>
+    /// The contended resources this scenario needs, reduced per type (exclusive wins), from every
+    /// <c>[Uses&lt;T&gt;]</c> on its steps' DSL methods, the scenario method, its classes, and the
+    /// assembly. The run loop acquires the whole set before the scenario starts. Empty when nothing
+    /// is declared.
+    /// </summary>
+    public IReadOnlyList<ContendedResourceUse> Uses { get; init; } = [];
+
     /// <summary>The graph nodes in source order.</summary>
     public required IReadOnlyList<ScenarioNode> Nodes { get; init; }
 
