@@ -20,3 +20,4 @@ RAUN011 | Raun.Usage | Error | Scenario condition must be an awaited phase-marke
 RAUN012 | Raun.Usage | Error | Conditionally assigned local has no step-produced definition
 RAUN013 | Raun.Usage | Error | Parallel steps conflict on one resource
 RAUN014 | Raun.Usage | Error | Cleanup uses the registering step's context
+RAUN015 | Raun.Usage | Error | Contended resource must declare exactly one kind

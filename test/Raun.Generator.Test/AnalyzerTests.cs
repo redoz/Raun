@@ -900,4 +900,58 @@ public class AnalyzerTests
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN014");
     }
+
+    [Fact]
+    public async Task Contended_resource_samples_are_clean()
+    {
+        Assert.Empty(await Analyze(SampleSources.UsesDsl + SampleSources.UsesScenario));
+    }
+
+    [Fact]
+    public async Task RAUN015_contended_resource_without_a_kind()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            """
+            using Raun;
+            public sealed class Db : IContendedResource;
+            """);
+
+        var d = Assert.Single(diagnostics, d => d.Id == "RAUN015");
+        Assert.Contains("Db", d.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RAUN015_contended_resource_with_two_kinds()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            """
+            using Raun;
+            [ExclusiveResource, SharedResource]
+            public sealed class Db : IContendedResource;
+            """);
+
+        AssertHas(diagnostics, "RAUN015");
+    }
+
+    [Fact]
+    public async Task RAUN015_pool_of_nothing()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            """
+            using Raun;
+            [PooledResource(0)]
+            public sealed class Smtp : IContendedResource;
+            """);
+
+        AssertHas(diagnostics, "RAUN015");
+    }
+
+    [Fact]
+    public async Task A_type_that_is_not_a_contended_resource_is_left_alone()
+    {
+        Assert.Empty(await GeneratorHarness.AnalyzeAsync(
+            """
+            public sealed class Plain;
+            """));
+    }
 }

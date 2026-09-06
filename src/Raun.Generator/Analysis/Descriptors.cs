@@ -126,4 +126,12 @@ internal static class Descriptors
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ContendedResourceKind = new(
+        "RAUN015",
+        "Contended resource must declare exactly one kind",
+        "'{0}' implements IContendedResource and must carry exactly one of [ExclusiveResource], [SharedResource], [PooledResource] with a capacity of at least 1",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

@@ -35,6 +35,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.UnmergeableLocal,
         Descriptors.ConflictingParallelAccess,
         Descriptors.StepContextInCleanup,
+        Descriptors.ContendedResourceKind,
     ];
 
     public override void Initialize(AnalysisContext context)
@@ -43,6 +44,56 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.RegisterSyntaxNodeAction(AnalyzeMethod, SyntaxKind.MethodDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
+        context.RegisterSymbolAction(AnalyzeNamedType, SymbolKind.NamedType);
+    }
+
+    private static void AnalyzeNamedType(SymbolAnalysisContext context)
+    {
+        try
+        {
+            AnalyzeContendedResource(context, (INamedTypeSymbol)context.Symbol);
+        }
+        catch (Exception ex)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.UnhandledException, context.Symbol.Locations.FirstOrDefault(), GeneratorSafety.Describe(ex)));
+        }
+    }
+
+    /// <summary>RAUN015: a type implementing Raun.IContendedResource carries exactly one kind attribute,
+    /// and a pool has a capacity of at least 1. The runtime gate throws the same; catching it here
+    /// keeps it out of the first parallel run.</summary>
+    private static void AnalyzeContendedResource(SymbolAnalysisContext context, INamedTypeSymbol type)
+    {
+        if (!type.AllInterfaces.Any(i => i.Name == "IContendedResource" && i.ContainingNamespace.ToDisplayString() == "Raun"))
+        {
+            return;
+        }
+
+        var kinds = 0;
+        var poolTooSmall = false;
+        foreach (var attr in type.GetAttributes())
+        {
+            switch (attr.AttributeClass?.Name)
+            {
+                case "ExclusiveResourceAttribute":
+                case "SharedResourceAttribute":
+                    kinds++;
+                    break;
+                case "PooledResourceAttribute":
+                    kinds++;
+                    poolTooSmall = attr.ConstructorArguments.Length != 1
+                        || attr.ConstructorArguments[0].Value is not int capacity
+                        || capacity < 1;
+                    break;
+            }
+        }
+
+        if (kinds != 1 || poolTooSmall)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.ContendedResourceKind, type.Locations.FirstOrDefault(), type.Name));
+        }
     }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)

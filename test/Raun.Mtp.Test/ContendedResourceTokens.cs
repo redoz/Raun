@@ -11,5 +11,7 @@ public sealed class SharedCatalog : IContendedResource;
 [PooledResource(2)]
 public sealed class PooledSmtp : IContendedResource;
 
-/// <summary>Invalid on purpose: no kind attribute.</summary>
+/// <summary>Invalid on purpose: no kind attribute. Exercises the runtime gate's rejection path, which RAUN015 exists to catch at compile time.</summary>
+#pragma warning disable RAUN015 // Deliberately mis-declared: the run-loop test needs a token the gate refuses at run time.
 public sealed class MisdeclaredToken : IContendedResource;
+#pragma warning restore RAUN015
