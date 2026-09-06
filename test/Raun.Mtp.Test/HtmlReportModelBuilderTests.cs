@@ -300,7 +300,23 @@ public class HtmlReportModelBuilderTests
 
         var model = builder.Build("2026-09-06T00:00:00Z");
         Assert.Equal(40, model.Summary.TotalMs);
-        Assert.Equal(2, model.Scenarios.Count);
+        var scenario = Assert.Single(model.Scenarios);
+        Assert.Equal("a", scenario.ScenarioId);
+        Assert.Equal(1, model.Summary.Passed);
+    }
+
+    [Fact]
+    public void An_empty_run_builds_an_empty_model()
+    {
+        var builder = new HtmlReport.HtmlReportModelBuilder();
+        builder.OnRunStarted([]);
+
+        var model = builder.Build("2026-09-06T00:00:00Z");
+        Assert.Empty(model.Scenarios);
+        Assert.Equal(0, model.Summary.TotalMs);
+        Assert.Equal(0, model.Summary.Passed);
+        Assert.Equal(0, model.Summary.Failed);
+        Assert.Equal(0, model.Summary.Skipped);
     }
 
     [Fact]

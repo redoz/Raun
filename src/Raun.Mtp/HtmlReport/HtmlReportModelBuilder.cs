@@ -43,6 +43,7 @@ internal sealed class HtmlReportModelBuilder
             _scenarios.Add(acc);
         }
 
+        acc.Started = true;
         acc.Waited = waited;
         acc.WaitedFor = waitedFor;
     }
@@ -57,7 +58,10 @@ internal sealed class HtmlReportModelBuilder
 
     public HtmlReportModel Build(string generatedAtUtc)
     {
-        var scenarios = _scenarios.Select(s => s.Build()).ToList();
+        // A scenario the run never launched (cancellation mid-run, a faulted sibling, a mis-declared
+        // token halting further admission) has nothing to report — it never had a Status, and
+        // without this filter Build() below would default it to "passed" with zero steps.
+        var scenarios = _scenarios.Where(s => s.Started).Select(s => s.Build()).ToList();
 
         // Wall clock: earliest start to latest end over the scenarios that ran, not the sum — with
         // concurrent scenarios the sum would count overlapping time twice.
@@ -92,6 +96,11 @@ internal sealed class HtmlReportModelBuilder
     {
         private readonly List<StepResult> _results = [];
         public ScenarioDefinition Definition { get; } = definition;
+
+        /// <summary>Set by <see cref="HtmlReportModelBuilder.OnScenarioStarted"/>. False means the run never launched this
+        /// scenario (cancellation mid-run, a faulted sibling, a mis-declared token halting further
+        /// admission) — it has no place in the report, just as it has no MTP node.</summary>
+        public bool Started { get; set; }
 
         public TimeSpan Waited { get; set; }
 
