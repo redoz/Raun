@@ -106,7 +106,10 @@
           ]
         }
       ],
-      "References": []
+      "References": [],
+      "Uses": [],
+      "WaitedMs": 0,
+      "WaitedFor": null
     }
   ]
 }

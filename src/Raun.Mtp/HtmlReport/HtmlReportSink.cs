@@ -31,9 +31,15 @@ internal sealed class HtmlReportSink : RunEventSink
         _timeProvider = timeProvider;
     }
 
+    protected override ValueTask OnRunStartedAsync(RunStarted e)
+    {
+        _builder.OnRunStarted(e.Scenarios);
+        return default;
+    }
+
     protected override ValueTask OnScenarioStartedAsync(ScenarioStarted e)
     {
-        _builder.OnScenarioStarted(e.Definition);
+        _builder.OnScenarioStarted(e.Definition, e.Waited, e.WaitedFor);
         return default;
     }
 

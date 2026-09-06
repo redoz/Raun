@@ -1917,11 +1917,15 @@
 
       // header
       const head = el("div", "card-head");
+      const waited = sc.waitedMs > 0
+        ? '<div class="cls">waited ' + fmtDur(sc.waitedMs) + " for " + esc(sc.waitedFor || "") + "</div>"
+        : "";
       head.innerHTML =
         '<div class="card-title">' +
           '<div class="name">' + esc(sc.displayName) + "</div>" +
           '<div class="cls">' + esc(sc.classDisplayName || "") +
             ' <span class="mth mono">· ' + esc(sc.methodName) + "</span></div>" +
+          waited +
         "</div>" +
         '<div class="card-meta">' +
           '<span class="dur">' + fmtDur(sc.durationMs) + "</span>" +

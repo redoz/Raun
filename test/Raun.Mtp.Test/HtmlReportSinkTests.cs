@@ -135,6 +135,25 @@ public sealed class HtmlReportSinkTests : IDisposable
         Assert.Contains("data-theme", html, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task The_wait_reaches_the_json_and_the_template_renders_it()
+    {
+        var path = Path.Combine(_dir, "raun-report-wait.html");
+        var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var def = Def();
+
+        await sink.PublishAsync(new RunStarted(1, [def]));
+        await sink.PublishAsync(new ScenarioStarted(def, TimeSpan.FromMilliseconds(250), typeof(ExclusiveDb)));
+        await sink.PublishAsync(new StepFinished(def, Passed(def.Nodes[0])));
+        await sink.PublishAsync(new ScenarioFinished(def, [Passed(def.Nodes[0])]));
+        await sink.PublishAsync(new RunFinished());
+
+        var html = await File.ReadAllTextAsync(path);
+        Assert.Contains("\"waitedMs\": 250", html, StringComparison.Ordinal);
+        Assert.Contains("\"waitedFor\": \"ExclusiveDb\"", html, StringComparison.Ordinal);
+        Assert.Contains("waited ", html, StringComparison.Ordinal); // the header line's template text
+    }
+
     private sealed class TestTimeProviderUtc(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;

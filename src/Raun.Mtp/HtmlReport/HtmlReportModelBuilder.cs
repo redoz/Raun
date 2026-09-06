@@ -7,23 +7,49 @@ namespace Raun.Mtp.HtmlReport;
 /// <summary>
 /// Builds the deterministic <see cref="HtmlReportModel"/> from the run-event stream. All layout
 /// (lane packing, resource rollup, ms-offset reduction) happens here — not in the renderer — so the
-/// JSON is snapshot-testable (design §4). Drive it with <see cref="OnScenarioStarted"/> then one
-/// <see cref="OnStepFinished"/> per terminal step, in scheduler order, then <see cref="Build"/>.
+/// JSON is snapshot-testable (design §4). Drive it with <see cref="OnRunStarted"/> (the canonical
+/// scenario order), <see cref="OnScenarioStarted"/>, one <see cref="OnStepFinished"/> per terminal
+/// step, then <see cref="Build"/>. Scenarios run concurrently, so step events of different
+/// scenarios interleave; each is routed by its definition, and the report keeps the run's order.
 /// </summary>
 internal sealed class HtmlReportModelBuilder
 {
     private readonly List<ScenarioAccumulator> _scenarios = [];
-    private ScenarioAccumulator? _current;
 
-    public void OnScenarioStarted(ScenarioDefinition definition)
+    /// <summary>Lays the scenarios out in the run's canonical order before any of them starts.</summary>
+    public void OnRunStarted(IReadOnlyList<ScenarioDefinition>? scenarios)
     {
-        _current = new ScenarioAccumulator(definition);
-        _scenarios.Add(_current);
+        if (scenarios is null)
+        {
+            return;
+        }
+
+        foreach (var definition in scenarios)
+        {
+            if (Find(definition.ScenarioId) is null)
+            {
+                _scenarios.Add(new ScenarioAccumulator(definition));
+            }
+        }
+    }
+
+    public void OnScenarioStarted(ScenarioDefinition definition, TimeSpan waited = default, Type? waitedFor = null)
+    {
+        var acc = Find(definition.ScenarioId);
+        if (acc is null)
+        {
+            // Driven without a RunStarted order (a sink under unit test): append as they come.
+            acc = new ScenarioAccumulator(definition);
+            _scenarios.Add(acc);
+        }
+
+        acc.Waited = waited;
+        acc.WaitedFor = waitedFor;
     }
 
     public void OnStepFinished(ScenarioDefinition definition, StepResult result)
     {
-        var acc = _scenarios.LastOrDefault(s => s.Definition.ScenarioId == definition.ScenarioId)
+        var acc = Find(definition.ScenarioId)
                   ?? throw new InvalidOperationException(
                       $"StepFinished for '{definition.ScenarioId}' before its ScenarioStarted.");
         acc.Add(result);
@@ -32,12 +58,23 @@ internal sealed class HtmlReportModelBuilder
     public HtmlReportModel Build(string generatedAtUtc)
     {
         var scenarios = _scenarios.Select(s => s.Build()).ToList();
+
+        // Wall clock: earliest start to latest end over the scenarios that ran, not the sum — with
+        // concurrent scenarios the sum would count overlapping time twice.
+        var ran = _scenarios.Where(s => s.HasSteps).ToList();
+        var totalMs = 0d;
+        if (ran.Count > 0)
+        {
+            var origin = ran.Min(s => s.Start);
+            totalMs = ran.Max(s => (s.Start - origin).TotalMilliseconds + s.DurationMs);
+        }
+
         var summary = new ReportSummary
         {
             Passed = scenarios.Count(s => s.Status == "passed"),
             Failed = scenarios.Count(s => s.Status == "failed"),
             Skipped = scenarios.Count(s => s.Status == "skipped"),
-            TotalMs = scenarios.Sum(s => s.DurationMs),
+            TotalMs = totalMs,
         };
 
         return new HtmlReportModel
@@ -48,18 +85,32 @@ internal sealed class HtmlReportModelBuilder
         };
     }
 
+    private ScenarioAccumulator? Find(string scenarioId)
+        => _scenarios.Find(s => s.Definition.ScenarioId == scenarioId);
+
     private sealed class ScenarioAccumulator(ScenarioDefinition definition)
     {
         private readonly List<StepResult> _results = [];
         public ScenarioDefinition Definition { get; } = definition;
 
+        public TimeSpan Waited { get; set; }
+
+        public Type? WaitedFor { get; set; }
+
+        public bool HasSteps => _results.Count > 0;
+
+        public DateTimeOffset Start => _results.Count == 0 ? DateTimeOffset.UnixEpoch : _results.Min(r => r.StartedAt);
+
+        /// <summary>Latest step end relative to <see cref="Start"/>, in ms; 0 with no steps.</summary>
+        public double DurationMs => _results.Count == 0
+            ? 0
+            : _results.Max(r => Ms(r.StartedAt - Start) + Ms(r.Duration));
+
         public void Add(StepResult result) => _results.Add(result);
 
         public ReportScenario Build()
         {
-            var start = _results.Count == 0
-                ? DateTimeOffset.UnixEpoch
-                : _results.Min(r => r.StartedAt);
+            var start = Start;
 
             var ordered = _results.OrderBy(r => r.Node.Index).ToList();
             var lanes = PackLanes(ordered, start);
@@ -165,6 +216,9 @@ internal sealed class HtmlReportModelBuilder
                 Steps = steps,
                 Resources = resources,
                 References = references,
+                Uses = Definition.Uses.Select(u => $"{u.Resource.Name}:{u.Mode}").ToList(),
+                WaitedMs = Ms(Waited),
+                WaitedFor = WaitedFor?.Name,
             };
         }
 

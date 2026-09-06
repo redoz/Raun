@@ -26,6 +26,11 @@ public class HtmlReportModelBuilderTests
         ClassDisplayName = "Appointment booking", Nodes = nodes,
     };
 
+    private static ScenarioDefinition Def(string id, params ScenarioNode[] nodes) => new()
+    {
+        ScenarioId = id, DisplayName = id, MethodName = "Ns." + id, Nodes = nodes,
+    };
+
     private static StepResult Result(ScenarioNode node, DateTimeOffset startedAt, double ms,
         StepStatus status = StepStatus.Passed, IReadOnlyList<ResourceEffect>? effects = null,
         IReadOnlyList<string>? logs = null, IReadOnlyList<ResourceLineageRelation>? lineage = null,
@@ -228,5 +233,93 @@ public class HtmlReportModelBuilderTests
 
         var scenario = Assert.Single(builder.Build("x").Scenarios);
         Assert.Single(scenario.References);
+    }
+
+    [Fact]
+    public void Scenarios_follow_the_RunStarted_order_whatever_order_they_started_and_finished_in()
+    {
+        var first = Def("first", Node(0, "a", "Given", "a"));
+        var second = Def("second", Node(0, "b", "Given", "b"));
+
+        var builder = new HtmlReport.HtmlReportModelBuilder();
+        builder.OnRunStarted([first, second]);
+        builder.OnScenarioStarted(second);                         // admitted first
+        builder.OnStepFinished(second, Result(second.Nodes[0], T0, 10));
+        builder.OnScenarioStarted(first);
+        builder.OnStepFinished(first, Result(first.Nodes[0], T0.AddMilliseconds(5), 10));
+
+        var model = builder.Build("2026-09-06T00:00:00Z");
+        Assert.Equal(["first", "second"], model.Scenarios.Select(s => s.ScenarioId));
+    }
+
+    [Fact]
+    public void Interleaved_step_events_land_on_their_own_scenarios()
+    {
+        var a = Def("a", Node(0, "a0", "Given", "a0"), Node(1, "a1", "Then", "a1", dependsOn: [0]));
+        var b = Def("b", Node(0, "b0", "Given", "b0"));
+
+        var builder = new HtmlReport.HtmlReportModelBuilder();
+        builder.OnRunStarted([a, b]);
+        builder.OnScenarioStarted(a);
+        builder.OnScenarioStarted(b);
+        builder.OnStepFinished(a, Result(a.Nodes[0], T0, 10));
+        builder.OnStepFinished(b, Result(b.Nodes[0], T0, 10));
+        builder.OnStepFinished(a, Result(a.Nodes[1], T0.AddMilliseconds(10), 10));
+
+        var model = builder.Build("2026-09-06T00:00:00Z");
+        Assert.Equal(2, model.Scenarios[0].Steps.Count);
+        Assert.Single(model.Scenarios[1].Steps);
+    }
+
+    [Fact]
+    public void Total_is_the_wall_span_across_overlapping_scenarios_not_their_sum()
+    {
+        var a = Def("a", Node(0, "a0", "Given", "a0"));
+        var b = Def("b", Node(0, "b0", "Given", "b0"));
+
+        var builder = new HtmlReport.HtmlReportModelBuilder();
+        builder.OnRunStarted([a, b]);
+        builder.OnScenarioStarted(a);
+        builder.OnScenarioStarted(b);
+        builder.OnStepFinished(a, Result(a.Nodes[0], T0, 100));                      // 0..100
+        builder.OnStepFinished(b, Result(b.Nodes[0], T0.AddMilliseconds(50), 100));  // 50..150
+
+        Assert.Equal(150, builder.Build("2026-09-06T00:00:00Z").Summary.TotalMs);
+    }
+
+    [Fact]
+    public void A_scenario_that_never_started_contributes_nothing_to_the_wall_span()
+    {
+        var a = Def("a", Node(0, "a0", "Given", "a0"));
+        var never = Def("never", Node(0, "n0", "Given", "n0"));
+
+        var builder = new HtmlReport.HtmlReportModelBuilder();
+        builder.OnRunStarted([a, never]);
+        builder.OnScenarioStarted(a);
+        builder.OnStepFinished(a, Result(a.Nodes[0], T0, 40));
+
+        var model = builder.Build("2026-09-06T00:00:00Z");
+        Assert.Equal(40, model.Summary.TotalMs);
+        Assert.Equal(2, model.Scenarios.Count);
+    }
+
+    [Fact]
+    public void Uses_and_wait_are_carried_per_scenario()
+    {
+        var def = new ScenarioDefinition
+        {
+            ScenarioId = "w", DisplayName = "w", MethodName = "Ns.w", Nodes = [Node(0, "x", "Given", "x")],
+            Uses = [new ContendedResourceUse(typeof(ExclusiveDb), LockMode.Exclusive), new ContendedResourceUse(typeof(SharedCatalog), LockMode.Shared)],
+        };
+
+        var builder = new HtmlReport.HtmlReportModelBuilder();
+        builder.OnRunStarted([def]);
+        builder.OnScenarioStarted(def, waited: TimeSpan.FromMilliseconds(1234), waitedFor: typeof(ExclusiveDb));
+        builder.OnStepFinished(def, Result(def.Nodes[0], T0, 10));
+
+        var scenario = Assert.Single(builder.Build("2026-09-06T00:00:00Z").Scenarios);
+        Assert.Equal(["ExclusiveDb:Exclusive", "SharedCatalog:Shared"], scenario.Uses);
+        Assert.Equal(1234, scenario.WaitedMs);
+        Assert.Equal("ExclusiveDb", scenario.WaitedFor);
     }
 }

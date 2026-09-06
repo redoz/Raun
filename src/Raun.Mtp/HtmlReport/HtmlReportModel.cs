@@ -29,6 +29,15 @@ public sealed record ReportScenario
     public required IReadOnlyList<ReportStep> Steps { get; init; }
     public required IReadOnlyList<ReportResource> Resources { get; init; }
     public required IReadOnlyList<ReportReference> References { get; init; }
+
+    /// <summary>The scenario's contended-resource uses as <c>Type:Mode</c>; empty when none declared.</summary>
+    public IReadOnlyList<string> Uses { get; init; } = [];
+
+    /// <summary>Milliseconds admission held the scenario back behind a contended resource; 0 when none.</summary>
+    public double WaitedMs { get; init; }
+
+    /// <summary>Name of the resource that first refused the scenario; null when it never waited.</summary>
+    public string? WaitedFor { get; init; }
 }
 
 public sealed record ReportStep
