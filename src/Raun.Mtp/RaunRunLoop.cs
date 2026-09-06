@@ -23,8 +23,9 @@ namespace Raun.Mtp;
 /// <para>
 /// Each scenario run gets its own <see cref="CancellationTokenSource"/>, linked to the platform's
 /// token and <strong>owned by the loop</strong> — never tied to a single step node's lifecycle — so
-/// one step can never cancel the shared run out from under its siblings. Cross-scenario execution is
-/// sequential for v1 (the scheduler already provides bounded parallelism <em>within</em> a scenario).
+/// one step can never cancel the shared run out from under its siblings. Scenarios run concurrently
+/// up to <see cref="MaxParallelScenarios"/>; the scheduler additionally parallelizes steps
+/// <em>within</em> a scenario.
 /// </para>
 /// </remarks>
 internal sealed class RaunRunLoop
@@ -43,6 +44,10 @@ internal sealed class RaunRunLoop
     private readonly bool simulateTime;
     private readonly IServiceProvider? services;
     private readonly Func<ScenarioContext, Task>? preflight;
+    private readonly int maxParallelScenarios;
+
+    /// <summary>How many scenarios may run at once. Steps inside a scenario stay unbounded.</summary>
+    public int MaxParallelScenarios => maxParallelScenarios;
 
     /// <param name="scenarioSource">Supplies the registered scenarios to consider for the run.</param>
     /// <param name="runScenario">
@@ -65,18 +70,26 @@ internal sealed class RaunRunLoop
     /// every scenario's steps report skipped naming preflight, and the run still completes so the
     /// report stays whole. <see langword="null"/> (the default) means no preflight node exists at all.
     /// </param>
+    /// <param name="maxParallelScenarios">
+    /// How many scenarios may run at once. <c>0</c> (the default) means <see cref="Environment.ProcessorCount"/>;
+    /// <c>1</c> runs scenarios one after another. Steps inside a scenario stay unbounded, so the
+    /// number of concurrently running steps is at most this times the widest scenario.
+    /// </param>
     public RaunRunLoop(
         Func<IEnumerable<ScenarioDefinition>> scenarioSource,
         RunScenario? runScenario = null,
         bool simulateTime = false,
         IServiceProvider? services = null,
-        Func<ScenarioContext, Task>? preflight = null)
+        Func<ScenarioContext, Task>? preflight = null,
+        int maxParallelScenarios = 0)
     {
         ArgumentNullException.ThrowIfNull(scenarioSource);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxParallelScenarios);
         this.scenarioSource = scenarioSource;
         this.simulateTime = simulateTime;
         this.services = services;
         this.preflight = preflight;
+        this.maxParallelScenarios = maxParallelScenarios == 0 ? Environment.ProcessorCount : maxParallelScenarios;
         this.runScenario = runScenario ?? DefaultRunScenario;
     }
 
@@ -120,7 +133,9 @@ internal sealed class RaunRunLoop
         ArgumentNullException.ThrowIfNull(bus);
 
         var selected = SelectScenarios(scenarioSource(), uids);
-        await bus.PublishAsync(new RunStarted(selected.Count)).ConfigureAwait(false);
+        var preflightDefinition = preflight is null ? null : Preflight.Definition(preflight);
+        IReadOnlyList<ScenarioDefinition> order = preflightDefinition is null ? selected : [preflightDefinition, .. selected];
+        await bus.PublishAsync(new RunStarted(selected.Count, order)).ConfigureAwait(false);
 
         // The run's own span: a small root that every scenario span LINKS to rather than nests under,
         // so a suite never becomes one giant trace and sampling can decide per scenario. Started, then
@@ -139,42 +154,75 @@ internal sealed class RaunRunLoop
         // Run-level setup, before any scenario. It runs even when the filter selected nothing: a
         // filtered run of one step still needs whatever preflight brings up.
         var preflightFailed = false;
-        if (preflight is not null)
+        if (preflightDefinition is not null)
         {
-            var results = await RunOneAsync(Preflight.Definition(preflight), bus, uids: null, runContext, runId, cancellationToken)
+            var results = await RunOneAsync(preflightDefinition, bus, uids: null, runContext, runId, waited: TimeSpan.Zero, waitedFor: null, cancellationToken)
                 .ConfigureAwait(false);
             preflightFailed = results.Any(r => r.Status is StepStatus.Failed or StepStatus.Skipped);
         }
 
-        // v1: sequential cross-scenario execution. The scheduler already parallelizes steps WITHIN a
-        // scenario; bounding concurrency ACROSS scenarios is a future enhancement — this foreach is
-        // the seam where a SemaphoreSlim / Parallel.ForEachAsync with a bounded degree would slot in.
-        var started = false;
-        foreach (var definition in selected)
+        if (preflightFailed)
         {
-            // Honor platform cancellation between scenarios: once cancellation is observed after a
-            // scenario has run, stop launching scenarios that have not started, rather than reporting
-            // every remaining one as all-skipped (which would flood the runner with skip updates for
-            // work the user never started). The first selected scenario always runs so that a run
-            // canceled up-front still reports its (skipped) steps via the scheduler's skip path.
-            if (started && cancellationToken.IsCancellationRequested)
+            // Attribute the failure to a row rather than to an exit code: every step reports skipped
+            // naming preflight, and the run still completes so the report is whole.
+            foreach (var definition in selected)
             {
-                break;
-            }
-
-            if (preflightFailed)
-            {
-                // Attribute the failure to a row rather than to an exit code: every step reports
-                // skipped naming preflight, and the run still completes so the report is whole.
                 await SkipScenarioAsync(definition, bus, runContext, runId).ConfigureAwait(false);
-                continue;
             }
-
-            await RunOneAsync(definition, bus, uids, runContext, runId, cancellationToken).ConfigureAwait(false);
-            started = true;
+        }
+        else
+        {
+            await LaunchAsync(selected, bus, uids, runContext, runId, cancellationToken).ConfigureAwait(false);
         }
 
         await bus.PublishAsync(new RunFinished()).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs the selected scenarios with at most <see cref="MaxParallelScenarios"/> in flight.
+    /// Scenarios launch in registration order as slots free up. Cancellation keeps the sequential
+    /// loop's contract: the first scenario always launches (an up-front cancellation still reports
+    /// its steps as skipped through the scheduler); after any launch, an observed cancellation
+    /// stops further launches; whatever is running drains through its own linked token.
+    /// </summary>
+    private async ValueTask LaunchAsync(
+        IReadOnlyList<ScenarioDefinition> selected,
+        IRunEventSink bus,
+        ISet<string>? uids,
+        ActivityContext? runContext,
+        string runId,
+        CancellationToken cancellationToken)
+    {
+        var pending = new List<ScenarioDefinition>(selected);
+        var running = new Dictionary<Task<IReadOnlyList<StepResult>>, ScenarioDefinition>();
+        var started = false;
+
+        while (pending.Count > 0 || running.Count > 0)
+        {
+            var i = 0;
+            while (i < pending.Count && running.Count < maxParallelScenarios)
+            {
+                if (started && cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                var definition = pending[i];
+                pending.RemoveAt(i);
+                var run = RunOneAsync(definition, bus, uids, runContext, runId, waited: TimeSpan.Zero, waitedFor: null, cancellationToken).AsTask();
+                running[run] = definition;
+                started = true;
+            }
+
+            if (running.Count == 0)
+            {
+                break; // cancelled with nothing left in flight
+            }
+
+            var finished = await Task.WhenAny(running.Keys).ConfigureAwait(false);
+            running.Remove(finished);
+            await finished.ConfigureAwait(false); // surfaces a loop bug; step failures never throw here
+        }
     }
 
     /// <summary>Reports every step of a scenario that never ran because preflight failed.</summary>
@@ -182,7 +230,7 @@ internal sealed class RaunRunLoop
         ScenarioDefinition definition, IRunEventSink bus, ActivityContext? runContext, string runId)
     {
         await bus.PublishAsync(new ScenarioStarted(definition)).ConfigureAwait(false);
-        using var scenarioActivity = StartScenarioActivity(definition, runContext, runId);
+        using var scenarioActivity = StartScenarioActivity(definition, runContext, runId, waited: TimeSpan.Zero, waitedFor: null);
         scenarioActivity?.SetTag(RaunTelemetry.Attributes.TestSuiteRunStatus, "skipped");
 
         var results = new List<StepResult>(definition.Nodes.Count);
@@ -209,17 +257,19 @@ internal sealed class RaunRunLoop
         ISet<string>? uids,
         ActivityContext? runContext,
         string runId,
+        TimeSpan waited,
+        Type? waitedFor,
         CancellationToken cancellationToken)
     {
         // One CTS per scenario run, owned here and linked to the platform token. Tying cancellation
         // to the run (not to any single step node) is what keeps a sibling from canceling the run.
         using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        await bus.PublishAsync(new ScenarioStarted(definition)).ConfigureAwait(false);
+        await bus.PublishAsync(new ScenarioStarted(definition, waited, waitedFor)).ConfigureAwait(false);
 
         // The scenario's span is a ROOT (Activity.Current is null here) linked to the run span. It is
         // ambient while the scheduler runs, so every step span nests under it and every outgoing
         // HttpClient call inside a step carries this trace's id across the wire.
-        using var scenarioActivity = StartScenarioActivity(definition, runContext, runId);
+        using var scenarioActivity = StartScenarioActivity(definition, runContext, runId, waited, waitedFor);
 
         var observer = new BusObserver(definition, bus);
         var targets = SelectTargets(definition, uids);
@@ -257,7 +307,8 @@ internal sealed class RaunRunLoop
     }
 
     /// <summary>Starts a scenario's root span, linked (not parented) to the run span, with its identity tags.</summary>
-    private static Activity? StartScenarioActivity(ScenarioDefinition definition, ActivityContext? runContext, string runId)
+    private static Activity? StartScenarioActivity(
+        ScenarioDefinition definition, ActivityContext? runContext, string runId, TimeSpan waited, Type? waitedFor)
     {
         var links = runContext is { } context ? new[] { new ActivityLink(context) } : null;
         var activity = RaunTelemetry.Source.StartActivity(

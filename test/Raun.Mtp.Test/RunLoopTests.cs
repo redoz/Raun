@@ -175,9 +175,9 @@ public class RunLoopTests
     }
 
     [Fact]
-    public async Task Distinct_scenarios_run_sequentially_for_v1()
+    public async Task Degree_one_runs_scenarios_sequentially()
     {
-        // Records the max observed concurrency across scenario runs; sequential => never exceeds 1.
+        // Records the max observed concurrency across scenario runs; degree 1 => never exceeds 1.
         var current = 0;
         var max = 0;
         var sync = new object();
@@ -204,10 +204,101 @@ public class RunLoopTests
         var b = Definition("b", "B", Node(0, "y", "y", invoke: Body));
         var c = Definition("c", "C", Node(0, "z", "z", invoke: Body));
 
-        var loop = new RaunRunLoop(() => [a, b, c]);
+        var loop = new RaunRunLoop(() => [a, b, c], maxParallelScenarios: 1);
         await loop.RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
 
         Assert.Equal(1, max);
+    }
+
+    [Fact]
+    public async Task Scenarios_run_concurrently_up_to_the_degree()
+    {
+        // Six scenarios, degree 3. Every body blocks until three are in flight, so "== 3" is proven
+        // by rendezvous rather than sampled; the launcher itself guarantees "<= 3".
+        var current = 0;
+        var max = 0;
+        var sync = new object();
+        var third = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<object?> Body(IStepInputs _, ScenarioContext __)
+        {
+            lock (sync)
+            {
+                current++;
+                max = Math.Max(max, current);
+                if (current == 3)
+                {
+                    third.TrySetResult();
+                }
+            }
+
+            await third.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            lock (sync)
+            {
+                current--;
+            }
+
+            return null;
+        }
+
+        var definitions = Enumerable.Range(0, 6)
+            .Select(i => Definition($"s{i}", $"S{i}", Node(0, "x", "x", invoke: Body)))
+            .ToArray();
+
+        var sink = new RecordingSink();
+        await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
+            .RunAsync(uids: null, sink, CancellationToken.None);
+
+        Assert.Equal(3, max);
+        Assert.Equal(6, sink.PassedUids.Count());
+    }
+
+    [Fact]
+    public void A_negative_degree_is_rejected_and_zero_means_the_processor_count()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RaunRunLoop(() => [], maxParallelScenarios: -1));
+        Assert.Equal(Environment.ProcessorCount, new RaunRunLoop(() => []).MaxParallelScenarios);
+        Assert.Equal(2, new RaunRunLoop(() => [], maxParallelScenarios: 2).MaxParallelScenarios);
+    }
+
+    [Fact]
+    public async Task RunStarted_carries_the_registration_order_with_preflight_first()
+    {
+        var a = Definition("a", "A", Node(0, "x", "x"));
+        var b = Definition("b", "B", Node(0, "y", "y"));
+        var sink = new RecordingSink();
+
+        await new RaunRunLoop(() => [a, b], preflight: _ => Task.CompletedTask, maxParallelScenarios: 2)
+            .RunAsync(uids: null, sink, CancellationToken.None);
+
+        var started = Assert.Single(sink.Events.OfType<RunStarted>());
+        Assert.Equal(2, started.ScenarioCount);
+        Assert.NotNull(started.Scenarios);
+        Assert.Equal([Preflight.ScenarioId, "a", "b"], started.Scenarios.Select(d => d.ScenarioId)); // "raun", then registration order
+    }
+
+    [Fact]
+    public async Task A_failed_preflight_skips_every_scenario_at_any_degree()
+    {
+        var a = Definition("a", "A", Node(0, "x", "x"));
+        var b = Definition("b", "B", Node(0, "y", "y"));
+        var c = Definition("c", "C", Node(0, "z", "z"));
+        var sink = new RecordingSink();
+
+        await new RaunRunLoop(
+                () => [a, b, c],
+                preflight: _ => throw new InvalidOperationException("no container runtime"),
+                maxParallelScenarios: 3)
+            .RunAsync(uids: null, sink, CancellationToken.None);
+
+        Assert.Empty(sink.PassedUids);
+        foreach (var uid in new[] { Uid("a", "x"), Uid("b", "y"), Uid("c", "z") })
+        {
+            Assert.Contains(uid, sink.SkippedUids);
+        }
+
+        Assert.Single(sink.Events.OfType<RunFinished>());
     }
 
     [Fact]
@@ -280,7 +371,7 @@ public class RunLoopTests
         var second = Definition("second", "second",
             Node(0, "b", "b", invoke: (_, _) => { secondRan = true; return Task.FromResult<object?>(null); }));
 
-        var loop = new RaunRunLoop(() => [first, second]);
+        var loop = new RaunRunLoop(() => [first, second], maxParallelScenarios: 1);
 
         var sink = new RecordingSink();
         await loop.RunAsync(uids: null, sink, cts.Token);
@@ -289,6 +380,36 @@ public class RunLoopTests
         // The second scenario was never started at all (not even as skipped).
         Assert.DoesNotContain("second",
             sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
+    }
+
+    [Fact]
+    public async Task Cancellation_mid_run_stops_launching_scenarios_beyond_the_first_pass()
+    {
+        // Degree 3, five scenarios: the first pass launches up to three; the first body cancels the
+        // platform token, so no later slot may be refilled — scenarios four and five never start.
+        using var cts = new CancellationTokenSource();
+        var launched = new List<string>();
+        var sync = new object();
+
+        ScenarioDefinition Def(string id, bool cancels) => Definition(id, id,
+            Node(0, "a", "a", invoke: (_, _) =>
+            {
+                lock (sync) { launched.Add(id); }
+                if (cancels) { cts.Cancel(); }
+                return Task.FromResult<object?>(null);
+            }));
+
+        var definitions = new[] { Def("one", cancels: true), Def("two", false), Def("three", false), Def("four", false), Def("five", false) };
+        var sink = new RecordingSink();
+
+        await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
+            .RunAsync(uids: null, sink, cts.Token);
+
+        var startedIds = sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId).ToList();
+        Assert.Contains("one", startedIds);
+        Assert.DoesNotContain("four", startedIds);
+        Assert.DoesNotContain("five", startedIds);
+        Assert.Single(sink.Events.OfType<RunFinished>());
     }
 
     [Fact]
@@ -758,6 +879,48 @@ public class RunLoopTests
         });
         Assert.Equal("success", scenario.GetTagItem(RaunTelemetry.Attributes.TestSuiteRunStatus));
         Assert.Equal("traced scenario", scenario.GetTagItem(RaunTelemetry.Attributes.TestSuiteName));
+    }
+
+    [Fact]
+    public async Task Concurrent_scenarios_keep_their_own_traces_and_step_parents()
+    {
+        var ids = Enumerable.Range(0, 3).Select(i => $"ctrace-{i}-" + Guid.NewGuid().ToString("N")[..6]).ToArray();
+        var rendezvous = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var arrived = 0;
+
+        async Task<object?> Body(IStepInputs _, ScenarioContext __)
+        {
+            if (Interlocked.Increment(ref arrived) == 3)
+            {
+                rendezvous.TrySetResult();
+            }
+
+            await rendezvous.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            return null;
+        }
+
+        var definitions = ids.Select(id => Definition(id, "traced " + id, Node(0, "x", "x", invoke: Body), Node(1, "y", "y", dependsOn: [0]))).ToArray();
+        using var capture = new SpanCapture();
+
+        await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
+            .RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
+
+        foreach (var id in ids)
+        {
+            var spans = capture.ForScenario(id);
+            var scenario = Assert.Single(spans, s => s.DisplayName == "traced " + id);
+            Assert.Null(scenario.Parent);
+            var steps = spans.Where(s => s != scenario).ToList();
+            Assert.Equal(2, steps.Count);
+            Assert.All(steps, step =>
+            {
+                Assert.Equal(scenario.TraceId, step.TraceId);
+                Assert.Equal(scenario.SpanId, step.ParentSpanId);
+            });
+        }
+
+        // Three different traces, not one.
+        Assert.Equal(3, ids.Select(id => capture.ForScenario(id).First().TraceId).Distinct().Count());
     }
 
     [Fact]
