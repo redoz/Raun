@@ -9,7 +9,7 @@ namespace Raun.Mtp;
 /// <remarks>
 /// <para>
 /// This is the escape-hatch API. By default the Raun source generator emits a <c>Program.cs</c>
-/// whose <c>Main</c> calls <see cref="RunAsync(string[], Action{ITestApplicationBuilder}?, bool, IServiceProvider?, Func{ScenarioContext,Task}?)"/>, giving
+/// whose <c>Main</c> calls <see cref="RunAsync(string[], Action{ITestApplicationBuilder}?, bool, IServiceProvider?, Func{ScenarioContext,Task}?, int)"/>, giving
 /// "just add the package" UX. Setting the MSBuild property <c>&lt;RaunGenerateProgram&gt;false&lt;/RaunGenerateProgram&gt;</c>
 /// suppresses that emission so a consumer can write their own <c>Program.cs</c> and call this method
 /// directly, taking full control of the host (custom MTP extensions, builder configuration, etc.)
@@ -45,13 +45,20 @@ public static class RaunTestApplication
     /// node, so a failure is a failing test rather than a process that exits before anything reports.
     /// When it fails, every scenario's steps report skipped naming preflight.
     /// </param>
+    /// <param name="maxParallelScenarios">
+    /// The suite's default degree of scenario parallelism: how many scenarios may run at once.
+    /// <c>0</c> (the default) means the processor count; <c>1</c> runs scenarios one after another.
+    /// <c>--max-parallel-scenarios &lt;n&gt;</c> overrides it per run. Steps inside a scenario stay
+    /// unbounded. Scenarios that contend for the same thing declare it with <c>[Uses&lt;T&gt;]</c>.
+    /// </param>
     /// <returns>The process exit code to return from <c>Main</c>.</returns>
     public static async Task<int> RunAsync(
         string[] args,
         Action<ITestApplicationBuilder>? configure = null,
         bool simulateTime = false,
         IServiceProvider? services = null,
-        Func<ScenarioContext, Task>? preflight = null)
+        Func<ScenarioContext, Task>? preflight = null,
+        int maxParallelScenarios = 0)
     {
         ArgumentNullException.ThrowIfNull(args);
 
@@ -60,10 +67,11 @@ public static class RaunTestApplication
         configure?.Invoke(builder);
 
         builder.CommandLine.AddProvider(() => new HtmlReport.HtmlReportOptionsProvider());
+        builder.CommandLine.AddProvider(() => new RunOptionsProvider());
 
         builder.RegisterTestFramework(
             _ => new TestFrameworkCapabilities(),
-            (_, serviceProvider) => new RaunTestFramework(serviceProvider, simulateTime, services, preflight));
+            (_, serviceProvider) => new RaunTestFramework(serviceProvider, simulateTime, services, preflight, maxParallelScenarios));
 
         using var app = await builder.BuildAsync().ConfigureAwait(false);
         return await app.RunAsync().ConfigureAwait(false);

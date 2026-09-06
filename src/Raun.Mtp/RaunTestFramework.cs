@@ -52,6 +52,7 @@ public class RaunTestFramework :
     private readonly IServiceProvider? _userServices;
     private readonly Func<ScenarioContext, Task>? _preflight;
     private readonly bool _simulateTime;
+    private readonly int _maxParallelScenarios;
 
     /// <summary>Parameterless ctor for tests and the default registration path.</summary>
     public RaunTestFramework() { }
@@ -81,6 +82,16 @@ public class RaunTestFramework :
         IServiceProvider? userServices,
         Func<ScenarioContext, Task>? preflight)
         : this(services, simulateTime, userServices) => _preflight = preflight;
+
+    /// <summary>Production ctor including the suite's default degree of scenario parallelism
+    /// (<c>0</c> = processor count, <c>1</c> = sequential); <c>--max-parallel-scenarios</c> overrides it per run.</summary>
+    public RaunTestFramework(
+        IServiceProvider services,
+        bool simulateTime,
+        IServiceProvider? userServices,
+        Func<ScenarioContext, Task>? preflight,
+        int maxParallelScenarios)
+        : this(services, simulateTime, userServices, preflight) => _maxParallelScenarios = maxParallelScenarios;
 
     /// <inheritdoc/>
     public string Uid => ExtensionUid;
@@ -283,7 +294,8 @@ public class RaunTestFramework :
             EnumerateRegisteredScenarios,
             simulateTime: _simulateTime,
             services: _userServices,
-            preflight: _preflight);
+            preflight: _preflight,
+            maxParallelScenarios: ScenarioParallelism.Resolve(_services, _maxParallelScenarios));
         await loop.RunAsync(uids, bus, cancellationToken).ConfigureAwait(false);
 
         if (bus.Failures.Count > 0)

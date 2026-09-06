@@ -26,6 +26,12 @@ public sealed class AspireRunOptions
     public TimeSpan StartupTimeout { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
+    /// How many scenarios may run at once against the application. <c>0</c> (the default) means the
+    /// processor count; <c>1</c> runs them one after another. <c>--max-parallel-scenarios</c> overrides it.
+    /// </summary>
+    public int MaxParallelScenarios { get; set; }
+
+    /// <summary>
     /// Names resources that must report healthy before any scenario runs. Additive: calling it twice
     /// waits for the union.
     /// </summary>
