@@ -26,6 +26,13 @@ public class GeneratorSnapshotTests
         Verify(GeneratorHarness.RunDriver(SampleSources.Dsl + SampleSources.ArrayScenario))
             .UseDirectory("Snapshots");
 
+    /// <summary>Pins the runtime display-name formatter's shape: a string concatenation of literals
+    /// and parenthesized <c>__inputs.Get&lt;…&gt;(i)</c> holes, not a hand-escaped interpolation.</summary>
+    [Fact]
+    public Task RuntimeName_scenario() =>
+        Verify(GeneratorHarness.RunDriver(SampleSources.Dsl + SampleSources.RuntimeNameScenario))
+            .UseDirectory("Snapshots");
+
     [Fact]
     public Task PathBearing_scenario() =>
         Verify(GeneratorHarness.RunDriver(SampleSources.Dsl + SampleSources.LinearScenario, "Scenario.cs"))

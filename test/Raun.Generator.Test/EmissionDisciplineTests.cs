@@ -14,19 +14,24 @@ public partial class EmissionDisciplineTests
     /// <summary>
     /// A <c>SyntaxFactory</c> parse entry point, in the only two spellings that reach one:
     /// qualified (<c>SyntaxFactory.ParseExpression(</c>) — the <c>receiver</c> group — or bare, which
-    /// resolves to <c>SyntaxFactory</c> only in a file with the <c>using static</c> below. The
+    /// binds to <c>SyntaxFactory</c> only in a file carrying the <c>using static</c> below. The
     /// negative lookbehind on the bare form drops every OTHER receiver (<c>this.ParseStatement(</c>,
-    /// <c>x.ParseName(</c>), and the <c>using static</c> condition drops a file's own private
-    /// <c>Parse*</c> methods: <see cref="Lowering.ScenarioParser"/> declares and calls
-    /// <c>ParseStatement</c>/<c>ParseExpressionStatement</c> of its own and imports no static
-    /// <c>SyntaxFactory</c>, so those never trip the guard. (A file that both imported
-    /// <c>SyntaxFactory</c> statically AND declared its own <c>Parse*</c> member would be a false
-    /// positive; no file does, and the split is deliberate.)
+    /// <c>x.ParseName(</c>).
     /// </summary>
     [GeneratedRegex(
         @"(?:(?<receiver>SyntaxFactory\.)|(?<![\w.]))" +
         @"(?<name>ParseExpression|ParseTypeName|ParseName|ParseCompilationUnit|ParseSyntaxTree|ParseMemberDeclaration|ParseStatement)\s*\(")]
     private static partial Regex ParseCall();
+
+    /// <summary>
+    /// A method DECLARATION of one of those names, so a class's own <c>Parse*</c> member and the calls
+    /// to it are not mistaken for the factory's: <see cref="Lowering.ScenarioParser"/> lowers a
+    /// statement in a private <c>ParseStatement</c> of its own, and it imports <c>SyntaxFactory</c>
+    /// statically to BUILD syntax. Only names the file declares itself are exempted, so a bare
+    /// <c>ParseExpression(</c> there would still be caught.
+    /// </summary>
+    [GeneratedRegex(@"\b(?:private|internal|protected|public)\b[^=;]*?\b(?<name>Parse\w*)\s*\(")]
+    private static partial Regex ParseDeclaration();
 
     private const string StaticFactoryImport = "using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;";
 
@@ -51,6 +56,10 @@ public partial class EmissionDisciplineTests
             var lines = File.ReadAllLines(file);
             var importsStaticFactory = lines.Any(
                 line => line.Contains(StaticFactoryImport, StringComparison.Ordinal));
+            var declaredHere = lines
+                .SelectMany(line => ParseDeclaration().Matches(line).Cast<Match>())
+                .Select(match => match.Groups["name"].Value)
+                .ToHashSet(StringComparer.Ordinal);
 
             for (var i = 0; i < lines.Length; i++)
             {
@@ -64,9 +73,12 @@ public partial class EmissionDisciplineTests
 
                 foreach (var match in ParseCall().Matches(line).Cast<Match>())
                 {
-                    if (match.Groups["receiver"].Success || importsStaticFactory)
+                    var name = match.Groups["name"].Value;
+                    var isFactoryCall = match.Groups["receiver"].Success
+                        || (importsStaticFactory && !declaredHere.Contains(name));
+                    if (isFactoryCall)
                     {
-                        offences.Add($"{location}: SyntaxFactory.{match.Groups["name"].Value} — {line.Trim()}");
+                        offences.Add($"{location}: SyntaxFactory.{name} — {line.Trim()}");
                     }
                 }
             }

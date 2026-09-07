@@ -14,10 +14,10 @@ namespace Raun.Generator.Lowering;
 /// </summary>
 internal sealed class IdentifierReplacer : CSharpSyntaxRewriter
 {
-    private readonly Dictionary<string, string> _map;
+    private readonly Dictionary<string, ExpressionSyntax> _map;
     private readonly HashSet<string> _shadowed = [];
 
-    public IdentifierReplacer(Dictionary<string, string> map) => _map = map;
+    public IdentifierReplacer(Dictionary<string, ExpressionSyntax> map) => _map = map;
 
     public override SyntaxNode? VisitSimpleLambdaExpression(SimpleLambdaExpressionSyntax node)
         => WithShadow([node.Parameter.Identifier.Text], () => base.VisitSimpleLambdaExpression(node));
@@ -39,7 +39,7 @@ internal sealed class IdentifierReplacer : CSharpSyntaxRewriter
         }
 
         return _map.TryGetValue(node.Identifier.Text, out var replacement)
-            ? SyntaxFactory.ParseExpression(replacement).WithTriviaFrom(node)
+            ? replacement.WithTriviaFrom(node)
             : base.VisitIdentifierName(node);
     }
 

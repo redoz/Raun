@@ -3,40 +3,48 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Raun.Generator.Lowering;
 
-/// <summary>A lowered display name: the constant template plus an optional interpolated format
-/// expression (in terms of <c>__inputs</c>) for runtime placeholders; null when fully constant.</summary>
-internal readonly record struct LoweredDisplayName(string Template, string? FormatExpression);
+/// <summary>A lowered display name: the constant template plus an optional string expression
+/// (in terms of <c>__inputs</c>) for runtime placeholders; null when fully constant.</summary>
+internal readonly record struct LoweredDisplayName(string Template, ExpressionSyntax? FormatExpression);
 
 /// <summary>
 /// Builds a step's display name from its <c>[StepName]</c> template: constant placeholders are
-/// folded into a literal, and runtime ones become an interpolated <c>$"..."</c> expression (in
-/// terms of <c>__inputs</c>). The format expression is null when the name is fully constant.
+/// folded into a literal, and runtime ones become a string concatenation (in terms of
+/// <c>__inputs</c>). The format expression is null when the name is fully constant.
 /// </summary>
+/// <remarks>
+/// The runtime form is a <c>+</c> chain rather than an interpolated string: Roslyn has no factory
+/// that escapes interpolated-string text, so building one means hand-escaping the very text this
+/// generator no longer wants to touch. <c>"a " + (hole) + " b"</c> has the same semantics —
+/// <c>ToString()</c> on the value, <c>null</c> rendered as empty — and Roslyn escapes every literal.
+/// A chain that would START with a hole gets a leading <c>""</c>, so left associativity keeps every
+/// <c>+</c> a string concatenation even for two adjacent holes.
+/// </remarks>
 internal static class DisplayNameBuilder
 {
     public static LoweredDisplayName Build(
         SemanticModel model,
         IMethodSymbol method,
         SeparatedSyntaxList<ArgumentSyntax> args,
-        Dictionary<string, string> replacements)
+        Dictionary<string, ExpressionSyntax> replacements)
     {
         var template = AttributeReader.StepTemplate(method) ?? method.Name;
         var tokens = TemplateTokenizer.Tokenize(template);
         var rewriter = new IdentifierReplacer(replacements);
 
         var constant = new StringBuilder();
-        var interpolation = new StringBuilder("$\"");
-        var anyRuntime = false;
+        var format = new Concatenation();
 
         foreach (var token in tokens)
         {
             if (!token.IsPlaceholder)
             {
                 constant.Append(token.Text);
-                interpolation.Append(EscapeForInterpolation(token.Text));
+                format.Append(token.Text);
                 continue;
             }
 
@@ -55,26 +63,81 @@ internal static class DisplayNameBuilder
             {
                 var text = constValue.HasValue ? constValue.Value?.ToString() ?? "" : folded!;
                 constant.Append(text);
-                interpolation.Append(EscapeForInterpolation(text));
+                format.Append(text);
             }
             else if (argExpr is not null)
             {
-                anyRuntime = true;
                 constant.Append('{').Append(token.Text).Append('}');
-                var rewritten = ((ExpressionSyntax)rewriter.Visit(argExpr!)).ToFullString().Trim();
-                // Parenthesize so a ':' inside the expression (e.g. global::) isn't read as a
-                // format separator, and to be safe against '?' / nested interpolation.
-                interpolation.Append("{(").Append(rewritten).Append(")}");
+                // Parenthesize so the hole binds tighter than the surrounding `+`, whatever it is.
+                format.Append(ParenthesizedExpression(
+                    ((ExpressionSyntax)rewriter.Visit(argExpr)).WithoutTrivia()));
             }
             else
             {
+                // No argument resolves the placeholder: it stays as written, in both forms.
                 constant.Append('{').Append(token.Text).Append('}');
-                interpolation.Append("{{").Append(token.Text).Append("}}");
+                format.Append("{" + token.Text + "}");
             }
         }
 
-        interpolation.Append('"');
-        return new LoweredDisplayName(constant.ToString(), anyRuntime ? interpolation.ToString() : null);
+        return new LoweredDisplayName(constant.ToString(), format.Build());
+    }
+
+    /// <summary>Accumulates the <c>+</c> chain, merging adjacent literal runs into one literal and
+    /// reporting null unless at least one runtime hole made it in.</summary>
+    private sealed class Concatenation
+    {
+        private readonly List<ExpressionSyntax> _operands = [];
+        private readonly StringBuilder _pending = new();
+        private bool _anyHole;
+
+        public void Append(string text) => _pending.Append(text);
+
+        public void Append(ExpressionSyntax hole)
+        {
+            if (_pending.Length > 0)
+            {
+                Flush();
+            }
+            else if (_operands.Count == 0)
+            {
+                // A chain starting with a hole would not be a string concatenation.
+                _operands.Add(Literal(""));
+            }
+
+            _operands.Add(hole);
+            _anyHole = true;
+        }
+
+        public ExpressionSyntax? Build()
+        {
+            if (!_anyHole)
+            {
+                return null;
+            }
+
+            if (_pending.Length > 0)
+            {
+                Flush();
+            }
+
+            var chain = _operands[0];
+            for (var i = 1; i < _operands.Count; i++)
+            {
+                chain = BinaryExpression(SyntaxKind.AddExpression, chain, _operands[i]);
+            }
+
+            return chain;
+        }
+
+        private void Flush()
+        {
+            _operands.Add(Literal(_pending.ToString()));
+            _pending.Clear();
+        }
+
+        private static LiteralExpressionSyntax Literal(string text)
+            => LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(text));
     }
 
     private static ExpressionSyntax? ArgumentForParameter(
@@ -134,7 +197,4 @@ internal static class DisplayNameBuilder
                 return false;
         }
     }
-
-    private static string EscapeForInterpolation(string text)
-        => text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("{", "{{").Replace("}", "}}");
 }

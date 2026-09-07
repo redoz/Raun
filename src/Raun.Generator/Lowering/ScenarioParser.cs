@@ -1,11 +1,12 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Raun.Generator.Emit;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Raun.Generator.Lowering;
 
@@ -30,8 +31,9 @@ internal sealed class ScenarioParser
     private readonly HashSet<string> _dslNamespaces = [];
 
     // Contended-resource uses accumulated from every [Uses<T>] site the scenario is subject to
-    // (fqn -> mode); Exclusive wins per type.
-    private readonly Dictionary<string, string> _uses = new(System.StringComparer.Ordinal);
+    // (fqn -> token type + mode); Exclusive wins per type. The fqn is the ordering key only.
+    private readonly Dictionary<string, (TypeSyntax Type, string Mode)> _uses =
+        new(System.StringComparer.Ordinal);
 
     // Indices introduced by the previous top-level statement (source-order barrier / join target).
     private List<int> _prevFrontier = [];
@@ -56,10 +58,10 @@ internal sealed class ScenarioParser
         _syntax = syntax;
     }
 
-    private readonly record struct VarSource(bool IsArray, int Index, int[] Indices, string ElementType)
+    private readonly record struct VarSource(bool IsArray, int Index, int[] Indices, TypeSyntax? ElementType)
     {
-        public static VarSource Scalar(int index) => new(false, index, [], "");
-        public static VarSource Array(int[] indices, string elementType) => new(true, -1, indices, elementType);
+        public static VarSource Scalar(int index) => new(false, index, [], null);
+        public static VarSource Array(int[] indices, TypeSyntax elementType) => new(true, -1, indices, elementType);
     }
 
     public static ParsedScenario? TryParse(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax)
@@ -94,8 +96,6 @@ internal sealed class ScenarioParser
             Phase = "Then",
             OperationName = "Teardown",
             HasResult = false,
-            ResultTypeFqn = "object",
-            InvokeCallText = "",
             DisplayNameTemplate = "Teardown",
             IsTeardown = true,
             DependsOn = [],
@@ -114,7 +114,8 @@ internal sealed class ScenarioParser
         var usings = CollectUsings().ToList();
         foreach (var ns in _dslNamespaces)
         {
-            usings.Add($"using {ns};");
+            // A namespace display string is a NAME, not code: split it and build the directive.
+            usings.Add(UsingDirective(Names.Dotted(ns.Split('.'))));
         }
 
         return new ParsedScenario
@@ -130,7 +131,10 @@ internal sealed class ScenarioParser
             SourceLine = line,
             Steps = [.. _steps],
             Usings = usings,
-            Uses = _uses.OrderBy(p => p.Key, System.StringComparer.Ordinal).Select(p => new ParsedUse(p.Key, p.Value)).ToList(),
+            Uses = _uses
+                .OrderBy(p => p.Key, System.StringComparer.Ordinal)
+                .Select(p => new ParsedUse(p.Value.Type, p.Value.Mode, p.Key))
+                .ToList(),
         };
     }
 
@@ -140,9 +144,9 @@ internal sealed class ScenarioParser
         foreach (var (resource, mode) in AttributeReader.Uses(attributes))
         {
             var fqn = resource.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!_uses.TryGetValue(fqn, out var existing) || existing != "Exclusive")
+            if (!_uses.TryGetValue(fqn, out var existing) || existing.Mode != "Exclusive")
             {
-                _uses[fqn] = mode;
+                _uses[fqn] = (TypeSyntaxFactory.From(resource), mode);
             }
         }
     }
@@ -258,7 +262,7 @@ internal sealed class ScenarioParser
     private void MarkAsCondition(ParsedStep condition)
     {
         var position = _steps.FindIndex(s => s.Index == condition.Index);
-        _steps[position] = _steps[position] with { ConditionCoercionType = condition.ResultTypeFqn };
+        _steps[position] = _steps[position] with { ConditionCoercionType = condition.ResultType };
     }
 
     /// <summary>
@@ -367,8 +371,7 @@ internal sealed class ScenarioParser
             Phase = producer.Phase,
             OperationName = "Merge",
             HasResult = true,
-            ResultTypeFqn = producer.ResultTypeFqn,
-            InvokeCallText = "",
+            ResultType = producer.ResultType,
             DisplayNameTemplate = "«merge " + name + "»",
             MergeSources = [thenDef, elseDef],
             IsSynthetic = true,
@@ -414,8 +417,7 @@ internal sealed class ScenarioParser
             Phase = producer.Phase,
             OperationName = "Unchanged",
             HasResult = true,
-            ResultTypeFqn = producer.ResultTypeFqn,
-            InvokeCallText = "",
+            ResultType = producer.ResultType,
             DisplayNameTemplate = "«" + name + " unchanged»",
             MergeSources = [parentDef],
             IsSynthetic = true,
@@ -542,7 +544,7 @@ internal sealed class ScenarioParser
 
         var groupId = "g" + _nextIndex;
         var frontier = new List<int>();
-        var elementType = "object";
+        TypeSyntax elementType = PredefinedType(Token(SyntaxKind.ObjectKeyword));
 
         foreach (var element in initializer.Expressions)
         {
@@ -557,7 +559,7 @@ internal sealed class ScenarioParser
                 return false;
             }
 
-            elementType = step.ResultTypeFqn;
+            elementType = step.ResultType;
             frontier.Add(step.Index);
         }
 
@@ -610,14 +612,14 @@ internal sealed class ScenarioParser
         var loopVar = lambda.Parameter.Identifier.Text;
         var groupId = "g" + _nextIndex;
         var frontier = new List<int>();
-        var elementType = "object";
+        TypeSyntax elementType = PredefinedType(Token(SyntaxKind.ObjectKeyword));
 
         for (var k = 0; k < count; k++)
         {
             var value = start + k;
             // Replace the loop variable with the constant value for this element.
             var substituted = (InvocationExpressionSyntax)new IdentifierReplacer(
-                new Dictionary<string, string> { [loopVar] = value.ToString(CultureInfo.InvariantCulture) }).Visit(bodyCall);
+                new Dictionary<string, ExpressionSyntax> { [loopVar] = Num(value) }).Visit(bodyCall);
 
             var step = BuildStep(substituted, groupId, _prevFrontier, semanticNode: bodyCall);
             if (step is null)
@@ -625,7 +627,7 @@ internal sealed class ScenarioParser
                 return false;
             }
 
-            elementType = step.ResultTypeFqn;
+            elementType = step.ResultType;
             frontier.Add(step.Index);
         }
 
@@ -688,7 +690,7 @@ internal sealed class ScenarioParser
 
         var replacements = BuildReplacements();
         var wantsCtx = SymbolHelpers.WantsContext(method, invocation.ArgumentList.Arguments.Count);
-        var callText = BuildCallText(invocation, member, replacements, wantsCtx);
+        var call = BuildCall(invocation, replacements, wantsCtx);
         var resourceClaims = BuildResourceClaims(invocation, method, resultType is not null, replacements);
         AddUses(method.GetAttributes());
 
@@ -701,8 +703,10 @@ internal sealed class ScenarioParser
             Phase = phase,
             OperationName = operation,
             HasResult = resultType is not null,
-            ResultTypeFqn = resultType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? "object",
-            InvokeCallText = callText,
+            ResultType = resultType is null
+                ? PredefinedType(Token(SyntaxKind.ObjectKeyword))
+                : TypeSyntaxFactory.From(resultType),
+            InvokeCall = call,
             DisplayNameTemplate = template,
             FormatExpression = formatExpr,
             GroupId = groupId,
@@ -741,46 +745,80 @@ internal sealed class ScenarioParser
         return deps;
     }
 
-    private Dictionary<string, string> BuildReplacements()
+    /// <summary>
+    /// How each in-scope step-output local is spelled inside an emitted call: a scalar becomes
+    /// <c>__inputs.Get&lt;T&gt;(i)</c>, an array-bound group becomes <c>new T[] { … }</c> over its
+    /// elements' gets.
+    /// </summary>
+    private Dictionary<string, ExpressionSyntax> BuildReplacements()
     {
-        var map = new Dictionary<string, string>();
+        var map = new Dictionary<string, ExpressionSyntax>();
         foreach (var pair in _vars)
         {
             if (pair.Value.IsArray)
             {
-                var elements = pair.Value.Indices.Select(i => $"__inputs.Get<{pair.Value.ElementType}>({i})");
-                map[pair.Key] = $"new {pair.Value.ElementType}[] {{ {string.Join(", ", elements)} }}";
+                var elementType = pair.Value.ElementType!;
+                map[pair.Key] = ArrayCreationExpression(
+                        ArrayType(elementType).WithRankSpecifiers(SingletonList(
+                            ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
+                                OmittedArraySizeExpression())))))
+                    .WithInitializer(InitializerExpression(
+                        SyntaxKind.ArrayInitializerExpression,
+                        SeparatedList<ExpressionSyntax>(
+                            pair.Value.Indices.Select(i => InputsGet(elementType, i)))));
             }
             else
             {
                 var producer = _steps.First(s => s.Index == pair.Value.Index);
-                map[pair.Key] = $"__inputs.Get<{producer.ResultTypeFqn}>({pair.Value.Index})";
+                map[pair.Key] = InputsGet(producer.ResultType, pair.Value.Index);
             }
         }
 
         return map;
     }
 
-    private static string BuildCallText(
+    /// <summary><c>__inputs.Get&lt;type&gt;(index)</c>.</summary>
+    private static InvocationExpressionSyntax InputsGet(TypeSyntax type, int index)
+        => InvocationExpression(
+                MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName("__inputs"),
+                    GenericName(Identifier("Get"))
+                        .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList(type)))))
+            .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(Num(index)))));
+
+    /// <summary>An integer literal, as the unary-minus form when negative.</summary>
+    private static ExpressionSyntax Num(int value)
+        => value < 0
+            ? PrefixUnaryExpression(
+                SyntaxKind.UnaryMinusExpression,
+                LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(-value)))
+            : LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(value));
+
+    /// <summary>
+    /// The DSL invocation as the generated file will call it: the original receiver and method, its
+    /// arguments rewritten in terms of <c>__inputs</c>, and <c>__ctx</c> appended when the method
+    /// takes a trailing <c>ScenarioContext</c> the scenario left out. Outer trivia is dropped — the
+    /// call is re-hosted inside a lambda, and the emitter formats the whole file.
+    /// </summary>
+    private static InvocationExpressionSyntax BuildCall(
         InvocationExpressionSyntax invocation,
-        MemberAccessExpressionSyntax member,
-        Dictionary<string, string> replacements,
+        Dictionary<string, ExpressionSyntax> replacements,
         bool appendCtx)
     {
-        var receiver = member.Expression.ToString();
-        var name = member.Name.Identifier.Text;
         var rewriter = new IdentifierReplacer(replacements);
-
-        var args = invocation.ArgumentList.Arguments
-            .Select(a => ((ArgumentSyntax)rewriter.Visit(a)).ToFullString().Trim())
+        var arguments = invocation.ArgumentList.Arguments
+            .Select(a => (ArgumentSyntax)rewriter.Visit(a))
             .ToList();
 
         if (appendCtx)
         {
-            args.Add("__ctx");
+            arguments.Add(Argument(IdentifierName("__ctx")));
         }
 
-        return $"{receiver}.{name}({string.Join(", ", args)})";
+        return invocation
+            .WithArgumentList(ArgumentList(SeparatedList(arguments)))
+            .WithoutTrivia();
     }
 
     /// <summary>
@@ -794,7 +832,7 @@ internal sealed class ScenarioParser
         InvocationExpressionSyntax invocation,
         IMethodSymbol method,
         bool hasResult,
-        Dictionary<string, string> replacements)
+        Dictionary<string, ExpressionSyntax> replacements)
     {
         var claims = new List<ResourceRoleClaim>();
         var rewriter = new IdentifierReplacer(replacements);
@@ -805,7 +843,7 @@ internal sealed class ScenarioParser
         // riding along (the runtime records subject→target). Emitted BEFORE the subject's own role claim,
         // so effect order stays target-lineage-then-subject (e.g. Reference, Consume, then Create).
         void EmitLineage((System.Collections.Immutable.ImmutableArray<string> References,
-            System.Collections.Immutable.ImmutableArray<string> Consumes) lineage, string subjectExpression)
+            System.Collections.Immutable.ImmutableArray<string> Consumes) lineage, ExpressionSyntax subjectExpression)
         {
             foreach (var target in lineage.References)
             {
@@ -843,7 +881,7 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            var expression = ((ExpressionSyntax)rewriter.Visit(argument.Expression)).ToFullString().Trim();
+            var expression = ((ExpressionSyntax)rewriter.Visit(argument.Expression)).WithoutTrivia();
             if (role == "Edit")
             {
                 EmitLineage(AttributeReader.ProducerLineage(parameter.GetAttributes()), expression);
@@ -860,19 +898,22 @@ internal sealed class ScenarioParser
                 lineage = AttributeReader.ProducerLineage(method.GetAttributes());
             }
 
-            EmitLineage(lineage, "__r");
-            claims.Add(new ResourceRoleClaim(returnRole, "__r", IsReturn: true));
+            EmitLineage(lineage, ReturnValue);
+            claims.Add(new ResourceRoleClaim(returnRole, ReturnValue, IsReturn: true));
         }
 
         return claims;
     }
+
+    /// <summary>The step's own return value inside the emitted lambda.</summary>
+    private static IdentifierNameSyntax ReturnValue => IdentifierName("__r");
 
     /// <summary>
     /// Maps a producer's lineage target name to an instance expression: <c>Subject.Return</c> ⇒
     /// <c>__r</c>; a parameter name ⇒ that parameter's rewritten argument expression. Null when the
     /// name resolves to no supplied argument (the analyzer reports it as RAUN010).
     /// </summary>
-    private static string? ResolveTargetExpression(
+    private static ExpressionSyntax? ResolveTargetExpression(
         string name,
         IMethodSymbol method,
         SeparatedSyntaxList<ArgumentSyntax> arguments,
@@ -880,7 +921,7 @@ internal sealed class ScenarioParser
     {
         if (name == AttributeReader.ReturnSubject)
         {
-            return "__r";
+            return ReturnValue;
         }
 
         for (var i = 0; i < method.Parameters.Length; i++)
@@ -891,7 +932,7 @@ internal sealed class ScenarioParser
             }
 
             var arg = FindArgument(arguments, name, i);
-            return arg is null ? null : ((ExpressionSyntax)rewriter.Visit(arg.Expression)).ToFullString().Trim();
+            return arg is null ? null : ((ExpressionSyntax)rewriter.Visit(arg.Expression)).WithoutTrivia();
         }
 
         return null;
@@ -920,9 +961,10 @@ internal sealed class ScenarioParser
             : null;
     }
 
-    // The emitter dedupes the merged using set, so no need to dedupe here.
-    private IEnumerable<string> CollectUsings()
-        => _syntax.SyntaxTree.GetCompilationUnitRoot().Usings.Select(u => u.ToString().Trim());
+    // The emitter dedupes the merged using set, so no need to dedupe here. Trivia is stripped: the
+    // scenario file's comments and formatting have no business in the generated one.
+    private IEnumerable<UsingDirectiveSyntax> CollectUsings()
+        => _syntax.SyntaxTree.GetCompilationUnitRoot().Usings.Select(u => u.WithoutTrivia());
 
     private static string? Location(SyntaxNode node, out int line)
     {

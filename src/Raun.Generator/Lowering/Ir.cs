@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Raun.Generator.Lowering;
 
@@ -15,22 +18,23 @@ internal readonly record struct SourceSpan(
 /// <see cref="Expression"/> is the rewritten argument expression (in terms of <c>__inputs</c>) for a
 /// parameter role, the lineage target's expression for a synthesized claim, or <c>__r</c> for a return role.
 /// </summary>
-internal readonly record struct ResourceRoleClaim(string Verb, string Expression, bool IsReturn)
+internal readonly record struct ResourceRoleClaim(string Verb, ExpressionSyntax Expression, bool IsReturn)
 {
     /// <summary>For a synthesized Reference/Consume claim, the producing subject's instance expression
     /// (a parameter's rewritten argument, or <c>__r</c>) — emitted as the trailing argument so the
     /// runtime records subject→target. Empty for plain role claims.</summary>
-    public IReadOnlyList<string> SubjectExpressions { get; init; } = [];
+    public IReadOnlyList<ExpressionSyntax> SubjectExpressions { get; init; } = [];
 }
 
 /// <summary>A lowered branch guard: the node runs only when node <see cref="ConditionIndex"/> passed
 /// and its condition evaluates to <see cref="WhenValue"/>. Mirrors <c>Raun.Model.Guard</c>.</summary>
 internal readonly record struct ParsedGuard(int ConditionIndex, bool WhenValue);
 
-/// <summary>One reduced contended-resource use of a scenario: the token type's fully-qualified
-/// name (with <c>global::</c>) and the mode name (<c>Shared</c> or <c>Exclusive</c>) as spelled on
-/// <c>Raun.LockMode</c>.</summary>
-internal readonly record struct ParsedUse(string ResourceFqn, string Mode);
+/// <summary>One reduced contended-resource use of a scenario: the token type (fully qualified, for
+/// <c>typeof</c>) and the mode name (<c>Shared</c> or <c>Exclusive</c>) as spelled on
+/// <c>Raun.LockMode</c>. <see cref="SortKey"/> is the type's fully-qualified display string — an
+/// ordering key so emission is deterministic, never emitted itself.</summary>
+internal readonly record struct ParsedUse(TypeSyntax Resource, string Mode, string SortKey);
 
 /// <summary>A lowered scenario ready for emission.</summary>
 internal sealed record ParsedScenario
@@ -43,14 +47,14 @@ internal sealed record ParsedScenario
     public string? SourceFile { get; init; }
     public int SourceLine { get; init; }
     public int TimeoutMs { get; init; }
-    public IReadOnlyList<string> Usings { get; init; } = [];
+    public IReadOnlyList<UsingDirectiveSyntax> Usings { get; init; } = [];
     public IReadOnlyList<ParsedStep> Steps { get; init; } = [];
 
     /// <summary>The scenario teardown policy as the underlying <c>Raun.Run</c> value.</summary>
     public int TeardownPolicy { get; init; }
 
     /// <summary>Every [Uses&lt;T&gt;] the scenario is subject to, one per type (Exclusive wins),
-    /// sorted by <see cref="ParsedUse.ResourceFqn"/> so emission is deterministic. Empty ⇒ no initializer.</summary>
+    /// sorted by <see cref="ParsedUse.SortKey"/> so emission is deterministic. Empty ⇒ no initializer.</summary>
     public IReadOnlyList<ParsedUse> Uses { get; init; } = [];
 }
 
@@ -75,20 +79,21 @@ internal sealed record ParsedStep
     /// <summary>True when the DSL method returns a value (Task&lt;T&gt;/ValueTask&lt;T&gt;).</summary>
     public bool HasResult { get; init; }
 
-    /// <summary>Fully-qualified output type (the T), or "object" when there is no result.</summary>
-    public string ResultTypeFqn { get; init; } = "object";
+    /// <summary>Fully-qualified output type (the T), or <c>object</c> when there is no result.</summary>
+    public TypeSyntax ResultType { get; init; } = PredefinedType(Token(SyntaxKind.ObjectKeyword));
 
-    /// <summary>The rewritten DSL invocation, e.g. <c>Given.PatientExists("Jane")</c>.</summary>
-    public string InvokeCallText { get; init; } = "";
+    /// <summary>The rewritten DSL invocation, e.g. <c>Given.PatientExists("Jane")</c>. Null for a
+    /// synthetic (merge/pass-through) or teardown node, which never invokes anything.</summary>
+    public InvocationExpressionSyntax? InvokeCall { get; init; }
 
     /// <summary>Display name with constant placeholders already substituted.</summary>
     public string DisplayNameTemplate { get; init; } = "";
 
     /// <summary>
-    /// When non-null, an interpolated-string expression (in terms of <c>__inputs</c>) for the
-    /// runtime display-name formatter; null when the display name is fully constant.
+    /// When non-null, a string expression (in terms of <c>__inputs</c>) for the runtime display-name
+    /// formatter; null when the display name is fully constant.
     /// </summary>
-    public string? FormatExpression { get; init; }
+    public ExpressionSyntax? FormatExpression { get; init; }
 
     /// <summary>
     /// Resource roles lowered from the step's role attributes, in declaration order (parameter roles
@@ -116,5 +121,5 @@ internal sealed record ParsedStep
 
     /// <summary>When this step is used as an <c>if</c> condition, its fully-qualified result type — the
     /// cast target in the emitted <c>EvaluateCondition</c> coercion. Null otherwise.</summary>
-    public string? ConditionCoercionType { get; init; }
+    public TypeSyntax? ConditionCoercionType { get; init; }
 }
