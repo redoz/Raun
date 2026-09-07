@@ -13,16 +13,12 @@ namespace Raun.Generator.Test;
 public class TypeSyntaxFactoryTests
 {
     /// <summary>
-    /// The display format the builder is pinned to. It is <see cref="SymbolDisplayFormat.FullyQualifiedFormat"/>
-    /// plus the nullable-reference modifier: the builder emits <c>string?</c> for an annotated
-    /// reference type, where the bare fully-qualified format prints <c>string</c> (it does not set
-    /// <see cref="SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier"/>). That is
-    /// the one deliberate divergence, and <see cref="Nullable_reference_types_are_the_one_divergence"/>
-    /// nails down exactly which cases it covers.
+    /// The display format the builder is pinned to — the bare fully-qualified format, with no
+    /// customisation: what the builder renders must be exactly what Roslyn's printer renders,
+    /// nullable reference annotations dropped included
+    /// (<see cref="Nullable_reference_annotations_are_dropped_like_the_display_format"/>).
     /// </summary>
-    private static readonly SymbolDisplayFormat Expected =
-        SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(
-            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+    private static readonly SymbolDisplayFormat Expected = SymbolDisplayFormat.FullyQualifiedFormat;
 
     private const string Snippet =
         """
@@ -54,6 +50,7 @@ public class TypeSyntaxFactoryTests
                 public Dictionary<string, List<int>> NestedGeneric;
                 public Patient[] Array;
                 public int[][] Jagged;
+                public int[]?[] NullableJagged;
                 public int[,] Rectangular;
                 public (Patient, Slot) Tuple;
                 public (Patient p, Slot s) NamedTuple;
@@ -82,6 +79,7 @@ public class TypeSyntaxFactoryTests
     [InlineData("Generic")]
     [InlineData("Array")]
     [InlineData("Jagged")]
+    [InlineData("NullableJagged")]
     [InlineData("Rectangular")]
     [InlineData("Dynamic")]
     [InlineData("Keyword")]
@@ -123,25 +121,30 @@ public class TypeSyntaxFactoryTests
     }
 
     /// <summary>
-    /// The builder deliberately keeps the <c>?</c> that <see cref="SymbolDisplayFormat.FullyQualifiedFormat"/>
-    /// drops for reference types. Nothing else diverges, which this asserts both ways.
+    /// A nullable annotation on a REFERENCE type is dropped, like the display format drops it: the
+    /// annotation has no runtime meaning, and the generated file is <c>#nullable enable</c>, so
+    /// emitting <c>string?</c> would carry maybe-null state into code the consumer compiles.
+    /// (Nullable VALUE types keep their <c>?</c> — that is what the format prints too, and the
+    /// <c>NullableInt</c> case above covers it.)
     /// </summary>
     [Fact]
-    public void Nullable_reference_types_are_the_one_divergence()
+    public void Nullable_reference_annotations_are_dropped_like_the_display_format()
     {
-        var diverging = new List<string>();
-        foreach (var field in AllFields())
-        {
-            var bare = field.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (bare != field.Type.ToDisplayString(Expected))
-            {
-                diverging.Add(field.Name);
-            }
-        }
+        var annotated = FieldType("NullableString");
+        var genericOfAnnotated = FieldType("GenericOfNullable");
 
-        Assert.Equal(["GenericOfNullable", "NullableString"], diverging.OrderBy(n => n, StringComparer.Ordinal));
-        Assert.Equal("string?", TypeSyntaxFactory.From(FieldType("NullableString")).ToString());
-        Assert.Equal("string", FieldType("NullableString").ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        Assert.Equal("string", TypeSyntaxFactory.From(annotated).ToString());
+        Assert.Equal(
+            "global::System.Collections.Generic.List<string>",
+            TypeSyntaxFactory.From(genericOfAnnotated).ToString());
+
+        // Which is exactly what the format the whole battery is pinned to prints.
+        Assert.Equal(
+            annotated.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            TypeSyntaxFactory.From(annotated).ToString());
+        Assert.Equal(
+            genericOfAnnotated.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            TypeSyntaxFactory.From(genericOfAnnotated).ToString());
     }
 
     [Fact]

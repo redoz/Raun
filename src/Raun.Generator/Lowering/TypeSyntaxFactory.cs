@@ -14,10 +14,11 @@ namespace Raun.Generator.Lowering;
 /// special types as keywords, keyword identifiers escaped — without ever going through text.
 /// </summary>
 /// <remarks>
-/// One deliberate divergence from that format: a nullable-annotated REFERENCE type is emitted as
-/// <c>T?</c>. <see cref="SymbolDisplayFormat.FullyQualifiedFormat"/> omits the annotation (it does
-/// not set <see cref="SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier"/>),
-/// but dropping it would be a lie about the value the step produced. Nullable VALUE types
+/// Nullable ANNOTATIONS on reference types are dropped, exactly as that format drops them (it does
+/// not set <see cref="SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier"/>).
+/// The annotation carries no runtime meaning, and the generated file is <c>#nullable enable</c>:
+/// emitting <c>string?</c> would let maybe-null state flow into code the consumer compiles, which
+/// can warn — and warn as an error — in a build the consumer never changed. Nullable VALUE types
 /// (<c>System.Nullable&lt;T&gt;</c>) print as <c>T?</c> in both.
 /// </remarks>
 internal static class TypeSyntaxFactory
@@ -47,12 +48,6 @@ internal static class TypeSyntaxFactory
     /// <exception cref="NotSupportedException">The type has no representable form here (pointers,
     /// function pointers); the generator reports it as RAUN000 rather than emitting nonsense.</exception>
     public static TypeSyntax From(ITypeSymbol type)
-    {
-        var syntax = Unannotated(type);
-        return IsAnnotatedReference(type) ? NullableType(syntax) : syntax;
-    }
-
-    private static TypeSyntax Unannotated(ITypeSymbol type)
         => type switch
         {
             IArrayTypeSymbol array => FromArray(array),
@@ -105,7 +100,7 @@ internal static class TypeSyntaxFactory
     {
         var ranks = new List<ArrayRankSpecifierSyntax> { RankOf(array) };
         var element = array.ElementType;
-        while (element is IArrayTypeSymbol nested && !IsAnnotatedReference(nested))
+        while (element is IArrayTypeSymbol nested)
         {
             ranks.Add(RankOf(nested));
             element = nested.ElementType;
@@ -163,7 +158,4 @@ internal static class TypeSyntaxFactory
         => SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None
             ? Identifier(name)
             : VerbatimIdentifier(TriviaList(), name, name, TriviaList());
-
-    private static bool IsAnnotatedReference(ITypeSymbol type)
-        => type.NullableAnnotation == NullableAnnotation.Annotated && type.IsReferenceType;
 }

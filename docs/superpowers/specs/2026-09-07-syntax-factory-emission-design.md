@@ -53,7 +53,13 @@ compare by reference.
 
 - named types: `global::` alias, namespace chain, containing types, `GenericName` with type
   arguments; special types as `PredefinedType` (`int`, `string`, `object`, `bool`, …);
-  `System.Nullable<T>` as `T?`; a nullable-annotated reference type as `T?`;
+  `System.Nullable<T>` (a nullable *value* type) as `T?`; a nullable **annotation** on a reference
+  type is **dropped** — `string?` builds as `string` — because that is what the display format
+  prints (it does not set `IncludeNullableReferenceTypeModifier`) and the annotation has no runtime
+  meaning. Keeping it would diverge from the text this refactor replaces: the generated file is
+  `#nullable enable`, so an annotated `__inputs.Get<string?>(i)` can carry maybe-null state into a
+  consumer's build and warn (as an error under `TreatWarningsAsErrors`) with nothing changed on
+  their side. Annotating the generated file properly is a separate decision, not a side effect;
 - arrays (rank, nested), tuples (with element names when present), type parameters, `dynamic`;
 - identifiers that are C# keywords are emitted verbatim (`@class`);
 - anything else (pointers, function pointers) throws `NotSupportedException` naming the type; the
