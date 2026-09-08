@@ -15,8 +15,10 @@
       referencing `xunit.v3.mtp-v2` (xunit.v3 3.2.0+ selects its MTP major via package choice; the
       default `xunit.v3` package is MTP v1). This replaced the old 1.9.1 pin: the earlier 2.x attempt
       failed only because the test projects stayed on the v1 runner package while MTP unified to 2.x.
+      Pinned at 2.4.0, which adds terminal options (progress, ansi, output minimal,
+      show-slowest-tests, show-flaky-tests, show-test-results) needing no code change.
     -->
-    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.2.3" />
+    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.4.0" />
 
     <!-- ILogger bridge: step logs written through the standard .NET logging abstraction.
          Abstractions only — no logging implementation is taken as a dependency. -->
@@ -32,8 +34,10 @@
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.3" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.11" />
 
-    <!-- Coverage spike: does the profiler reach Aspire's child processes? -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.7.0" />
+    <!-- Coverage spike: does the profiler reach Aspire's child processes?
+         Moves in lockstep with Microsoft.Testing.Platform above: a version mismatch surfaces as a
+         TypeLoadException after tests pass, not a coverage bug. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
 
     <!-- OpenTelemetry, for the Aspire sample only: the test process exports Raun's spans and the API
          exports its own, both over OTLP, so one trace shows a step and the server work it caused.
