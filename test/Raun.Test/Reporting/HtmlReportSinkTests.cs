@@ -1,8 +1,9 @@
 using Raun.Model;
 using Raun.Reporting;
+using Raun.Reporting.Html;
 using Xunit;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 public sealed class HtmlReportSinkTests : IDisposable
 {
@@ -39,7 +40,7 @@ public sealed class HtmlReportSinkTests : IDisposable
     public async Task Writes_a_self_contained_html_file_on_run_finished()
     {
         var path = Path.Combine(_dir, "raun-report.html");
-        var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
         var def = Def();
 
         await sink.PublishAsync(new RunStarted(1));
@@ -65,7 +66,7 @@ public sealed class HtmlReportSinkTests : IDisposable
     public async Task Empty_run_still_writes_a_valid_report()
     {
         var path = Path.Combine(_dir, "raun-report.html");
-        var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
 
         await sink.PublishAsync(new RunStarted(0));
         await sink.PublishAsync(new RunFinished());
@@ -80,7 +81,7 @@ public sealed class HtmlReportSinkTests : IDisposable
         var fileAsDir = Path.Combine(_dir, "afile");
         await File.WriteAllTextAsync(fileAsDir, "x");
         var badPath = Path.Combine(fileAsDir, "nested", "report.html");
-        var bus = new RunEventBus([new HtmlReport.HtmlReportSink(badPath, new TestTimeProviderUtc(T0))]);
+        var bus = new RunEventBus([new HtmlReportSink(badPath, new TestTimeProviderUtc(T0))]);
 
         await bus.PublishAsync(new RunStarted(0));
         var ex = await Record.ExceptionAsync(async () => await bus.PublishAsync(new RunFinished()));
@@ -93,7 +94,7 @@ public sealed class HtmlReportSinkTests : IDisposable
     public async Task Report_embeds_the_serif_font_and_links_no_external_assets()
     {
         var path = Path.Combine(_dir, "raun-report.html");
-        var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
         var def = Def();
         await sink.PublishAsync(new RunStarted(1));
         await sink.PublishAsync(new ScenarioStarted(def));
@@ -117,7 +118,7 @@ public sealed class HtmlReportSinkTests : IDisposable
     public async Task Renders_the_activity_diagram_and_drops_the_old_overlay()
     {
         var path = Path.Combine(_dir, "raun-report.html");
-        var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
         var def = Def();
         await sink.PublishAsync(new RunStarted(1));
         await sink.PublishAsync(new ScenarioStarted(def));
@@ -139,7 +140,7 @@ public sealed class HtmlReportSinkTests : IDisposable
     public async Task The_wait_reaches_the_json_and_the_template_renders_it()
     {
         var path = Path.Combine(_dir, "raun-report-wait.html");
-        var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
         var def = Def();
 
         await sink.PublishAsync(new RunStarted(1, [def]));

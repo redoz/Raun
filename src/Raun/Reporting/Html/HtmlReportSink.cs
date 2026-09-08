@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Raun.Reporting;
 
-namespace Raun.Mtp.HtmlReport;
+namespace Raun.Reporting.Html;
 
 /// <summary>
 /// Subscribes to the run-event stream, accumulates the <see cref="HtmlReportModel"/>, and on
@@ -11,10 +11,10 @@ namespace Raun.Mtp.HtmlReport;
 /// <see cref="RunEventBus.Failures"/> and the framework logs it — a broken report must never
 /// fail the run (design §3.D/§3.E). Constructed only when <c>--report-html</c> is set.
 /// </summary>
-internal sealed class HtmlReportSink : RunEventSink
+public sealed class HtmlReportSink : RunEventSink
 {
     private const string JsonToken = "/*__RAUN_REPORT_JSON__*/";
-    private const string ResourceName = "Raun.Mtp.HtmlReport.report-template.html";
+    private const string ResourceName = "Raun.Reporting.Html.report-template.html";
 
     private static readonly JsonSerializerOptions SerializerOptions =
         new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };

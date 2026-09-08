@@ -1,4 +1,4 @@
-namespace Raun.Mtp.HtmlReport;
+namespace Raun.Reporting.Html;
 
 /// <summary>The full, self-contained report payload embedded into the HTML (design §4). All times are
 /// pre-reduced to millisecond offsets from each scenario's start so the renderer does no clock math.</summary>

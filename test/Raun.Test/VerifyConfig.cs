@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 public static class VerifyConfig
 {

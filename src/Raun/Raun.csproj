@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The self-contained HTML report the HtmlReportSink writes; the JSON model is injected into it. -->
+    <EmbeddedResource Include="Reporting\Html\report-template.html" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The scheduler-facing seams (AttachTeardown, SetCurrent) stay internal; the runtime tests
          exercise them directly rather than only through a full scenario run. -->
     <InternalsVisibleTo Include="Raun.Test" />

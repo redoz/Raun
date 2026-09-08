@@ -2,7 +2,7 @@ using System.Globalization;
 using Raun;
 using Raun.Model;
 
-namespace Raun.Mtp.HtmlReport;
+namespace Raun.Reporting.Html;
 
 /// <summary>
 /// Builds the deterministic <see cref="HtmlReportModel"/> from the run-event stream. All layout

@@ -16,6 +16,7 @@ using Microsoft.Testing.Platform.Services;
 using Microsoft.Testing.Platform.TestHost;
 using Raun.Model;
 using Raun.Reporting;
+using Raun.Reporting.Html;
 using Raun.Running;
 using Raun.Scheduling;
 using ITestPlatformTestFramework = Microsoft.Testing.Platform.Extensions.TestFramework.ITestFramework;
@@ -293,7 +294,7 @@ public class RaunTestFramework :
         var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this) };
         if (HtmlReport.HtmlReportPath.Resolve(_services) is { } reportPath)
         {
-            sinks.Add(new HtmlReport.HtmlReportSink(reportPath, TimeProvider.System));
+            sinks.Add(new HtmlReportSink(reportPath, TimeProvider.System));
         }
 
         var bus = new RunEventBus(sinks);

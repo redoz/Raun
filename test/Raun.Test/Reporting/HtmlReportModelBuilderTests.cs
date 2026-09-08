@@ -2,11 +2,12 @@ using System.Linq;
 using System.Text.Json;
 using Raun;
 using Raun.Model;
+using Raun.Reporting.Html;
 using static VerifyXunit.Verifier;
 using Raun.Running;
 using Xunit;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 public class HtmlReportModelBuilderTests
 {
@@ -49,7 +50,7 @@ public class HtmlReportModelBuilderTests
         var n0 = Node(0, "r", "When", "When a travel reminder is sent");
         var def = Def(n0);
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, attachments: new Dictionary<string, string>
         {
@@ -70,7 +71,7 @@ public class HtmlReportModelBuilderTests
         var n2 = Node(2, "c", "When", "When creating an appointment", dependsOn: [0, 1]);
         var def = Def(n0, n1, n2);
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 40, effects:
         [
@@ -96,7 +97,7 @@ public class HtmlReportModelBuilderTests
         var n1 = Node(1, "b", "Given", "b");
         var def = Def(n0, n1);
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 100));               // [0,100)
         builder.OnStepFinished(def, Result(n1, T0.AddMilliseconds(10), 50)); // [10,60) overlaps → lane 1
@@ -113,7 +114,7 @@ public class HtmlReportModelBuilderTests
         var n1 = Node(1, "b", "When", "b", dependsOn: [0]);
         var def = Def(n0, n1);
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 50));                // [0,50)
         builder.OnStepFinished(def, Result(n1, T0.AddMilliseconds(50), 50)); // [50,100) no overlap → lane 0
@@ -130,7 +131,7 @@ public class HtmlReportModelBuilderTests
         var def = Def(n0);
         var id = new ResourceIdentity(typeof(string), "Jane");
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, effects:
         [
@@ -153,7 +154,7 @@ public class HtmlReportModelBuilderTests
         var patient = new ResourceIdentity(typeof(string), "Jane");
         var slot = new ResourceIdentity(typeof(int), "7");
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, lineage:
         [
@@ -182,7 +183,7 @@ public class HtmlReportModelBuilderTests
         var n0 = Node(0, "t", "Then", "Then the appointment should exist");
         var def = Def(n0);
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, effects:
         [
@@ -202,7 +203,7 @@ public class HtmlReportModelBuilderTests
         var to = new ResourceIdentity(typeof(string), "acc-to");
         var bank = new ResourceIdentity(typeof(string), "Bank");
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, lineage:
         [
@@ -225,7 +226,7 @@ public class HtmlReportModelBuilderTests
         var appointment = new ResourceIdentity(typeof(string), "appt-1");
         var patient = new ResourceIdentity(typeof(string), "Jane");
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, lineage:
             [new ResourceLineageRelation { Subject = appointment, Target = patient, Kind = LifecycleVerb.Reference }]));
@@ -242,7 +243,7 @@ public class HtmlReportModelBuilderTests
         var first = Def("first", Node(0, "a", "Given", "a"));
         var second = Def("second", Node(0, "b", "Given", "b"));
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([first, second]);
         builder.OnScenarioStarted(second);                         // admitted first
         builder.OnStepFinished(second, Result(second.Nodes[0], T0, 10));
@@ -259,7 +260,7 @@ public class HtmlReportModelBuilderTests
         var a = Def("a", Node(0, "a0", "Given", "a0"), Node(1, "a1", "Then", "a1", dependsOn: [0]));
         var b = Def("b", Node(0, "b0", "Given", "b0"));
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([a, b]);
         builder.OnScenarioStarted(a);
         builder.OnScenarioStarted(b);
@@ -278,7 +279,7 @@ public class HtmlReportModelBuilderTests
         var a = Def("a", Node(0, "a0", "Given", "a0"));
         var b = Def("b", Node(0, "b0", "Given", "b0"));
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([a, b]);
         builder.OnScenarioStarted(a);
         builder.OnScenarioStarted(b);
@@ -294,7 +295,7 @@ public class HtmlReportModelBuilderTests
         var a = Def("a", Node(0, "a0", "Given", "a0"));
         var never = Def("never", Node(0, "n0", "Given", "n0"));
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([a, never]);
         builder.OnScenarioStarted(a);
         builder.OnStepFinished(a, Result(a.Nodes[0], T0, 40));
@@ -309,7 +310,7 @@ public class HtmlReportModelBuilderTests
     [Fact]
     public void An_empty_run_builds_an_empty_model()
     {
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([]);
 
         var model = builder.Build("2026-09-06T00:00:00Z");
@@ -330,7 +331,7 @@ public class HtmlReportModelBuilderTests
         var a = Def("a", Node(0, "a0", "Given", "a0"));
         var b = Def("b", Node(0, "b0", "Given", "b0"));
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([preflight, a, b]);
         builder.OnScenarioStarted(preflight);
         builder.OnStepFinished(preflight, Result(preflight.Nodes[0], T0, 40, StepStatus.Failed));
@@ -356,7 +357,7 @@ public class HtmlReportModelBuilderTests
             Uses = [new ContendedResourceUse(typeof(ExclusiveDb), LockMode.Exclusive), new ContendedResourceUse(typeof(SharedCatalog), LockMode.Shared)],
         };
 
-        var builder = new HtmlReport.HtmlReportModelBuilder();
+        var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([def]);
         builder.OnScenarioStarted(def, waited: TimeSpan.FromMilliseconds(1234), waitedFor: typeof(ExclusiveDb));
         builder.OnStepFinished(def, Result(def.Nodes[0], T0, 10));
