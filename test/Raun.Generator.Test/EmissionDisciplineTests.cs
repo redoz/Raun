@@ -5,37 +5,41 @@ namespace Raun.Generator.Test;
 
 /// <summary>
 /// The generator builds every emitted node with <c>SyntaxFactory</c> and never assembles code as
-/// text: no <c>Parse*</c> entry point, no <c>.ToFullString().Trim()</c> round trip. Text
+/// text: no <c>Parse*</c> entry point, no <c>ToString()</c>/<c>Trim()</c> round trip. Text
 /// concatenation is where escaping, precedence and qualification bugs hide, so this is a structural
 /// guard rather than a style preference.
 /// </summary>
 public partial class EmissionDisciplineTests
 {
     /// <summary>
-    /// A <c>SyntaxFactory</c> parse entry point, in the only two spellings that reach one:
-    /// qualified (<c>SyntaxFactory.ParseExpression(</c>) — the <c>receiver</c> group — or bare, which
-    /// binds to <c>SyntaxFactory</c> only in a file carrying the <c>using static</c> below. The
-    /// negative lookbehind on the bare form drops every OTHER receiver (<c>this.ParseStatement(</c>,
-    /// <c>x.ParseName(</c>).
+    /// A call to ANY <c>Parse*</c> member, in the two spellings that can reach a parser: qualified by
+    /// a receiver (<c>SyntaxFactory.ParseExpression(</c>, <c>CSharpSyntaxTree.ParseText(</c>, an alias
+    /// like <c>SF.ParseExpression(</c>) — the <c>receiver</c> group, which the test clears only for
+    /// <c>this</c> — or bare, which binds to <c>SyntaxFactory</c> in a file carrying the
+    /// <c>using static</c> below. Deliberately not a whitelist of names: <c>ParseArgumentList</c>,
+    /// <c>ParseToken</c>, <c>ParseLeadingTrivia</c> and the rest are parsers too. An object creation
+    /// is excluded — <c>new ParsedGuard(…)</c> is a constructor, not a factory entry point.
     /// </summary>
     [GeneratedRegex(
-        @"(?:(?<receiver>SyntaxFactory\.)|(?<![\w.]))" +
-        @"(?<name>ParseExpression|ParseTypeName|ParseName|ParseCompilationUnit|ParseSyntaxTree|ParseMemberDeclaration|ParseStatement)\s*\(")]
+        @"(?<!\bnew\s+)(?:(?<receiver>[A-Za-z_]\w*)\s*\.\s*|(?<![\w.]))(?<name>Parse\w*)\s*\(")]
     private static partial Regex ParseCall();
 
     /// <summary>
-    /// A method DECLARATION of one of those names, so a class's own <c>Parse*</c> member and the calls
-    /// to it are not mistaken for the factory's: <see cref="Lowering.ScenarioParser"/> lowers a
+    /// A method DECLARATION of a <c>Parse*</c> name, so a class's own <c>Parse*</c> member and the bare
+    /// calls to it are not mistaken for the factory's: <see cref="Lowering.ScenarioParser"/> lowers a
     /// statement in a private <c>ParseStatement</c> of its own, and it imports <c>SyntaxFactory</c>
-    /// statically to BUILD syntax. Only names the file declares itself are exempted, so a bare
-    /// <c>ParseExpression(</c> there would still be caught.
+    /// statically to BUILD syntax. Only names the file declares itself are exempted, and only in the
+    /// bare form, so <c>SyntaxFactory.ParseStatement(</c> in that same file is still caught.
     /// </summary>
     [GeneratedRegex(@"\b(?:private|internal|protected|public)\b[^=;]*?\b(?<name>Parse\w*)\s*\(")]
     private static partial Regex ParseDeclaration();
 
-    private const string StaticFactoryImport = "using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;";
+    /// <summary>The text round trip the emitter used to do: render a node, then trim the result back
+    /// into something to concatenate. Either renderer, any of the trims.</summary>
+    [GeneratedRegex(@"\.To(?:Full)?String\(\s*\)\s*\.Trim(?:Start|End)?\s*\(")]
+    private static partial Regex TextRoundTrip();
 
-    private const string TextRoundTrip = ".ToFullString().Trim()";
+    private const string StaticFactoryImport = "using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;";
 
     [Fact]
     public void The_generator_never_parses_source_text()
@@ -53,7 +57,9 @@ public partial class EmissionDisciplineTests
                 continue;
             }
 
-            var lines = File.ReadAllLines(file);
+            // Comments are stripped first: prose is not code, and a comment naming a Parse* member
+            // must not exempt that name for the whole file.
+            var lines = File.ReadAllLines(file).Select(WithoutLineComment).ToArray();
             var importsStaticFactory = lines.Any(
                 line => line.Contains(StaticFactoryImport, StringComparison.Ordinal));
             var declaredHere = lines
@@ -66,19 +72,22 @@ public partial class EmissionDisciplineTests
                 var line = lines[i];
                 var location = $"{relative}({i + 1})";
 
-                if (line.Contains(TextRoundTrip, StringComparison.Ordinal))
+                if (TextRoundTrip().IsMatch(line))
                 {
-                    offences.Add($"{location}: {TextRoundTrip} — {line.Trim()}");
+                    offences.Add($"{location}: text round trip — {line.Trim()}");
                 }
 
                 foreach (var match in ParseCall().Matches(line).Cast<Match>())
                 {
+                    var receiver = match.Groups["receiver"];
                     var name = match.Groups["name"].Value;
-                    var isFactoryCall = match.Groups["receiver"].Success
-                        || (importsStaticFactory && !declaredHere.Contains(name));
-                    if (isFactoryCall)
+                    var isParserCall = receiver.Success
+                        ? receiver.Value != "this"
+                        : importsStaticFactory && !declaredHere.Contains(name);
+                    if (isParserCall)
                     {
-                        offences.Add($"{location}: SyntaxFactory.{name} — {line.Trim()}");
+                        var call = receiver.Success ? receiver.Value + "." + name : name;
+                        offences.Add($"{location}: {call} — {line.Trim()}");
                     }
                 }
             }
@@ -89,6 +98,14 @@ public partial class EmissionDisciplineTests
             "the generator must build syntax, never parse or concatenate source text:"
                 + Environment.NewLine
                 + string.Join(Environment.NewLine, offences));
+    }
+
+    /// <summary>Everything from the first <c>//</c> on. Crude on purpose: truncating a line that has
+    /// <c>//</c> inside a string literal can only lose a match, never invent one.</summary>
+    private static string WithoutLineComment(string line)
+    {
+        var comment = line.IndexOf("//", StringComparison.Ordinal);
+        return comment < 0 ? line : line[..comment];
     }
 
     private static bool IsBuildOutput(string relativePath)

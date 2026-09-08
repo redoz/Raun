@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace Raun.Generator.Lowering;
+namespace Raun.Generator.Syntax;
 
 /// <summary>
 /// Builds the <see cref="TypeSyntax"/> for a symbol the way
@@ -58,6 +58,28 @@ internal static class TypeSyntaxFactory
                 "cannot build syntax for " + type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                     + " (" + type.Kind + ")"),
         };
+
+    /// <summary>
+    /// <c>a.b.c</c> for a namespace symbol — the unrooted form a using directive takes, built from the
+    /// symbol chain with the same identifier escaping as a type name (<c>@class.@event</c>).
+    /// </summary>
+    /// <exception cref="NotSupportedException">The global namespace, which has no name to import.</exception>
+    public static NameSyntax NamespaceName(INamespaceSymbol @namespace)
+    {
+        var parts = NamespaceParts(@namespace);
+        if (parts.Count == 0)
+        {
+            throw new NotSupportedException("the global namespace has no name to build");
+        }
+
+        NameSyntax name = IdentifierName(Name(parts[0]));
+        for (var i = 1; i < parts.Count; i++)
+        {
+            name = QualifiedName(name, IdentifierName(Name(parts[i])));
+        }
+
+        return name;
+    }
 
     private static TypeSyntax FromNamed(INamedTypeSymbol named)
     {
@@ -131,12 +153,7 @@ internal static class TypeSyntaxFactory
     /// <summary>Prefixes <paramref name="simple"/> with <c>global::</c> and the namespace chain.</summary>
     private static NameSyntax Rooted(INamespaceSymbol? containing, SimpleNameSyntax simple)
     {
-        var namespaces = new List<string>();
-        for (var ns = containing; ns is { IsGlobalNamespace: false }; ns = ns.ContainingNamespace)
-        {
-            namespaces.Insert(0, ns.Name);
-        }
-
+        var namespaces = NamespaceParts(containing);
         if (namespaces.Count == 0)
         {
             return AliasQualifiedName(GlobalAlias, simple);
@@ -149,6 +166,18 @@ internal static class TypeSyntaxFactory
         }
 
         return QualifiedName(left, simple);
+    }
+
+    /// <summary>The namespace's names, outermost first; empty for the global namespace.</summary>
+    private static List<string> NamespaceParts(INamespaceSymbol? containing)
+    {
+        var namespaces = new List<string>();
+        for (var ns = containing; ns is { IsGlobalNamespace: false }; ns = ns.ContainingNamespace)
+        {
+            namespaces.Insert(0, ns.Name);
+        }
+
+        return namespaces;
     }
 
     private static IdentifierNameSyntax GlobalAlias => IdentifierName(Token(SyntaxKind.GlobalKeyword));

@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Raun.Generator.Lowering;
+using Raun.Generator.Syntax;
 using Xunit;
 
 namespace Raun.Generator.Test;

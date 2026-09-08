@@ -4,7 +4,9 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Raun.Generator.Lowering;
+using Raun.Generator.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+using static Raun.Generator.Syntax.Literals;
 
 namespace Raun.Generator.Emit;
 
@@ -183,7 +185,7 @@ internal static class ScenarioEmitter
         {
             members.Add(Set("Uses", ArrayOf(
                 Names.Global("Raun", "ContendedResourceUse"),
-                scenario.Uses.Select(ContendedResourceUse))));
+                scenario.Uses.Select(UseEntry))));
         }
 
         var definition = ObjectCreationExpression(ScenarioDefinitionType)
@@ -197,7 +199,7 @@ internal static class ScenarioEmitter
     }
 
     /// <summary><c>new global::Raun.ContendedResourceUse(typeof(T), global::Raun.LockMode.Mode)</c>.</summary>
-    private static ExpressionSyntax ContendedResourceUse(ParsedUse use)
+    private static ExpressionSyntax UseEntry(ParsedUse use)
         => ObjectCreationExpression(Names.Global("Raun", "ContendedResourceUse"))
             .WithArgumentList(ArgumentList(SeparatedList<ArgumentSyntax>(new[]
             {
@@ -440,7 +442,7 @@ internal static class ScenarioEmitter
 
     /// <summary>Builds <c>new int[] { i0, i1, … }</c> (empty initializer when the list is empty).</summary>
     private static ArrayCreationExpressionSyntax IntArray(IEnumerable<int> ints)
-        => ArrayOf(PredefinedType(Token(SyntaxKind.IntKeyword)), ints.Select(i => (ExpressionSyntax)Num(i)));
+        => ArrayOf(PredefinedType(Token(SyntaxKind.IntKeyword)), ints.Select(Num));
 
     /// <summary>Builds <c>new T[] { … }</c>.</summary>
     private static ArrayCreationExpressionSyntax ArrayOf(TypeSyntax element, IEnumerable<ExpressionSyntax> items)
@@ -472,9 +474,6 @@ internal static class ScenarioEmitter
 
     private static AssignmentExpressionSyntax Set(string member, ExpressionSyntax value)
         => AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, IdentifierName(member), value);
-
-    private static LiteralExpressionSyntax Num(int value)
-        => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(value));
 
     private static LiteralExpressionSyntax Lit(string? value)
         => value is null

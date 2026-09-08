@@ -679,4 +679,42 @@ public static class SampleSources
             }
         }
         """;
+
+    // A DSL step invoked with an EXPLICIT type argument, which nothing infers: dropping the `<int>`
+    // (as the old text-built call did — it re-spelled the member from its identifier alone) leaves
+    // `Given.DefaultOf()`, which does not compile. Step and scenario live in one self-contained
+    // snippet appended to Dsl, following UsesSitesScenario: adding the method to Dsl itself would
+    // shift the source lines baked into every accepted snapshot.
+    public const string GenericStepScenario =
+        """
+
+        public static class GenericDsl
+        {
+            extension(Given)
+            {
+                [StepName("a default value exists")]
+                public static async Task<T> DefaultOf<T>()
+                {
+                    await Task.Yield();
+                    return default!;
+                }
+            }
+
+            extension(Then)
+            {
+                [StepName("the value should be {value}")]
+                public static Task ValueShouldBe(int value) => Task.CompletedTask;
+            }
+        }
+
+        public static class GenericScenarios
+        {
+            [Scenario("explicit type argument")]
+            public static async Task ExplicitTypeArgument()
+            {
+                var zero = await Given.DefaultOf<int>();
+                await Then.ValueShouldBe(zero);
+            }
+        }
+        """;
 }

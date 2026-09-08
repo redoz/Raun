@@ -4,9 +4,9 @@
 - **Status:** Approved by request (Patrik, 2026-09-07: "replace all string built source generation
   with SyntaxFactory"). Built the same day.
 - **Scope:** `src/Raun.Generator` only: `Lowering/Ir.cs`, `ScenarioParser.cs`,
-  `DisplayNameBuilder.cs`, `IdentifierReplacer.cs`, `Emit/ScenarioEmitter.cs`, a new
-  `Emit/Names.cs` (constant names) and `Lowering/TypeSyntaxFactory.cs` (symbol → `TypeSyntax`).
-  Tests in `test/Raun.Generator.Test`.
+  `DisplayNameBuilder.cs`, `IdentifierReplacer.cs`, `Emit/ScenarioEmitter.cs`, and a new
+  `Syntax/` folder holding `Names.cs` (constant names), `TypeSyntaxFactory.cs`
+  (symbol → `TypeSyntax`) and `Literals.cs` (`Num`). Tests in `test/Raun.Generator.Test`.
 - **Non-goals:** any change to the generated output's *meaning*; the analyzer; the runtime.
   `EntryPointEmitter`'s fixed template (no variable parts) stays a raw literal.
 
@@ -78,6 +78,13 @@ printer, not hand concatenation, but it is still parsing text, and the builder i
 chain; `Names.Dotted("Raun", "Generated")` the unqualified form for the namespace declaration and
 usings; generic instantiations compose `GenericName`. No `ParseName`/`ParseTypeName` remain.
 
+`Names`, `TypeSyntaxFactory` and `Literals` live in `src/Raun.Generator/Syntax`
+(`Raun.Generator.Syntax`), not under `Emit`: lowering needs them too — a DSL namespace becomes a
+using directive built by `TypeSyntaxFactory.NamespaceName(INamespaceSymbol)`, from the symbol chain
+rather than from a display string split on `.` — and lowering must not depend on emit. `Literals.Num`
+is the one integer-literal helper both halves call: a negative is a `PrefixUnaryExpression` over the
+magnitude taken as a `long`, so `int.MinValue` does not overflow into `--2147483648`.
+
 ### The runtime display name is a concatenation
 
 `DisplayNameBuilder` used to build `$"user {(__inputs.Get<…>(0))} exists"` as text with a hand-written
@@ -107,18 +114,27 @@ end-of-file trivia, so `Emit` returns `unit.ToFullString()` and nothing is conca
 ### What `IdentifierReplacer` does
 
 Same rewriter, but the map holds `ExpressionSyntax`; a replacement is inserted
-`.WithTriviaFrom(node)`. The LINQ unroll substitutes `Num(value)` (a `PrefixUnaryExpression` for
-negatives). `BuildCallText` becomes `BuildCall`: the original invocation with its argument list
-rewritten and `__ctx` appended, outer trivia stripped (what `Trim()` did).
+`.WithTriviaFrom(node)`. The LINQ unroll substitutes `Literals.Num(value)`. `BuildCallText` becomes
+`BuildCall`: the original invocation with its argument list rewritten and `__ctx` appended, outer
+trivia stripped (what `Trim()` did). Building from the invocation node also keeps what the text form
+dropped — it re-spelled the member from `member.Name.Identifier.Text`, so an explicit type argument
+(`Given.Foo<int>(x)`) was lost; `GenericStepLoweringTests` pins that.
 
 ### Guard test
 
 `EmissionDisciplineTests.The_generator_never_parses_source_text` scans `src/Raun.Generator/**/*.cs`
-for `ParseExpression(`, `ParseTypeName(`, `ParseName(`, `ParseCompilationUnit(`,
-`ParseSyntaxTree(`, `ParseMemberDeclaration(`, `ParseStatement(` as `SyntaxFactory` members, and for
-`.ToFullString().Trim()`; it fails if any returns. (The parser's own private `ParseStatement`
-methods are matched by the leading `SyntaxFactory.` or `using static` form only — the regex requires
-the call to be a `SyntaxFactory` invocation, i.e. not preceded by `this.` or `bool `.)
+(line comments stripped first, so prose cannot exempt anything) and fails on:
+
+- any `Parse*(` call — not a whitelist of names, so `ParseArgumentList`, `ParseToken`,
+  `ParseLeadingTrivia` and the rest are covered — when it is either qualified by a receiver other
+  than `this` (`SyntaxFactory.`, `CSharpSyntaxTree.`, an alias like `SF.`) or bare in a file that
+  imports `SyntaxFactory` statically. An object creation (`new ParsedGuard(…)`) is not a call to a
+  parser and is excluded;
+- any `.ToString()`/`.ToFullString()` followed by `.Trim()`/`.TrimStart()`/`.TrimEnd()`.
+
+Only the BARE form is exempted for the `Parse*` names a file declares itself (`ScenarioParser` lowers
+statements in private `ParseStatement`/`ParseIf`/… methods and imports `SyntaxFactory` statically), so
+`SyntaxFactory.ParseStatement(` in that same file is still caught.
 
 ## Testing
 

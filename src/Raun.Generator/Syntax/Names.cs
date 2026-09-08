@@ -2,7 +2,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace Raun.Generator.Emit;
+namespace Raun.Generator.Syntax;
 
 /// <summary>
 /// The fixed names the generator spells out itself — runtime types, framework types, the generated

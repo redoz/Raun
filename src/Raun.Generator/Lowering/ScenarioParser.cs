@@ -5,8 +5,9 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Raun.Generator.Emit;
+using Raun.Generator.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+using static Raun.Generator.Syntax.Literals;
 
 namespace Raun.Generator.Lowering;
 
@@ -27,8 +28,9 @@ internal sealed class ScenarioParser
     private readonly Dictionary<string, VarSource> _vars = [];
 
     // Namespaces that contain the invoked DSL extension members; imported into the generated file
-    // so `Given.PatientExists(...)` resolves there too.
-    private readonly HashSet<string> _dslNamespaces = [];
+    // so `Given.PatientExists(...)` resolves there too. Kept as symbols: a using directive is built
+    // from the namespace chain, never from a display string split back apart.
+    private readonly HashSet<INamespaceSymbol> _dslNamespaces = new(SymbolEqualityComparer.Default);
 
     // Contended-resource uses accumulated from every [Uses<T>] site the scenario is subject to
     // (fqn -> token type + mode); Exclusive wins per type. The fqn is the ordering key only.
@@ -112,10 +114,13 @@ internal sealed class ScenarioParser
         AddUses(_model.Compilation.Assembly.GetAttributes());
 
         var usings = CollectUsings().ToList();
-        foreach (var ns in _dslNamespaces)
+
+        // Ordered by display string: a HashSet's order is an implementation detail, and the emitted
+        // using list has to be the same on every run.
+        foreach (var ns in _dslNamespaces.OrderBy(
+            n => n.ToDisplayString(SymbolHelpers.NoGlobal), System.StringComparer.Ordinal))
         {
-            // A namespace display string is a NAME, not code: split it and build the directive.
-            usings.Add(UsingDirective(Names.Dotted(ns.Split('.'))));
+            usings.Add(UsingDirective(TypeSyntaxFactory.NamespaceName(ns)));
         }
 
         return new ParsedScenario
@@ -674,7 +679,7 @@ internal sealed class ScenarioParser
         var dslNamespace = method.ContainingType?.ContainingNamespace;
         if (dslNamespace is { IsGlobalNamespace: false })
         {
-            _dslNamespaces.Add(dslNamespace.ToDisplayString(SymbolHelpers.NoGlobal));
+            _dslNamespaces.Add(dslNamespace);
         }
 
         var index = _nextIndex++;
@@ -786,14 +791,6 @@ internal sealed class ScenarioParser
                     GenericName(Identifier("Get"))
                         .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList(type)))))
             .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(Num(index)))));
-
-    /// <summary>An integer literal, as the unary-minus form when negative.</summary>
-    private static ExpressionSyntax Num(int value)
-        => value < 0
-            ? PrefixUnaryExpression(
-                SyntaxKind.UnaryMinusExpression,
-                LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(-value)))
-            : LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(value));
 
     /// <summary>
     /// The DSL invocation as the generated file will call it: the original receiver and method, its
