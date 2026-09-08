@@ -5,8 +5,10 @@ using Xunit;
 namespace Raun.Mtp.Test;
 
 /// <summary>
-/// A step's tree-filter path is /assembly/namespace/class/scenario/step, each segment URL-encoded
-/// because the platform's contract is an encoded path and a display name may contain a slash.
+/// A step's tree-filter path is /assembly/namespace/class/scenario/step. Segments are minimally
+/// escaped rather than URL-encoded: a display name's spaces stay literal (so a name copied verbatim
+/// out of --list-tests works as a filter), and only / and % are escaped, since a display name may
+/// contain a slash.
 /// </summary>
 public class ScenarioNodePathTests
 {
@@ -45,8 +47,8 @@ public class ScenarioNodePathTests
         Assert.Equal(string.Empty, segments[0]);
         Assert.Equal("Demo", segments[2]);
         Assert.Equal("Booking", segments[3]);
-        Assert.Equal("customer%20books", segments[4]);
-        Assert.Equal("patient%20Jane%20exists", segments[5]);
+        Assert.Equal("customer books", segments[4]);
+        Assert.Equal("patient Jane exists", segments[5]);
     }
 
     [Fact]
@@ -55,7 +57,7 @@ public class ScenarioNodePathTests
         var step = Node("a step");
         var definition = Definition("Demo.Booking.CustomerBooks", "customer books", "Appointment booking", step);
 
-        Assert.Equal("Appointment%20booking", ScenarioNodePath.For(definition, step).Split('/')[3]);
+        Assert.Equal("Appointment booking", ScenarioNodePath.For(definition, step).Split('/')[3]);
     }
 
     [Fact]
@@ -80,6 +82,31 @@ public class ScenarioNodePathTests
 
         Assert.Equal(6, path.Split('/').Length);
         Assert.Contains("a%2Fb", path, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_percent_in_a_display_name_is_escaped_rather_than_corrupting_the_segment_count()
+    {
+        var step = Node("discount is 50% off");
+        var definition = Definition("Demo.Booking.CustomerBooks", "customer books", null, step);
+
+        var path = ScenarioNodePath.For(definition, step);
+
+        Assert.Equal(6, path.Split('/').Length);
+        Assert.Contains("50%25 off", path, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_display_name_with_spaces_appears_verbatim_so_a_name_copied_from_list_tests_can_be_pasted_into_a_filter()
+    {
+        var step = Node("Given user alice exists");
+        var definition = Definition("Demo.Booking.CustomerBooks", "bulk user import", null, step);
+
+        var path = ScenarioNodePath.For(definition, step);
+        var segments = path.Split('/');
+
+        Assert.Equal("bulk user import", segments[4]);
+        Assert.Equal("Given user alice exists", segments[5]);
     }
 
     [Fact]
