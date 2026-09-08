@@ -65,3 +65,13 @@ dotnet run --project samples/AspireAppointments/AspireAppointments.Tests/AspireA
   scenarios in registration order regardless.
 - A scenario header reading "waited 1.2 s for Database" is admission control, not slowness: an
   `[Uses<T>]` declaration held it back behind a running scenario.
+- There is no `--filter`. The platform never had one — it belongs to `Microsoft.Testing.Extensions.VSTestBridge`,
+  which xUnit and MSTest use for VSTest compatibility. Raun registers the platform's own
+  `--treenode-filter` instead, plus `--filter-uid`, which is what an IDE sends for a single test.
+- A `--treenode-filter` path has five segments, not the conventional four, because a step is a test
+  node: `/{assembly}/{namespace}/{class}/{scenario}/{step}`. Segments are escaped minimally, not
+  URL-encoded: only `%` and `/` are escaped, so a display name copied straight out of `--list-tests`
+  — spaces and all — matches as typed.
+- `--maximum-failed-tests` stops Raun launching new scenarios; scenarios already running finish and
+  report. Nothing is killed mid-flight, so the number of failures can exceed the threshold by
+  whatever was already in the air.

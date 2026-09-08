@@ -99,6 +99,33 @@ timer from scenario start, its resource effects, and a resource lane across the 
 test explorer each step is a test node; selecting one step runs everything up to and including it —
 its dependencies, merge sources, guard conditions, and teardown — and nothing after it.
 
+### Selecting what to run
+
+Raun registers the platform's own tree filter, so the syntax is the one every Microsoft.Testing.Platform
+framework uses. A step is a test node in Raun, so paths have five segments:
+
+```
+/{assembly}/{namespace}/{class}/{scenario}/{step}
+```
+
+```bash
+dotnet run --project MyScenarios -- --treenode-filter '/*/*/*/customer books an appointment/*'  # one scenario
+dotnet run --project MyScenarios -- --treenode-filter '/*/*/*/*/*reminder*'                      # steps by name
+dotnet run --project MyScenarios -- --treenode-filter '/*/*/*/*/*[Phase=When]'                   # by phase
+```
+
+A segment is matched literally unless it contains a wildcard, so copy a name straight out of
+`--list-tests` — spaces and all — rather than percent-encoding it. Selecting a step runs everything
+it needs — its dependencies, merge sources, guard conditions, and teardown — and nothing after it,
+exactly as selecting one step in an IDE does. `--filter-uid` takes node uids and is what an IDE sends
+when you run a single test.
+
+There is no `--filter`: that option belongs to the VSTest bridge that xUnit and MSTest use for
+VSTest compatibility, not to the platform itself.
+
+`--maximum-failed-tests <n>` stops Raun admitting new scenarios once failures cross the threshold;
+scenarios already running finish and report, so the final failure count can exceed `<n>`.
+
 ### Scenarios run in parallel
 
 Scenarios are independent by contract: each gets its own DI scope, context, and trace, and you own
