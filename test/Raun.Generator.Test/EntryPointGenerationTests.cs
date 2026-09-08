@@ -65,6 +65,18 @@ public class EntryPointGenerationTests
     }
 
     [Fact]
+    public void Entry_point_is_not_emitted_without_the_mtp_bootstrap()
+    {
+        // The generator ships in the Raun package, so a project can reference Raun without
+        // Raun.Mtp (a library of scenarios, or another host). A Main calling a bootstrap that is not
+        // referenced would be a compile error the consumer did nothing to deserve.
+        var files = GeneratorHarness.RunGeneratedFiles(Source, generateProgram: null, referenceMtp: false);
+
+        Assert.False(files.ContainsKey(EntryPointHint), "no entry point without Raun.Mtp in the compilation");
+        Assert.True(files.ContainsKey("RaunScenarios.g.cs"), "the scenario manifest is still generated");
+    }
+
+    [Fact]
     public void Generated_entry_point_passes_args_through()
     {
         var program = GeneratorHarness.RunGeneratedFiles(Source)[EntryPointHint];

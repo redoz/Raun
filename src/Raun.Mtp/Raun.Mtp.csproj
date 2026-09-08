@@ -9,14 +9,18 @@
          runnable apps; opt this library out. -->
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
     <Description>
-      Microsoft.Testing.Platform test framework for Raun: Raun's own ITestFramework that
-      discovers, runs, and reports each scenario step as a first-class MTP test node, plus a
-      public bootstrap (RunAsync) for the generated entry point and the escape-hatch API.
+      Microsoft.Testing.Platform adapter for Raun: Raun's own ITestFramework that discovers,
+      runs, and reports each scenario step as a first-class MTP test node, plus the public
+      bootstrap (RunAsync) the generated entry point calls. The runtime and the source
+      generator come from the Raun package this one depends on.
     </Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Raun\Raun.csproj" />
+    <!-- PrivateAssets="none": pack would otherwise write this dependency with
+         exclude="Build,Analyzers", and a consumer of Raun.Mtp would get neither Raun's generator
+         nor its props. -->
+    <ProjectReference Include="..\Raun\Raun.csproj" PrivateAssets="none" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,42 +33,13 @@
   </ItemGroup>
 
   <!--
-    Packaging: `dotnet add package Raun.Mtp` should bring the generator along. We reference the
-    generator only to order its build (its assembly is not referenced and never becomes a package
-    dependency), then drop its dll into the package's analyzers path. The Raun core reference
-    becomes an ordinary package dependency. Add a higher Roslyn variant later by recompiling the
-    generator's sources against it (see Directory.Build.props) and packing it under its own folder.
+    When Raun's generator emits the entry point, the SDK's own entry points must be suppressed so
+    there is exactly one Main. That is an MTP-application concern, so the targets ship here; the
+    props that default RaunGenerateProgram ship with the generator, in the Raun package.
+    buildTransitive flows both through project-to-project references too.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\Raun.Generator\Raun.Generator.csproj"
-                      ReferenceOutputAssembly="false" PrivateAssets="all" />
-  </ItemGroup>
-
-  <PropertyGroup>
-    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_IncludeRaunGenerator</TargetsForTfmSpecificContentInPackage>
-  </PropertyGroup>
-
-  <!--
-    Ship MSBuild props/targets so a consuming test project gets the RaunGenerateProgram default,
-    exposes it to the generator (CompilerVisibleProperty), and suppresses the SDK's own entry points
-    when Raun emits one. buildTransitive flows these through project-to-project references too.
-  -->
-  <ItemGroup>
-    <None Include="buildTransitive\Raun.Mtp.props" Pack="true" PackagePath="buildTransitive\" />
     <None Include="buildTransitive\Raun.Mtp.targets" Pack="true" PackagePath="buildTransitive\" />
   </ItemGroup>
-
-  <Target Name="_IncludeRaunGenerator">
-    <!-- Pin the analyzer TFM so this net10.0 project's TargetFramework doesn't flow to the
-         netstandard2.0 generator via the MSBuild task's inherited global properties. -->
-    <MSBuild Projects="..\Raun.Generator\Raun.Generator.csproj" Targets="GetTargetPath"
-             Properties="TargetFramework=netstandard2.0;Configuration=$(Configuration)">
-      <Output TaskParameter="TargetOutputs" ItemName="_RaunGeneratorPath" />
-    </MSBuild>
-    <ItemGroup>
-      <TfmSpecificPackageFile Include="@(_RaunGeneratorPath)"
-                              PackagePath="analyzers/dotnet/roslyn$(RaunRoslynVersion)/cs" />
-    </ItemGroup>
-  </Target>
 
 </Project>

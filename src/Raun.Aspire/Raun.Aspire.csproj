@@ -13,8 +13,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Raun\Raun.csproj" />
-    <ProjectReference Include="..\Raun.Mtp\Raun.Mtp.csproj" />
+    <!-- PrivateAssets="none": keep Raun's generator/props and Raun.Mtp's targets flowing to a
+         consumer of this package (pack would otherwise exclude Build and Analyzers). -->
+    <ProjectReference Include="..\Raun\Raun.csproj" PrivateAssets="none" />
+    <ProjectReference Include="..\Raun.Mtp\Raun.Mtp.csproj" PrivateAssets="none" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,8 +4,9 @@
   <PropertyGroup>
     <!--
       The Raun source generator emits the Microsoft.Testing.Platform entry point (a Main calling
-      Raun.Mtp's RunAsync). Default it on; a consumer sets <RaunGenerateProgram>false</RaunGenerateProgram>
-      to supply their own Program.cs and call the public bootstrap directly.
+      Raun.Mtp's RunAsync) when the project references Raun.Mtp. Default it on; a consumer sets
+      <RaunGenerateProgram>false</RaunGenerateProgram> to supply their own Program.cs and call the
+      public bootstrap directly.
     -->
     <RaunGenerateProgram Condition="'$(RaunGenerateProgram)' == ''">true</RaunGenerateProgram>
   </PropertyGroup>

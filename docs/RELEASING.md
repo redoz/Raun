@@ -1,8 +1,8 @@
 # Releasing Raun
 
 Versions come from git tags via [MinVer](https://github.com/adamralph/minver). There is no version
-number in any file. Three packages ship from one tag, in lockstep: `Raun`, `Raun.Mtp` (which
-carries the source generator as an analyzer), and `Raun.Aspire`.
+number in any file. Three packages ship from one tag, in lockstep: `Raun` (which carries the source
+generator as an analyzer), `Raun.Mtp`, and `Raun.Aspire`.
 
 ## Version scheme
 
@@ -71,10 +71,29 @@ carries the source generator as an analyzer), and `Raun.Aspire`.
 
 ## Consumer baseline
 
-The generator is packed under `analyzers/dotnet/roslyn5.3/cs`. A consumer whose compiler is older
-than Roslyn 5.3 gets no generator and no diagnostics, silently. Supported baseline today: the .NET 10
-SDK. Adding an older baseline means a `Raun.Generator.RoslynNN` variant project (see
-`Directory.Build.props`), not a version bump.
+The generator is packed in `Raun` under `analyzers/dotnet/roslyn5.3/cs`, and reaches a consumer of
+`Raun.Mtp` or `Raun.Aspire` transitively because those packages depend on `Raun` with
+`PrivateAssets="none"` (pack would otherwise write the dependency with `exclude="Build,Analyzers"`).
+A consumer whose compiler is older than Roslyn 5.3 gets no generator and no diagnostics, silently.
+Supported baseline today: the .NET 10 SDK. Adding an older baseline means a
+`Raun.Generator.RoslynNN` variant project (see `Directory.Build.props`), not a version bump.
+
+## Generator ↔ runtime contract
+
+The generated code targets only data: `ScenarioDefinition` / `ScenarioNode` object initializers,
+`Guard`, `ContendedResourceUse`, `IStepInputs.Get<T>`, `ScenarioRegistry.Register`, and the
+`ResourceContext` verbs by name. `Raun.Mtp` depends on `Raun` with `>=`, so *an older generator with
+a newer runtime* is a legal package resolution. Rules that keep it working:
+
+- Never add a `required` member to `ScenarioDefinition` or `ScenarioNode`; new members are
+  init-only with a default, and whatever reads them tolerates the default (`Namespace` and
+  `TypeName` are the precedent — the adapters fall back to splitting `MethodName`).
+- Never rename a `ResourceContext` verb the emitter names by string (`Read`, `Load`, `Create`,
+  `Edit`, `Delete`, `Reference`, `Consume`).
+- `Run`'s ordinals are frozen: the emitter writes an int cast.
+- The generator emits the MTP entry point only when `Raun.Mtp.RaunTestApplication` resolves in the
+  compilation, so `Raun` alone (a scenario library, another host) never produces a `Main` that
+  cannot compile.
 
 ## Undoing a bad release
 

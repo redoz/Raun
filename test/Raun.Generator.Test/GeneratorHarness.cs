@@ -20,17 +20,32 @@ namespace Raun.Generator.Test;
 /// </summary>
 public static class GeneratorHarness
 {
-    private static readonly ImmutableArray<MetadataReference> References = BuildReferences();
+    /// <summary>The framework plus <c>Raun</c> (DSL, <c>[Scenario]</c>) plus <c>Raun.Mtp</c> (the
+    /// bootstrap the generated entry point calls) — what an MTP test project references.</summary>
+    private static readonly ImmutableArray<MetadataReference> References = BuildReferences(withMtp: true);
 
-    private static ImmutableArray<MetadataReference> BuildReferences()
+    /// <summary>The framework plus <c>Raun</c> only — a project that authors scenarios without the
+    /// MTP adapter, for which no entry point must be generated.</summary>
+    private static readonly ImmutableArray<MetadataReference> CoreOnlyReferences = BuildReferences(withMtp: false);
+
+    private static ImmutableArray<MetadataReference> BuildReferences(bool withMtp)
     {
+        // The test process's own probing list also carries this project's references, Raun.Mtp
+        // included; the core-only set has to leave that one out or the "without Raun.Mtp" path is
+        // not one.
+        var mtpAssemblyPath = typeof(Raun.Mtp.RaunTestApplication).Assembly.Location;
         var tpa = (string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!;
         var refs = tpa.Split(Path.PathSeparator)
             .Where(p => p.Length > 0)
+            .Where(p => withMtp || !string.Equals(p, mtpAssemblyPath, StringComparison.OrdinalIgnoreCase))
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
             .ToList();
-        refs.Add(MetadataReference.CreateFromFile(typeof(Given).Assembly.Location)); // Raun: DSL and [Scenario]
-        refs.Add(MetadataReference.CreateFromFile(typeof(Raun.Mtp.RaunTestApplication).Assembly.Location)); // the entry point's target
+        refs.Add(MetadataReference.CreateFromFile(typeof(Given).Assembly.Location));
+        if (withMtp)
+        {
+            refs.Add(MetadataReference.CreateFromFile(typeof(Raun.Mtp.RaunTestApplication).Assembly.Location));
+        }
+
         return refs.ToImmutableArray();
     }
 
@@ -214,14 +229,14 @@ public static class GeneratorHarness
     /// <c>build_property.RaunGenerateProgram</c> analyzer-config value (the MSBuild property a
     /// consuming project would set); null leaves the property unset so the generator sees its default.
     /// </summary>
-    public static IReadOnlyDictionary<string, string> RunGeneratedFiles(string source, string? generateProgram = null)
+    public static IReadOnlyDictionary<string, string> RunGeneratedFiles(string source, string? generateProgram = null, bool referenceMtp = true)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
         var tree = CSharpSyntaxTree.ParseText(source, parseOptions);
         var compilation = CSharpCompilation.Create(
             "GenFiles_" + Guid.NewGuid().ToString("N"),
             [tree],
-            References,
+            referenceMtp ? References : CoreOnlyReferences,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
 

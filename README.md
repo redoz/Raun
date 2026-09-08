@@ -23,8 +23,9 @@ A Roslyn source generator lowers the scenario method into a manifest + executor 
 
 ## Install
 
-Packages are published to GitHub Packages for now: `Raun.Mtp` (the test framework, with the source
-generator inside), `Raun` (the core it depends on), and `Raun.Aspire`. Every push to `main` publishes
+Packages are published to GitHub Packages for now: `Raun` (the runtime, with the source generator
+inside), `Raun.Mtp` (the Microsoft.Testing.Platform adapter, which depends on it), and `Raun.Aspire`.
+Every push to `main` publishes
 a `0.x.y-preview.0.N` build; tags publish real versions. GitHub Packages requires authentication even
 for public packages, so a consumer needs a personal access token with `read:packages`:
 
@@ -349,9 +350,9 @@ to one collector.
 
 | Project | What it is |
 | --- | --- |
-| `src/Raun` | Runner-neutral core: phase markers, parallel awaiters, `ScenarioContext`, the graph model, resources, teardown, tracing, and the DAG scheduler. |
-| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN017`). netstandard2.0, shipped inside `Raun.Mtp`. |
-| `src/Raun.Mtp` | Microsoft.Testing.Platform test framework: `[Scenario]`, discovery, run loop, per-step node reporter, HTML report. |
+| `src/Raun` | The runtime: `[Scenario]`, phase markers, parallel awaiters, `ScenarioContext`, the graph model, resources, teardown, tracing, the DAG scheduler, the run loop, and the HTML report. Depends on no test platform. |
+| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN017`). netstandard2.0, shipped inside `Raun`. |
+| `src/Raun.Mtp` | Microsoft.Testing.Platform adapter: discovery, per-step node reporter, filter translation, the `--report-html` option, the bootstrap the generated entry point calls. |
 | `src/Raun.Aspire` | Aspire integration: builds the AppHost, starts it as the run's preflight while waiting for the resources you declare, registers it for your steps. Plumbing only — no phase markers, no steps. |
 | `samples/AppointmentTests` | End-to-end sample: linear, tuple, array, LINQ, conditionals, resources, teardown, logging, a custom phase marker; run with `--report-html` for the report showcase. |
 | `samples/AspireAppointments` | Aspire end-to-end: an AppHost, a mock API, and a suite that starts it as preflight, drives it as two actors, and exports traces. |

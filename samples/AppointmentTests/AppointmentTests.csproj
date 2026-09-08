@@ -11,8 +11,9 @@
     <EnableMSTestRunner>true</EnableMSTestRunner>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <!-- Raun normally emits the single Main; suppress the SDK-provided entry points so there is no
-         clash. (These live in Raun.Mtp's buildTransitive props/targets for package consumers; the
-         sample references Raun.Mtp by project, so we set them here directly.) -->
+         clash. (Package consumers get this from Raun.Mtp's buildTransitive targets and the
+         RaunGenerateProgram default from Raun's props; the sample references both by project, so
+         we set them here directly.) -->
     <GenerateProgramFile>false</GenerateProgramFile>
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
     <!-- This showcase hand-writes Program.cs (below) so it can opt into Raun's deterministic
@@ -29,9 +30,9 @@
 
   <!-- The canonical end-to-end sample: authoring scenarios with the Given/When/Then DSL, run by
        Raun's own Microsoft.Testing.Platform test framework with each business step reported as its
-       own MTP test node. A real consumer would `dotnet add package Raun.Mtp` (which bundles the
-       generator and the entry-point props/targets) plus `xunit.v3.assert`; here we reference the
-       runtime adapter and wire the generator in as an analyzer, and bring assertions only. -->
+       own MTP test node. A real consumer would `dotnet add package Raun.Mtp` (Raun, with the
+       generator inside, comes with it) plus `xunit.v3.assert`; here we reference the adapter by
+       project and wire the generator in as an analyzer, and bring assertions only. -->
   <ItemGroup>
     <PackageReference Include="xunit.v3.assert" />
     <!-- Only for the [LoggerMessage] source generator the lifecycle DSL uses; ILogger itself arrives

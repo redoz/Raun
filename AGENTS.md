@@ -11,9 +11,9 @@ self-contained HTML report is produced per run. Old Norse *raun*: a trial, proof
 
 | Path | What |
 |---|---|
-| `src/Raun` | Runtime model, scheduler, resources, teardown, logging bridge |
-| `src/Raun.Generator` | Source generator + analyzer (`RAUN000`…) — netstandard2.0, ships inside `Raun.Mtp` |
-| `src/Raun.Mtp` | The MTP test framework: discovery, run loop, report sinks, entry-point bootstrap |
+| `src/Raun` | The runtime: attributes, model, scheduler, run loop, resources, teardown, logging bridge, HTML report |
+| `src/Raun.Generator` | Source generator + analyzer (`RAUN000`…) — netstandard2.0, ships inside `Raun` |
+| `src/Raun.Mtp` | The MTP adapter: discovery, node reporter, filter translation, entry-point bootstrap |
 | `src/Raun.Aspire` | Aspire AppHost bootstrap as the run's preflight node |
 | `test/*` | xUnit v3 test projects (generator tests use Verify snapshots) |
 | `samples/AppointmentTests` | Canonical end-to-end sample, simulated time, HTML report showcase |

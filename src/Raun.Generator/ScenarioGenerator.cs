@@ -73,8 +73,16 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
         // Entry point: emit a Main calling Raun.Mtp's bootstrap, gated on the MSBuild property
         // RaunGenerateProgram (default true). The default-true read keeps "just add the package"
         // working without any property set; setting it to false lets a consumer own Program.cs.
-        var generateProgram = context.AnalyzerConfigOptionsProvider
+        // The generator ships in the Raun package, so it also runs for a project that references
+        // Raun without Raun.Mtp (a scenario library, another host); there is no bootstrap to call,
+        // and a Main naming one would be a compile error, so the emission also requires the
+        // bootstrap type to be resolvable in the compilation.
+        var wantsProgram = context.AnalyzerConfigOptionsProvider
             .Select(static (provider, _) => ShouldGenerateProgram(provider));
+        var hasBootstrap = context.CompilationProvider
+            .Select(static (compilation, _) => compilation.GetTypeByMetadataName(EntryPointEmitter.BootstrapTypeName) is not null);
+        var generateProgram = wantsProgram.Combine(hasBootstrap)
+            .Select(static (pair, _) => pair.Left && pair.Right);
 
         context.RegisterSourceOutput(generateProgram, static (spc, generate) =>
         {
