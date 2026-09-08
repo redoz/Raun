@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Testing.Platform.CommandLine;
 using Microsoft.Testing.Platform.Extensions.Messages;
 using Microsoft.Testing.Platform.Messages;
+using Microsoft.Testing.Platform.Requests;
 using Microsoft.Testing.Platform.TestHost;
 using Raun;
 using Raun.Model;
@@ -682,6 +683,34 @@ public class RunLoopTests
             .Select(n => n.Uid.Value).ToList();
         Assert.Contains("fw-scn:a", passed);
         Assert.Contains("fw-scn:b", passed);
+    }
+
+    /// <summary>A filter type Raun has never seen — what a future platform version could hand over.</summary>
+    private sealed class UnknownFilter : ITestExecutionFilter
+    {
+    }
+
+    [Fact]
+    public async Task An_unrecognized_filter_runs_everything_instead_of_failing_the_run()
+    {
+        // A filter Raun cannot honour is a reason to over-select, never to abort: aborting turns a
+        // future platform filter into a hard run failure for something the user did not do wrong.
+        var method = $"Raun.Mtp.Test.UnknownFilter.{Guid.NewGuid():N}";
+        ScenarioRegistry.Register(method, () => Definition("uf-scn", "unknown filter scenario",
+            Node(0, "a", "a"),
+            Node(1, "b", "b", dependsOn: [0])));
+
+        var framework = new RaunTestFramework();
+        var uid = new SessionUid("uf-run");
+        await framework.CreateTestSession(uid);
+
+        var bus = new RecordingMessageBus();
+        var completed = false;
+        await framework.OnExecute(uid, new UnknownFilter(), bus, () => completed = true, CancellationToken.None);
+
+        Assert.True(completed);
+        Assert.Contains(bus.Nodes, n => n.Uid.Value == Uid("uf-scn", "a"));
+        Assert.Contains(bus.Nodes, n => n.Uid.Value == Uid("uf-scn", "b"));
     }
 
     // -- Simulated-time opt-in threaded through the loop (A4) -------------------------------------

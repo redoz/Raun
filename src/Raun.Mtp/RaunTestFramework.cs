@@ -224,7 +224,8 @@ public class RaunTestFramework :
         // A null/no-op filter discovers everything (so --list-tests enumerates every step); a
         // TestNodeUidListFilter restricts discovery to the named nodes, matching xUnit's discovery
         // sink. The same parsing backs both discover and run so a single-step uid resolves identically.
-        var selector = ReadSelector(filter);
+        var selector = ReadSelector(filter, out var unsupported);
+        await WarnUnsupportedFilterAsync(unsupported).ConfigureAwait(false);
 
         // Announced like any test, but never executed here: a discovery request must not start
         // containers or migrate databases.
@@ -273,7 +274,8 @@ public class RaunTestFramework :
         Action operationComplete,
         CancellationToken cancellationToken)
     {
-        var selector = ReadSelector(filter);
+        var selector = ReadSelector(filter, out var unsupported);
+        await WarnUnsupportedFilterAsync(unsupported).ConfigureAwait(false);
 
         var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this) };
         if (HtmlReport.HtmlReportPath.Resolve(_services) is { } reportPath)
@@ -314,29 +316,54 @@ public class RaunTestFramework :
     /// <summary>
     /// Reduces an MTP execution filter to the <see cref="NodeSelector"/> that decides which steps the
     /// request selects, or <see langword="null"/> to select everything. A
-    /// <see cref="TestNodeUidListFilter"/> carries an explicit uid list; a null or no-op filter means
-    /// "run all".
+    /// <see cref="TestNodeUidListFilter"/> carries an explicit uid list, a
+    /// <see cref="TreeNodeFilter"/> a path expression, and a null or no-op filter means "run all".
+    /// A filter type Raun does not recognize selects everything and names itself in
+    /// <paramref name="unsupported"/>: over-selecting is recoverable and visible, whereas aborting
+    /// would turn a future platform filter into a failed run the user cannot act on.
     /// </summary>
     // CA1859 wants the concrete UidNodeSelector return type: today's only non-null case. The
     // abstract NodeSelector return is deliberate — a later task adds a second case (the platform's
     // tree filter) reducing to a different NodeSelector subtype, and callers must not know which.
 #pragma warning disable CA1859
-    private static NodeSelector? ReadSelector(ITestExecutionFilter? filter) => filter switch
+    private static NodeSelector? ReadSelector(ITestExecutionFilter? filter, out string? unsupported)
     {
-        null => null,
+        unsupported = null;
+        switch (filter)
+        {
+            case null:
+                return null;
 #pragma warning disable TPEXP // NopFilter is an experimental Microsoft.Testing.Platform API.
-        NopFilter => null,
+            case NopFilter:
 #pragma warning restore TPEXP
-        TestNodeUidListFilter uidFilter => new UidNodeSelector(
-            uidFilter.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase)),
-        _ => throw new ArgumentException(
-            string.Format(
-                CultureInfo.CurrentCulture,
-                "Unsupported execution filter type '{0}'.",
-                filter.GetType().FullName),
-            nameof(filter)),
-    };
+                return null;
+            case TestNodeUidListFilter uidFilter:
+                return new UidNodeSelector(
+                    uidFilter.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase));
+            default:
+                unsupported = filter.GetType().FullName;
+                return null;
+        }
+    }
 #pragma warning restore CA1859
+
+    /// <summary>Warns that a filter type was ignored, through the platform logger when there is one.</summary>
+    private async Task WarnUnsupportedFilterAsync(string? unsupported)
+    {
+        if (unsupported is null)
+        {
+            return;
+        }
+
+        var message = $"ignoring unsupported execution filter type '{unsupported}'; selecting every test";
+        ILogger? logger = _services?.GetLoggerFactory().CreateLogger(typeof(RaunTestFramework).FullName!);
+        if (logger is not null)
+        {
+            await logger.LogWarningAsync(message).ConfigureAwait(false);
+        }
+
+        NodeDiagnostics.Log("unsupported-filter", message);
+    }
 
     /// <summary>Lowers every scenario registered in <see cref="ScenarioRegistry"/> to its definition.</summary>
     private static IEnumerable<ScenarioDefinition> EnumerateRegisteredScenarios()
