@@ -1,5 +1,6 @@
 using Microsoft.Testing.Platform.Builder;
 using Microsoft.Testing.Platform.Capabilities.TestFramework;
+using Microsoft.Testing.Platform.Helpers;
 
 namespace Raun.Mtp;
 
@@ -68,6 +69,13 @@ public static class RaunTestApplication
 
         builder.CommandLine.AddProvider(() => new HtmlReport.HtmlReportOptionsProvider());
         builder.CommandLine.AddProvider(() => new RunOptionsProvider());
+
+        // Opt into the platform's own filter rather than inventing a Raun dialect: this registers
+        // --treenode-filter, and the framework receives the parsed TreeNodeFilter in the request.
+        var extension = new RaunExtension();
+#pragma warning disable TPEXP // AddTreeNodeFilterService is an experimental Microsoft.Testing.Platform API.
+        builder.AddTreeNodeFilterService(extension);
+#pragma warning restore TPEXP
 
         builder.RegisterTestFramework(
             _ => new TestFrameworkCapabilities(),

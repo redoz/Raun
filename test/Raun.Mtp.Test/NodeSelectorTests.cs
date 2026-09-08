@@ -76,4 +76,11 @@ public class NodeSelectorTests
         => Assert.Empty(RaunRunLoop.SelectScenarios(
             [Definition(Node(0, "a"))],
             new UidNodeSelector(new HashSet<string>(["scn:zzz"], StringComparer.OrdinalIgnoreCase))));
+
+    // TreeNodeFilter's constructor is internal to the platform, so the only way to obtain an
+    // instance is from the platform itself (proven end to end in the sample runs, not here). The
+    // guard clause below is the one behaviour TreeNodeSelector has that does not need an instance.
+    [Fact]
+    public void A_tree_node_selector_rejects_a_null_filter()
+        => Assert.Throws<ArgumentNullException>(() => new TreeNodeSelector(null!));
 }

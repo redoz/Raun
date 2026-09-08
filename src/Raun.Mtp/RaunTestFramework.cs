@@ -340,6 +340,10 @@ public class RaunTestFramework :
             case TestNodeUidListFilter uidFilter:
                 return new UidNodeSelector(
                     uidFilter.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase));
+#pragma warning disable TPEXP // TreeNodeFilter is an experimental Microsoft.Testing.Platform API.
+            case TreeNodeFilter treeFilter:
+                return new TreeNodeSelector(treeFilter);
+#pragma warning restore TPEXP
             default:
                 unsupported = filter.GetType().FullName;
                 return null;
