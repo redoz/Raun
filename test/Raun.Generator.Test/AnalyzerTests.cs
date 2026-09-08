@@ -968,8 +968,10 @@ public class AnalyzerTests
             """));
     }
 
-    // RAUN016: a resource is inert when no scenario uses it exclusively AND its capacity can never
-    // bind. Builds a self-contained compilation with one DSL step and one [Scenario] per element of
+    // RAUN016: a resource is permanently inert when it is [SharedResource], used by two or more
+    // scenarios, and no scenario uses it exclusively — a Pooled resource never qualifies, whatever its
+    // capacity and scenario count (see ReportInertContendedResources' doc comment for why). Builds a
+    // self-contained compilation with one DSL step and one [Scenario] per element of
     // `scenarioUsesClauses`, each carrying that clause's [Uses<Db>] attribute (or none, for an empty
     // string). Independent of SampleSources — RAUN016 doesn't need the shared DSL's other scenarios.
     private static string ContendedResourceScenarios(string resourceDeclaration, params string[] scenarioUsesClauses)
@@ -1043,19 +1045,21 @@ public class AnalyzerTests
     }
 
     [Fact]
-    public async Task RAUN016_pooled_capacity_two_used_by_two_scenarios_still_never_binds()
+    public async Task RAUN016_does_not_fire_on_a_pooled_resource_at_its_capacity_floor()
     {
-        // usingScenarioCount (2) <= capacity (2): capacity can never bind, so this qualifies exactly
-        // like an unbounded shared resource would. Per the rule as specified, this DOES report.
+        // usingScenarioCount (2) <= capacity (2): the pool is not yet binding, but that is
+        // work-in-progress, not permanently inert — one more scenario and it starts serializing
+        // access. The ruling (see ReportInertContendedResources' doc comment) is that only a
+        // [SharedResource] with no exclusive user is permanently inert; a Pooled resource never
+        // qualifies, whatever its capacity and scenario count.
         var diagnostics = await GeneratorHarness.AnalyzeAsync(
             ContendedResourceScenarios(PooledDbCapacityTwo, "[Uses<Db>]", "[Uses<Db>]"));
 
-        var d = Assert.Single(diagnostics, x => x.Id == "RAUN016");
-        Assert.Contains("Db", d.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
     }
 
     [Fact]
-    public async Task RAUN016_pooled_capacity_two_used_by_three_scenarios_binds()
+    public async Task RAUN016_does_not_fire_on_a_pooled_resource_over_its_capacity()
     {
         var diagnostics = await GeneratorHarness.AnalyzeAsync(
             ContendedResourceScenarios(PooledDbCapacityTwo, "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]"));
@@ -1088,5 +1092,105 @@ public class AnalyzerTests
             ContendedResourceScenarios(SharedDb, "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]"));
 
         Assert.Single(diagnostics, x => x.Id == "RAUN016");
+    }
+
+    [Fact]
+    public async Task RAUN016_union_includes_an_exclusive_use_declared_on_a_called_dsl_step_method()
+    {
+        // Scenario0's own [Uses<Db>] is Shared, so it counts toward the two-scenario floor even if the
+        // step-site union were dropped — the ONLY exclusive use here sits on the DSL step method
+        // Scenario0 calls. If CollectScenarioUses stopped walking invoked-method attributes, Scenario0
+        // would reduce to Shared only, anyExclusive would be false, and this would incorrectly report
+        // RAUN016 on a suite that is, in fact, protected.
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            """
+            using System.Threading.Tasks;
+            using Raun;
+
+            [SharedResource]
+            public sealed class Db : IContendedResource;
+
+            public static class Steps
+            {
+                extension(Given)
+                {
+                    [Uses<Db>(LockMode.Exclusive)]
+                    public static Task ExclusiveStep() => Task.CompletedTask;
+
+                    public static Task PlainStep() => Task.CompletedTask;
+                }
+            }
+
+            public static class Scenario0
+            {
+                [Scenario("s0")]
+                [Uses<Db>]
+                public static async Task Run0()
+                {
+                    await Given.ExclusiveStep();
+                }
+            }
+
+            public static class Scenario1
+            {
+                [Scenario("s1")]
+                [Uses<Db>]
+                public static async Task Run1()
+                {
+                    await Given.PlainStep();
+                }
+            }
+            """);
+
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
+    }
+
+    [Fact]
+    public async Task RAUN016_union_includes_an_exclusive_use_declared_on_a_containing_class()
+    {
+        // Scenario0's own [Uses<Db>] (on the scenario method) is Shared, so it counts toward the
+        // two-scenario floor even if the containing-class site were dropped — the ONLY exclusive use
+        // here sits on Scenario0's containing class. If CollectScenarioUses stopped walking containing
+        // types, Scenario0 would reduce to Shared only, anyExclusive would be false, and this would
+        // incorrectly report RAUN016 on a suite that is, in fact, protected.
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            """
+            using System.Threading.Tasks;
+            using Raun;
+
+            [SharedResource]
+            public sealed class Db : IContendedResource;
+
+            public static class Steps
+            {
+                extension(Given)
+                {
+                    public static Task Step() => Task.CompletedTask;
+                }
+            }
+
+            [Uses<Db>(LockMode.Exclusive)]
+            public static class Scenario0
+            {
+                [Scenario("s0")]
+                [Uses<Db>]
+                public static async Task Run0()
+                {
+                    await Given.Step();
+                }
+            }
+
+            public static class Scenario1
+            {
+                [Scenario("s1")]
+                [Uses<Db>]
+                public static async Task Run1()
+                {
+                    await Given.Step();
+                }
+            }
+            """);
+
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
     }
 }

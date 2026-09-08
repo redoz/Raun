@@ -243,7 +243,11 @@ public static class GeneratorHarness
             .ToDictionary(s => s.HintName, s => s.SourceText.ToString());
     }
 
-    /// <summary>Runs the analyzer over source and returns just the Raun diagnostics.</summary>
+    /// <summary>Runs the analyzer over source and returns just the Raun diagnostics. Source that fails
+    /// to compile produces no analyzer diagnostics at all, which would make every absence assertion
+    /// (<c>Assert.DoesNotContain(diagnostics, ...)</c>) pass for free regardless of what the analyzer
+    /// actually does — so this asserts the compilation is error-free before running analyzers, to keep
+    /// a broken test source from silently making its own assertions vacuous.</summary>
     public static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
@@ -254,6 +258,13 @@ public static class GeneratorHarness
             References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
+
+        var compileErrors = compilation.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .ToImmutableArray();
+        Assert.True(
+            compileErrors.IsEmpty,
+            "test source did not compile: " + string.Join("; ", compileErrors.Take(5).Select(d => d.ToString())));
 
         var withAnalyzers = compilation.WithAnalyzers(
             ImmutableArray.Create<DiagnosticAnalyzer>(new ScenarioAnalyzer()));

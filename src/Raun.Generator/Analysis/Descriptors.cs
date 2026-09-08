@@ -13,10 +13,7 @@ internal static class Descriptors
         "Raun failed to process a scenario: {0}",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description: null,
-        helpLinkUri: null,
-        customTags: WellKnownDiagnosticTags.CompilationEnd);
+        isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor MustBeAsyncTask = new(
         "RAUN001",
@@ -141,7 +138,7 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor InertContendedResourceUse = new(
         "RAUN016",
         "Contended resource use never constrains anything",
-        "'{0}' is never used exclusively and its capacity never binds, so every [Uses<{0}>] in this assembly has no effect; make one use LockMode.Exclusive, lower the pool capacity, or remove the declarations",
+        "'{0}' is a shared contended resource that no scenario uses exclusively, so every [Uses<{0}>] in this assembly has no effect: shared uses never block each other; make one use LockMode.Exclusive, or remove the declarations",
         Category,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,

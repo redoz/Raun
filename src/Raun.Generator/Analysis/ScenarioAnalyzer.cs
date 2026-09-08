@@ -52,12 +52,12 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// RAUN016 needs a compilation-wide view: whether ANY scenario uses a resource exclusively, and how
-    /// many distinct scenarios use it at all, to decide whether the resource's capacity can ever bind.
-    /// A single syntax node can't answer that, so this registers its own per-compilation accumulator
-    /// (a scenario's reduced use is recorded as each [Scenario] method is visited) and reports once at
-    /// compilation end. Concurrent execution is enabled for this analyzer, so the accumulator is a
-    /// <see cref="ConcurrentDictionary{TKey,TValue}"/> keyed by symbol identity, and each entry
-    /// serializes its own writes.
+    /// many distinct scenarios use it at all, to decide whether the resource's declaration is
+    /// permanently inert. A single syntax node can't answer that, so this registers its own
+    /// per-compilation accumulator (a scenario's reduced use is recorded as each [Scenario] method is
+    /// visited) and reports once at compilation end. Concurrent execution is enabled for this analyzer,
+    /// so the accumulator is a <see cref="ConcurrentDictionary{TKey,TValue}"/> keyed by symbol identity,
+    /// and each entry serializes its own writes.
     /// </summary>
     private static void OnCompilationStart(CompilationStartAnalysisContext context)
     {
@@ -102,9 +102,12 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     private static bool IsContendedResource(INamedTypeSymbol type)
         => type.AllInterfaces.Any(i => i.Name == "IContendedResource" && i.ContainingNamespace.ToDisplayString() == "Raun");
 
-    /// <summary>One resource type's declared kind + capacity, read once and shared by RAUN015 (is the
-    /// declaration itself valid?) and RAUN016 (given a valid declaration, can its capacity ever bind?).</summary>
-    private readonly record struct ContendedResourceKindInfo(int KindsDeclared, string Kind, int Capacity, bool PoolTooSmall);
+    /// <summary>One resource type's declared kind, read once and shared by RAUN015 (is the declaration
+    /// itself valid — exactly one kind, and a pool capacity of at least 1?) and RAUN016 (given a valid
+    /// declaration, is it Shared — the only kind whose capacity never binds?). The declared pool
+    /// capacity itself isn't carried: RAUN016 no longer needs it (see <see cref="ReportInertContendedResources"/>),
+    /// and RAUN015 only needs to know whether it was valid.</summary>
+    private readonly record struct ContendedResourceKindInfo(int KindsDeclared, string Kind, bool PoolTooSmall);
 
     private static ContendedResourceKindInfo ReadContendedResourceKind(INamedTypeSymbol type)
     {
@@ -138,19 +141,20 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
             }
         }
 
-        return new ContendedResourceKindInfo(kinds, kind, capacity, poolTooSmall);
+        return new ContendedResourceKindInfo(kinds, kind, poolTooSmall);
     }
 
-    /// <summary>Per resource type: every scenario using it, and whether any of them uses it exclusively
+    /// <summary>Per resource type: every scenario using it, whether any of them uses it exclusively
     /// (after per-scenario reduction — the same type wins the same way <c>ScenarioParser.AddUses</c>
-    /// reduces multiple sites on one scenario: Exclusive beats Shared). Thread-safe: entries are shared
-    /// across concurrent syntax-node-action invocations.</summary>
+    /// reduces multiple sites on one scenario: Exclusive beats Shared), and every use-site location seen
+    /// (for RAUN016's fallback location — see <see cref="PickFallbackLocation"/>). Thread-safe: entries
+    /// are shared across concurrent syntax-node-action invocations.</summary>
     private sealed class ResourceUsageAccumulator
     {
         private readonly object _gate = new();
         private readonly HashSet<IMethodSymbol> _scenarios = new(SymbolEqualityComparer.Default);
+        private readonly List<Location> _useLocations = new();
         private bool _anyExclusive;
-        private Location? _firstUseLocation;
 
         public void Record(IMethodSymbol scenario, bool exclusive, Location useLocation)
         {
@@ -158,15 +162,15 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
             {
                 _scenarios.Add(scenario);
                 _anyExclusive |= exclusive;
-                _firstUseLocation ??= useLocation;
+                _useLocations.Add(useLocation);
             }
         }
 
-        public (int ScenarioCount, bool AnyExclusive, Location? FirstUseLocation) Snapshot()
+        public (int ScenarioCount, bool AnyExclusive, IReadOnlyList<Location> UseLocations) Snapshot()
         {
             lock (_gate)
             {
-                return (_scenarios.Count, _anyExclusive, _firstUseLocation);
+                return (_scenarios.Count, _anyExclusive, _useLocations.ToArray());
             }
         }
     }
@@ -219,8 +223,12 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     /// <summary>Every <c>[Uses&lt;T&gt;]</c> a scenario is subject to, matching what <c>ScenarioParser</c>
     /// unions onto a scenario: every DSL method its body calls, the scenario method itself, its
     /// containing types (walked outward), and the compilation's assembly attributes. Walking every
-    /// invocation (rather than reproducing the parser's lowering) is a safe superset — a use the
-    /// generator wouldn't actually emit can only make RAUN016 stay silent, never fire falsely.</summary>
+    /// invocation (rather than reproducing the parser's lowering) is a safe superset for the
+    /// exclusivity flag: a use the generator wouldn't actually emit can only make RAUN016 stay silent,
+    /// never fire falsely, because it can only add an exclusive user that doesn't really exist. It is
+    /// NOT a safe superset for the scenario count, though: a <c>[Uses&lt;T&gt;]</c>-bearing method
+    /// invoked somewhere the generator would not lower still counts its scenario toward the
+    /// two-scenario floor.</summary>
     private static IEnumerable<(INamedTypeSymbol Resource, string Mode, Location Location)> CollectScenarioUses(
         SyntaxNodeAnalysisContext context, MethodDeclarationSyntax method, IMethodSymbol symbol)
     {
@@ -274,10 +282,16 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// RAUN016: report once per resource type that is used by two or more scenarios, that no scenario
-    /// uses exclusively, and whose capacity can never bind: unbounded (Shared), or pooled with room for
-    /// every user (usingScenarioCount &lt;= capacity). An Exclusive-kind resource always binds once two
-    /// or more scenarios use it (capacity 1), so it never qualifies here.
+    /// RAUN016: report once per resource type that is <c>[SharedResource]</c>, used by two or more
+    /// scenarios, and never used exclusively by any of them. That combination is the only one that is
+    /// permanently inert — adding scenarios never makes a declaration like that start binding, because
+    /// shared uses never block each other and a Shared resource never gains an exclusive slot no matter
+    /// how many scenarios join. A Pooled resource is out of scope even at or under its capacity: that is
+    /// not-yet-binding, not permanently inert — one more scenario using it makes the pool start
+    /// serializing access, the same "suite still being built" shape as the deliberate under-two-scenario
+    /// carve-out below, and warning on it would be the behaviour most likely to feel hostile while a
+    /// suite is still being assembled. An Exclusive-kind resource is out of scope too: capacity 1 always
+    /// binds once two or more scenarios use it, so it never qualifies here.
     /// </summary>
     private static void ReportInertContendedResources(
         CompilationAnalysisContext context, ConcurrentDictionary<INamedTypeSymbol, ResourceUsageAccumulator> usage)
@@ -287,7 +301,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
             try
             {
                 var resource = pair.Key;
-                var (scenarioCount, anyExclusive, firstUseLocation) = pair.Value.Snapshot();
+                var (scenarioCount, anyExclusive, useLocations) = pair.Value.Snapshot();
 
                 // Deliberately excluded: a resource used by fewer than two scenarios is inert today but
                 // is the normal state while a suite is being built up — warning here would fire on work
@@ -298,32 +312,55 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
                 }
 
                 var kind = ReadContendedResourceKind(resource);
-                if (kind.KindsDeclared != 1)
+                if (kind.KindsDeclared != 1 || kind.PoolTooSmall)
                 {
-                    // RAUN015 already flags a malformed kind declaration; don't pile a second, less
-                    // meaningful diagnostic onto a type that's already broken.
+                    // RAUN015 already flags a malformed kind declaration — including a pool whose
+                    // capacity isn't valid — so a type it has already condemned must never also reach
+                    // RAUN016's reporting logic.
                     continue;
                 }
 
-                var capacityNeverBinds = kind.Kind switch
+                if (kind.Kind != "Shared")
                 {
-                    "Shared" => true,
-                    "Pooled" => scenarioCount <= kind.Capacity,
-                    _ => false, // "Exclusive": capacity 1 always binds once scenarioCount >= 2 (guarded above)
-                };
-                if (!capacityNeverBinds)
-                {
+                    // Pooled (at or under capacity): not-yet-binding, not permanently inert — see the
+                    // method doc. Exclusive: capacity 1 always binds once scenarioCount >= 2 (guarded
+                    // above).
                     continue;
                 }
 
-                var location = resource.Locations.FirstOrDefault(l => l.IsInSource) ?? firstUseLocation ?? Location.None;
+                var location = resource.Locations.FirstOrDefault(l => l.IsInSource) ?? PickFallbackLocation(useLocations);
                 context.ReportDiagnostic(Diagnostic.Create(Descriptors.InertContendedResourceUse, location, resource.Name));
             }
-            catch (Exception ex)
+            catch
             {
-                context.ReportDiagnostic(Diagnostic.Create(Descriptors.UnhandledException, Location.None, GeneratorSafety.Describe(ex)));
+                // The accumulator was already built by AnalyzeScenarioResourceUse, which has its own
+                // RAUN000 catch; this loop only reads it and picks a location deterministically, so a
+                // throw here means a bug in this analyzer, not in user code. Swallow rather than report:
+                // reporting RAUN000 from a compilation-end action would force it to carry
+                // WellKnownDiagnosticTags.CompilationEnd (RS1037), which is false for RAUN000 — it is
+                // also reported live from syntax-node and symbol actions, where a generator crash most
+                // needs to stay visible rather than risk deferral to full-solution analysis.
             }
         }
+    }
+
+    /// <summary>RAUN016's fallback location when the resource type has no in-source declaration of its
+    /// own (it's declared in another assembly): the lowest of every recorded <c>[Uses&lt;T&gt;]</c>
+    /// site, ordered by file path then by span start (both ordinal). Deterministic regardless of which
+    /// syntax-node-action invocation records first — <see cref="Initialize"/> enables concurrent
+    /// execution, so "the first one recorded" is otherwise first-writer-wins and can move between
+    /// builds of identical source, moving a warnings-as-errors diagnostic's location along with it.</summary>
+    private static Location PickFallbackLocation(IReadOnlyList<Location> useLocations)
+    {
+        if (useLocations.Count == 0)
+        {
+            return Location.None;
+        }
+
+        return useLocations
+            .OrderBy(l => l.SourceTree?.FilePath ?? "", StringComparer.Ordinal)
+            .ThenBy(l => l.SourceSpan.Start)
+            .First();
     }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
