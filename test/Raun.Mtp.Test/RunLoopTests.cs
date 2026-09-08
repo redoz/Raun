@@ -72,12 +72,8 @@ public class RunLoopTests
     private static string Uid(string scenarioId, string stepId) => scenarioId + ":" + stepId;
 
     /// <summary>The selector a runner's uid list reduces to.</summary>
-    // CA1859 wants the concrete UidNodeSelector return type, but callers use this through the
-    // NodeSelector abstraction the same way production code does.
-#pragma warning disable CA1859
-    private static NodeSelector Select(params string[] uids)
+    private static UidNodeSelector Select(params string[] uids)
         => new UidNodeSelector(new HashSet<string>(uids, StringComparer.OrdinalIgnoreCase));
-#pragma warning restore CA1859
 
     private static string PassedUid(StepFinished e) =>
         RaunDiscoverer.MakeUid(e.Definition.ScenarioId, e.Result.Node.StepId);
