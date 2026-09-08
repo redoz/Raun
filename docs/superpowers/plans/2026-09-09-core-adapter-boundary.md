@@ -70,5 +70,5 @@ only, ship the generator in `Raun`, and give the model the identity the adapters
 - [x] Build, test, commit: `refactor(core): internalize what only the runtime uses`.
 
 ### Review
-- [ ] Both reviewers re-read `2e9a568b..@-`; confirmed findings addressed in follow-up commits.
-- [ ] Handoff note + memory update.
+- [x] Both reviewers re-read the range; confirmed findings addressed in 82786e02 and 2d02b34e.
+- [x] Handoff note (`docs/superpowers/handoffs/2026-09-09-overnight-handoff.md`) + memory update.
