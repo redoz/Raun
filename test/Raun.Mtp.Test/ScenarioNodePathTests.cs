@@ -97,6 +97,18 @@ public class ScenarioNodePathTests
     }
 
     [Fact]
+    public void A_percent_is_escaped_before_a_slash_so_the_slash_escape_is_not_itself_escaped()
+    {
+        var step = Node("100%/off");
+        var definition = Definition("Demo.Booking.CustomerBooks", "customer books", null, step);
+
+        var path = ScenarioNodePath.For(definition, step);
+
+        Assert.Equal(6, path.Split('/').Length);
+        Assert.Contains("100%25%2Foff", path, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_display_name_with_spaces_appears_verbatim_so_a_name_copied_from_list_tests_can_be_pasted_into_a_filter()
     {
         var step = Node("Given user alice exists");
