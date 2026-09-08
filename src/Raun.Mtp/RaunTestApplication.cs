@@ -77,9 +77,19 @@ public static class RaunTestApplication
         builder.AddTreeNodeFilterService(extension);
 #pragma warning restore TPEXP
 
+        var stopSignal = new RunStopSignal();
+
+        // --maximum-failed-tests is offered only to a framework that declares a graceful stop.
+#pragma warning disable TPEXP // AddMaximumFailedTestsService is an experimental Microsoft.Testing.Platform API.
+        builder.AddMaximumFailedTestsService(extension);
+#pragma warning restore TPEXP
+
         builder.RegisterTestFramework(
-            _ => new TestFrameworkCapabilities(),
-            (_, serviceProvider) => new RaunTestFramework(serviceProvider, simulateTime, services, preflight, maxParallelScenarios));
+            _ => new TestFrameworkCapabilities(
+                new RaunBannerCapability(),
+                new RaunGracefulStopCapability(stopSignal)),
+            (_, serviceProvider) => new RaunTestFramework(
+                serviceProvider, simulateTime, services, preflight, maxParallelScenarios, stopSignal));
 
         using var app = await builder.BuildAsync().ConfigureAwait(false);
         return await app.RunAsync().ConfigureAwait(false);

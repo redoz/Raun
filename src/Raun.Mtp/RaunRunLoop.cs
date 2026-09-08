@@ -46,6 +46,7 @@ internal sealed class RaunRunLoop
     private readonly IServiceProvider? services;
     private readonly Func<ScenarioContext, Task>? preflight;
     private readonly int maxParallelScenarios;
+    private readonly RunStopSignal? stopSignal;
 
     /// <summary>How many scenarios may run at once. Steps inside a scenario stay unbounded.</summary>
     public int MaxParallelScenarios => maxParallelScenarios;
@@ -76,13 +77,19 @@ internal sealed class RaunRunLoop
     /// <c>1</c> runs scenarios one after another. Steps inside a scenario stay unbounded, so the
     /// number of concurrently running steps is at most this times the widest scenario.
     /// </param>
+    /// <param name="stopSignal">
+    /// Set by the platform's graceful-stop capability. When a stop is requested the launcher stops
+    /// admitting scenarios; whatever is running drains and reports, exactly as it does when a
+    /// scenario faults. <see langword="null"/> (the default) means no stop can be requested.
+    /// </param>
     public RaunRunLoop(
         Func<IEnumerable<ScenarioDefinition>> scenarioSource,
         RunScenario? runScenario = null,
         bool simulateTime = false,
         IServiceProvider? services = null,
         Func<ScenarioContext, Task>? preflight = null,
-        int maxParallelScenarios = 0)
+        int maxParallelScenarios = 0,
+        RunStopSignal? stopSignal = null)
     {
         ArgumentNullException.ThrowIfNull(scenarioSource);
         ArgumentOutOfRangeException.ThrowIfNegative(maxParallelScenarios);
@@ -92,6 +99,7 @@ internal sealed class RaunRunLoop
         this.preflight = preflight;
         this.maxParallelScenarios = maxParallelScenarios == 0 ? Environment.ProcessorCount : maxParallelScenarios;
         this.runScenario = runScenario ?? DefaultRunScenario;
+        this.stopSignal = stopSignal;
     }
 
     /// <summary>
@@ -221,7 +229,7 @@ internal sealed class RaunRunLoop
             var i = 0;
             while (i < pending.Count && running.Count < maxParallelScenarios)
             {
-                if ((started && cancellationToken.IsCancellationRequested) || halted)
+                if ((started && cancellationToken.IsCancellationRequested) || halted || stopSignal?.IsStopRequested == true)
                 {
                     break;
                 }

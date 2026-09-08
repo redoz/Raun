@@ -455,6 +455,45 @@ public class RunLoopTests
     }
 
     [Fact]
+    public async Task A_requested_stop_stops_admitting_scenarios_and_drains_what_is_running()
+    {
+        // Graceful means graceful: nothing in flight is killed, nothing new starts, and the run
+        // still reports. This is the same halt path a faulted scenario uses.
+        var signal = new RunStopSignal();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new List<string>();
+        var sync = new object();
+
+        ScenarioDefinition Def(string id, bool stops) => Definition(id, id,
+            Node(0, "a", "a", invoke: async (_, _) =>
+            {
+                lock (sync) { started.Add(id); }
+                if (stops)
+                {
+                    signal.Request();
+                    release.TrySetResult();
+                }
+
+                await release.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                return null;
+            }));
+
+        var definitions = new[] { Def("one", stops: true), Def("two", false), Def("three", false), Def("four", false) };
+        var sink = new RecordingSink();
+
+        await new RaunRunLoop(() => definitions, maxParallelScenarios: 1, stopSignal: signal)
+            .RunAsync(selector: null, sink, CancellationToken.None);
+
+        lock (sync)
+        {
+            Assert.Equal(["one"], started);
+        }
+
+        Assert.Single(sink.Events.OfType<ScenarioFinished>());
+        Assert.Single(sink.Events.OfType<RunFinished>());
+    }
+
+    [Fact]
     public void A_negative_degree_is_rejected_and_zero_means_the_processor_count()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new RaunRunLoop(() => [], maxParallelScenarios: -1));

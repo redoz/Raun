@@ -53,6 +53,7 @@ public class RaunTestFramework :
     private readonly Func<ScenarioContext, Task>? _preflight;
     private readonly bool _simulateTime;
     private readonly int _maxParallelScenarios;
+    private readonly RunStopSignal? _stopSignal;
 
     /// <summary>Parameterless ctor for tests and the default registration path.</summary>
     public RaunTestFramework() { }
@@ -92,6 +93,17 @@ public class RaunTestFramework :
         Func<ScenarioContext, Task>? preflight,
         int maxParallelScenarios)
         : this(services, simulateTime, userServices, preflight) => _maxParallelScenarios = maxParallelScenarios;
+
+    /// <summary>Production ctor including the platform's graceful-stop signal, so
+    /// <c>--maximum-failed-tests</c> can stop the loop from admitting further scenarios.</summary>
+    internal RaunTestFramework(
+        IServiceProvider services,
+        bool simulateTime,
+        IServiceProvider? userServices,
+        Func<ScenarioContext, Task>? preflight,
+        int maxParallelScenarios,
+        RunStopSignal? stopSignal)
+        : this(services, simulateTime, userServices, preflight, maxParallelScenarios) => _stopSignal = stopSignal;
 
     /// <inheritdoc/>
     public string Uid => ExtensionUid;
@@ -289,7 +301,8 @@ public class RaunTestFramework :
             simulateTime: _simulateTime,
             services: _userServices,
             preflight: _preflight,
-            maxParallelScenarios: ScenarioParallelism.Resolve(_services, _maxParallelScenarios));
+            maxParallelScenarios: ScenarioParallelism.Resolve(_services, _maxParallelScenarios),
+            stopSignal: _stopSignal);
         await loop.RunAsync(selector, bus, cancellationToken).ConfigureAwait(false);
 
         if (bus.Failures.Count > 0)
