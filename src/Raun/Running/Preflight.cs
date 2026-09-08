@@ -31,31 +31,36 @@ public static class Preflight
     public const string FailedSkipReason = "preflight failed";
 
     /// <summary>Builds the one-node definition wrapping <paramref name="preflight"/>.</summary>
-    public static ScenarioDefinition Definition(Func<ScenarioContext, Task> preflight) => new()
+    public static ScenarioDefinition Definition(Func<ScenarioContext, Task> preflight)
     {
-        ScenarioId = ScenarioId,
-        DisplayName = "Preflight",
-        // Its own identity so runners group it apart from scenarios rather than filing it under an
-        // empty namespace and class; stated here rather than left to an adapter's split of MethodName.
-        MethodName = "Raun.Preflight",
-        Namespace = "",
-        TypeName = "Raun",
-        Nodes =
-        [
-            new ScenarioNode
-            {
-                Index = 0,
-                StepId = StepId,
-                Phase = "Given",
-                OperationName = "Preflight",
-                DisplayNameTemplate = "Preflight",
-                DependsOn = [],
-                Invoke = async (_, ctx) =>
+        ArgumentNullException.ThrowIfNull(preflight);
+        return new ScenarioDefinition
+        {
+            ScenarioId = ScenarioId,
+            DisplayName = "Preflight",
+            // Its own identity so runners group it apart from scenarios — under namespace Raun,
+            // class Preflight — rather than filing it under an empty namespace. Stated here, not
+            // left to a split of MethodName (which would put it under "" / "Raun").
+            MethodName = "Raun.Preflight",
+            Namespace = "Raun",
+            TypeName = "Preflight",
+            Nodes =
+            [
+                new ScenarioNode
                 {
-                    await preflight(ctx).ConfigureAwait(false);
-                    return null;
+                    Index = 0,
+                    StepId = StepId,
+                    Phase = "Given",
+                    OperationName = "Preflight",
+                    DisplayNameTemplate = "Preflight",
+                    DependsOn = [],
+                    Invoke = async (_, ctx) =>
+                    {
+                        await preflight(ctx).ConfigureAwait(false);
+                        return null;
+                    },
                 },
-            },
-        ],
-    };
+            ],
+        };
+    }
 }

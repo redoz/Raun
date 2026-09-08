@@ -175,8 +175,12 @@ public class PreflightTests
         // Core must not lean on an adapter's fallback split of MethodName for its own node.
         var def = Preflight.Definition(_ => Task.CompletedTask);
 
-        Assert.Equal("", def.Namespace);
-        Assert.Equal("Raun", def.TypeName);
+        Assert.Equal("Raun", def.Namespace);
+        Assert.Equal("Preflight", def.TypeName);
         Assert.Equal("Raun.Preflight", def.MethodName);
     }
+
+    [Fact]
+    public void A_null_preflight_delegate_is_rejected_up_front()
+        => Assert.Throws<ArgumentNullException>(() => Preflight.Definition(null!));
 }

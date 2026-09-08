@@ -31,8 +31,9 @@ namespace Raun.Running;
 /// </remarks>
 public sealed class RunLoop
 {
-    /// <summary>Runs one scenario to completion and returns its step results. Tests substitute this
-    /// to observe how many runs the loop issues; the default drives a real <see cref="ScenarioScheduler"/>.</summary>
+    /// <summary>Runs one scenario to completion and returns its step results. The extension point
+    /// for a host that wraps or replaces the scheduler; the default drives a real
+    /// <see cref="ScenarioScheduler"/>, and the tests substitute it to count runs.</summary>
     public delegate Task<IReadOnlyList<StepResult>> RunScenario(
         ScenarioDefinition definition,
         IStepObserver observer,
@@ -77,9 +78,10 @@ public sealed class RunLoop
     /// number of concurrently running steps is at most this times the widest scenario.
     /// </param>
     /// <param name="stopSignal">
-    /// Set by the platform's graceful-stop capability. When a stop is requested the launcher stops
-    /// admitting scenarios; whatever is running drains and reports, exactly as it does when a
-    /// scenario faults. <see langword="null"/> (the default) means no stop can be requested.
+    /// Set by the host when it wants the run to wind down (under Microsoft.Testing.Platform, the
+    /// graceful-stop capability behind <c>--maximum-failed-tests</c>). When a stop is requested the
+    /// launcher stops admitting scenarios; whatever is running drains and reports, exactly as it
+    /// does when a scenario faults. <see langword="null"/> (the default) means no stop can be requested.
     /// </param>
     public RunLoop(
         Func<IEnumerable<ScenarioDefinition>> scenarioSource,
@@ -106,7 +108,7 @@ public sealed class RunLoop
     /// (the request had no filter, or a no-op one) selects every scenario; otherwise a scenario is
     /// selected when any of its steps matches.
     /// </summary>
-    public static IReadOnlyList<ScenarioDefinition> SelectScenarios(
+    internal static IReadOnlyList<ScenarioDefinition> SelectScenarios(
         IEnumerable<ScenarioDefinition> scenarios,
         NodeSelector? selector)
     {

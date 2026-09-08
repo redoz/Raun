@@ -2,14 +2,14 @@ namespace Raun.Reporting.Html;
 
 /// <summary>The full, self-contained report payload embedded into the HTML (design §4). All times are
 /// pre-reduced to millisecond offsets from each scenario's start so the renderer does no clock math.</summary>
-public sealed record HtmlReportModel
+internal sealed record HtmlReportModel
 {
     public required string GeneratedAtUtc { get; init; }
     public required ReportSummary Summary { get; init; }
     public required IReadOnlyList<ReportScenario> Scenarios { get; init; }
 }
 
-public sealed record ReportSummary
+internal sealed record ReportSummary
 {
     public required int Passed { get; init; }
     public required int Failed { get; init; }
@@ -17,7 +17,7 @@ public sealed record ReportSummary
     public required double TotalMs { get; init; }
 }
 
-public sealed record ReportScenario
+internal sealed record ReportScenario
 {
     public required string ScenarioId { get; init; }
     public required string DisplayName { get; init; }
@@ -40,7 +40,7 @@ public sealed record ReportScenario
     public string? WaitedFor { get; init; }
 }
 
-public sealed record ReportStep
+internal sealed record ReportStep
 {
     public required string StepId { get; init; }
     public required int Index { get; init; }
@@ -68,13 +68,13 @@ public sealed record ReportStep
     public IReadOnlyList<ReportAttachment> Attachments { get; init; } = [];
 }
 
-public sealed record ReportAttachment
+internal sealed record ReportAttachment
 {
     public required string Name { get; init; }
     public required string Value { get; init; }
 }
 
-public sealed record ReportEffect
+internal sealed record ReportEffect
 {
     public required string Verb { get; init; }
     public required string Type { get; init; }
@@ -83,14 +83,14 @@ public sealed record ReportEffect
     public string? Data { get; init; }
 }
 
-public sealed record ReportResource
+internal sealed record ReportResource
 {
     public required string Type { get; init; }
     public required string Key { get; init; }
     public required IReadOnlyList<ReportResourceEvent> Events { get; init; }
 }
 
-public sealed record ReportResourceEvent
+internal sealed record ReportResourceEvent
 {
     public required string Verb { get; init; }
     public required double OffsetMs { get; init; }
@@ -99,7 +99,7 @@ public sealed record ReportResourceEvent
 
 /// <summary>One resource→resource lineage edge in the report, mapped from a step's recorded
 /// producer References/Consumes targets. Endpoints are (Type, Key) pairs matching <see cref="ReportResource"/>.</summary>
-public sealed record ReportReference
+internal sealed record ReportReference
 {
     public required string SubjectType { get; init; }
     public required string SubjectKey { get; init; }

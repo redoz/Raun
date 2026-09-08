@@ -246,8 +246,9 @@ public class TracingTests
     [Fact]
     public async Task Without_a_listener_nothing_is_recorded_and_results_carry_no_trace_ids()
     {
-        // No Capture here. Tests in this class run one at a time and each disposes its listener, and
-        // no other class in this project subscribes to the Raun source, so nothing is listening now.
+        // No Capture here. Tests in this class run one at a time and each disposes its listener. The
+        // run-loop tests subscribe to the same source, which is why both classes share the
+        // "ActivityListeners" collection: it is what guarantees nothing is listening right now.
         var def = Def(NewId(), Node(0, (_, ctx) => { ctx.Log("x"); return Task.FromResult<object?>(null); }));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));

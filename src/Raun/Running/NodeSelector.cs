@@ -20,9 +20,9 @@ public abstract class NodeSelector
 /// </summary>
 public sealed class UidNodeSelector : NodeSelector
 {
-    private readonly ISet<string> _uids;
+    private readonly IReadOnlySet<string> _uids;
 
-    public UidNodeSelector(ISet<string> uids)
+    public UidNodeSelector(IReadOnlySet<string> uids)
     {
         ArgumentNullException.ThrowIfNull(uids);
         _uids = uids;

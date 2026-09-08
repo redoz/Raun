@@ -7,6 +7,9 @@ namespace Raun.Model;
 /// </summary>
 public interface IStepInputs
 {
-    /// <summary>Gets the output produced by the step at <paramref name="producerIndex"/>.</summary>
+    /// <summary>Gets the output produced by the step at <paramref name="producerIndex"/>. Throws
+    /// <see cref="InvalidOperationException"/> if that step has not passed: a reader must name its
+    /// producer in <see cref="ScenarioNode.DependsOn"/>, and only a generator bug can arrange
+    /// otherwise.</summary>
     T Get<T>(int producerIndex);
 }

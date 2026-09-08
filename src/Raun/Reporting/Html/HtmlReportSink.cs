@@ -8,8 +8,9 @@ namespace Raun.Reporting.Html;
 /// <see cref="RunFinished"/> renders the embedded template with the model's JSON and writes one
 /// self-contained HTML file. Best-effort I/O: a write failure propagates out of
 /// <see cref="OnRunFinishedAsync"/> so the <see cref="RunEventBus"/> records it in
-/// <see cref="RunEventBus.Failures"/> and the framework logs it — a broken report must never
-/// fail the run (design §3.D/§3.E). Constructed only when <c>--report-html</c> is set.
+/// <see cref="RunEventBus.Failures"/> and the host logs it — a broken report must never fail
+/// the run. A host constructs one when the report was asked for (under Microsoft.Testing.Platform,
+/// <c>--report-html</c>).
 /// </summary>
 public sealed class HtmlReportSink : RunEventSink
 {

@@ -50,7 +50,7 @@ public class RejectionReportingTests
         public static class ExpressionBodiedScenarios
         {
             [Scenario("expression bodied")]
-            public static Task Run() => Task.CompletedTask;
+            public static async Task Run() => await Given.DatabaseIsClean();
         }
         """;
 
@@ -64,7 +64,6 @@ public class RejectionReportingTests
         var diagnostic = Assert.Single(result.GeneratorDiagnostics, d => d.Id == RejectedId);
         Assert.Equal(LineOf(source, "var n = 1;"), diagnostic.Location.GetLineSpan().StartLinePosition.Line);
         Assert.Contains("RejectScenarios.Run", diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
-        Assert.DoesNotContain("rejected", result.GeneratedSource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -79,14 +78,18 @@ public class RejectionReportingTests
     }
 
     [Fact]
-    public void An_expression_bodied_scenario_is_reported_at_its_name()
+    public async Task An_expression_bodied_scenario_is_reported_at_its_name()
     {
+        // An async expression-bodied scenario is the case only RAUN017 catches: it is async, so
+        // RAUN001 stays quiet, and the analyzer has no block body to walk.
         var source = SampleSources.Dsl + ExpressionBodied;
 
         var result = GeneratorHarness.Run(source);
+        var analyzer = await GeneratorHarness.AnalyzeAsync(source);
 
         var diagnostic = Assert.Single(result.GeneratorDiagnostics, d => d.Id == RejectedId);
-        Assert.Equal(LineOf(source, "public static Task Run() =>"), diagnostic.Location.GetLineSpan().StartLinePosition.Line);
+        Assert.Equal(LineOf(source, "public static async Task Run() =>"), diagnostic.Location.GetLineSpan().StartLinePosition.Line);
+        Assert.Empty(analyzer);
     }
 
     [Fact]

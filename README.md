@@ -65,8 +65,8 @@ for Roslyn 5.3 and newer.
    never executed directly.
 3. The generator lowers each body into a dependency graph (`ScenarioDefinition`): one node per
    step, with **source-order + dataflow** edges, and tuple/array forms lowered to parallel
-   sibling groups. An analyzer (`RAUN000`–`RAUN017`) rejects anything outside the supported subset
-   and catches authoring mistakes at compile time.
+   sibling groups. The analyzer and the generator (`RAUN000`–`RAUN017`) reject anything outside
+   the supported subset and catch authoring mistakes at compile time.
 4. At run time, the MTP test framework discovers each `[Scenario]`, runs the graph through a DAG
    scheduler, and reports **every step as its own test** — passed, failed, skipped, or not taken.
 
