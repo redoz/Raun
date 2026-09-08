@@ -24,9 +24,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Raun.Generator\Raun.Generator.csproj" />
     <ProjectReference Include="..\..\src\Raun\Raun.csproj" />
-    <!-- Raun.Mtp provides the go-forward [Scenario] attribute (test input compilations need it to
-         resolve [Scenario]) AND the bootstrap the generated entry point calls; reference it so a
-         compile test can prove the emitted Program.cs binds to the real RunAsync signature. -->
+    <!-- Raun.Mtp is the bootstrap the generated entry point calls; reference it so a compile test
+         can prove the emitted Program.cs binds to the real RunAsync signature. -->
     <ProjectReference Include="..\..\src\Raun.Mtp\Raun.Mtp.csproj" />
   </ItemGroup>
 

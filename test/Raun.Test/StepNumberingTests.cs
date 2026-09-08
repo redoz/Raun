@@ -1,16 +1,16 @@
-using Raun.Mtp;
 using Raun.Model;
+using Raun.Reporting;
 using Xunit;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 /// <summary>
-/// Unit tests for <see cref="ScenarioStepNumbering"/>: standalone steps take the next top-level
+/// Unit tests for <see cref="StepNumbering"/>: standalone steps take the next top-level
 /// number; a parallel/array group (nodes sharing a GroupId) takes one top-level number with
 /// sub-numbered members; numbers are zero-padded to a per-scenario width so a runner that sorts
 /// sibling leaves lexically renders them in execution order.
 /// </summary>
-public class ScenarioStepNumberingTests
+public class StepNumberingTests
 {
     private static ScenarioNode Node(int index, string? group = null, bool synthetic = false) => new()
     {
@@ -36,7 +36,7 @@ public class ScenarioStepNumberingTests
     [Fact]
     public void Linear_scenario_numbers_each_step_sequentially()
     {
-        var labels = ScenarioStepNumbering.Compute(Def(Node(0), Node(1), Node(2), Node(3)));
+        var labels = StepNumbering.Compute(Def(Node(0), Node(1), Node(2), Node(3)));
 
         Assert.Equal("1", labels[0]);
         Assert.Equal("2", labels[1]);
@@ -47,7 +47,7 @@ public class ScenarioStepNumberingTests
     [Fact]
     public void Single_step_is_numbered_one()
     {
-        var labels = ScenarioStepNumbering.Compute(Def(Node(0)));
+        var labels = StepNumbering.Compute(Def(Node(0)));
 
         Assert.Equal("1", Assert.Single(labels.Values));
     }
@@ -56,7 +56,7 @@ public class ScenarioStepNumberingTests
     public void Tuple_group_consumes_one_top_level_number_with_sub_indices()
     {
         // standalone, group(g1) x2, standalone, standalone
-        var labels = ScenarioStepNumbering.Compute(
+        var labels = StepNumbering.Compute(
             Def(Node(0), Node(1, "g1"), Node(2, "g1"), Node(3), Node(4)));
 
         Assert.Equal("1", labels[0]);
@@ -70,7 +70,7 @@ public class ScenarioStepNumberingTests
     public void Group_at_start_takes_top_level_one()
     {
         // group(g0) x2 first, then two standalones
-        var labels = ScenarioStepNumbering.Compute(
+        var labels = StepNumbering.Compute(
             Def(Node(0, "g0"), Node(1, "g0"), Node(2), Node(3)));
 
         Assert.Equal("1.1", labels[0]);
@@ -82,7 +82,7 @@ public class ScenarioStepNumberingTests
     [Fact]
     public void Array_group_of_three_sub_numbers_all_members()
     {
-        var labels = ScenarioStepNumbering.Compute(
+        var labels = StepNumbering.Compute(
             Def(Node(0, "g0"), Node(1, "g0"), Node(2, "g0"), Node(3), Node(4)));
 
         Assert.Equal("1.1", labels[0]);
@@ -95,7 +95,7 @@ public class ScenarioStepNumberingTests
     [Fact]
     public void Two_groups_in_one_scenario_each_take_their_own_top_level_number()
     {
-        var labels = ScenarioStepNumbering.Compute(
+        var labels = StepNumbering.Compute(
             Def(Node(0, "ga"), Node(1, "ga"), Node(2), Node(3, "gb"), Node(4, "gb"), Node(5)));
 
         Assert.Equal("1.1", labels[0]);
@@ -115,7 +115,7 @@ public class ScenarioStepNumberingTests
             nodes[i] = Node(i);
         }
 
-        var labels = ScenarioStepNumbering.Compute(Def(nodes));
+        var labels = StepNumbering.Compute(Def(nodes));
 
         Assert.Equal("01", labels[0]);
         Assert.Equal("09", labels[8]);
@@ -134,7 +134,7 @@ public class ScenarioStepNumberingTests
             nodes[i] = Node(i, "g");
         }
 
-        var labels = ScenarioStepNumbering.Compute(Def(nodes));
+        var labels = StepNumbering.Compute(Def(nodes));
 
         Assert.Equal("1", labels[0]);
         Assert.Equal("2.01", labels[1]);
@@ -159,7 +159,7 @@ public class ScenarioStepNumberingTests
             nodes[i] = Node(i);
         }
 
-        var labels = ScenarioStepNumbering.Compute(Def(nodes));
+        var labels = StepNumbering.Compute(Def(nodes));
 
         var inIndexOrder = labels.OrderBy(kv => kv.Key).Select(kv => kv.Value).ToList();
         var inLexicalOrder = labels.Values.OrderBy(v => v, StringComparer.Ordinal).ToList();
@@ -171,26 +171,26 @@ public class ScenarioStepNumberingTests
     public void Format_standalone_step_uses_trailing_dot()
     {
         var def = Def(Node(0));
-        var labels = ScenarioStepNumbering.Compute(def);
+        var labels = StepNumbering.Compute(def);
 
         Assert.Equal("1. the database is clean",
-            ScenarioStepNumbering.Format(labels, def.Nodes[0], "the database is clean"));
+            StepNumbering.Format(labels, def.Nodes[0], "the database is clean"));
     }
 
     [Fact]
     public void Format_group_member_omits_the_trailing_dot()
     {
         var def = Def(Node(0), Node(1, "g1"), Node(2, "g1"));
-        var labels = ScenarioStepNumbering.Compute(def);
+        var labels = StepNumbering.Compute(def);
 
         Assert.Equal("2.1 patient Jane exists",
-            ScenarioStepNumbering.Format(labels, def.Nodes[1], "patient Jane exists"));
+            StepNumbering.Format(labels, def.Nodes[1], "patient Jane exists"));
     }
 
     [Fact]
     public void Synthetic_nodes_consume_no_number_and_leave_no_gap()
     {
-        var labels = ScenarioStepNumbering.Compute(
+        var labels = StepNumbering.Compute(
             Def(Node(0), Node(1, synthetic: true), Node(2), Node(3, synthetic: true), Node(4)));
 
         Assert.Equal("1", labels[0]);
@@ -203,7 +203,7 @@ public class ScenarioStepNumberingTests
     {
         // The HTML report keeps merge nodes (it wants the merge diamond), so a label must exist —
         // it simply does not consume a top-level number.
-        var labels = ScenarioStepNumbering.Compute(Def(Node(0), Node(1, synthetic: true), Node(2)));
+        var labels = StepNumbering.Compute(Def(Node(0), Node(1, synthetic: true), Node(2)));
 
         Assert.True(labels.ContainsKey(1));
     }

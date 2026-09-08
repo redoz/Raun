@@ -11,9 +11,10 @@ namespace Raun;
 /// <remarks>
 /// <para>
 /// This replaces the xUnit-coupled attribute that used to live in <c>Raun.Xunit</c> (which derived
-/// from <c>FactAttribute</c> so xUnit's attribute discovery could find it). Raun.Mtp owns discovery
-/// now, so this is a plain marker attribute with no test-runner coupling. It stays in namespace
-/// <c>Raun</c> so authoring is just <c>using Raun;</c>.
+/// from <c>FactAttribute</c> so xUnit's attribute discovery could find it). Discovery is Raun's own
+/// now, so this is a plain marker attribute with no test-runner coupling, and it lives in the core
+/// so a scenario can be authored against <c>Raun</c> alone. It stays in namespace <c>Raun</c> so
+/// authoring is just <c>using Raun;</c>.
 /// </para>
 /// <para>
 /// The generator matches it by metadata name (<c>Raun.ScenarioAttribute</c>) and reads the

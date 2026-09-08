@@ -189,4 +189,12 @@ public class ModelTests
 
         def.Validate(); // does not throw
     }
+
+    [Fact]
+    public void Step_uid_is_scenario_id_colon_step_id()
+    {
+        // The one spelling every adapter and sink must agree on, so a filter built from a discovered
+        // node resolves to the node the run reports.
+        Assert.Equal("scn:b", StepUid.Of("scn", "b"));
+    }
 }

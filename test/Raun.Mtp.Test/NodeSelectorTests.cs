@@ -33,7 +33,7 @@ public class NodeSelectorTests
     {
         var definition = Definition(Node(0, "a"), Node(1, "b"));
         var selector = new UidNodeSelector(new HashSet<string>(
-            [RaunDiscoverer.MakeUid("scn", "b")], StringComparer.OrdinalIgnoreCase));
+            [StepUid.Of("scn", "b")], StringComparer.OrdinalIgnoreCase));
 
         Assert.False(selector.Matches(definition, definition.Nodes[0]));
         Assert.True(selector.Matches(definition, definition.Nodes[1]));
@@ -44,7 +44,7 @@ public class NodeSelectorTests
     {
         var definition = Definition(Node(0, "a"));
         var selector = new UidNodeSelector(new HashSet<string>(
-            [RaunDiscoverer.MakeUid("scn", "a").ToUpperInvariant()], StringComparer.OrdinalIgnoreCase));
+            [StepUid.Of("scn", "a").ToUpperInvariant()], StringComparer.OrdinalIgnoreCase));
 
         Assert.True(selector.Matches(definition, definition.Nodes[0]));
     }
@@ -63,7 +63,7 @@ public class NodeSelectorTests
     {
         var definition = Definition(Node(0, "a"), Node(1, "b"));
         var selector = new UidNodeSelector(new HashSet<string>(
-            [RaunDiscoverer.MakeUid("scn", "b")], StringComparer.OrdinalIgnoreCase));
+            [StepUid.Of("scn", "b")], StringComparer.OrdinalIgnoreCase));
 
         Assert.Single(RaunRunLoop.SelectScenarios([definition], selector));
         var targets = RaunRunLoop.SelectTargets(definition, selector);

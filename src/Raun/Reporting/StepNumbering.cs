@@ -1,7 +1,7 @@
 using System.Globalization;
 using Raun.Model;
 
-namespace Raun.Mtp;
+namespace Raun.Reporting;
 
 /// <summary>
 /// Computes per-step display labels for a scenario so a runner that sorts sibling leaves
@@ -12,7 +12,7 @@ namespace Raun.Mtp;
 /// numeric order (≤9 steps render <c>1</c>–<c>9</c>; ≥10 render <c>01</c>…). Pure and runner-free,
 /// so it is unit-testable and shared by discovery and execution.
 /// </summary>
-internal static class ScenarioStepNumbering
+public static class StepNumbering
 {
     /// <summary>
     /// Maps each <see cref="ScenarioNode.Index"/> to its label (e.g. <c>"1"</c>, <c>"2.1"</c>, or

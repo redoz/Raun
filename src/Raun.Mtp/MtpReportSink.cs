@@ -36,7 +36,7 @@ internal sealed class MtpReportSink : RunEventSink
 
     protected override ValueTask OnScenarioStartedAsync(ScenarioStarted e)
     {
-        _labels[e.Definition.ScenarioId] = ScenarioStepNumbering.Compute(e.Definition);
+        _labels[e.Definition.ScenarioId] = StepNumbering.Compute(e.Definition);
         return default;
     }
 
@@ -82,12 +82,12 @@ internal sealed class MtpReportSink : RunEventSink
     {
         var labels = _labels.TryGetValue(definition.ScenarioId, out var cached)
             ? cached
-            : ScenarioStepNumbering.Compute(definition); // defensive: step before its ScenarioStarted
+            : StepNumbering.Compute(definition); // defensive: step before its ScenarioStarted
 
         var testNode = new TestNode
         {
-            Uid = RaunDiscoverer.MakeUid(definition.ScenarioId, node.StepId),
-            DisplayName = ScenarioStepNumbering.Format(labels, node, displayName),
+            Uid = StepUid.Of(definition, node),
+            DisplayName = StepNumbering.Format(labels, node, displayName),
         };
 
         testNode.Properties.Add(ScenarioTestIdentity.Create(
@@ -220,7 +220,7 @@ internal sealed class MtpReportSink : RunEventSink
         var path = Path.Combine(
             Path.GetTempPath(),
             "raun-mtp",
-            SanitizeFileName(RaunDiscoverer.MakeUid(definition.ScenarioId, result.Node.StepId)));
+            SanitizeFileName(StepUid.Of(definition, result.Node)));
         Directory.CreateDirectory(path);
         return path;
     }

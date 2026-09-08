@@ -1,13 +1,13 @@
 using System.Reflection;
 using Xunit;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 /// <summary>
 /// The <c>[Scenario]</c> authoring attribute used to live in <c>Raun.Xunit</c> and derived from
-/// xUnit's <c>FactAttribute</c> so xUnit's discovery could find it. Raun.Mtp owns discovery now, so
-/// the attribute becomes a plain marker that Raun.Mtp ships (in namespace <c>Raun</c>, so authoring
-/// stays <c>using Raun;</c>). The source generator matches it by metadata name and reads the
+/// xUnit's <c>FactAttribute</c> so xUnit's discovery could find it. Discovery is Raun's own now, so
+/// the attribute is a plain marker the core ships (in namespace <c>Raun</c>, so authoring stays
+/// <c>using Raun;</c>, and against <c>Raun</c> alone). The source generator matches it by metadata name and reads the
 /// display-name constructor argument and the <c>Timeout</c> named argument, so the shape must be
 /// preserved: first ctor parameter is the display name, plus a <c>Timeout</c> (ms) property.
 /// </summary>
@@ -24,8 +24,8 @@ public class ScenarioAttributeTests
     [Fact]
     public void Is_a_plain_attribute_not_an_xunit_fact()
     {
-        // The MTP framework discovers scenarios itself; the attribute must not drag in xUnit's
-        // FactAttribute (which Raun.Mtp does not even reference).
+        // Raun discovers scenarios itself; the attribute must not drag in xUnit's FactAttribute
+        // (which the core does not even reference).
         Assert.True(typeof(Attribute).IsAssignableFrom(ScenarioAttributeType));
 
         for (var t = ScenarioAttributeType.BaseType; t is not null; t = t.BaseType)

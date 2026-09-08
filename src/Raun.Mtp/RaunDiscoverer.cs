@@ -1,5 +1,6 @@
 using Microsoft.Testing.Platform.Extensions.Messages;
 using Raun.Model;
+using Raun.Reporting;
 
 namespace Raun.Mtp;
 
@@ -15,7 +16,7 @@ namespace Raun.Mtp;
 ///   <item>a stable <c>{ScenarioId}:{StepId}</c> uid so single-step run filters resolve to the
 ///   same node that discovery emitted;</item>
 ///   <item>a numbered leaf display name (<c>"1. {step}"</c>, group member <c>"2.1 {step}"</c>) from
-///   <see cref="ScenarioStepNumbering"/>; the reporter refines runtime-bound names at execution time;</item>
+///   <see cref="StepNumbering"/>; the reporter refines runtime-bound names at execution time;</item>
 ///   <item>a <see cref="TestFileLocationProperty"/> for "go to source" when the step's source is
 ///   known;</item>
 ///   <item>the <see cref="DiscoveredTestNodeStateProperty"/>.</item>
@@ -33,7 +34,7 @@ internal static class RaunDiscoverer
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        var labels = ScenarioStepNumbering.Compute(definition);
+        var labels = StepNumbering.Compute(definition);
         var nodes = new List<TestNode>(definition.Nodes.Count);
         foreach (var step in definition.Nodes)
         {
@@ -64,8 +65,8 @@ internal static class RaunDiscoverer
 
         var node = new TestNode
         {
-            Uid = MakeUid(definition.ScenarioId, step.StepId),
-            DisplayName = ScenarioStepNumbering.Format(labels, step, step.DisplayNameTemplate),
+            Uid = StepUid.Of(definition, step),
+            DisplayName = StepNumbering.Format(labels, step, step.DisplayNameTemplate),
         };
 
         node.Properties.Add(DiscoveredTestNodeStateProperty.CachedInstance);
@@ -78,9 +79,6 @@ internal static class RaunDiscoverer
 
         return node;
     }
-
-    /// <summary>The stable node uid for a step: <c>{ScenarioId}:{StepId}</c>.</summary>
-    public static string MakeUid(string scenarioId, string stepId) => scenarioId + ":" + stepId;
 
     private static bool TryMakeFileLocation(ScenarioNode step, out TestFileLocationProperty location)
     {

@@ -77,7 +77,7 @@ public class RunLoopTests
         => new UidNodeSelector(new HashSet<string>(uids, StringComparer.OrdinalIgnoreCase));
 
     private static string PassedUid(StepFinished e) =>
-        RaunDiscoverer.MakeUid(e.Definition.ScenarioId, e.Result.Node.StepId);
+        StepUid.Of(e.Definition.ScenarioId, e.Result.Node.StepId);
 
     /// <summary>A step body that advances its per-step clock by <paramref name="delta"/> via
     /// <see cref="ScenarioContext.SimulateElapsed"/> with no real waiting (an inert no-op in real mode).</summary>
@@ -950,7 +950,7 @@ public class RunLoopTests
         public IEnumerable<string> SkippedUids => Events
             .OfType<StepFinished>()
             .Where(e => e.Result.Status == StepStatus.Skipped)
-            .Select(e => RaunDiscoverer.MakeUid(e.Definition.ScenarioId, e.Result.Node.StepId));
+            .Select(e => StepUid.Of(e.Definition.ScenarioId, e.Result.Node.StepId));
     }
 
     private sealed class RecordingMessageBus : IMessageBus
@@ -1017,7 +1017,7 @@ public class RunLoopTests
         sink.Events.OfType<StepFinished>().Select(PassedUid);
 
     private static IEnumerable<string> StartedUids(RecordingSink sink) =>
-        sink.Events.OfType<StepStarted>().Select(e => RaunDiscoverer.MakeUid(e.Definition.ScenarioId, e.Context.Node.StepId));
+        sink.Events.OfType<StepStarted>().Select(e => StepUid.Of(e.Definition.ScenarioId, e.Context.Node.StepId));
 
     [Fact]
     public async Task Selecting_a_middle_step_runs_its_predecessors_and_leaves_the_rest_out()

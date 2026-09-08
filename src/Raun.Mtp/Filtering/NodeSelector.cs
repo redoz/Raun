@@ -29,5 +29,5 @@ internal sealed class UidNodeSelector : NodeSelector
     }
 
     public override bool Matches(ScenarioDefinition definition, ScenarioNode step)
-        => _uids.Contains(RaunDiscoverer.MakeUid(definition.ScenarioId, step.StepId));
+        => _uids.Contains(StepUid.Of(definition, step));
 }

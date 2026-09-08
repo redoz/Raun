@@ -29,8 +29,8 @@ public static class GeneratorHarness
             .Where(p => p.Length > 0)
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
             .ToList();
-        refs.Add(MetadataReference.CreateFromFile(typeof(Given).Assembly.Location));
-        refs.Add(MetadataReference.CreateFromFile(typeof(Raun.ScenarioAttribute).Assembly.Location));
+        refs.Add(MetadataReference.CreateFromFile(typeof(Given).Assembly.Location)); // Raun: DSL and [Scenario]
+        refs.Add(MetadataReference.CreateFromFile(typeof(Raun.Mtp.RaunTestApplication).Assembly.Location)); // the entry point's target
         return refs.ToImmutableArray();
     }
 
