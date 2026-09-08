@@ -616,12 +616,11 @@ public class AnalyzerTests
         """;
 
     /// <param name="body">Scenario-body statements inserted after the two `Given.PatientExists` steps.</param>
-    /// <param name="requireCompilable">Passed through to <see cref="GeneratorHarness.AnalyzeAsync"/> —
-    /// leave false for the handful of callers whose <paramref name="body"/> deliberately awaits a tuple
-    /// of plain (non-generic) <c>Task</c>s, which does not compile (see the harness-correction report
-    /// for the underlying <c>ScenarioAwaiters</c> gap); true everywhere else, per absence-assertion
-    /// callers below.</param>
-    private static Task<ImmutableArray<Diagnostic>> AnalyzeConflict(string body, bool requireCompilable = false) =>
+    /// <remarks>Every body is compiled (<c>requireCompilable: true</c>): the conflict DSL's steps all
+    /// return plain <c>Task</c> or <c>Task&lt;T&gt;</c>, and <c>ScenarioAwaiters</c> covers both the
+    /// all-<c>Task&lt;T&gt;</c> and all-<c>Task</c> parallel forms, so a body that fails to compile is a
+    /// test bug rather than an analyzer input.</remarks>
+    private static Task<ImmutableArray<Diagnostic>> AnalyzeConflict(string body) =>
         GeneratorHarness.AnalyzeAsync(ConflictDsl +
             $$"""
             public static class S
@@ -634,7 +633,7 @@ public class AnalyzerTests
             {{body}}
                 }
             }
-            """, requireCompilable);
+            """, requireCompilable: true);
 
     [Fact]
     public void RAUN013_is_a_supported_diagnostic()
@@ -700,7 +699,7 @@ public class AnalyzerTests
             """
                     var notes = await new[] { When.AttachNote(patient, "a"), When.AttachNote(patient, "b") };
                     await Then.CanSignIn(patient);
-            """, requireCompilable: true);
+            """);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN013");
     }
@@ -724,7 +723,7 @@ public class AnalyzerTests
                     await When.Rename(patient, "J");
                     await When.Suspend(patient);
                     await When.Delete(patient);
-            """, requireCompilable: true);
+            """);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN013");
     }
@@ -746,7 +745,7 @@ public class AnalyzerTests
         var diagnostics = await AnalyzeConflict(
             """
                     var tags = await Enumerable.Range(1, 1).Select(i => When.Tag(patient, i)).ToArray();
-            """, requireCompilable: true);
+            """);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN013");
     }

@@ -9,6 +9,14 @@ namespace Raun;
 /// an array of results. The elements are already-running (hot) tasks, so awaiting joins them via
 /// <see cref="Task.WhenAll(System.Threading.Tasks.Task[])"/> rather than serializing.
 ///
+/// Two families are covered: every element a <c>Task&lt;T&gt;</c> (the await yields the results) and
+/// every element a plain <c>Task</c> (the await yields nothing — the usual shape for a group of
+/// assertion steps). A group that mixes the two binds the plain-<c>Task</c> family, because
+/// <c>Task&lt;T&gt;</c> converts to <c>Task</c> by reference and tuple/array receivers admit that: it
+/// joins, and the typed results are discarded. The all-<c>Task&lt;T&gt;</c> family still wins for
+/// all-typed groups because identity is the better conversion. <c>ValueTask</c> elements have no
+/// overload here and cannot be grouped.
+///
 /// The generator still lowers these forms into individual step nodes; these awaiters exist so the
 /// authored scenario method remains honest, compilable, runnable C#.
 /// </summary>
@@ -18,6 +26,33 @@ public static class ScenarioAwaiters
 {
     public static TaskAwaiter<T[]> GetAwaiter<T>(this Task<T>[] tasks)
         => Task.WhenAll(tasks).GetAwaiter();
+
+    public static TaskAwaiter GetAwaiter(this Task[] tasks)
+        => Task.WhenAll(tasks).GetAwaiter();
+
+    public static TaskAwaiter GetAwaiter(this (Task first, Task second) tasks)
+        => Task.WhenAll(tasks.first, tasks.second).GetAwaiter();
+
+    public static TaskAwaiter GetAwaiter(this (Task, Task, Task) tasks)
+        => Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3).GetAwaiter();
+
+    public static TaskAwaiter GetAwaiter(this (Task, Task, Task, Task) tasks)
+        => Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4).GetAwaiter();
+
+    public static TaskAwaiter GetAwaiter(this (Task, Task, Task, Task, Task) tasks)
+        => Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4, tasks.Item5).GetAwaiter();
+
+    public static TaskAwaiter GetAwaiter(this (Task, Task, Task, Task, Task, Task) tasks)
+        => Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4, tasks.Item5, tasks.Item6)
+            .GetAwaiter();
+
+    public static TaskAwaiter GetAwaiter(this (Task, Task, Task, Task, Task, Task, Task) tasks)
+        => Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4, tasks.Item5, tasks.Item6,
+            tasks.Item7).GetAwaiter();
+
+    public static TaskAwaiter GetAwaiter(this (Task, Task, Task, Task, Task, Task, Task, Task) tasks)
+        => Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4, tasks.Item5, tasks.Item6,
+            tasks.Item7, tasks.Item8).GetAwaiter();
 
     public static TaskAwaiter<(T1, T2)> GetAwaiter<T1, T2>(
         this (Task<T1> first, Task<T2> second) tasks)

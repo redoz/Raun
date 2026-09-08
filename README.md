@@ -78,6 +78,9 @@ await Given.DatabaseIsClean();
 // fork/join with an awaited tuple — both run in parallel, the next step waits for both
 var (patient, slot) = await (Given.PatientExists("Jane"), Given.AvailableSlot());
 
+// void steps group the same way — nothing to bind, so no `var`
+await (Then.PatientIsRegistered(patient), Then.SlotIsHeld(slot));
+
 // homogeneous bulk work — explicit array or a constant LINQ .ToArray()
 var users = await new[] { Given.UserExists("alice"), Given.UserExists("bob") };
 var more  = await Enumerable.Range(1, 10).Select(i => Given.UserExists($"u{i}")).ToArray();
@@ -175,7 +178,10 @@ service — register it in DI yourself if it is also one.
 
 - `[Scenario]` methods are `async Task` / `async ValueTask`.
 - Steps are awaited `Given`/`When`/`Then` calls, awaited tuples of them (arity 2–8), awaited
-  `new[] { ... }` arrays, or a constant `Enumerable.Range(a, b).Select(...).ToArray()`.
+  `new[] { ... }` arrays, or a constant `Enumerable.Range(a, b).Select(...).ToArray()`. A group of
+  all `Task<T>` steps awaits to their results; any other mix of `Task` and `Task<T>` steps awaits to
+  nothing, and the typed results are discarded — bind those steps in their own group if you need
+  them. Steps returning `ValueTask` cannot be grouped.
 - DSL methods return `Task`/`Task<T>`/`ValueTask`/`ValueTask<T>` and may take an optional trailing
   `ScenarioContext` parameter.
 - `if`/`else` shapes the graph when the condition is an awaited `Given`/`When`/`Then` call whose

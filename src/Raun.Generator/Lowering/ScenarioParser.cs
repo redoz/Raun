@@ -542,7 +542,7 @@ internal sealed class ScenarioParser
 
     private bool ParseArray(InitializerExpressionSyntax? initializer, Binding? binding)
     {
-        if (initializer is null || binding is not { Kind: BindingKind.Single })
+        if (initializer is null || binding is { Kind: BindingKind.Tuple })
         {
             return false;
         }
@@ -568,14 +568,18 @@ internal sealed class ScenarioParser
             frontier.Add(step.Index);
         }
 
-        _vars[binding.Names[0]] = VarSource.Array(frontier.ToArray(), elementType);
+        if (binding is not null)
+        {
+            _vars[binding.Names[0]] = VarSource.Array(frontier.ToArray(), elementType);
+        }
+
         Advance(frontier);
         return true;
     }
 
     private bool ParseLinqArray(InvocationExpressionSyntax toArray, Binding? binding)
     {
-        if (binding is not { Kind: BindingKind.Single })
+        if (binding is { Kind: BindingKind.Tuple })
         {
             return false;
         }
@@ -636,7 +640,11 @@ internal sealed class ScenarioParser
             frontier.Add(step.Index);
         }
 
-        _vars[binding.Names[0]] = VarSource.Array(frontier.ToArray(), elementType);
+        if (binding is not null)
+        {
+            _vars[binding.Names[0]] = VarSource.Array(frontier.ToArray(), elementType);
+        }
+
         Advance(frontier);
         return true;
     }

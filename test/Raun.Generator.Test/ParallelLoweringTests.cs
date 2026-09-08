@@ -89,4 +89,80 @@ public class ParallelLoweringTests
         Assert.Equal(6, results.Count);
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
     }
+
+    [Fact]
+    public void Void_tuple_elements_become_parallel_siblings_without_a_binding()
+    {
+        var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.VoidTupleScenario);
+        result.AssertCompiles();
+        var def = result.Definitions().Single();
+
+        Assert.Equal(6, def.Nodes.Count);                      // 2 PatientExists + 2 Greet + DatabaseIsClean + teardown
+        Assert.Equal([0, 1], def.Nodes[2].DependsOn);          // Greet jane: data dep on jane, order dep on the step before the group
+        Assert.Equal([1], def.Nodes[3].DependsOn);             // Greet bob
+        Assert.Equal(def.Nodes[2].GroupId, def.Nodes[3].GroupId);
+        Assert.Equal([2, 3], def.Nodes[4].DependsOn);          // DatabaseIsClean joins both
+    }
+
+    [Fact]
+    public async Task Void_tuple_scenario_runs()
+    {
+        var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.VoidTupleScenario);
+        result.AssertCompiles();
+
+        var results = await result.Definitions().Single().RunAsync();
+
+        Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
+    }
+
+    [Fact]
+    public void Void_array_elements_become_parallel_siblings_without_a_binding()
+    {
+        var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.VoidArrayScenario);
+        result.AssertCompiles();
+        var def = result.Definitions().Single();
+
+        Assert.Equal(6, def.Nodes.Count);
+        Assert.Equal([0, 1], def.Nodes[2].DependsOn);
+        Assert.Equal([1], def.Nodes[3].DependsOn);
+        Assert.Equal(def.Nodes[2].GroupId, def.Nodes[3].GroupId);
+        Assert.Equal([2, 3], def.Nodes[4].DependsOn);
+    }
+
+    [Fact]
+    public async Task Void_array_scenario_runs()
+    {
+        var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.VoidArrayScenario);
+        result.AssertCompiles();
+
+        var results = await result.Definitions().Single().RunAsync();
+
+        Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
+    }
+
+    [Fact]
+    public void Void_linq_array_elements_become_parallel_siblings_without_a_binding()
+    {
+        var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.VoidLinqScenario);
+        result.AssertCompiles();
+        var def = result.Definitions().Single();
+
+        Assert.Equal(6, def.Nodes.Count);                      // PatientExists + 3 Greet + DatabaseIsClean + teardown
+        Assert.Equal([0], def.Nodes[1].DependsOn);
+        Assert.Equal([0], def.Nodes[2].DependsOn);
+        Assert.Equal([0], def.Nodes[3].DependsOn);
+        Assert.Equal(def.Nodes[1].GroupId, def.Nodes[3].GroupId);
+        Assert.Equal([1, 2, 3], def.Nodes[4].DependsOn);
+    }
+
+    [Fact]
+    public async Task Void_linq_scenario_runs()
+    {
+        var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.VoidLinqScenario);
+        result.AssertCompiles();
+
+        var results = await result.Definitions().Single().RunAsync();
+
+        Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
+    }
 }

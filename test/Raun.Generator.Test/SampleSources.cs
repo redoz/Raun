@@ -717,4 +717,60 @@ public static class SampleSources
             }
         }
         """;
+
+    // Parallel groups whose steps all return plain Task: nothing to bind, so the awaited tuple or
+    // array is a bare expression statement. Appended rather than added to Dsl for the snapshot
+    // line-number reason above.
+    public const string VoidTupleScenario =
+        """
+
+        public static class VoidTupleScenarios
+        {
+            [Scenario("parallel greetings")]
+            public static async Task Greetings()
+            {
+                var jane = await Given.PatientExists("Jane");
+                var bob = await Given.PatientExists("Bob");
+
+                await (Then.Greet(jane), Then.Greet(bob));
+
+                await Given.DatabaseIsClean();
+            }
+        }
+        """;
+
+    public const string VoidArrayScenario =
+        """
+
+        public static class VoidArrayScenarios
+        {
+            [Scenario("parallel greetings array")]
+            public static async Task Greetings()
+            {
+                var jane = await Given.PatientExists("Jane");
+                var bob = await Given.PatientExists("Bob");
+
+                await new[] { Then.Greet(jane), Then.Greet(bob) };
+
+                await Given.DatabaseIsClean();
+            }
+        }
+        """;
+
+    public const string VoidLinqScenario =
+        """
+
+        public static class VoidLinqScenarios
+        {
+            [Scenario("parallel greetings linq")]
+            public static async Task Greetings()
+            {
+                var jane = await Given.PatientExists("Jane");
+
+                await Enumerable.Range(1, 3).Select(i => Then.Greet(jane)).ToArray();
+
+                await Given.DatabaseIsClean();
+            }
+        }
+        """;
 }
