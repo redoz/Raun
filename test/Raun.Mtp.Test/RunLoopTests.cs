@@ -71,6 +71,14 @@ public class RunLoopTests
 
     private static string Uid(string scenarioId, string stepId) => scenarioId + ":" + stepId;
 
+    /// <summary>The selector a runner's uid list reduces to.</summary>
+    // CA1859 wants the concrete UidNodeSelector return type, but callers use this through the
+    // NodeSelector abstraction the same way production code does.
+#pragma warning disable CA1859
+    private static NodeSelector Select(params string[] uids)
+        => new UidNodeSelector(new HashSet<string>(uids, StringComparer.OrdinalIgnoreCase));
+#pragma warning restore CA1859
+
     private static string PassedUid(StepFinished e) =>
         RaunDiscoverer.MakeUid(e.Definition.ScenarioId, e.Result.Node.StepId);
 
@@ -87,7 +95,7 @@ public class RunLoopTests
         var a = Definition("a", "A", Node(0, "x", "x"));
         var b = Definition("b", "B", Node(0, "y", "y"));
 
-        var selected = RaunRunLoop.SelectScenarios([a, b], uids: null);
+        var selected = RaunRunLoop.SelectScenarios([a, b], selector: null);
 
         Assert.Equal(["a", "b"], selected.Select(d => d.ScenarioId).Order());
     }
@@ -97,7 +105,7 @@ public class RunLoopTests
     {
         var a = Definition("a", "A", Node(0, "x", "x"));
 
-        var selected = RaunRunLoop.SelectScenarios([a], uids: new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        var selected = RaunRunLoop.SelectScenarios([a], selector: Select());
 
         Assert.Empty(selected);
     }
@@ -109,8 +117,8 @@ public class RunLoopTests
         var b = Definition("b", "B", Node(0, "x", "x"));
 
         // Three step uids of the SAME scenario must map to a single distinct scenario.
-        var uids = new HashSet<string>([Uid("a", "x"), Uid("a", "y"), Uid("a", "z")], StringComparer.OrdinalIgnoreCase);
-        var selected = RaunRunLoop.SelectScenarios([a, b], uids);
+        var selector = Select(Uid("a", "x"), Uid("a", "y"), Uid("a", "z"));
+        var selected = RaunRunLoop.SelectScenarios([a, b], selector);
 
         var only = Assert.Single(selected);
         Assert.Equal("a", only.ScenarioId);
@@ -123,8 +131,8 @@ public class RunLoopTests
         var b = Definition("b", "B", Node(0, "y", "y"));
         var c = Definition("c", "C", Node(0, "z", "z"));
 
-        var uids = new HashSet<string>([Uid("a", "x"), Uid("c", "z")], StringComparer.OrdinalIgnoreCase);
-        var selected = RaunRunLoop.SelectScenarios([a, b, c], uids);
+        var selector = Select(Uid("a", "x"), Uid("c", "z"));
+        var selected = RaunRunLoop.SelectScenarios([a, b, c], selector);
 
         Assert.Equal(["a", "c"], selected.Select(d => d.ScenarioId).Order());
     }
@@ -144,9 +152,9 @@ public class RunLoopTests
             () => [def],
             runScenario: (_, _, _, _, _) => { Interlocked.Increment(ref runs); return Task.FromResult<IReadOnlyList<StepResult>>([]); });
 
-        var uids = new HashSet<string>([Uid("a", "x"), Uid("a", "z")], StringComparer.OrdinalIgnoreCase);
+        var selector = Select(Uid("a", "x"), Uid("a", "z"));
         var sink = new RecordingSink();
-        await loop.RunAsync(uids, sink, CancellationToken.None);
+        await loop.RunAsync(selector, sink, CancellationToken.None);
 
         Assert.Equal(1, runs);
     }
@@ -164,8 +172,8 @@ public class RunLoopTests
         var loop = new RaunRunLoop(() => [def]);
 
         var sink = new RecordingSink();
-        var uids = new HashSet<string>([Uid("chain", "z")], StringComparer.OrdinalIgnoreCase);
-        await loop.RunAsync(uids, sink, CancellationToken.None);
+        var selector = Select(Uid("chain", "z"));
+        await loop.RunAsync(selector, sink, CancellationToken.None);
 
         // All three siblings reported (each at least one finished Passed update).
         Assert.Contains(Uid("chain", "x"), sink.PassedUids);
@@ -182,7 +190,7 @@ public class RunLoopTests
         var loop = new RaunRunLoop(() => [a, b]);
 
         var sink = new RecordingSink();
-        await loop.RunAsync(uids: null, sink, CancellationToken.None);
+        await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Contains(Uid("a", "x"), sink.PassedUids);
         Assert.Contains(Uid("b", "y"), sink.PassedUids);
@@ -219,7 +227,7 @@ public class RunLoopTests
         var c = Definition("c", "C", Node(0, "z", "z", invoke: Body));
 
         var loop = new RaunRunLoop(() => [a, b, c], maxParallelScenarios: 1);
-        await loop.RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
+        await loop.RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         Assert.Equal(1, max);
     }
@@ -262,7 +270,7 @@ public class RunLoopTests
 
         var sink = new RecordingSink();
         await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
-            .RunAsync(uids: null, sink, CancellationToken.None);
+            .RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(3, max);
         Assert.Equal(6, sink.PassedUids.Count());
@@ -293,7 +301,7 @@ public class RunLoopTests
         var c = Definition("c", "C", Node(0, "z", "z", invoke: (_, _) => { cStarted.TrySetResult(); return Task.FromResult<object?>(null); }));
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => [a, b, c], maxParallelScenarios: 3).RunAsync(uids: null, sink, CancellationToken.None);
+        await new RaunRunLoop(() => [a, b, c], maxParallelScenarios: 3).RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(1, dbMax);
         Assert.Equal(3, sink.PassedUids.Count());
@@ -326,7 +334,7 @@ public class RunLoopTests
             Node(0, "z", "z", invoke: (_, _) => { seenBySweeper = Volatile.Read(ref sharedFinished); return Task.FromResult<object?>(null); }));
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => [s1, s2, sweeper], maxParallelScenarios: 3).RunAsync(uids: null, sink, CancellationToken.None);
+        await new RaunRunLoop(() => [s1, s2, sweeper], maxParallelScenarios: 3).RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(2, seenBySweeper);
         var sweepStarted = Assert.Single(sink.Events.OfType<ScenarioStarted>(), e => e.Definition.ScenarioId == "sweep");
@@ -368,7 +376,7 @@ public class RunLoopTests
             .ToArray();
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => definitions, maxParallelScenarios: 4).RunAsync(uids: null, sink, CancellationToken.None);
+        await new RaunRunLoop(() => definitions, maxParallelScenarios: 4).RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(2, max);
         Assert.Equal(4, sink.PassedUids.Count());
@@ -391,7 +399,7 @@ public class RunLoopTests
         var d = Definition("d", "D", Node(0, "w", "w", invoke: (_, _) => { dStarted.TrySetResult(); return Task.FromResult<object?>(null); }));
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => [a, b, c, d], maxParallelScenarios: 2).RunAsync(uids: null, sink, CancellationToken.None);
+        await new RaunRunLoop(() => [a, b, c, d], maxParallelScenarios: 2).RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(["a", "c", "d", "b"], sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
     }
@@ -410,7 +418,7 @@ public class RunLoopTests
         using var capture = new SpanCapture();
 
         await new RaunRunLoop(() => [holder, waiter, opener], maxParallelScenarios: 3)
-            .RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
+            .RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         var holderSpan = Assert.Single(capture.ForScenario(holderId), s => s.DisplayName == "holder");
         Assert.Equal("ExclusiveDb:Exclusive,SharedCatalog:Shared", holderSpan.GetTagItem(RaunTelemetry.Attributes.ScenarioUses));
@@ -435,7 +443,7 @@ public class RunLoopTests
         var sink = new RecordingSink();
         var loop = new RaunRunLoop(() => [a, bad, never], maxParallelScenarios: 3);
 
-        var run = loop.RunAsync(uids: null, sink, CancellationToken.None).AsTask();
+        var run = loop.RunAsync(selector: null, sink, CancellationToken.None).AsTask();
 
         // The run must still be in flight here: it is draining "a". Without the catch around
         // TryAcquire the gate's throw would have faulted the whole run synchronously already.
@@ -465,7 +473,7 @@ public class RunLoopTests
         var sink = new RecordingSink();
 
         await new RaunRunLoop(() => [a, b], preflight: _ => Task.CompletedTask, maxParallelScenarios: 2)
-            .RunAsync(uids: null, sink, CancellationToken.None);
+            .RunAsync(selector: null, sink, CancellationToken.None);
 
         var started = Assert.Single(sink.Events.OfType<RunStarted>());
         Assert.Equal(2, started.ScenarioCount);
@@ -485,7 +493,7 @@ public class RunLoopTests
                 () => [a, b, c],
                 preflight: _ => throw new InvalidOperationException("no container runtime"),
                 maxParallelScenarios: 3)
-            .RunAsync(uids: null, sink, CancellationToken.None);
+            .RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Empty(sink.PassedUids);
         foreach (var uid in new[] { Uid("a", "x"), Uid("b", "y"), Uid("c", "z") })
@@ -522,8 +530,8 @@ public class RunLoopTests
 
         var sink = new RecordingSink();
         // Both steps are selected: a filter naming only "lonely" would (correctly) leave "sibling" out.
-        var uids = new HashSet<string>([Uid("scn", "lonely"), Uid("scn", "sibling")], StringComparer.OrdinalIgnoreCase);
-        await loop.RunAsync(uids, sink, CancellationToken.None);
+        var selector = Select(Uid("scn", "lonely"), Uid("scn", "sibling"));
+        await loop.RunAsync(selector, sink, CancellationToken.None);
 
         Assert.True(siblingRan);
         // The sibling completes successfully; nothing was skipped (the run token never canceled).
@@ -544,7 +552,7 @@ public class RunLoopTests
         cts.Cancel();
 
         var sink = new RecordingSink();
-        await loop.RunAsync(uids: null, sink, cts.Token);
+        await loop.RunAsync(selector: null, sink, cts.Token);
 
         // The scheduler skips steps when the run token is already canceled; the body never runs.
         Assert.False(bodyRan);
@@ -569,7 +577,7 @@ public class RunLoopTests
         var loop = new RaunRunLoop(() => [first, second], maxParallelScenarios: 1);
 
         var sink = new RecordingSink();
-        await loop.RunAsync(uids: null, sink, cts.Token);
+        await loop.RunAsync(selector: null, sink, cts.Token);
 
         Assert.False(secondRan);
         // The second scenario was never started at all (not even as skipped).
@@ -598,7 +606,7 @@ public class RunLoopTests
         var sink = new RecordingSink();
 
         await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
-            .RunAsync(uids: null, sink, cts.Token);
+            .RunAsync(selector: null, sink, cts.Token);
 
         var startedIds = sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId).ToList();
         Assert.Contains("one", startedIds);
@@ -647,7 +655,7 @@ public class RunLoopTests
         var loop = new RaunRunLoop(() => [a, boom, c], runScenario: Seam, maxParallelScenarios: 3);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await loop.RunAsync(uids: null, sink, CancellationToken.None));
+            await loop.RunAsync(selector: null, sink, CancellationToken.None));
 
         Assert.Equal("scheduler bug", ex.Message);
         Assert.Equal(["a", "c"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId).Order());
@@ -697,7 +705,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def], runScenario: null, simulateTime: true);
         var sink = new RecordingSink();
-        await loop.RunAsync(uids: null, sink, CancellationToken.None);
+        await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
         var finished = sink.Events.OfType<StepFinished>()
             .Where(e => e.Result.Status == StepStatus.Passed)
@@ -723,7 +731,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def]); // simulateTime defaults to false
         var sink = new RecordingSink();
-        await loop.RunAsync(uids: null, sink, CancellationToken.None);
+        await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
         var finished = sink.Events.OfType<StepFinished>().Single(e => e.Result.Status == StepStatus.Passed);
         Assert.True(finished.Result.Duration < TimeSpan.FromSeconds(1),
@@ -767,7 +775,7 @@ public class RunLoopTests
 
         var provider = new StubServiceProvider();
         var loop = new RaunRunLoop(() => [def], services: provider);
-        await loop.RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
+        await loop.RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         Assert.Same(provider, seen);
     }
@@ -783,7 +791,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def]);
         var sink = new RecordingSink();
-        await loop.RunAsync(uids: null, sink, CancellationToken.None);
+        await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.True(ran);
         Assert.Null(seen);
@@ -914,7 +922,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def]);
         var sink = new RecordingSink();
-        await loop.RunAsync(uids: null, sink, CancellationToken.None);
+        await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
         var finished = sink.Events.OfType<StepFinished>().ToDictionary(e => e.Result.Node.StepId, e => e.Result);
 
@@ -934,7 +942,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def]);
         var sink = new RecordingSink();
-        await loop.RunAsync(uids: null, sink, CancellationToken.None);
+        await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.DoesNotContain(Uid("c2", "urgent"), sink.PassedUids);
     }
@@ -957,7 +965,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def]);
         var sink = new RecordingSink();
-        await loop.RunAsync(new HashSet<string>([Uid("chain", "y")], StringComparer.OrdinalIgnoreCase), sink, CancellationToken.None);
+        await loop.RunAsync(Select(Uid("chain", "y")), sink, CancellationToken.None);
 
         Assert.Contains(Uid("chain", "x"), sink.PassedUids);
         Assert.Contains(Uid("chain", "y"), sink.PassedUids);
@@ -976,7 +984,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def]);
         var sink = new RecordingSink();
-        await loop.RunAsync(new HashSet<string>([Uid("fork", "left")], StringComparer.OrdinalIgnoreCase), sink, CancellationToken.None);
+        await loop.RunAsync(Select(Uid("fork", "left")), sink, CancellationToken.None);
 
         Assert.Contains(Uid("fork", "root"), sink.PassedUids);
         Assert.Contains(Uid("fork", "left"), sink.PassedUids);
@@ -994,7 +1002,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def]);
         var sink = new RecordingSink();
-        await loop.RunAsync(new HashSet<string>([Uid("cond", "urgent")], StringComparer.OrdinalIgnoreCase), sink, CancellationToken.None);
+        await loop.RunAsync(Select(Uid("cond", "urgent")), sink, CancellationToken.None);
 
         Assert.Contains(Uid("cond", "priority"), sink.PassedUids);
         Assert.Contains(Uid("cond", "urgent"), sink.PassedUids);
@@ -1022,7 +1030,7 @@ public class RunLoopTests
 
         var loop = new RaunRunLoop(() => [def]);
         var sink = new RecordingSink();
-        await loop.RunAsync(new HashSet<string>([Uid("td", "x")], StringComparer.OrdinalIgnoreCase), sink, CancellationToken.None);
+        await loop.RunAsync(Select(Uid("td", "x")), sink, CancellationToken.None);
 
         Assert.Contains(Uid("td", "x"), sink.PassedUids);
         Assert.Contains(Uid("td", "teardown"), sink.PassedUids);
@@ -1034,10 +1042,10 @@ public class RunLoopTests
     {
         var def = Definition("a", "A", Node(0, "x", "x"), Node(1, "y", "y"), Node(2, "z", "z"));
 
-        Assert.Null(RaunRunLoop.SelectTargets(def, uids: null));
+        Assert.Null(RaunRunLoop.SelectTargets(def, selector: null));
 
         var targets = RaunRunLoop.SelectTargets(
-            def, new HashSet<string>([Uid("a", "y"), Uid("other", "x")], StringComparer.OrdinalIgnoreCase));
+            def, Select(Uid("a", "y"), Uid("other", "x")));
         Assert.Equal([1], targets!.Order());
     }
 
@@ -1095,7 +1103,7 @@ public class RunLoopTests
             Node(1, "y", "y", dependsOn: [0]));
         using var capture = new SpanCapture();
 
-        await new RaunRunLoop(() => [def]).RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
+        await new RaunRunLoop(() => [def]).RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         var spans = capture.ForScenario(scenarioId);
         var scenario = Assert.Single(spans, s => s.DisplayName == "traced scenario");
@@ -1145,7 +1153,7 @@ public class RunLoopTests
         using var capture = new SpanCapture();
 
         await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
-            .RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
+            .RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         foreach (var id in ids)
         {
@@ -1173,7 +1181,7 @@ public class RunLoopTests
             Node(0, "x", "x", invoke: (_, _) => throw new InvalidOperationException("boom")));
         using var capture = new SpanCapture();
 
-        await new RaunRunLoop(() => [def]).RunAsync(uids: null, new RecordingSink(), CancellationToken.None);
+        await new RaunRunLoop(() => [def]).RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         var scenario = Assert.Single(capture.ForScenario(scenarioId), s => s.DisplayName == "failing scenario");
         Assert.Equal("failure", scenario.GetTagItem(RaunTelemetry.Attributes.TestSuiteRunStatus));

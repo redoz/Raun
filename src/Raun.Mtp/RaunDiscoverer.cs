@@ -25,8 +25,11 @@ namespace Raun.Mtp;
 /// </remarks>
 internal static class RaunDiscoverer
 {
-    /// <summary>Builds the per-step <see cref="TestNode"/> list for one scenario.</summary>
-    public static IReadOnlyList<TestNode> BuildNodes(ScenarioDefinition definition)
+    /// <summary>
+    /// Builds the per-step <see cref="TestNode"/> list for one scenario, keeping only the steps
+    /// <paramref name="selector"/> matches (all of them when it is <see langword="null"/>).
+    /// </summary>
+    public static IReadOnlyList<TestNode> BuildNodes(ScenarioDefinition definition, NodeSelector? selector = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
 
@@ -37,6 +40,11 @@ internal static class RaunDiscoverer
             // Merge/pass-through nodes are graph plumbing, not business steps: discovering them would
             // put "«merge appt»" in the user's test list. The HTML report keeps them.
             if (step.IsSynthetic)
+            {
+                continue;
+            }
+
+            if (selector is not null && !selector.Matches(definition, step))
             {
                 continue;
             }

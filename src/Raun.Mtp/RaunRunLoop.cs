@@ -95,17 +95,17 @@ internal sealed class RaunRunLoop
     }
 
     /// <summary>
-    /// Maps a run filter onto the distinct scenarios it selects. A <see langword="null"/> uid set
+    /// Maps a run selector onto the distinct scenarios it selects. A <see langword="null"/> selector
     /// (the request had no filter, or a no-op one) selects every scenario; otherwise a scenario is
-    /// selected when any of its step uids (<c>{ScenarioId}:{StepId}</c>) appears in the set.
+    /// selected when any of its steps matches.
     /// </summary>
     public static IReadOnlyList<ScenarioDefinition> SelectScenarios(
         IEnumerable<ScenarioDefinition> scenarios,
-        ISet<string>? uids)
+        NodeSelector? selector)
     {
         ArgumentNullException.ThrowIfNull(scenarios);
 
-        if (uids is null)
+        if (selector is null)
         {
             return scenarios.ToList();
         }
@@ -115,7 +115,7 @@ internal sealed class RaunRunLoop
         {
             foreach (var step in definition.Nodes)
             {
-                if (uids.Contains(RaunDiscoverer.MakeUid(definition.ScenarioId, step.StepId)))
+                if (selector.Matches(definition, step))
                 {
                     selected.Add(definition);
                     break; // distinct scenario, regardless of how many of its steps matched
@@ -126,14 +126,14 @@ internal sealed class RaunRunLoop
         return selected;
     }
 
-    /// <summary>Runs every scenario the <paramref name="uids"/> filter selects (or all when null),
+    /// <summary>Runs every scenario the <paramref name="selector"/> selects (or all when null),
     /// emitting the run-event envelope (<see cref="RunStarted"/> → per scenario
     /// <see cref="ScenarioStarted"/>/steps/<see cref="ScenarioFinished"/> → <see cref="RunFinished"/>).</summary>
-    public async ValueTask RunAsync(ISet<string>? uids, IRunEventSink bus, CancellationToken cancellationToken)
+    public async ValueTask RunAsync(NodeSelector? selector, IRunEventSink bus, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(bus);
 
-        var selected = SelectScenarios(scenarioSource(), uids);
+        var selected = SelectScenarios(scenarioSource(), selector);
         var preflightDefinition = preflight is null ? null : Preflight.Definition(preflight);
         IReadOnlyList<ScenarioDefinition> order = preflightDefinition is null ? selected : [preflightDefinition, .. selected];
         await bus.PublishAsync(new RunStarted(selected.Count, order)).ConfigureAwait(false);
@@ -159,7 +159,7 @@ internal sealed class RaunRunLoop
             var preflightFailed = false;
             if (preflightDefinition is not null)
             {
-                var results = await RunOneAsync(preflightDefinition, bus, uids: null, runContext, runId, waited: TimeSpan.Zero, waitedFor: null, cancellationToken)
+                var results = await RunOneAsync(preflightDefinition, bus, selector: null, runContext, runId, waited: TimeSpan.Zero, waitedFor: null, cancellationToken)
                     .ConfigureAwait(false);
                 preflightFailed = results.Any(r => r.Status is StepStatus.Failed or StepStatus.Skipped);
             }
@@ -175,7 +175,7 @@ internal sealed class RaunRunLoop
             }
             else
             {
-                await LaunchAsync(selected, bus, uids, runContext, runId, cancellationToken).ConfigureAwait(false);
+                await LaunchAsync(selected, bus, selector, runContext, runId, cancellationToken).ConfigureAwait(false);
             }
         }
         finally
@@ -203,7 +203,7 @@ internal sealed class RaunRunLoop
     private async ValueTask LaunchAsync(
         IReadOnlyList<ScenarioDefinition> selected,
         IRunEventSink bus,
-        ISet<string>? uids,
+        NodeSelector? selector,
         ActivityContext? runContext,
         string runId,
         CancellationToken cancellationToken)
@@ -266,7 +266,7 @@ internal sealed class RaunRunLoop
                     waitedFor = wait.By;
                 }
 
-                var run = RunOneAsync(definition, bus, uids, runContext, runId, waited, waitedFor, cancellationToken).AsTask();
+                var run = RunOneAsync(definition, bus, selector, runContext, runId, waited, waitedFor, cancellationToken).AsTask();
                 running[run] = definition;
                 started = true;
             }
@@ -340,7 +340,7 @@ internal sealed class RaunRunLoop
     private async ValueTask<IReadOnlyList<StepResult>> RunOneAsync(
         ScenarioDefinition definition,
         IRunEventSink bus,
-        ISet<string>? uids,
+        NodeSelector? selector,
         ActivityContext? runContext,
         string runId,
         TimeSpan waited,
@@ -358,7 +358,7 @@ internal sealed class RaunRunLoop
         using var scenarioActivity = StartScenarioActivity(definition, runContext, runId, waited, waitedFor);
 
         var observer = new BusObserver(definition, bus);
-        var targets = SelectTargets(definition, uids);
+        var targets = SelectTargets(definition, selector);
 
         // One DI scope per scenario, so AddScoped means "per scenario" and AddSingleton means "per
         // run" through ordinary .NET semantics. Disposed only after the scenario returns — the
@@ -449,13 +449,13 @@ internal sealed class RaunRunLoop
     }
 
     /// <summary>
-    /// The node indices a uid filter names within one scenario, or <see langword="null"/> for an
+    /// The node indices a selector names within one scenario, or <see langword="null"/> for an
     /// unfiltered run. The scheduler expands these to their predecessor closure; the loop only says
     /// which steps were asked for.
     /// </summary>
-    internal static IReadOnlySet<int>? SelectTargets(ScenarioDefinition definition, ISet<string>? uids)
+    internal static IReadOnlySet<int>? SelectTargets(ScenarioDefinition definition, NodeSelector? selector)
     {
-        if (uids is null)
+        if (selector is null)
         {
             return null;
         }
@@ -463,7 +463,7 @@ internal sealed class RaunRunLoop
         var targets = new HashSet<int>();
         foreach (var node in definition.Nodes)
         {
-            if (uids.Contains(RaunDiscoverer.MakeUid(definition.ScenarioId, node.StepId)))
+            if (selector.Matches(definition, node))
             {
                 targets.Add(node.Index);
             }

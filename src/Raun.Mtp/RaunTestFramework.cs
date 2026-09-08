@@ -224,21 +224,18 @@ public class RaunTestFramework :
         // A null/no-op filter discovers everything (so --list-tests enumerates every step); a
         // TestNodeUidListFilter restricts discovery to the named nodes, matching xUnit's discovery
         // sink. The same parsing backs both discover and run so a single-step uid resolves identically.
-        var uids = ReadUidFilter(filter);
+        var selector = ReadSelector(filter);
 
         // Announced like any test, but never executed here: a discovery request must not start
         // containers or migrate databases.
         if (_preflight is not null)
         {
-            foreach (var node in RaunDiscoverer.BuildNodes(Preflight.Definition(_preflight)))
+            foreach (var node in RaunDiscoverer.BuildNodes(Preflight.Definition(_preflight), selector))
             {
-                if (uids is null || uids.Contains(node.Uid.Value))
-                {
-                    NodeDiagnostics.Log("discover", node);
-                    await messageBus
-                        .PublishAsync(this, new TestNodeUpdateMessage(sessionUid, node))
-                        .ConfigureAwait(false);
-                }
+                NodeDiagnostics.Log("discover", node);
+                await messageBus
+                    .PublishAsync(this, new TestNodeUpdateMessage(sessionUid, node))
+                    .ConfigureAwait(false);
             }
         }
 
@@ -252,13 +249,8 @@ public class RaunTestFramework :
             }
 
             var definition = factory();
-            foreach (var node in RaunDiscoverer.BuildNodes(definition))
+            foreach (var node in RaunDiscoverer.BuildNodes(definition, selector))
             {
-                if (uids is not null && !uids.Contains(node.Uid.Value))
-                {
-                    continue;
-                }
-
                 NodeDiagnostics.Log("discover", node);
                 await messageBus
                     .PublishAsync(this, new TestNodeUpdateMessage(sessionUid, node))
@@ -281,7 +273,7 @@ public class RaunTestFramework :
         Action operationComplete,
         CancellationToken cancellationToken)
     {
-        var uids = ReadUidFilter(filter);
+        var selector = ReadSelector(filter);
 
         var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this) };
         if (HtmlReport.HtmlReportPath.Resolve(_services) is { } reportPath)
@@ -296,7 +288,7 @@ public class RaunTestFramework :
             services: _userServices,
             preflight: _preflight,
             maxParallelScenarios: ScenarioParallelism.Resolve(_services, _maxParallelScenarios));
-        await loop.RunAsync(uids, bus, cancellationToken).ConfigureAwait(false);
+        await loop.RunAsync(selector, bus, cancellationToken).ConfigureAwait(false);
 
         if (bus.Failures.Count > 0)
         {
@@ -320,19 +312,23 @@ public class RaunTestFramework :
     }
 
     /// <summary>
-    /// Reduces an MTP execution filter to the set of step uids to run, or <see langword="null"/> to
-    /// run everything. A <see cref="TestNodeUidListFilter"/> carries an explicit uid list; a null or
-    /// no-op filter means "run all". Unknown filter kinds are rejected so a silent partial run can't
-    /// masquerade as success.
+    /// Reduces an MTP execution filter to the <see cref="NodeSelector"/> that decides which steps the
+    /// request selects, or <see langword="null"/> to select everything. A
+    /// <see cref="TestNodeUidListFilter"/> carries an explicit uid list; a null or no-op filter means
+    /// "run all".
     /// </summary>
-    private static HashSet<string>? ReadUidFilter(ITestExecutionFilter? filter) => filter switch
+    // CA1859 wants the concrete UidNodeSelector return type: today's only non-null case. The
+    // abstract NodeSelector return is deliberate — a later task adds a second case (the platform's
+    // tree filter) reducing to a different NodeSelector subtype, and callers must not know which.
+#pragma warning disable CA1859
+    private static NodeSelector? ReadSelector(ITestExecutionFilter? filter) => filter switch
     {
         null => null,
 #pragma warning disable TPEXP // NopFilter is an experimental Microsoft.Testing.Platform API.
         NopFilter => null,
 #pragma warning restore TPEXP
-        TestNodeUidListFilter uidFilter =>
-            uidFilter.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase),
+        TestNodeUidListFilter uidFilter => new UidNodeSelector(
+            uidFilter.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase)),
         _ => throw new ArgumentException(
             string.Format(
                 CultureInfo.CurrentCulture,
@@ -340,6 +336,7 @@ public class RaunTestFramework :
                 filter.GetType().FullName),
             nameof(filter)),
     };
+#pragma warning restore CA1859
 
     /// <summary>Lowers every scenario registered in <see cref="ScenarioRegistry"/> to its definition.</summary>
     private static IEnumerable<ScenarioDefinition> EnumerateRegisteredScenarios()

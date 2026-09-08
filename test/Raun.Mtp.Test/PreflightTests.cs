@@ -52,7 +52,7 @@ public class PreflightTests
     {
         var sink = new Recorder();
         await new RaunRunLoop(() => definitions, preflight: preflight)
-            .RunAsync(uids: null, sink, CancellationToken.None);
+            .RunAsync(selector: null, sink, CancellationToken.None);
         return sink;
     }
 

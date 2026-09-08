@@ -55,7 +55,7 @@ public class ServiceScopeTests
 
     private static Task Run(IServiceProvider? services, params ScenarioDefinition[] definitions)
         => new RaunRunLoop(() => definitions, services: services)
-            .RunAsync(uids: null, new Sink(), CancellationToken.None).AsTask();
+            .RunAsync(selector: null, new Sink(), CancellationToken.None).AsTask();
 
     [Fact]
     public async Task A_supplied_provider_reaches_the_step_context()
