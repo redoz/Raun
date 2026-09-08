@@ -9,7 +9,7 @@
     </Description>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <!-- Shipped as an analyzer inside the Raun.Mtp package, not as its own package. -->
+    <!-- Shipped as an analyzer inside the Raun package, not as its own package. -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

@@ -12,8 +12,8 @@ namespace Raun.Mtp;
 /// <para>
 /// Five segments rather than the conventional four because in Raun a <em>step</em> is a test node:
 /// <c>/*/*/*/booking/*</c> selects a scenario and <c>/*/*/*/booking/*reminder*</c> one step inside it.
-/// The segments come from the same derivation <see cref="ScenarioTestIdentity"/> uses, so filtering
-/// and IDE grouping agree.
+/// The segments come from the same derivation (<see cref="ScenarioIdentity"/>) the identity
+/// property uses, so filtering and IDE grouping agree.
 /// </para>
 /// <para>
 /// Each segment is minimally escaped, not URL-encoded: a display name containing <c>/</c> would
@@ -43,7 +43,7 @@ internal static class ScenarioNodePath
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(step);
 
-        ScenarioTestIdentity.Resolve(definition, out var @namespace, out var typeName);
+        ScenarioIdentity.Resolve(definition, out var @namespace, out var typeName);
         var type = string.IsNullOrEmpty(definition.ClassDisplayName) ? typeName : definition.ClassDisplayName!;
 
         return string.Concat(

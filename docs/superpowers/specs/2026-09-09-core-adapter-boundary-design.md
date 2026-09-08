@@ -215,8 +215,27 @@ src/Raun.Mtp/
 
 ## Follow-ups (not in this change)
 
-- Analyzer statement walk derived from the parser (one walker, two consumers) — after RAUN017.
-- A `ScenarioScope` replacing the `Attach*` mutators on `ScenarioContext` — when the fifth attach
-  (resource slot handles) arrives.
-- Factoring the node-execution pipeline so teardown and preflight stop hand-assembling
-  `StepResult`s.
+In the order the 2026-09-09 re-review recommends:
+
+1. **Entry point via the platform's own hook — Patrik's decision, before the first tag.** The
+   generator still knows one adapter by name (it probes for `Raun.Mtp.RaunTestApplication` and emits
+   a call into it), and `Raun` ships an MTP-only MSBuild knob (`RaunGenerateProgram`) that becomes a
+   consumer-visible contract once tagged. `Microsoft.Testing.Platform.MSBuild` offers a
+   `TestingPlatformBuilderHook` item: an adapter ships a `buildTransitive/*.props` naming a static
+   `AddExtensions(ITestApplicationBuilder, string[])`, and the platform's own generated entry point
+   calls it. Everything `RaunTestApplication.RunAsync` does is builder work. Taking it deletes
+   `EntryPointEmitter`, the gate, `RaunGenerateProgram`, `Raun.props` and `Raun.Mtp.targets`; the
+   hand-written-`Program` path (Aspire, `simulateTime`) uses the platform's
+   `GenerateTestingPlatformEntryPoint=false`. Cost: `Raun.Mtp` depends on
+   `Microsoft.Testing.Platform.MSBuild`. Not done overnight: it changes a consumer-visible property.
+2. **Factor the node-execution pipeline** (five `new StepResult { … }` sites, three copying the same
+   block; `RunLoop.SkipScenarioAsync` is a third skip synthesizer) so teardown and preflight stop
+   hand-assembling results. Prerequisite for external-process steps.
+3. A `ScenarioScope` replacing the `Attach*` mutators on `ScenarioContext` — when the fifth attach
+   (resource slot handles) arrives.
+4. A `RunOptions` record in `Raun.Running` replacing the mirrored constructor / `RunAsync` / loop
+   parameter lists — with the next run option, not before.
+5. Analyzer statement walk derived from the parser — maintenance-only now that RAUN017 closes the
+   safety gap; do it with the next construct (loops), not as standalone work.
+6. When a second adapter exists: lift verdict classification and log formatting out of
+   `MtpReportSink` as one `StepResult` extension.

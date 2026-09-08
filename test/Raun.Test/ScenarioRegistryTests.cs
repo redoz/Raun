@@ -34,4 +34,21 @@ public class ScenarioRegistryTests
         Assert.False(ScenarioRegistry.TryGet("Ns.Type.NeverRegistered", out var factory));
         Assert.Null(factory);
     }
+
+    [Fact]
+    public void Definitions_lowers_every_registered_scenario_once()
+    {
+        // The one registry walk every host needs; before this, each adapter hand-rolled
+        // RegisteredMethods -> TryGet -> factory().
+        var a = "Ns.Type." + nameof(Definitions_lowers_every_registered_scenario_once) + ".A";
+        var b = "Ns.Type." + nameof(Definitions_lowers_every_registered_scenario_once) + ".B";
+        ScenarioRegistry.Register(a, () => Empty(a));
+        ScenarioRegistry.Register(b, () => Empty(b));
+
+        var names = ScenarioRegistry.Definitions().Select(d => d.MethodName).ToList();
+
+        Assert.Contains(a, names);
+        Assert.Contains(b, names);
+        Assert.Equal(names.Count, names.Distinct().Count());
+    }
 }

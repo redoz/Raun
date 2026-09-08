@@ -168,4 +168,15 @@ public class PreflightTests
         Assert.Equal(3, finished.Count);
         Assert.Equal(["a", "b", "raun"], finished.Select(e => e.Definition.ScenarioId).Order());
     }
+
+    [Fact]
+    public void The_preflight_definition_states_its_own_identity()
+    {
+        // Core must not lean on an adapter's fallback split of MethodName for its own node.
+        var def = Preflight.Definition(_ => Task.CompletedTask);
+
+        Assert.Equal("", def.Namespace);
+        Assert.Equal("Raun", def.TypeName);
+        Assert.Equal("Raun.Preflight", def.MethodName);
+    }
 }

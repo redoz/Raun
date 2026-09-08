@@ -254,16 +254,10 @@ public class RaunTestFramework :
             }
         }
 
-        foreach (var methodName in ScenarioRegistry.RegisteredMethods)
+        foreach (var definition in ScenarioRegistry.Definitions())
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!ScenarioRegistry.TryGet(methodName, out var factory) || factory is null)
-            {
-                continue;
-            }
-
-            var definition = factory();
             foreach (var node in RaunDiscoverer.BuildNodes(definition, selector))
             {
                 NodeDiagnostics.Log("discover", node);
@@ -380,16 +374,7 @@ public class RaunTestFramework :
     }
 
     /// <summary>Lowers every scenario registered in <see cref="ScenarioRegistry"/> to its definition.</summary>
-    private static IEnumerable<ScenarioDefinition> EnumerateRegisteredScenarios()
-    {
-        foreach (var methodName in ScenarioRegistry.RegisteredMethods)
-        {
-            if (ScenarioRegistry.TryGet(methodName, out var factory) && factory is not null)
-            {
-                yield return factory();
-            }
-        }
-    }
+    private static IEnumerable<ScenarioDefinition> EnumerateRegisteredScenarios() => ScenarioRegistry.Definitions();
 
     private void EnsureSession(SessionUid sessionUid, string requestKind)
     {

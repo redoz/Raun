@@ -19,55 +19,55 @@ only, ship the generator in `Raun`, and give the model the identity the adapters
 ## Steps
 
 ### C1 — attributes and identity helpers into core
-- [ ] Move `ScenarioAttribute.cs`, `TeardownAttribute.cs` to `src/Raun/Attributes/`.
-- [ ] Add `Raun.Model.StepUid.Of(string scenarioId, string stepId)` (red test in `Raun.Test/ModelTests`).
-- [ ] Move `ScenarioStepNumbering` → `src/Raun/Reporting/StepNumbering.cs`, rename; tests →
+- [x] Move `ScenarioAttribute.cs`, `TeardownAttribute.cs` to `src/Raun/Attributes/`.
+- [x] Add `Raun.Model.StepUid.Of(string scenarioId, string stepId)` (red test in `Raun.Test/ModelTests`).
+- [x] Move `ScenarioStepNumbering` → `src/Raun/Reporting/StepNumbering.cs`, rename; tests →
       `Raun.Test/StepNumberingTests.cs`; `ScenarioAttributeTests` → `Raun.Test`.
-- [ ] `RaunDiscoverer.MakeUid` callers use `StepUid.Of`; delete `MakeUid`.
-- [ ] Generator test project comment updated; harness `References` unchanged (still both assemblies).
-- [ ] Build, test, commit: `refactor(core): [Scenario], step numbering and step uids live in Raun`.
+- [x] `RaunDiscoverer.MakeUid` callers use `StepUid.Of`; delete `MakeUid`.
+- [x] Generator test project comment updated; harness `References` unchanged (still both assemblies).
+- [x] Build, test, commit: `refactor(core): [Scenario], step numbering and step uids live in Raun`.
 
 ### C2 — run loop, preflight, selectors, stop signal into `Raun.Running`
-- [ ] Move + rename `RaunRunLoop` → `RunLoop`; `Preflight`; `NodeSelector` + `UidNodeSelector`;
+- [x] Move + rename `RaunRunLoop` → `RunLoop`; `Preflight`; `NodeSelector` + `UidNodeSelector`;
       `RunStopSignal` (out of `Capabilities.cs`). All public. Fix `using`s in `Raun.Mtp`.
-- [ ] `ScenarioScheduler.CanceledSkipReason` constant; loop compares against it.
-- [ ] Tests: `RunLoopTests` splits — pure cases → `Raun.Test/Running/RunLoopTests.cs`; the six
+- [x] `ScenarioScheduler.CanceledSkipReason` constant; loop compares against it.
+- [x] Tests: `RunLoopTests` splits — pure cases → `Raun.Test/Running/RunLoopTests.cs`; the six
       framework cases stay as `Raun.Mtp.Test/RunLoopFrameworkTests.cs`. `PreflightTests` likewise
       (discovery case stays). `NodeSelectorTests` uid half → `Raun.Test`. `ServiceScopeTests` →
       `Raun.Test`. `Raun.Test.csproj` gains `Microsoft.Extensions.DependencyInjection`.
-- [ ] Build, test, commit: `refactor(core): the run loop is part of the runtime, not the adapter`.
+- [x] Build, test, commit: `refactor(core): the run loop is part of the runtime, not the adapter`.
 
 ### C3 — HTML report into `Raun.Reporting.Html`
-- [ ] Move sink, builder, model, template; resource name `Raun.Reporting.Html.report-template.html`;
+- [x] Move sink, builder, model, template; resource name `Raun.Reporting.Html.report-template.html`;
       `HtmlReportSink` public. Option provider and path stay.
-- [ ] Tests move with their verified file; `Raun.Test.csproj` gains `Verify.XunitV3` + `VerifyConfig`.
-- [ ] Build, test, commit: `refactor(core): the HTML report is a runtime sink, not an MTP feature`.
+- [x] Tests move with their verified file; `Raun.Test.csproj` gains `Verify.XunitV3` + `VerifyConfig`.
+- [x] Build, test, commit: `refactor(core): the HTML report is a runtime sink, not an MTP feature`.
 
 ### C4 — generator ships in `Raun`; entry point gated on `Raun.Mtp`
-- [ ] Red: `EntryPointGenerationTests.Entry_point_is_not_emitted_without_the_mtp_bootstrap` using a
+- [x] Red: `EntryPointGenerationTests.Entry_point_is_not_emitted_without_the_mtp_bootstrap` using a
       harness path that omits the `Raun.Mtp` reference.
-- [ ] Generator: combine the options provider with `CompilationProvider.Select(c =>
+- [x] Generator: combine the options provider with `CompilationProvider.Select(c =>
       c.GetTypeByMetadataName("Raun.Mtp.RaunTestApplication") is not null)`.
-- [ ] `Raun.csproj`: generator project reference, `_IncludeRaunGenerator`, `buildTransitive/Raun.props`
+- [x] `Raun.csproj`: generator project reference, `_IncludeRaunGenerator`, `buildTransitive/Raun.props`
       (moved from `Raun.Mtp.props`). `Raun.Mtp.csproj`: remove those; keep `Raun.Mtp.targets`;
       `PrivateAssets="none"` on the `Raun` reference. `Raun.Aspire.csproj`: same on both references.
-- [ ] Pack to `artifacts/`, inspect nuspecs and file lists; scratch consumers (spec Verification 4–5).
-- [ ] README (packages paragraph, layout table), AGENTS.md table, `docs/RELEASING.md` (generator
+- [x] Pack to `artifacts/`, inspect nuspecs and file lists; scratch consumers (spec Verification 4–5).
+- [x] README (packages paragraph, layout table), AGENTS.md table, `docs/RELEASING.md` (generator
       location, compatibility rules).
-- [ ] Build, test, commit: `build: the generator ships in the Raun package`.
+- [x] Build, test, commit: `build: the generator ships in the Raun package`.
 
 ### C5 — model identity
-- [ ] Red: `ModelTests` for defaults; generator lowering test asserting `Namespace`/`TypeName`
+- [x] Red: `ModelTests` for defaults; generator lowering test asserting `Namespace`/`TypeName`
       (including a nested type); `ScenarioTestIdentityTests` and `ScenarioNodePathTests` cases for
       the model-first path and the fallback; `HtmlReportModelBuilderTests` label expectation.
-- [ ] Emitter sets the members; adapters prefer them; report label uses `StepNumbering`.
-- [ ] Accept snapshot diffs after reading them.
-- [ ] Build, test, commit: `feat(model): scenarios carry their namespace and type name`.
+- [x] Emitter sets the members; adapters prefer them; report label uses `StepNumbering`.
+- [x] Accept snapshot diffs after reading them.
+- [x] Build, test, commit: `feat(model): scenarios carry their namespace and type name`.
 
 ### C6 — surface tightening
-- [ ] `ContentionGate`, `ResourceLedger`, `TeardownLog`, `SimulatedClock`, `StableId` → internal;
+- [x] `ContentionGate`, `ResourceLedger`, `TeardownLog`, `SimulatedClock`, `StableId` → internal;
       delete `ResourceClaim`; `StepInputs.Get` throws (red test first).
-- [ ] Build, test, commit: `refactor(core): internalize what only the runtime uses`.
+- [x] Build, test, commit: `refactor(core): internalize what only the runtime uses`.
 
 ### Review
 - [ ] Both reviewers re-read `2e9a568b..@-`; confirmed findings addressed in follow-up commits.

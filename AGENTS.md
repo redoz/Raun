@@ -4,7 +4,7 @@ Guidance for coding agents (and humans) working in this repository.
 
 ## Project
 
-**Raun** is a Microsoft.Testing.Platform test framework for .NET: scenarios are written as plain
+**Raun** is a scenario-testing runtime for .NET, shipped as a Microsoft.Testing.Platform test framework: scenarios are written as plain
 C# with a Given/When/Then DSL, a Roslyn source generator lowers each scenario into a step graph, a
 DAG scheduler runs independent steps in parallel, resource roles trace what each step touches, and a
 self-contained HTML report is produced per run. Old Norse *raun*: a trial, proof by experience.

@@ -82,8 +82,10 @@ Supported baseline today: the .NET 10 SDK. Adding an older baseline means a
 
 The generated code targets only data: `ScenarioDefinition` / `ScenarioNode` object initializers,
 `Guard`, `ContendedResourceUse`, `IStepInputs.Get<T>`, `ScenarioRegistry.Register`, and the
-`ResourceContext` verbs by name. `Raun.Mtp` depends on `Raun` with `>=`, so *an older generator with
-a newer runtime* is a legal package resolution. Rules that keep it working:
+`ResourceContext` verbs by name. The generator and the runtime travel in one package, so a single
+project never sees skew between them. A scenario *library* does: its generated code is compiled
+against the `Raun` it referenced, and an application that consumes the library may resolve a newer
+`Raun`. Older generated code against a newer runtime must therefore keep working. Rules:
 
 - Never add a `required` member to `ScenarioDefinition` or `ScenarioNode`; new members are
   init-only with a default, and whatever reads them tolerates the default (`Namespace` and
