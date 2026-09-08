@@ -13,6 +13,10 @@ public class AnalyzerTests
     private static void AssertHas(ImmutableArray<Diagnostic> diagnostics, string id) =>
         Assert.Contains(diagnostics, d => d.Id == id);
 
+    /// <summary>For tests asserting a diagnostic is absent — requires the source to actually compile.</summary>
+    private static Task<ImmutableArray<Diagnostic>> AnalyzeCompilable(string source) =>
+        GeneratorHarness.AnalyzeAsync(source, requireCompilable: true);
+
     [Fact]
     public void RAUN000_is_a_supported_diagnostic()
     {
@@ -24,10 +28,10 @@ public class AnalyzerTests
     [Fact]
     public async Task Valid_scenarios_produce_no_diagnostics()
     {
-        Assert.Empty(await Analyze(SampleSources.LinearScenario));
-        Assert.Empty(await Analyze(SampleSources.TupleScenario));
-        Assert.Empty(await Analyze(SampleSources.ArrayScenario));
-        Assert.Empty(await Analyze(SampleSources.LinqScenario));
+        Assert.Empty(await AnalyzeCompilable(SampleSources.Dsl + SampleSources.LinearScenario));
+        Assert.Empty(await AnalyzeCompilable(SampleSources.Dsl + SampleSources.TupleScenario));
+        Assert.Empty(await AnalyzeCompilable(SampleSources.Dsl + SampleSources.ArrayScenario));
+        Assert.Empty(await AnalyzeCompilable(SampleSources.Dsl + SampleSources.LinqScenario));
     }
 
     [Fact]
@@ -119,7 +123,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN003_no_longer_fires_on_a_supported_if()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             SampleSources.ConditionalDsl + SampleSources.IfElseScenario);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN003");
@@ -137,15 +141,15 @@ public class AnalyzerTests
     [Fact]
     public async Task Supported_conditional_scenarios_produce_no_diagnostics()
     {
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(
+        Assert.Empty(await AnalyzeCompilable(
             SampleSources.ConditionalDsl + SampleSources.IfElseScenario));
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(
+        Assert.Empty(await AnalyzeCompilable(
             SampleSources.ConditionalDsl + SampleSources.BareIfScenario));
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(
+        Assert.Empty(await AnalyzeCompilable(
             SampleSources.ConditionalDsl + SampleSources.NestedIfScenario));
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(
+        Assert.Empty(await AnalyzeCompilable(
             SampleSources.ConditionalDsl + SampleSources.OperatorTrueScenario));
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(
+        Assert.Empty(await AnalyzeCompilable(
             SampleSources.ConditionalDsl + SampleSources.ConditionalOverwriteScenario));
     }
 
@@ -259,7 +263,7 @@ public class AnalyzerTests
             }
             """;
 
-        Assert.DoesNotContain(await GeneratorHarness.AnalyzeAsync(source), d => d.Id == "RAUN012");
+        Assert.DoesNotContain(await AnalyzeCompilable(source), d => d.Id == "RAUN012");
     }
 
     [Fact]
@@ -445,7 +449,7 @@ public class AnalyzerTests
     public async Task RAUN009_clean_when_roles_are_declared()
     {
         // Every resource param/return in the resource DSL carries a role attribute.
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             SampleSources.ResourceDsl + SampleSources.ResourceScenario);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN009");
@@ -455,7 +459,7 @@ public class AnalyzerTests
     public async Task RAUN009_does_not_fire_on_non_resource_types()
     {
         // Plain records carry no resource interface, so role-free params/returns are fine.
-        var diagnostics = await Analyze(SampleSources.LinearScenario);
+        var diagnostics = await AnalyzeCompilable(SampleSources.Dsl + SampleSources.LinearScenario);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN009");
     }
@@ -554,7 +558,7 @@ public class AnalyzerTests
             }
             """;
 
-        Assert.DoesNotContain(await GeneratorHarness.AnalyzeAsync(source), d => d.Id == "RAUN010");
+        Assert.DoesNotContain(await AnalyzeCompilable(source), d => d.Id == "RAUN010");
     }
 
     // A DSL whose steps declare every kind of parameter access on one resource type, so a scenario
@@ -611,7 +615,13 @@ public class AnalyzerTests
         }
         """;
 
-    private static Task<ImmutableArray<Diagnostic>> AnalyzeConflict(string body) =>
+    /// <param name="body">Scenario-body statements inserted after the two `Given.PatientExists` steps.</param>
+    /// <param name="requireCompilable">Passed through to <see cref="GeneratorHarness.AnalyzeAsync"/> —
+    /// leave false for the handful of callers whose <paramref name="body"/> deliberately awaits a tuple
+    /// of plain (non-generic) <c>Task</c>s, which does not compile (see the harness-correction report
+    /// for the underlying <c>ScenarioAwaiters</c> gap); true everywhere else, per absence-assertion
+    /// callers below.</param>
+    private static Task<ImmutableArray<Diagnostic>> AnalyzeConflict(string body, bool requireCompilable = false) =>
         GeneratorHarness.AnalyzeAsync(ConflictDsl +
             $$"""
             public static class S
@@ -624,7 +634,7 @@ public class AnalyzerTests
             {{body}}
                 }
             }
-            """);
+            """, requireCompilable);
 
     [Fact]
     public void RAUN013_is_a_supported_diagnostic()
@@ -690,7 +700,7 @@ public class AnalyzerTests
             """
                     var notes = await new[] { When.AttachNote(patient, "a"), When.AttachNote(patient, "b") };
                     await Then.CanSignIn(patient);
-            """);
+            """, requireCompilable: true);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN013");
     }
@@ -714,7 +724,7 @@ public class AnalyzerTests
                     await When.Rename(patient, "J");
                     await When.Suspend(patient);
                     await When.Delete(patient);
-            """);
+            """, requireCompilable: true);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN013");
     }
@@ -736,7 +746,7 @@ public class AnalyzerTests
         var diagnostics = await AnalyzeConflict(
             """
                     var tags = await Enumerable.Range(1, 1).Select(i => When.Tag(patient, i)).ToArray();
-            """);
+            """, requireCompilable: true);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN013");
     }
@@ -757,14 +767,14 @@ public class AnalyzerTests
     {
         foreach (var scenario in new[] { SampleSources.ResourceScenario, SampleSources.BookingScenario, SampleSources.LineageScenario })
         {
-            var diagnostics = await GeneratorHarness.AnalyzeAsync(SampleSources.ResourceDsl + scenario);
+            var diagnostics = await AnalyzeCompilable(SampleSources.ResourceDsl + scenario);
             Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN013");
         }
     }
 
     /// <summary>A step body around <paramref name="registration"/>, which sees `ctx` (the step's own
     /// nullable context) and `id` (a plain captured value).</summary>
-    private static Task<ImmutableArray<Diagnostic>> AnalyzeCleanup(string registration) =>
+    private static Task<ImmutableArray<Diagnostic>> AnalyzeCleanup(string registration, bool requireCompilable = false) =>
         GeneratorHarness.AnalyzeAsync(
             $$"""
             using System.Threading.Tasks;
@@ -787,7 +797,7 @@ public class AnalyzerTests
                     }
                 }
             }
-            """);
+            """, requireCompilable);
 
     [Fact]
     public void RAUN014_is_a_supported_diagnostic()
@@ -855,7 +865,7 @@ public class AnalyzerTests
                             teardown.AddAttachment("deleted", "row");
                             return Db.Delete(id);
                         });
-            """);
+            """, requireCompilable: true);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN014");
     }
@@ -867,7 +877,7 @@ public class AnalyzerTests
             """
                         ctx?.OnTeardown(() => Db.Delete(id));
                         ctx?.OnTeardown(Cleanup.Required, () => Db.Delete(id));
-            """);
+            """, requireCompilable: true);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN014");
     }
@@ -883,7 +893,7 @@ public class AnalyzerTests
                             ScenarioContext.Current?.Log("deleting");
                             return Db.Delete(id);
                         });
-            """);
+            """, requireCompilable: true);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN014");
     }
@@ -896,7 +906,7 @@ public class AnalyzerTests
                         ctx?.Log("created");
                         ctx?.OnTeardown(() => Db.Delete(id));
                         ctx?.Log("registered");
-            """);
+            """, requireCompilable: true);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN014");
     }
@@ -912,7 +922,7 @@ public class AnalyzerTests
         // own file-scoped `namespace UsesDemo;`, which cannot follow SampleSources.Dsl's own
         // `namespace Demo;` in the same compilation unit — exactly like every other UsesDsl-based test
         // (GeneratorSnapshotTests.Uses_scenario, UsesLoweringTests) already analyzes it standalone.
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             SampleSources.UsesDsl + SampleSources.UsesScenario + SampleSources.UsesFreeScenario);
 
         var d = Assert.Single(diagnostics);
@@ -962,7 +972,7 @@ public class AnalyzerTests
     [Fact]
     public async Task A_type_that_is_not_a_contended_resource_is_left_alone()
     {
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(
+        Assert.Empty(await AnalyzeCompilable(
             """
             public sealed class Plain;
             """));
@@ -1038,7 +1048,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN016_does_not_fire_when_one_use_is_exclusive()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             ContendedResourceScenarios(SharedDb, "[Uses<Db>]", "[Uses<Db>(LockMode.Exclusive)]"));
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
@@ -1052,7 +1062,7 @@ public class AnalyzerTests
         // access. The ruling (see ReportInertContendedResources' doc comment) is that only a
         // [SharedResource] with no exclusive user is permanently inert; a Pooled resource never
         // qualifies, whatever its capacity and scenario count.
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             ContendedResourceScenarios(PooledDbCapacityTwo, "[Uses<Db>]", "[Uses<Db>]"));
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
@@ -1061,7 +1071,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN016_does_not_fire_on_a_pooled_resource_over_its_capacity()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             ContendedResourceScenarios(PooledDbCapacityTwo, "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]"));
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
@@ -1070,7 +1080,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN016_does_not_fire_on_a_resource_used_by_only_one_scenario()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             ContendedResourceScenarios(SharedDb, "[Uses<Db>]"));
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
@@ -1079,7 +1089,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN016_does_not_fire_on_an_exclusive_resource_used_by_two_scenarios()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             ContendedResourceScenarios(ExclusiveDb, "[Uses<Db>]", "[Uses<Db>]"));
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
@@ -1102,7 +1112,7 @@ public class AnalyzerTests
         // Scenario0 calls. If CollectScenarioUses stopped walking invoked-method attributes, Scenario0
         // would reduce to Shared only, anyExclusive would be false, and this would incorrectly report
         // RAUN016 on a suite that is, in fact, protected.
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             """
             using System.Threading.Tasks;
             using Raun;
@@ -1153,7 +1163,7 @@ public class AnalyzerTests
         // here sits on Scenario0's containing class. If CollectScenarioUses stopped walking containing
         // types, Scenario0 would reduce to Shared only, anyExclusive would be false, and this would
         // incorrectly report RAUN016 on a suite that is, in fact, protected.
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await AnalyzeCompilable(
             """
             using System.Threading.Tasks;
             using Raun;

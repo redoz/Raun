@@ -243,12 +243,19 @@ public static class GeneratorHarness
             .ToDictionary(s => s.HintName, s => s.SourceText.ToString());
     }
 
-    /// <summary>Runs the analyzer over source and returns just the Raun diagnostics. Source that fails
-    /// to compile produces no analyzer diagnostics at all, which would make every absence assertion
-    /// (<c>Assert.DoesNotContain(diagnostics, ...)</c>) pass for free regardless of what the analyzer
-    /// actually does — so this asserts the compilation is error-free before running analyzers, to keep
-    /// a broken test source from silently making its own assertions vacuous.</summary>
-    public static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    /// <summary>Runs the analyzer over source and returns just the Raun diagnostics.
+    /// <para>
+    /// When <paramref name="requireCompilable"/> is true, this first asserts the compilation is
+    /// error-free. That check is opt-in, not automatic, because a Roslyn analyzer's job legitimately
+    /// includes reporting on code that does not compile — much of the point of an analyzer is to give a
+    /// clear diagnostic on broken code, so a test that feeds deliberately invalid source and asserts a
+    /// diagnostic is present is exercising exactly that. Source that fails to compile does, however,
+    /// produce no analyzer diagnostics at all, which would make an absence assertion
+    /// (<c>Assert.DoesNotContain(diagnostics, ...)</c> / <c>Assert.Empty(diagnostics)</c>) pass for free
+    /// regardless of what the analyzer actually does — so only a test that asserts a diagnostic is
+    /// absent should opt in, to keep a broken test source from silently making that assertion vacuous.
+    /// </para></summary>
+    public static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source, bool requireCompilable = false)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
         var tree = CSharpSyntaxTree.ParseText(source, parseOptions);
@@ -259,12 +266,15 @@ public static class GeneratorHarness
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
 
-        var compileErrors = compilation.GetDiagnostics()
-            .Where(d => d.Severity == DiagnosticSeverity.Error)
-            .ToImmutableArray();
-        Assert.True(
-            compileErrors.IsEmpty,
-            "test source did not compile: " + string.Join("; ", compileErrors.Take(5).Select(d => d.ToString())));
+        if (requireCompilable)
+        {
+            var compileErrors = compilation.GetDiagnostics()
+                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .ToImmutableArray();
+            Assert.True(
+                compileErrors.IsEmpty,
+                "test source did not compile: " + string.Join("; ", compileErrors.Take(5).Select(d => d.ToString())));
+        }
 
         var withAnalyzers = compilation.WithAnalyzers(
             ImmutableArray.Create<DiagnosticAnalyzer>(new ScenarioAnalyzer()));
