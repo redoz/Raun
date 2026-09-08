@@ -47,10 +47,13 @@ feature, and it would collide in spirit with the platform option the same runner
 /{assembly}/{namespace}/{class}/{scenario}/{step}
 ```
 
-Each segment is URL-encoded with `Uri.EscapeDataString`, which the platform's own contract requires
-("the segment URL encoded path") and which removes the one hard failure mode: a display name
-containing `/` would otherwise split into extra segments, and the platform rejects a slash inside a
-filter segment outright.
+Each segment is escaped minimally, not URL-encoded: only `%` (as `%25`, first, so the escape stays
+unambiguous) and `/` (as `%2F`) are escaped, and everything else — spaces included — is left literal.
+The platform's own documentation calls the path "segment URL encoded", but that wording is nominal:
+the shipped matcher splits the filter on `/` and regex-matches the raw segment text, decoding nothing.
+The only real structural requirement is that a segment cannot itself contain a literal `/`, since that
+would split it into extra path segments (and the platform rejects a literal slash inside a filter
+segment outright) — which is exactly what the minimal escaping prevents.
 
 The segments come from data Raun already has, via the same derivation `ScenarioTestIdentity` uses
 for `TestMethodIdentifierProperty`, so filtering and IDE grouping agree:
@@ -77,6 +80,12 @@ replacing it.
 unaddressable from the command line and contradicts per-step nodes.
 **Rejected: four segments with a `scenario.step` compound leaf.** Conventional depth, but the leaf
 becomes awkward to wildcard and no longer matches any name the user has seen.
+**Rejected: full URL-encoding (`Uri.EscapeDataString`).** Tried first, and it does satisfy the
+platform's nominal "segment URL encoded path" contract. But the platform never decodes the path — its
+matcher regex-matches the raw segment text — so full encoding bought nothing structurally beyond what
+minimal escaping already gives, while forcing a user to percent-encode every space (`%20` for each one)
+before a filter would match. That silently broke the documented workflow of copying a name straight out
+of `--list-tests` into a `--treenode-filter`: the copied name, spaces and all, would match nothing.
 
 ### Nodes expose two filterable properties
 

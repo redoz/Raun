@@ -4,10 +4,14 @@ using Microsoft.Testing.Platform.Capabilities.TestFramework;
 namespace Raun.Mtp;
 
 /// <summary>
-/// A run-scoped "stop admitting work" flag. The platform asks for a graceful stop (today when
-/// <c>--maximum-failed-tests</c> is crossed) and the run loop honours it at its admission scan, so
-/// nothing in flight is killed. Created in the bootstrap because the capability and the framework are
-/// built by different factories and need to meet.
+/// A "stop admitting work" flag, created once in <see cref="RaunTestApplication.RunAsync"/> and held
+/// for the lifetime of the process — not scoped to a single run. The platform asks for a graceful stop
+/// (today when <c>--maximum-failed-tests</c> is crossed) and the run loop honours it at its admission
+/// scan, so nothing in flight is killed. Created in the bootstrap because the capability and the
+/// framework are built by different factories and need to meet. Because it outlives any one run, a
+/// stop request also suppresses admission on whatever runs follow in the same process; harmless for a
+/// command-line invocation today, since the process exits after the one run, but worth knowing if a
+/// future host reuses the process for more than one run.
 /// </summary>
 internal sealed class RunStopSignal
 {
@@ -25,7 +29,7 @@ internal sealed class RunStopSignal
 /// <c>--maximum-failed-tests</c>: its option provider is enabled only for a framework with this
 /// capability.
 /// </summary>
-#pragma warning disable TPEXP // IGracefulStopTestExecutionCapability is an experimental Microsoft.Testing.Platform API.
+#pragma warning disable TPEXP // IGracefulStopTestExecutionCapability and IBannerMessageOwnerCapability are experimental Microsoft.Testing.Platform APIs.
 internal sealed class RaunGracefulStopCapability : IGracefulStopTestExecutionCapability
 {
     private readonly RunStopSignal _signal;

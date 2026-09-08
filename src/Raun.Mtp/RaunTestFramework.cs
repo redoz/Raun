@@ -335,10 +335,6 @@ public class RaunTestFramework :
     /// <paramref name="unsupported"/>: over-selecting is recoverable and visible, whereas aborting
     /// would turn a future platform filter into a failed run the user cannot act on.
     /// </summary>
-    // CA1859 wants the concrete UidNodeSelector return type: today's only non-null case. The
-    // abstract NodeSelector return is deliberate — a later task adds a second case (the platform's
-    // tree filter) reducing to a different NodeSelector subtype, and callers must not know which.
-#pragma warning disable CA1859
     private static NodeSelector? ReadSelector(ITestExecutionFilter? filter, out string? unsupported)
     {
         unsupported = null;
@@ -362,7 +358,6 @@ public class RaunTestFramework :
                 return null;
         }
     }
-#pragma warning restore CA1859
 
     /// <summary>Warns that a filter type was ignored, through the platform logger when there is one.</summary>
     private async Task WarnUnsupportedFilterAsync(string? unsupported)

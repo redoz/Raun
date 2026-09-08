@@ -114,11 +114,15 @@ dotnet run --project MyScenarios -- --treenode-filter '/*/*/*/*/*reminder*'     
 dotnet run --project MyScenarios -- --treenode-filter '/*/*/*/*/*[Phase=When]'                   # by phase
 ```
 
-A segment is matched literally unless it contains a wildcard, so copy a name straight out of
-`--list-tests` — spaces and all — rather than percent-encoding it. Selecting a step runs everything
-it needs — its dependencies, merge sources, guard conditions, and teardown — and nothing after it,
-exactly as selecting one step in an IDE does. `--filter-uid` takes node uids and is what an IDE sends
-when you run a single test.
+A segment is matched literally unless it contains a wildcard. `--list-tests` prints step names with a
+positional numbering prefix (`4. When creating an appointment`) — filter on the name with that prefix
+stripped, spaces and all; scenario names never appear in `--list-tests` at all, so get those from a
+scenario's `[Scenario("...")]` attribute or the HTML report instead. A name containing `%` or `/` is
+typed as `%25` or `%2F`, and the platform's own filter operator characters (`( ) [ ] & | = ! *`) need
+its backslash escape when they appear literally, e.g. `\(`. Selecting a step runs everything it needs —
+its dependencies, merge sources, guard conditions, and teardown — and nothing after it, exactly as
+selecting one step in an IDE does. `--filter-uid` takes node uids and is what an IDE sends when you run
+a single test.
 
 There is no `--filter`: that option belongs to the VSTest bridge that xUnit and MSTest use for
 VSTest compatibility, not to the platform itself.

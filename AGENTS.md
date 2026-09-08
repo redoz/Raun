@@ -70,8 +70,10 @@ dotnet run --project samples/AspireAppointments/AspireAppointments.Tests/AspireA
   `--treenode-filter` instead, plus `--filter-uid`, which is what an IDE sends for a single test.
 - A `--treenode-filter` path has five segments, not the conventional four, because a step is a test
   node: `/{assembly}/{namespace}/{class}/{scenario}/{step}`. Segments are escaped minimally, not
-  URL-encoded: only `%` and `/` are escaped, so a display name copied straight out of `--list-tests`
-  — spaces and all — matches as typed.
+  URL-encoded: only `%` and `/` are escaped, so a display name matches as typed, spaces and all.
+  `--list-tests` prints step names with a numbering prefix (`4. When creating an appointment`) — filter
+  on the name with that prefix stripped; scenario names don't appear in `--list-tests` at all, so get
+  those from `[Scenario("...")]` or the HTML report instead.
 - `--maximum-failed-tests` stops Raun launching new scenarios; scenarios already running finish and
   report. Nothing is killed mid-flight, so the number of failures can exceed the threshold by
   whatever was already in the air.
