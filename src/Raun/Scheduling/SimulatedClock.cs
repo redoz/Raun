@@ -13,7 +13,7 @@ namespace Raun.Scheduling;
 /// duration.
 /// </para>
 /// </summary>
-public sealed class SimulatedClock : TimeProvider
+internal sealed class SimulatedClock : TimeProvider
 {
     private readonly long _baseTicks;
     private long _advancedTicks;

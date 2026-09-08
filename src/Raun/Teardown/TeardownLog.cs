@@ -8,7 +8,7 @@ namespace Raun;
 /// <param name="Sequence">Global registration order, used to break ties within one step.</param>
 /// <param name="Kind">Whether the scenario's policy may skip this cleanup.</param>
 /// <param name="Cleanup">The work to run, handed the teardown node's <see cref="ScenarioContext"/>.</param>
-public readonly record struct TeardownRegistration(
+internal readonly record struct TeardownRegistration(
     int OwningStepIndex, int Sequence, Cleanup Kind, Func<ScenarioContext, Task> Cleanup);
 
 /// <summary>
@@ -16,7 +16,7 @@ public readonly record struct TeardownRegistration(
 /// every step's <see cref="ScenarioContext"/> — steps register concurrently, so this is the
 /// synchronized object while the context itself stays per-step.
 /// </summary>
-public sealed class TeardownLog
+internal sealed class TeardownLog
 {
     private readonly ConcurrentQueue<TeardownRegistration> _entries = new();
     private int _sequence = -1;

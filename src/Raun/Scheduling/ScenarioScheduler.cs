@@ -69,7 +69,7 @@ public sealed class ScenarioScheduler
         var status = new StepStatus[count];          // defaults to Pending
         var results = new StepResult?[count];
         var outputs = new object?[count];
-        var inputs = new StepInputs(outputs);
+        var inputs = new StepInputs(outputs, status);
         var capacity = _maxParallelism > 0 ? _maxParallelism : int.MaxValue;
 
         var pending = new HashSet<int>(Enumerable.Range(0, count));
@@ -888,8 +888,24 @@ public sealed class ScenarioScheduler
 
     private readonly record struct NodeOutcome(StepResult Result, object? Output);
 
-    private sealed class StepInputs(object?[] outputs) : IStepInputs
+    /// <summary>
+    /// The producer outputs a step's body reads. A slot is readable only once its node has passed;
+    /// reading it earlier means the reader does not depend on the producer, which only a generator
+    /// bug can arrange, and a null cast would let that pass silently (or surface as a bare
+    /// NullReferenceException for a value type). Display-name formatting for a skipped step may
+    /// legitimately hit this and is caught by <see cref="FormatName"/>.
+    /// </summary>
+    private sealed class StepInputs(object?[] outputs, StepStatus[] status) : IStepInputs
     {
-        public T Get<T>(int producerIndex) => (T)outputs[producerIndex]!;
+        public T Get<T>(int producerIndex)
+        {
+            if (status[producerIndex] != StepStatus.Passed)
+            {
+                throw new InvalidOperationException(
+                    $"Step input {producerIndex} was read before that node produced a value: the reading step does not depend on it.");
+            }
+
+            return (T)outputs[producerIndex]!;
+        }
     }
 }

@@ -13,7 +13,7 @@ namespace Raun;
 /// it does not depend on whether the two steps happened to overlap in time, so the same scenario
 /// fails the same way on every run.
 /// </summary>
-public sealed class ResourceLedger
+internal sealed class ResourceLedger
 {
     private readonly object _lock = new();
     private readonly bool[][] _after;

@@ -11,7 +11,7 @@ namespace Raun.Scheduling;
 /// no hold-and-wait, no deadlock. The gate never waits — the run loop retries a refused scenario
 /// whenever a running one finishes. Kinds are read from the token type's attributes once and cached.
 /// </summary>
-public sealed class ContentionGate
+internal sealed class ContentionGate
 {
     private readonly object _lock = new();
     private readonly Dictionary<Type, Slots> _slots = [];

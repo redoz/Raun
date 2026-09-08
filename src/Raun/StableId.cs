@@ -12,7 +12,7 @@ namespace Raun;
 /// The generator computes ids at compile time with the same algorithm (see the generator's
 /// matching helper); this type is the runtime/reference implementation.
 /// </summary>
-public static class StableId
+internal static class StableId
 {
     /// <summary>Stable id for a scenario, from its fully-qualified method name.</summary>
     public static string ForScenario(string methodFullName) => Hash(methodFullName);

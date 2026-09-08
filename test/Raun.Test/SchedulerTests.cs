@@ -745,4 +745,23 @@ public class SchedulerTests
             return Task.CompletedTask;
         }
     }
+
+    [Fact]
+    public async Task Reading_an_input_its_step_does_not_depend_on_fails_that_step_loudly()
+    {
+        // Only a generator bug reaches this: a consumer reads producer 0 without depending on it,
+        // so the slot is not filled yet. A null cast would pass silently (or throw a bare
+        // NullReferenceException for a value type); the failure has to name what went wrong.
+        var def = Def(
+            Node(0, Pass("value"), dependsOn: [1]),
+            Node(1, (inputs, _) => Task.FromResult<object?>(inputs.Get<string>(0))));
+
+        var results = await new ScenarioScheduler().RunAsync(def, cancellationToken: TestContext.Current.CancellationToken);
+
+        var reader = results.Single(r => r.Node.Index == 1);
+        Assert.Equal(StepStatus.Failed, reader.Status);
+        var ex = Assert.IsType<InvalidOperationException>(reader.Exception);
+        Assert.Contains("0", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("depend", ex.Message, StringComparison.Ordinal);
+    }
 }
