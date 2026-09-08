@@ -165,4 +165,26 @@ public class ParallelLoweringTests
 
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
     }
+
+    [Fact]
+    public void Empty_array_group_keeps_the_next_step_ordered_after_the_previous_one()
+    {
+        var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.EmptyArrayScenario);
+        result.AssertCompiles();
+        var def = result.Definitions().Single();
+
+        Assert.Equal(3, def.Nodes.Count);                      // DatabaseIsClean + AvailableSlot + teardown
+        Assert.Equal([0], def.Nodes[1].DependsOn);
+    }
+
+    [Fact]
+    public void Empty_linq_group_keeps_the_next_step_ordered_after_the_previous_one()
+    {
+        var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.EmptyLinqScenario);
+        result.AssertCompiles();
+        var def = result.Definitions().Single();
+
+        Assert.Equal(3, def.Nodes.Count);
+        Assert.Equal([0], def.Nodes[1].DependsOn);
+    }
 }

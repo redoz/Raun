@@ -773,4 +773,40 @@ public static class SampleSources
             }
         }
         """;
+
+    // Empty parallel groups: nothing to run, but the step after one must still wait for the step
+    // before it. Nobody writes these on purpose; a constant-count LINQ unroll reaches zero easily.
+    public const string EmptyArrayScenario =
+        """
+
+        public static class EmptyArrayScenarios
+        {
+            [Scenario("empty array group")]
+            public static async Task Empty()
+            {
+                await Given.DatabaseIsClean();
+
+                await new Task[] { };
+
+                await Given.AvailableSlot();
+            }
+        }
+        """;
+
+    public const string EmptyLinqScenario =
+        """
+
+        public static class EmptyLinqScenarios
+        {
+            [Scenario("empty linq group")]
+            public static async Task Empty()
+            {
+                await Given.DatabaseIsClean();
+
+                await Enumerable.Range(1, 0).Select(i => Given.UserExists($"u{i}")).ToArray();
+
+                await Given.AvailableSlot();
+            }
+        }
+        """;
 }

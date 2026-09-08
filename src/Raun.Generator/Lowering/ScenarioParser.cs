@@ -573,7 +573,12 @@ internal sealed class ScenarioParser
             _vars[binding.Names[0]] = VarSource.Array(frontier.ToArray(), elementType);
         }
 
-        Advance(frontier);
+        // An empty group ran nothing, so the step after it still follows the step before it.
+        if (frontier.Count > 0)
+        {
+            Advance(frontier);
+        }
+
         return true;
     }
 
@@ -645,7 +650,12 @@ internal sealed class ScenarioParser
             _vars[binding.Names[0]] = VarSource.Array(frontier.ToArray(), elementType);
         }
 
-        Advance(frontier);
+        // An empty group ran nothing, so the step after it still follows the step before it.
+        if (frontier.Count > 0)
+        {
+            Advance(frontier);
+        }
+
         return true;
     }
 
