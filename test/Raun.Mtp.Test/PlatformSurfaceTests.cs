@@ -71,6 +71,12 @@ public class PlatformSurfaceTests
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        // ReadSummaryTotal matches the platform's English summary ("total: N"), but MTP localizes it
+        // (German prints "gesamt:"). Pin English on the child. Both variables are needed: the platform
+        // reads its own TESTINGPLATFORM_UI_LANGUAGE ahead of the SDK's DOTNET_CLI_UI_LANGUAGE, and a
+        // test host that is itself an MTP app exports the former into this process's environment.
+        startInfo.Environment["TESTINGPLATFORM_UI_LANGUAGE"] = "en";
+        startInfo.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         startInfo.ArgumentList.Add("run");
         startInfo.ArgumentList.Add("--project");
         startInfo.ArgumentList.Add(projectPath);
