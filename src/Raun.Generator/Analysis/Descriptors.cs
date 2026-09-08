@@ -145,4 +145,16 @@ internal static class Descriptors
         description: null,
         helpLinkUri: null,
         customTags: WellKnownDiagnosticTags.CompilationEnd);
+
+    /// <summary>Reported by the generator, not the analyzer: the parser rejected a statement, so the
+    /// scenario was not generated. The analyzer normally explains the same statement more precisely
+    /// (RAUN002–RAUN007, RAUN011); this is the safety net for the day the two disagree, because a
+    /// scenario that silently vanishes from the test list fails no test.</summary>
+    public static readonly DiagnosticDescriptor ScenarioNotGenerated = new(
+        "RAUN017",
+        "Scenario was not generated",
+        "Scenario '{0}' was not generated: this statement is not a shape the generator lowers",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

@@ -40,6 +40,9 @@ internal sealed class ScenarioParser
     // Indices introduced by the previous top-level statement (source-order barrier / join target).
     private List<int> _prevFrontier = [];
 
+    /// <summary>The innermost statement the walk rejected, for RAUN017. Null while the walk succeeds.</summary>
+    private StatementSyntax? _rejected;
+
     // Ordering-only predecessors the NEXT statement must wait for: the last steps of every arm of the
     // `if` that just closed. DependsOn cannot carry them (an arm may be not-taken, and DependsOn would
     // cascade that), so they ride on WaitsFor. Consumed and cleared by the statement that follows.
@@ -66,10 +69,33 @@ internal sealed class ScenarioParser
         public static VarSource Array(int[] indices, TypeSyntax elementType) => new(true, -1, indices, elementType);
     }
 
-    public static ParsedScenario? TryParse(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax)
+    public static ParseOutcome TryParse(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax)
         => new ScenarioParser(model, method, syntax).Parse();
 
-    private ParsedScenario? Parse()
+    private ParseOutcome Parse()
+    {
+        var scenario = Lower();
+        if (scenario is not null)
+        {
+            return new ParseOutcome(scenario, null);
+        }
+
+        // The innermost rejected statement, or the method name when there was no body to walk.
+        var at = _rejected is not null ? _rejected.GetLocation() : _syntax.Identifier.GetLocation();
+        var lines = at.GetLineSpan();
+        var name = _method.ContainingType.ToDisplayString(SymbolHelpers.NoGlobal) + "." + _method.Name;
+        return new ParseOutcome(null, new ParseRejection(
+            name,
+            lines.Path,
+            at.SourceSpan.Start,
+            at.SourceSpan.Length,
+            new SourceSpan(
+                lines.Path,
+                lines.StartLinePosition.Line, lines.StartLinePosition.Character,
+                lines.EndLinePosition.Line, lines.EndLinePosition.Character)));
+    }
+
+    private ParsedScenario? Lower()
     {
         if (_syntax.Body is null)
         {
@@ -83,7 +109,7 @@ internal sealed class ScenarioParser
         {
             if (!ParseStatement(statement))
             {
-                return null; // unsupported construct
+                return null; // reported as RAUN017 by TryParse, at _rejected
             }
         }
 
@@ -158,7 +184,7 @@ internal sealed class ScenarioParser
 
     private bool ParseStatement(StatementSyntax statement)
     {
-        return statement switch
+        var ok = statement switch
         {
             LocalDeclarationStatementSyntax local => ParseLocalDeclaration(local),
             ExpressionStatementSyntax expr => ParseExpressionStatement(expr),
@@ -167,6 +193,13 @@ internal sealed class ScenarioParser
             _ => false,
         };
 
+        // Recursion unwinds leaf-first, so the first statement recorded is the innermost one.
+        if (!ok)
+        {
+            _rejected ??= statement;
+        }
+
+        return ok;
     }
 
     private bool ParseBlock(BlockSyntax block)

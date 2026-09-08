@@ -44,6 +44,11 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
                     spc.ReportDiagnostic(Diagnostic.Create(
                         Descriptors.UnhandledException, MakeLocation(r.File, r.Line), r.Error));
                 }
+                else if (r.Rejection is { } rejection)
+                {
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        Descriptors.ScenarioNotGenerated, MakeLocation(rejection), rejection.ScenarioName));
+                }
                 else if (r.Scenario is not null)
                 {
                     parsed.Add(r.Scenario);
@@ -114,6 +119,16 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
             lineSpan.Path,
             lineSpan.StartLinePosition.Line + 1);
     }
+
+    /// <summary>The rejected statement's span, rebuilt as an external-file location (the pipeline
+    /// carries values, not syntax).</summary>
+    private static Location MakeLocation(ParseRejection rejection)
+        => Location.Create(
+            rejection.File,
+            new TextSpan(rejection.SpanStart, rejection.SpanLength),
+            new LinePositionSpan(
+                new LinePosition(rejection.Lines.StartLine, rejection.Lines.StartChar),
+                new LinePosition(rejection.Lines.EndLine, rejection.Lines.EndChar)));
 
     /// <summary>A 1-based file/line location for a diagnostic, or <see cref="Location.None"/> when the
     /// input had no path.</summary>

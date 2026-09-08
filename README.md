@@ -64,7 +64,7 @@ for Roslyn 5.3 and newer.
    never executed directly.
 3. The generator lowers each body into a dependency graph (`ScenarioDefinition`): one node per
    step, with **source-order + dataflow** edges, and tuple/array forms lowered to parallel
-   sibling groups. An analyzer (`RAUN000`–`RAUN015`) rejects anything outside the supported subset
+   sibling groups. An analyzer (`RAUN000`–`RAUN017`) rejects anything outside the supported subset
    and catches authoring mistakes at compile time.
 4. At run time, the MTP test framework discovers each `[Scenario]`, runs the graph through a DAG
    scheduler, and reports **every step as its own test** — passed, failed, skipped, or not taken.
@@ -350,7 +350,7 @@ to one collector.
 | Project | What it is |
 | --- | --- |
 | `src/Raun` | Runner-neutral core: phase markers, parallel awaiters, `ScenarioContext`, the graph model, resources, teardown, tracing, and the DAG scheduler. |
-| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN015`). netstandard2.0, shipped inside `Raun.Mtp`. |
+| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN017`). netstandard2.0, shipped inside `Raun.Mtp`. |
 | `src/Raun.Mtp` | Microsoft.Testing.Platform test framework: `[Scenario]`, discovery, run loop, per-step node reporter, HTML report. |
 | `src/Raun.Aspire` | Aspire integration: builds the AppHost, starts it as the run's preflight while waiting for the resources you declare, registers it for your steps. Plumbing only — no phase markers, no steps. |
 | `samples/AppointmentTests` | End-to-end sample: linear, tuple, array, LINQ, conditionals, resources, teardown, logging, a custom phase marker; run with `--report-html` for the report showcase. |

@@ -36,6 +36,16 @@ internal readonly record struct ParsedGuard(int ConditionIndex, bool WhenValue);
 /// ordering key so emission is deterministic, never emitted itself.</summary>
 internal readonly record struct ParsedUse(TypeSyntax Resource, string Mode, string SortKey);
 
+/// <summary>Why a scenario was not lowered: the innermost statement the parser rejected (or the
+/// method name, for a body-less method). Carries the span as plain values — never a
+/// <c>Location</c>, which would pin a syntax tree in the incremental pipeline — and is rebuilt into
+/// an external-file location when reported.</summary>
+internal readonly record struct ParseRejection(
+    string ScenarioName, string File, int SpanStart, int SpanLength, SourceSpan Lines);
+
+/// <summary>The parser's verdict on one scenario: exactly one of the two is set.</summary>
+internal readonly record struct ParseOutcome(ParsedScenario? Scenario, ParseRejection? Rejection);
+
 /// <summary>A lowered scenario ready for emission.</summary>
 internal sealed record ParsedScenario
 {
