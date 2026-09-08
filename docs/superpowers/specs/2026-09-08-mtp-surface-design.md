@@ -61,7 +61,11 @@ for `TestMethodIdentifierProperty`, so filtering and IDE grouping agree:
 | namespace | `ScenarioDefinition.MethodName` split, the part ahead of the type |
 | class | `ClassDisplayName` when set, else the derived type name |
 | scenario | `ScenarioDefinition.DisplayName` |
-| step | the numbered display name discovery reports, so what a user sees is what they filter on |
+| step | the step's display name **without** the numbering prefix discovery adds |
+
+The step segment drops the `1.` / `2.1` prefix on purpose. The number is positional, so a filter
+keyed on it would silently select a different step the moment one is inserted above it. The name is
+what the author wrote; the number is presentation.
 
 Five levels rather than the conventional four because in Raun a **step** is a test node, which is the
 framework's whole premise. `/*/*/*/booking/*` selects a scenario, `/*/*/*/booking/*reminder*`
