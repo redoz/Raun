@@ -1,10 +1,11 @@
 using Raun.Model;
 using Raun.Reporting;
+using Raun.Running;
 using Raun.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 // CA1812 cannot see instantiation through the DI container — that is the whole point of these types.
 #pragma warning disable CA1812
@@ -54,7 +55,7 @@ public class ServiceScopeTests
     }
 
     private static Task Run(IServiceProvider? services, params ScenarioDefinition[] definitions)
-        => new RaunRunLoop(() => definitions, services: services)
+        => new RunLoop(() => definitions, services: services)
             .RunAsync(selector: null, new Sink(), CancellationToken.None).AsTask();
 
     [Fact]

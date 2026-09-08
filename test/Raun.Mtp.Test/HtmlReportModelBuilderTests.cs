@@ -3,6 +3,7 @@ using System.Text.Json;
 using Raun;
 using Raun.Model;
 using static VerifyXunit.Verifier;
+using Raun.Running;
 using Xunit;
 
 namespace Raun.Mtp.Test;
@@ -323,7 +324,7 @@ public class HtmlReportModelBuilderTests
     public void Scenarios_skipped_by_a_failed_preflight_carry_no_time_and_leave_the_wall_span_to_what_ran()
     {
         // A failed preflight (the "raun" scenario) really ran for 40 ms; the two selected scenarios
-        // were skip-published with StartedAt = default (see RaunRunLoop.SkipScenarioAsync). Their
+        // were skip-published with StartedAt = default (see RunLoop.SkipScenarioAsync). Their
         // default timestamps must not become the wall-span origin.
         var preflight = Def("raun", Node(0, "pf", "Given", "Preflight"));
         var a = Def("a", Node(0, "a0", "Given", "a0"));

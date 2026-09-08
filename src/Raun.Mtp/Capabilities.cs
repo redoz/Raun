@@ -1,28 +1,8 @@
 using System.Reflection;
 using Microsoft.Testing.Platform.Capabilities.TestFramework;
+using Raun.Running;
 
 namespace Raun.Mtp;
-
-/// <summary>
-/// A "stop admitting work" flag, created once in <see cref="RaunTestApplication.RunAsync"/> and held
-/// for the lifetime of the process — not scoped to a single run. The platform asks for a graceful stop
-/// (today when <c>--maximum-failed-tests</c> is crossed) and the run loop honours it at its admission
-/// scan, so nothing in flight is killed. Created in the bootstrap because the capability and the
-/// framework are built by different factories and need to meet. Because it outlives any one run, a
-/// stop request also suppresses admission on whatever runs follow in the same process; harmless for a
-/// command-line invocation today, since the process exits after the one run, but worth knowing if a
-/// future host reuses the process for more than one run.
-/// </summary>
-internal sealed class RunStopSignal
-{
-    private int _requested;
-
-    /// <summary>True once a stop has been asked for; never returns to false within a run.</summary>
-    public bool IsStopRequested => Volatile.Read(ref _requested) != 0;
-
-    /// <summary>Asks the run to stop admitting scenarios. Idempotent.</summary>
-    public void Request() => Interlocked.Exchange(ref _requested, 1);
-}
 
 /// <summary>
 /// Declares that Raun can stop gracefully, which is what makes the platform offer

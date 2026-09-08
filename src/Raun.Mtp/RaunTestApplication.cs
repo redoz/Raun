@@ -1,6 +1,7 @@
 using Microsoft.Testing.Platform.Builder;
 using Microsoft.Testing.Platform.Capabilities.TestFramework;
 using Microsoft.Testing.Platform.Helpers;
+using Raun.Running;
 
 namespace Raun.Mtp;
 

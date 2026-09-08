@@ -16,6 +16,7 @@ using Microsoft.Testing.Platform.Services;
 using Microsoft.Testing.Platform.TestHost;
 using Raun.Model;
 using Raun.Reporting;
+using Raun.Running;
 using Raun.Scheduling;
 using ITestPlatformTestFramework = Microsoft.Testing.Platform.Extensions.TestFramework.ITestFramework;
 
@@ -275,7 +276,7 @@ public class RaunTestFramework :
     }
 
     /// <summary>
-    /// Runs the requested tests for the session via the <see cref="RaunRunLoop"/>: the filter is
+    /// Runs the requested tests for the session via the <see cref="RunLoop"/>: the filter is
     /// reduced to the distinct scenarios it selects, each is run once through a
     /// <see cref="ScenarioScheduler"/>, and every executed step is published (siblings light up).
     /// </summary>
@@ -296,7 +297,7 @@ public class RaunTestFramework :
         }
 
         var bus = new RunEventBus(sinks);
-        var loop = new RaunRunLoop(
+        var loop = new RunLoop(
             EnumerateRegisteredScenarios,
             simulateTime: _simulateTime,
             services: _userServices,

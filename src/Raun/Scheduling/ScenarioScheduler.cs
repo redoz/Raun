@@ -41,6 +41,9 @@ public sealed class ScenarioScheduler
     /// <summary>Skip reason recorded on steps a filtered run left out entirely.</summary>
     public const string NotSelectedSkipReason = "not selected";
 
+    /// <summary>Skip reason recorded on steps that never ran because the scenario was canceled.</summary>
+    public const string CanceledSkipReason = "scenario canceled";
+
     /// <param name="definition">The scenario graph to run.</param>
     /// <param name="services">Per-scenario service provider surfaced as <c>ctx.Services</c>.</param>
     /// <param name="observer">Receives step lifecycle callbacks; nothing is raised for steps a filter left out.</param>
@@ -138,7 +141,7 @@ public sealed class ScenarioScheduler
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    await ApplyTerminalAsync(i, StepStatus.Skipped, "scenario canceled").ConfigureAwait(false);
+                    await ApplyTerminalAsync(i, StepStatus.Skipped, CanceledSkipReason).ConfigureAwait(false);
                     progressed = true;
                     continue;
                 }
@@ -758,7 +761,7 @@ public sealed class ScenarioScheduler
         {
             stopwatch.Stop();
             activity?.SetTag(RaunTelemetry.Attributes.TestCaseResultStatus, "skipped");
-            return Outcome(StepStatus.Skipped, skipReason: "scenario canceled");
+            return Outcome(StepStatus.Skipped, skipReason: CanceledSkipReason);
         }
         catch (Exception ex)
         {

@@ -1,6 +1,6 @@
 using Raun.Model;
 
-namespace Raun.Mtp;
+namespace Raun.Running;
 
 /// <summary>
 /// Run-level setup, reported as its own test node — the mirror of a scenario's teardown node.
@@ -18,7 +18,7 @@ namespace Raun.Mtp;
 /// collected onto this node with no further wiring.
 /// </para>
 /// </remarks>
-internal static class Preflight
+public static class Preflight
 {
     /// <summary>Scenario id of the synthetic preflight definition; with <see cref="StepId"/> this
     /// forms the stable <c>raun:preflight</c> node uid.</summary>

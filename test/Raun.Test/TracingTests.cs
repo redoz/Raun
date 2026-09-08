@@ -10,6 +10,9 @@ namespace Raun.Test;
 /// parented to whatever is ambient, with the step's identity as tags, its outcome as status, and its
 /// log lines and resource events as span events. Nothing is emitted without a listener.
 /// </summary>
+// Both classes register a process-wide ActivityListener; sharing one collection keeps them from
+// running at the same time, since a listener in one would make the other's spans sampled.
+[Collection("ActivityListeners")]
 public class TracingTests
 {
     private static readonly TimeSpan Generous = TimeSpan.FromSeconds(10);

@@ -7,10 +7,11 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
-  <!-- Core runtime tests: manifest model, parallel awaiters, and the DAG scheduler.
-       These exercise Raun only and never load the xUnit runner, per the design's
-       "scheduler tests independent from xUnit" requirement. -->
+  <!-- Core runtime tests: manifest model, parallel awaiters, the DAG scheduler and the run loop.
+       These exercise Raun only and never load a test-platform adapter. The DI implementation is
+       here to build a real provider for the per-scenario scope tests. -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3.mtp-v2" />
     <PackageReference Include="xunit.runner.visualstudio" />

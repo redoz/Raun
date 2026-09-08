@@ -1,7 +1,8 @@
 using Raun.Model;
+using Raun.Running;
 using Xunit;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 /// <summary>
 /// Selection is one abstraction shared by discovery, scenario selection and target expansion: a
@@ -54,8 +55,8 @@ public class NodeSelectorTests
     {
         var definition = Definition(Node(0, "a"), Node(1, "b"));
 
-        Assert.Single(RaunRunLoop.SelectScenarios([definition], selector: null));
-        Assert.Null(RaunRunLoop.SelectTargets(definition, selector: null));
+        Assert.Single(RunLoop.SelectScenarios([definition], selector: null));
+        Assert.Null(RunLoop.SelectTargets(definition, selector: null));
     }
 
     [Fact]
@@ -65,22 +66,15 @@ public class NodeSelectorTests
         var selector = new UidNodeSelector(new HashSet<string>(
             [StepUid.Of("scn", "b")], StringComparer.OrdinalIgnoreCase));
 
-        Assert.Single(RaunRunLoop.SelectScenarios([definition], selector));
-        var targets = RaunRunLoop.SelectTargets(definition, selector);
+        Assert.Single(RunLoop.SelectScenarios([definition], selector));
+        var targets = RunLoop.SelectTargets(definition, selector);
         Assert.NotNull(targets);
         Assert.Equal([1], targets);
     }
 
     [Fact]
     public void A_selector_that_matches_nothing_selects_no_scenario()
-        => Assert.Empty(RaunRunLoop.SelectScenarios(
+        => Assert.Empty(RunLoop.SelectScenarios(
             [Definition(Node(0, "a"))],
             new UidNodeSelector(new HashSet<string>(["scn:zzz"], StringComparer.OrdinalIgnoreCase))));
-
-    // TreeNodeFilter's constructor is internal to the platform, so the only way to obtain an
-    // instance is from the platform itself (proven end to end in the sample runs, not here). The
-    // guard clause below is the one behaviour TreeNodeSelector has that does not need an instance.
-    [Fact]
-    public void A_tree_node_selector_rejects_a_null_filter()
-        => Assert.Throws<ArgumentNullException>(() => new TreeNodeSelector(null!));
 }

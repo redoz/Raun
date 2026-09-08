@@ -1,26 +1,24 @@
 using System.Collections.Concurrent;
-using Microsoft.Testing.Platform.CommandLine;
-using Microsoft.Testing.Platform.Extensions.Messages;
-using Microsoft.Testing.Platform.Messages;
-using Microsoft.Testing.Platform.Requests;
-using Microsoft.Testing.Platform.TestHost;
-using Raun;
 using Raun.Model;
 using Raun.Reporting;
+using Raun.Running;
 using Raun.Scheduling;
 using Xunit;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 /// <summary>
-/// Phase 3 behavioral tests for the run loop. On a run request the loop reads the filter
-/// (a <c>TestNodeUidListFilter</c> uid set, or null = run everything), maps each requested step-uid
-/// onto its owning scenario, and runs each <em>distinct</em> scenario exactly once via the
-/// <see cref="ScenarioScheduler"/> with the Phase-3 <see cref="MtpReportSink"/> and a per-run
-/// <see cref="CancellationTokenSource"/> owned by the loop. Because the sink fans events out to all
-/// subscribers, every step the scheduler executes lights up — including the dependency siblings of a
-/// single-step run.
+/// Behavioral tests for the run loop. On a run request the loop reads the selection (a uid set,
+/// or null = run everything), maps each requested step-uid onto its owning scenario, and runs each
+/// <em>distinct</em> scenario exactly once via the <see cref="ScenarioScheduler"/> onto an
+/// <see cref="IRunEventSink"/>, with a per-run <see cref="CancellationTokenSource"/> owned by the
+/// loop. Because the sink fans events out to all subscribers, every step the scheduler executes
+/// lights up — including the dependency siblings of a single-step run. The cases that go through
+/// the MTP framework live in <c>Raun.Mtp.Test.RunLoopFrameworkTests</c>.
 /// </summary>
+// Both classes register a process-wide ActivityListener; sharing one collection keeps them from
+// running at the same time, since a listener in one would make the other's spans sampled.
+[Collection("ActivityListeners")]
 public class RunLoopTests
 {
     private static ScenarioNode Node(
@@ -92,7 +90,7 @@ public class RunLoopTests
         var a = Definition("a", "A", Node(0, "x", "x"));
         var b = Definition("b", "B", Node(0, "y", "y"));
 
-        var selected = RaunRunLoop.SelectScenarios([a, b], selector: null);
+        var selected = RunLoop.SelectScenarios([a, b], selector: null);
 
         Assert.Equal(["a", "b"], selected.Select(d => d.ScenarioId).Order());
     }
@@ -102,7 +100,7 @@ public class RunLoopTests
     {
         var a = Definition("a", "A", Node(0, "x", "x"));
 
-        var selected = RaunRunLoop.SelectScenarios([a], selector: Select());
+        var selected = RunLoop.SelectScenarios([a], selector: Select());
 
         Assert.Empty(selected);
     }
@@ -115,7 +113,7 @@ public class RunLoopTests
 
         // Three step uids of the SAME scenario must map to a single distinct scenario.
         var selector = Select(Uid("a", "x"), Uid("a", "y"), Uid("a", "z"));
-        var selected = RaunRunLoop.SelectScenarios([a, b], selector);
+        var selected = RunLoop.SelectScenarios([a, b], selector);
 
         var only = Assert.Single(selected);
         Assert.Equal("a", only.ScenarioId);
@@ -129,7 +127,7 @@ public class RunLoopTests
         var c = Definition("c", "C", Node(0, "z", "z"));
 
         var selector = Select(Uid("a", "x"), Uid("c", "z"));
-        var selected = RaunRunLoop.SelectScenarios([a, b, c], selector);
+        var selected = RunLoop.SelectScenarios([a, b, c], selector);
 
         Assert.Equal(["a", "c"], selected.Select(d => d.ScenarioId).Order());
     }
@@ -145,7 +143,7 @@ public class RunLoopTests
             Node(2, "z", "z", dependsOn: [1]));
 
         var runs = 0;
-        var loop = new RaunRunLoop(
+        var loop = new RunLoop(
             () => [def],
             runScenario: (_, _, _, _, _) => { Interlocked.Increment(ref runs); return Task.FromResult<IReadOnlyList<StepResult>>([]); });
 
@@ -166,7 +164,7 @@ public class RunLoopTests
             Node(1, "y", "y", dependsOn: [0]),
             Node(2, "z", "z", dependsOn: [1]));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
 
         var sink = new RecordingSink();
         var selector = Select(Uid("chain", "z"));
@@ -184,7 +182,7 @@ public class RunLoopTests
         var a = Definition("a", "A", Node(0, "x", "x"));
         var b = Definition("b", "B", Node(0, "y", "y"));
 
-        var loop = new RaunRunLoop(() => [a, b]);
+        var loop = new RunLoop(() => [a, b]);
 
         var sink = new RecordingSink();
         await loop.RunAsync(selector: null, sink, CancellationToken.None);
@@ -223,7 +221,7 @@ public class RunLoopTests
         var b = Definition("b", "B", Node(0, "y", "y", invoke: Body));
         var c = Definition("c", "C", Node(0, "z", "z", invoke: Body));
 
-        var loop = new RaunRunLoop(() => [a, b, c], maxParallelScenarios: 1);
+        var loop = new RunLoop(() => [a, b, c], maxParallelScenarios: 1);
         await loop.RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         Assert.Equal(1, max);
@@ -266,7 +264,7 @@ public class RunLoopTests
             .ToArray();
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
+        await new RunLoop(() => definitions, maxParallelScenarios: 3)
             .RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(3, max);
@@ -298,7 +296,7 @@ public class RunLoopTests
         var c = Definition("c", "C", Node(0, "z", "z", invoke: (_, _) => { cStarted.TrySetResult(); return Task.FromResult<object?>(null); }));
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => [a, b, c], maxParallelScenarios: 3).RunAsync(selector: null, sink, CancellationToken.None);
+        await new RunLoop(() => [a, b, c], maxParallelScenarios: 3).RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(1, dbMax);
         Assert.Equal(3, sink.PassedUids.Count());
@@ -331,7 +329,7 @@ public class RunLoopTests
             Node(0, "z", "z", invoke: (_, _) => { seenBySweeper = Volatile.Read(ref sharedFinished); return Task.FromResult<object?>(null); }));
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => [s1, s2, sweeper], maxParallelScenarios: 3).RunAsync(selector: null, sink, CancellationToken.None);
+        await new RunLoop(() => [s1, s2, sweeper], maxParallelScenarios: 3).RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(2, seenBySweeper);
         var sweepStarted = Assert.Single(sink.Events.OfType<ScenarioStarted>(), e => e.Definition.ScenarioId == "sweep");
@@ -373,7 +371,7 @@ public class RunLoopTests
             .ToArray();
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => definitions, maxParallelScenarios: 4).RunAsync(selector: null, sink, CancellationToken.None);
+        await new RunLoop(() => definitions, maxParallelScenarios: 4).RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(2, max);
         Assert.Equal(4, sink.PassedUids.Count());
@@ -396,7 +394,7 @@ public class RunLoopTests
         var d = Definition("d", "D", Node(0, "w", "w", invoke: (_, _) => { dStarted.TrySetResult(); return Task.FromResult<object?>(null); }));
 
         var sink = new RecordingSink();
-        await new RaunRunLoop(() => [a, b, c, d], maxParallelScenarios: 2).RunAsync(selector: null, sink, CancellationToken.None);
+        await new RunLoop(() => [a, b, c, d], maxParallelScenarios: 2).RunAsync(selector: null, sink, CancellationToken.None);
 
         Assert.Equal(["a", "c", "d", "b"], sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
     }
@@ -414,7 +412,7 @@ public class RunLoopTests
         var opener = Definition("open", "opener", Node(0, "z", "z", invoke: (_, _) => { release.TrySetResult(); return Task.FromResult<object?>(null); }));
         using var capture = new SpanCapture();
 
-        await new RaunRunLoop(() => [holder, waiter, opener], maxParallelScenarios: 3)
+        await new RunLoop(() => [holder, waiter, opener], maxParallelScenarios: 3)
             .RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         var holderSpan = Assert.Single(capture.ForScenario(holderId), s => s.DisplayName == "holder");
@@ -435,10 +433,10 @@ public class RunLoopTests
         // let "a" finish, publish RunFinished once, and surface the gate's error from RunAsync.
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var a = Definition("a", "A", Node(0, "x", "x", invoke: async (_, _) => { await release.Task.WaitAsync(TimeSpan.FromSeconds(10)); return null; }));
-        var bad = Definition("bad", "Bad", [new ContendedResourceUse(typeof(MisdeclaredToken), LockMode.Shared)], Node(0, "y", "y"));
+        var bad = Definition("bad", "Bad", [new ContendedResourceUse(typeof(NoKind), LockMode.Shared)], Node(0, "y", "y"));
         var never = Definition("never", "Never", Node(0, "z", "z"));
         var sink = new RecordingSink();
-        var loop = new RaunRunLoop(() => [a, bad, never], maxParallelScenarios: 3);
+        var loop = new RunLoop(() => [a, bad, never], maxParallelScenarios: 3);
 
         var run = loop.RunAsync(selector: null, sink, CancellationToken.None).AsTask();
 
@@ -448,7 +446,7 @@ public class RunLoopTests
         release.TrySetResult();
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await run);
 
-        Assert.Contains(nameof(MisdeclaredToken), ex.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(NoKind), ex.Message, StringComparison.Ordinal);
         Assert.Equal(["a"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId));
         Assert.DoesNotContain("never", sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
         Assert.Single(sink.Events.OfType<RunFinished>());
@@ -481,7 +479,7 @@ public class RunLoopTests
         var definitions = new[] { Def("one", stops: true), Def("two", false), Def("three", false), Def("four", false) };
         var sink = new RecordingSink();
 
-        await new RaunRunLoop(() => definitions, maxParallelScenarios: 1, stopSignal: signal)
+        await new RunLoop(() => definitions, maxParallelScenarios: 1, stopSignal: signal)
             .RunAsync(selector: null, sink, CancellationToken.None);
 
         lock (sync)
@@ -496,9 +494,9 @@ public class RunLoopTests
     [Fact]
     public void A_negative_degree_is_rejected_and_zero_means_the_processor_count()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new RaunRunLoop(() => [], maxParallelScenarios: -1));
-        Assert.Equal(Environment.ProcessorCount, new RaunRunLoop(() => []).MaxParallelScenarios);
-        Assert.Equal(2, new RaunRunLoop(() => [], maxParallelScenarios: 2).MaxParallelScenarios);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RunLoop(() => [], maxParallelScenarios: -1));
+        Assert.Equal(Environment.ProcessorCount, new RunLoop(() => []).MaxParallelScenarios);
+        Assert.Equal(2, new RunLoop(() => [], maxParallelScenarios: 2).MaxParallelScenarios);
     }
 
     [Fact]
@@ -508,7 +506,7 @@ public class RunLoopTests
         var b = Definition("b", "B", Node(0, "y", "y"));
         var sink = new RecordingSink();
 
-        await new RaunRunLoop(() => [a, b], preflight: _ => Task.CompletedTask, maxParallelScenarios: 2)
+        await new RunLoop(() => [a, b], preflight: _ => Task.CompletedTask, maxParallelScenarios: 2)
             .RunAsync(selector: null, sink, CancellationToken.None);
 
         var started = Assert.Single(sink.Events.OfType<RunStarted>());
@@ -525,7 +523,7 @@ public class RunLoopTests
         var c = Definition("c", "C", Node(0, "z", "z"));
         var sink = new RecordingSink();
 
-        await new RaunRunLoop(
+        await new RunLoop(
                 () => [a, b, c],
                 preflight: _ => throw new InvalidOperationException("no container runtime"),
                 maxParallelScenarios: 3)
@@ -562,7 +560,7 @@ public class RunLoopTests
                 return Task.FromResult<object?>(null);
             }));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
 
         var sink = new RecordingSink();
         // Both steps are selected: a filter naming only "lonely" would (correctly) leave "sibling" out.
@@ -582,7 +580,7 @@ public class RunLoopTests
         var def = Definition("scn", "scn",
             Node(0, "x", "x", invoke: (_, _) => { bodyRan = true; return Task.FromResult<object?>(null); }));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -610,7 +608,7 @@ public class RunLoopTests
         var second = Definition("second", "second",
             Node(0, "b", "b", invoke: (_, _) => { secondRan = true; return Task.FromResult<object?>(null); }));
 
-        var loop = new RaunRunLoop(() => [first, second], maxParallelScenarios: 1);
+        var loop = new RunLoop(() => [first, second], maxParallelScenarios: 1);
 
         var sink = new RecordingSink();
         await loop.RunAsync(selector: null, sink, cts.Token);
@@ -641,7 +639,7 @@ public class RunLoopTests
         var definitions = new[] { Def("one", cancels: true), Def("two", false), Def("three", false), Def("four", false), Def("five", false) };
         var sink = new RecordingSink();
 
-        await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
+        await new RunLoop(() => definitions, maxParallelScenarios: 3)
             .RunAsync(selector: null, sink, cts.Token);
 
         var startedIds = sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId).ToList();
@@ -688,7 +686,7 @@ public class RunLoopTests
         var boom = Definition("boom", "Boom", Node(0, "y", "y"));
         var c = Definition("c", "C", Node(0, "z", "z"));
         var sink = new RecordingSink();
-        var loop = new RaunRunLoop(() => [a, boom, c], runScenario: Seam, maxParallelScenarios: 3);
+        var loop = new RunLoop(() => [a, boom, c], runScenario: Seam, maxParallelScenarios: 3);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await loop.RunAsync(selector: null, sink, CancellationToken.None));
@@ -696,60 +694,6 @@ public class RunLoopTests
         Assert.Equal("scheduler bug", ex.Message);
         Assert.Equal(["a", "c"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId).Order());
         Assert.Single(sink.Events.OfType<RunFinished>());
-    }
-
-    [Fact]
-    public async Task Through_the_framework_run_request_executes_the_registered_scenario()
-    {
-        // End-to-end through RaunTestFramework.OnExecute (registry-backed), proving the framework
-        // wires the run loop into the run request path.
-        var method = $"Raun.Mtp.Test.RunLoop.{Guid.NewGuid():N}";
-        ScenarioRegistry.Register(method, () => Definition("fw-scn", "fw scenario",
-            Node(0, "a", "a"),
-            Node(1, "b", "b", dependsOn: [0])));
-
-        var framework = new RaunTestFramework();
-        var uid = new SessionUid("fw-run");
-        await framework.CreateTestSession(uid);
-
-        var bus = new RecordingMessageBus();
-        var completed = false;
-        await framework.OnExecute(uid, filter: null, bus, () => completed = true, CancellationToken.None);
-
-        Assert.True(completed);
-        var passed = bus.Nodes
-            .Where(n => n.Properties.OfType<PassedTestNodeStateProperty>().Length != 0)
-            .Select(n => n.Uid.Value).ToList();
-        Assert.Contains("fw-scn:a", passed);
-        Assert.Contains("fw-scn:b", passed);
-    }
-
-    /// <summary>A filter type Raun has never seen — what a future platform version could hand over.</summary>
-    private sealed class UnknownFilter : ITestExecutionFilter
-    {
-    }
-
-    [Fact]
-    public async Task An_unrecognized_filter_runs_everything_instead_of_failing_the_run()
-    {
-        // A filter Raun cannot honour is a reason to over-select, never to abort: aborting turns a
-        // future platform filter into a hard run failure for something the user did not do wrong.
-        var method = $"Raun.Mtp.Test.UnknownFilter.{Guid.NewGuid():N}";
-        ScenarioRegistry.Register(method, () => Definition("uf-scn", "unknown filter scenario",
-            Node(0, "a", "a"),
-            Node(1, "b", "b", dependsOn: [0])));
-
-        var framework = new RaunTestFramework();
-        var uid = new SessionUid("uf-run");
-        await framework.CreateTestSession(uid);
-
-        var bus = new RecordingMessageBus();
-        var completed = false;
-        await framework.OnExecute(uid, new UnknownFilter(), bus, () => completed = true, CancellationToken.None);
-
-        Assert.True(completed);
-        Assert.Contains(bus.Nodes, n => n.Uid.Value == Uid("uf-scn", "a"));
-        Assert.Contains(bus.Nodes, n => n.Uid.Value == Uid("uf-scn", "b"));
     }
 
     // -- Simulated-time opt-in threaded through the loop (A4) -------------------------------------
@@ -767,7 +711,7 @@ public class RunLoopTests
             Node(1, "slow", "slow", dependsOn: [0], invoke: Elapse(slow)),
             Node(2, "fast", "fast", dependsOn: [0], invoke: Elapse(fast)));
 
-        var loop = new RaunRunLoop(() => [def], runScenario: null, simulateTime: true);
+        var loop = new RunLoop(() => [def], runScenario: null, simulateTime: true);
         var sink = new RecordingSink();
         await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
@@ -793,37 +737,13 @@ public class RunLoopTests
         var def = Definition("real", "real",
             Node(0, "x", "x", invoke: Elapse(TimeSpan.FromSeconds(5))));
 
-        var loop = new RaunRunLoop(() => [def]); // simulateTime defaults to false
+        var loop = new RunLoop(() => [def]); // simulateTime defaults to false
         var sink = new RecordingSink();
         await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
         var finished = sink.Events.OfType<StepFinished>().Single(e => e.Result.Status == StepStatus.Passed);
         Assert.True(finished.Result.Duration < TimeSpan.FromSeconds(1),
             $"real mode must not absorb the simulated 5s (was {finished.Result.Duration})");
-    }
-
-    [Fact]
-    public async Task Framework_built_with_simulateTime_threads_the_flag_to_the_scheduler()
-    {
-        // The (IServiceProvider, bool) overload carries the opt-in flag from RunAsync down through the run
-        // loop to the scheduler: a body that SimulateElapsed(800ms) reports exactly that on the published
-        // node's TimingProperty — only reachable if simulated mode arrived at the scheduler.
-        var method = $"Raun.Mtp.Test.SimRun.{Guid.NewGuid():N}";
-        var work = TimeSpan.FromMilliseconds(800);
-        ScenarioRegistry.Register(method, () => Definition("sim-fw", "sim scenario",
-            Node(0, "a", "a", invoke: Elapse(work))));
-
-        var framework = new RaunTestFramework(services: null!, simulateTime: true);
-        var uid = new SessionUid("sim-fw-run");
-        await framework.CreateTestSession(uid);
-
-        var bus = new RecordingMessageBus();
-        await framework.OnExecute(uid, filter: null, bus, () => { }, CancellationToken.None);
-
-        var node = bus.Nodes.Single(n => n.Uid.Value == "sim-fw:a"
-            && n.Properties.OfType<PassedTestNodeStateProperty>().Length != 0);
-        var timing = node.Properties.OfType<TimingProperty>().Single();
-        Assert.Equal(work, timing.GlobalTiming.Duration);
     }
 
     // -- Service provider threaded through the loop into ScenarioContext.Services ------------------
@@ -838,7 +758,7 @@ public class RunLoopTests
             Node(0, "x", "x", invoke: (_, ctx) => { seen = ctx.Services; return Task.FromResult<object?>(null); }));
 
         var provider = new StubServiceProvider();
-        var loop = new RaunRunLoop(() => [def], services: provider);
+        var loop = new RunLoop(() => [def], services: provider);
         await loop.RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         Assert.Same(provider, seen);
@@ -847,13 +767,13 @@ public class RunLoopTests
     [Fact]
     public async Task No_provider_leaves_ScenarioContext_Services_null_without_throwing()
     {
-        // The null path is real: RaunTestFramework's parameterless ctor leaves the provider null.
+        // The null path is real: an adapter built without a provider leaves it null.
         IServiceProvider? seen = new StubServiceProvider();
         var ran = false;
         var def = Definition("no-di", "no-di",
             Node(0, "x", "x", invoke: (_, ctx) => { seen = ctx.Services; ran = true; return Task.FromResult<object?>(null); }));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
         var sink = new RecordingSink();
         await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
@@ -862,74 +782,10 @@ public class RunLoopTests
         Assert.Contains(Uid("no-di", "x"), sink.PassedUids);
     }
 
-    [Fact]
-    public async Task Framework_built_with_a_provider_threads_it_to_the_step_context()
-    {
-        // End-to-end: the CONSUMER's provider -> run loop -> scheduler -> ctx.Services.
-        //
-        // MTP's own provider is deliberately NOT what steps see. It carries platform internals
-        // (command-line options, the logger factory), and letting a step resolve those would couple
-        // user code to the platform. The framework keeps it for its own use and threads the
-        // consumer's provider — the one built in their Program.cs — to step bodies instead.
-        var method = $"Raun.Mtp.Test.DiRun.{Guid.NewGuid():N}";
-        IServiceProvider? seen = null;
-        ScenarioRegistry.Register(method, () => Definition("di-fw", "di scenario",
-            Node(0, "a", "a", invoke: (_, ctx) => { seen = ctx.Services; return Task.FromResult<object?>(null); })));
-
-        var mtpProvider = new StubServiceProvider();
-        var userProvider = new StubServiceProvider();
-        var framework = new RaunTestFramework(mtpProvider, simulateTime: false, userProvider);
-        var uid = new SessionUid("di-fw-run");
-        await framework.CreateTestSession(uid);
-
-        await framework.OnExecute(uid, filter: null, new RecordingMessageBus(), () => { }, CancellationToken.None);
-
-        Assert.Same(userProvider, seen);
-        Assert.NotSame(mtpProvider, seen);
-    }
-
-    [Fact]
-    public async Task Without_a_consumer_provider_the_step_context_has_no_services()
-    {
-        // MTP's provider must not leak in as a fallback.
-        var method = $"Raun.Mtp.Test.DiRun.{Guid.NewGuid():N}";
-        IServiceProvider? seen = null;
-        var ran = false;
-        ScenarioRegistry.Register(method, () => Definition("di-none", "no di scenario",
-            Node(0, "a", "a", invoke: (_, ctx) => { seen = ctx.Services; ran = true; return Task.FromResult<object?>(null); })));
-
-        var framework = new RaunTestFramework(new StubServiceProvider());
-        var uid = new SessionUid("di-none-run");
-        await framework.CreateTestSession(uid);
-
-        await framework.OnExecute(uid, filter: null, new RecordingMessageBus(), () => { }, CancellationToken.None);
-
-        Assert.True(ran);
-        Assert.Null(seen);
-    }
-
-    /// <summary>
-    /// A provider standing in for MTP's own. Identity is what these tests assert on; it only has to
-    /// answer <see cref="ICommandLineOptions"/> because the framework consults it (for --report-html)
-    /// before the run loop starts, and MTP's accessor extension throws on a missing service.
-    /// </summary>
+    /// <summary>A provider whose identity is all these tests assert on.</summary>
     private sealed class StubServiceProvider : IServiceProvider
     {
-        public object? GetService(Type serviceType) =>
-            serviceType == typeof(ICommandLineOptions) ? new NoOptions() : null;
-
-        private sealed class NoOptions : ICommandLineOptions
-        {
-            public bool IsOptionSet(string optionName) => false;
-
-            public bool TryGetOptionArgumentList(
-                string optionName,
-                [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string[]? arguments)
-            {
-                arguments = null;
-                return false;
-            }
-        }
+        public object? GetService(Type serviceType) => null;
     }
 
     private sealed class RecordingSink : IRunEventSink
@@ -953,26 +809,6 @@ public class RunLoopTests
             .Select(e => StepUid.Of(e.Definition.ScenarioId, e.Result.Node.StepId));
     }
 
-    private sealed class RecordingMessageBus : IMessageBus
-    {
-        private readonly List<TestNodeUpdateMessage> updates = [];
-
-        public IReadOnlyList<TestNode> Nodes
-        {
-            get { lock (updates) { return updates.Select(u => u.TestNode).ToList(); } }
-        }
-
-        public Task PublishAsync(IDataProducer dataProducer, IData data)
-        {
-            if (data is TestNodeUpdateMessage update)
-            {
-                lock (updates) { updates.Add(update); }
-            }
-
-            return Task.CompletedTask;
-        }
-    }
-
     [Fact]
     public async Task Conditional_scenario_runs_the_taken_arm_and_reports_the_other_as_not_green()
     {
@@ -984,7 +820,7 @@ public class RunLoopTests
             Node(2, "standard", "create standard", dependsOn: [0], guards: [new Guard(0, false)]),
             Node(3, "merge", "«merge appt»", mergeSources: [1, 2], synthetic: true));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
         var sink = new RecordingSink();
         await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
@@ -1004,7 +840,7 @@ public class RunLoopTests
                 evaluate: static o => (bool)o!),
             Node(1, "urgent", "create urgent", dependsOn: [0], guards: [new Guard(0, true)]));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
         var sink = new RecordingSink();
         await loop.RunAsync(selector: null, sink, CancellationToken.None);
 
@@ -1027,7 +863,7 @@ public class RunLoopTests
             Node(1, "y", "y", dependsOn: [0]),
             Node(2, "z", "z", dependsOn: [1]));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
         var sink = new RecordingSink();
         await loop.RunAsync(Select(Uid("chain", "y")), sink, CancellationToken.None);
 
@@ -1046,7 +882,7 @@ public class RunLoopTests
             Node(1, "left", "left", dependsOn: [0]),
             Node(2, "right", "right", dependsOn: [0]));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
         var sink = new RecordingSink();
         await loop.RunAsync(Select(Uid("fork", "left")), sink, CancellationToken.None);
 
@@ -1064,7 +900,7 @@ public class RunLoopTests
             Node(2, "urgent", "urgent", dependsOn: [1], guards: [new Guard(1, true)]),
             Node(3, "notify", "notify", dependsOn: [0]));
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
         var sink = new RecordingSink();
         await loop.RunAsync(Select(Uid("cond", "urgent")), sink, CancellationToken.None);
 
@@ -1092,7 +928,7 @@ public class RunLoopTests
             Node(1, "y", "y", dependsOn: [0]),
             teardown);
 
-        var loop = new RaunRunLoop(() => [def]);
+        var loop = new RunLoop(() => [def]);
         var sink = new RecordingSink();
         await loop.RunAsync(Select(Uid("td", "x")), sink, CancellationToken.None);
 
@@ -1106,9 +942,9 @@ public class RunLoopTests
     {
         var def = Definition("a", "A", Node(0, "x", "x"), Node(1, "y", "y"), Node(2, "z", "z"));
 
-        Assert.Null(RaunRunLoop.SelectTargets(def, selector: null));
+        Assert.Null(RunLoop.SelectTargets(def, selector: null));
 
-        var targets = RaunRunLoop.SelectTargets(
+        var targets = RunLoop.SelectTargets(
             def, Select(Uid("a", "y"), Uid("other", "x")));
         Assert.Equal([1], targets!.Order());
     }
@@ -1167,7 +1003,7 @@ public class RunLoopTests
             Node(1, "y", "y", dependsOn: [0]));
         using var capture = new SpanCapture();
 
-        await new RaunRunLoop(() => [def]).RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
+        await new RunLoop(() => [def]).RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         var spans = capture.ForScenario(scenarioId);
         var scenario = Assert.Single(spans, s => s.DisplayName == "traced scenario");
@@ -1216,7 +1052,7 @@ public class RunLoopTests
         var definitions = ids.Select(id => Definition(id, "traced " + id, Node(0, "x", "x", invoke: Body), Node(1, "y", "y", dependsOn: [0]))).ToArray();
         using var capture = new SpanCapture();
 
-        await new RaunRunLoop(() => definitions, maxParallelScenarios: 3)
+        await new RunLoop(() => definitions, maxParallelScenarios: 3)
             .RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         foreach (var id in ids)
@@ -1245,7 +1081,7 @@ public class RunLoopTests
             Node(0, "x", "x", invoke: (_, _) => throw new InvalidOperationException("boom")));
         using var capture = new SpanCapture();
 
-        await new RaunRunLoop(() => [def]).RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
+        await new RunLoop(() => [def]).RunAsync(selector: null, new RecordingSink(), CancellationToken.None);
 
         var scenario = Assert.Single(capture.ForScenario(scenarioId), s => s.DisplayName == "failing scenario");
         Assert.Equal("failure", scenario.GetTagItem(RaunTelemetry.Attributes.TestSuiteRunStatus));

@@ -5,10 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Raun.Reporting;
 using Raun.Scheduling;
 
-namespace Raun.Mtp;
+namespace Raun.Running;
 
 /// <summary>
-/// The run loop (design §5): turns a run request's filter into a set of <em>distinct</em> scenarios
+/// The run loop: turns a run request's selection into a set of <em>distinct</em> scenarios
 /// and runs each one exactly once through a <see cref="ScenarioScheduler"/>, emitting the run-event
 /// envelope (<see cref="RunStarted"/> → per-scenario <see cref="ScenarioStarted"/>/steps/
 /// <see cref="ScenarioFinished"/> → <see cref="RunFinished"/>) onto an <see cref="IRunEventSink"/>.
@@ -29,7 +29,7 @@ namespace Raun.Mtp;
 /// <em>within</em> a scenario.
 /// </para>
 /// </remarks>
-internal sealed class RaunRunLoop
+public sealed class RunLoop
 {
     /// <summary>Runs one scenario to completion and returns its step results. Tests substitute this
     /// to observe how many runs the loop issues; the default drives a real <see cref="ScenarioScheduler"/>.</summary>
@@ -64,8 +64,7 @@ internal sealed class RaunRunLoop
     /// <param name="services">
     /// The service provider handed to every <see cref="ScenarioContext"/> the default runner creates,
     /// surfacing as <c>ctx.Services</c> to step bodies. <see langword="null"/> (the default) is a real,
-    /// supported path — <see cref="RaunTestFramework"/>'s parameterless ctor has no provider — and
-    /// leaves <c>ctx.Services</c> null. Ignored when an explicit <paramref name="runScenario"/> seam is supplied.
+    /// supported path — an adapter built without a provider — and leaves <c>ctx.Services</c> null. Ignored when an explicit <paramref name="runScenario"/> seam is supplied.
     /// </param>
     /// <param name="preflight">
     /// Run-level setup executed once before any scenario and reported as its own node. When it fails,
@@ -82,7 +81,7 @@ internal sealed class RaunRunLoop
     /// admitting scenarios; whatever is running drains and reports, exactly as it does when a
     /// scenario faults. <see langword="null"/> (the default) means no stop can be requested.
     /// </param>
-    public RaunRunLoop(
+    public RunLoop(
         Func<IEnumerable<ScenarioDefinition>> scenarioSource,
         RunScenario? runScenario = null,
         bool simulateTime = false,
@@ -448,7 +447,7 @@ internal sealed class RaunRunLoop
             return "failure";
         }
 
-        if (results.Any(r => r.Status == StepStatus.Skipped && r.SkipReason == "scenario canceled"))
+        if (results.Any(r => r.Status == StepStatus.Skipped && r.SkipReason == ScenarioScheduler.CanceledSkipReason))
         {
             return "aborted";
         }

@@ -1,3 +1,4 @@
+using Raun.Running;
 using Xunit;
 
 namespace Raun.Mtp.Test;
@@ -9,26 +10,12 @@ namespace Raun.Mtp.Test;
 public class CapabilitiesTests
 {
     [Fact]
-    public void A_fresh_stop_signal_is_not_requested()
-        => Assert.False(new RunStopSignal().IsStopRequested);
-
-    [Fact]
     public async Task The_graceful_stop_capability_requests_the_stop()
     {
         var signal = new RunStopSignal();
         var capability = new RaunGracefulStopCapability(signal);
 
         await capability.StopTestExecutionAsync(CancellationToken.None);
-
-        Assert.True(signal.IsStopRequested);
-    }
-
-    [Fact]
-    public void Requesting_a_stop_twice_is_harmless()
-    {
-        var signal = new RunStopSignal();
-        signal.Request();
-        signal.Request();
 
         Assert.True(signal.IsStopRequested);
     }

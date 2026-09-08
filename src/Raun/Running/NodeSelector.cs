@@ -1,14 +1,14 @@
 using Raun.Model;
 
-namespace Raun.Mtp;
+namespace Raun.Running;
 
 /// <summary>
 /// Decides which of a scenario's steps a discovery or run request selects. One abstraction serves
 /// discovery, scenario selection and target expansion, so "selected" means the same thing in all
-/// three. A <see langword="null"/> selector is the platform's no-filter case and selects everything;
+/// three. A <see langword="null"/> selector is the runner's no-filter case and selects everything;
 /// callers check for null rather than allocating a match-all instance.
 /// </summary>
-internal abstract class NodeSelector
+public abstract class NodeSelector
 {
     /// <summary>True when <paramref name="step"/> of <paramref name="definition"/> is selected.</summary>
     public abstract bool Matches(ScenarioDefinition definition, ScenarioNode step);
@@ -18,7 +18,7 @@ internal abstract class NodeSelector
 /// Selects the step nodes a runner named by uid (<c>{ScenarioId}:{StepId}</c>) — what an IDE sends
 /// when the user runs one test, and what <c>--filter-uid</c> carries.
 /// </summary>
-internal sealed class UidNodeSelector : NodeSelector
+public sealed class UidNodeSelector : NodeSelector
 {
     private readonly ISet<string> _uids;
 
