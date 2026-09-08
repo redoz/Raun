@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -36,6 +37,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.ConflictingParallelAccess,
         Descriptors.StepContextInCleanup,
         Descriptors.ContendedResourceKind,
+        Descriptors.InertContendedResourceUse,
     ];
 
     public override void Initialize(AnalysisContext context)
@@ -45,6 +47,25 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeMethod, SyntaxKind.MethodDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSymbolAction(AnalyzeNamedType, SymbolKind.NamedType);
+        context.RegisterCompilationStartAction(OnCompilationStart);
+    }
+
+    /// <summary>
+    /// RAUN016 needs a compilation-wide view: whether ANY scenario uses a resource exclusively, and how
+    /// many distinct scenarios use it at all, to decide whether the resource's capacity can ever bind.
+    /// A single syntax node can't answer that, so this registers its own per-compilation accumulator
+    /// (a scenario's reduced use is recorded as each [Scenario] method is visited) and reports once at
+    /// compilation end. Concurrent execution is enabled for this analyzer, so the accumulator is a
+    /// <see cref="ConcurrentDictionary{TKey,TValue}"/> keyed by symbol identity, and each entry
+    /// serializes its own writes.
+    /// </summary>
+    private static void OnCompilationStart(CompilationStartAnalysisContext context)
+    {
+        var usage = new ConcurrentDictionary<INamedTypeSymbol, ResourceUsageAccumulator>(SymbolEqualityComparer.Default);
+
+        context.RegisterSyntaxNodeAction(
+            ctx => AnalyzeScenarioResourceUse(ctx, usage), SyntaxKind.MethodDeclaration);
+        context.RegisterCompilationEndAction(ctx => ReportInertContendedResources(ctx, usage));
     }
 
     private static void AnalyzeNamedType(SymbolAnalysisContext context)
@@ -65,34 +86,243 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     /// keeps it out of the first parallel run.</summary>
     private static void AnalyzeContendedResource(SymbolAnalysisContext context, INamedTypeSymbol type)
     {
-        if (!type.AllInterfaces.Any(i => i.Name == "IContendedResource" && i.ContainingNamespace.ToDisplayString() == "Raun"))
+        if (!IsContendedResource(type))
         {
             return;
         }
 
+        var kind = ReadContendedResourceKind(type);
+        if (kind.KindsDeclared != 1 || kind.PoolTooSmall)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.ContendedResourceKind, type.Locations.FirstOrDefault(), type.Name));
+        }
+    }
+
+    private static bool IsContendedResource(INamedTypeSymbol type)
+        => type.AllInterfaces.Any(i => i.Name == "IContendedResource" && i.ContainingNamespace.ToDisplayString() == "Raun");
+
+    /// <summary>One resource type's declared kind + capacity, read once and shared by RAUN015 (is the
+    /// declaration itself valid?) and RAUN016 (given a valid declaration, can its capacity ever bind?).</summary>
+    private readonly record struct ContendedResourceKindInfo(int KindsDeclared, string Kind, int Capacity, bool PoolTooSmall);
+
+    private static ContendedResourceKindInfo ReadContendedResourceKind(INamedTypeSymbol type)
+    {
         var kinds = 0;
+        var kind = "";
+        var capacity = 0;
         var poolTooSmall = false;
         foreach (var attr in type.GetAttributes())
         {
             switch (attr.AttributeClass?.Name)
             {
                 case "ExclusiveResourceAttribute":
+                    kinds++;
+                    kind = "Exclusive";
+                    break;
                 case "SharedResourceAttribute":
                     kinds++;
+                    kind = "Shared";
                     break;
                 case "PooledResourceAttribute":
                     kinds++;
+                    kind = "Pooled";
+                    if (attr.ConstructorArguments.Length == 1 && attr.ConstructorArguments[0].Value is int cap)
+                    {
+                        capacity = cap;
+                    }
+
                     poolTooSmall = attr.ConstructorArguments.Length != 1
-                        || attr.ConstructorArguments[0].Value is not int capacity
-                        || capacity < 1;
+                        || attr.ConstructorArguments[0].Value is not int || capacity < 1;
                     break;
             }
         }
 
-        if (kinds != 1 || poolTooSmall)
+        return new ContendedResourceKindInfo(kinds, kind, capacity, poolTooSmall);
+    }
+
+    /// <summary>Per resource type: every scenario using it, and whether any of them uses it exclusively
+    /// (after per-scenario reduction — the same type wins the same way <c>ScenarioParser.AddUses</c>
+    /// reduces multiple sites on one scenario: Exclusive beats Shared). Thread-safe: entries are shared
+    /// across concurrent syntax-node-action invocations.</summary>
+    private sealed class ResourceUsageAccumulator
+    {
+        private readonly object _gate = new();
+        private readonly HashSet<IMethodSymbol> _scenarios = new(SymbolEqualityComparer.Default);
+        private bool _anyExclusive;
+        private Location? _firstUseLocation;
+
+        public void Record(IMethodSymbol scenario, bool exclusive, Location useLocation)
         {
+            lock (_gate)
+            {
+                _scenarios.Add(scenario);
+                _anyExclusive |= exclusive;
+                _firstUseLocation ??= useLocation;
+            }
+        }
+
+        public (int ScenarioCount, bool AnyExclusive, Location? FirstUseLocation) Snapshot()
+        {
+            lock (_gate)
+            {
+                return (_scenarios.Count, _anyExclusive, _firstUseLocation);
+            }
+        }
+    }
+
+    private static void AnalyzeScenarioResourceUse(
+        SyntaxNodeAnalysisContext context, ConcurrentDictionary<INamedTypeSymbol, ResourceUsageAccumulator> usage)
+    {
+        try
+        {
+            AnalyzeScenarioResourceUseCore(context, usage);
+        }
+        catch (Exception ex)
+        {
+            var location = ((MethodDeclarationSyntax)context.Node).Identifier.GetLocation();
             context.ReportDiagnostic(Diagnostic.Create(
-                Descriptors.ContendedResourceKind, type.Locations.FirstOrDefault(), type.Name));
+                Descriptors.UnhandledException, location, GeneratorSafety.Describe(ex)));
+        }
+    }
+
+    private static void AnalyzeScenarioResourceUseCore(
+        SyntaxNodeAnalysisContext context, ConcurrentDictionary<INamedTypeSymbol, ResourceUsageAccumulator> usage)
+    {
+        var method = (MethodDeclarationSyntax)context.Node;
+        if (context.SemanticModel.GetDeclaredSymbol(method) is not IMethodSymbol symbol
+            || !HasAttribute(symbol, "ScenarioAttribute"))
+        {
+            return;
+        }
+
+        // Reduce every site's [Uses<T>] to one entry per resource type for THIS scenario — Exclusive
+        // wins per type, same as ScenarioParser.AddUses — before folding into the compilation-wide
+        // accumulator, so a scenario that both shares and exclusively uses a resource (via different
+        // sites) correctly counts as an exclusive user of it.
+        var perScenario = new Dictionary<INamedTypeSymbol, (bool Exclusive, Location Location)>(SymbolEqualityComparer.Default);
+        foreach (var (resource, mode, location) in CollectScenarioUses(context, method, symbol))
+        {
+            var exclusive = mode == "Exclusive";
+            perScenario[resource] = perScenario.TryGetValue(resource, out var existing)
+                ? (existing.Exclusive || exclusive, existing.Location)
+                : (exclusive, location);
+        }
+
+        foreach (var pair in perScenario)
+        {
+            usage.GetOrAdd(pair.Key, static _ => new ResourceUsageAccumulator())
+                .Record(symbol, pair.Value.Exclusive, pair.Value.Location);
+        }
+    }
+
+    /// <summary>Every <c>[Uses&lt;T&gt;]</c> a scenario is subject to, matching what <c>ScenarioParser</c>
+    /// unions onto a scenario: every DSL method its body calls, the scenario method itself, its
+    /// containing types (walked outward), and the compilation's assembly attributes. Walking every
+    /// invocation (rather than reproducing the parser's lowering) is a safe superset — a use the
+    /// generator wouldn't actually emit can only make RAUN016 stay silent, never fire falsely.</summary>
+    private static IEnumerable<(INamedTypeSymbol Resource, string Mode, Location Location)> CollectScenarioUses(
+        SyntaxNodeAnalysisContext context, MethodDeclarationSyntax method, IMethodSymbol symbol)
+    {
+        if (method.Body is not null)
+        {
+            foreach (var invocation in method.Body.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                if (context.SemanticModel.GetSymbolInfo(invocation).Symbol is IMethodSymbol called)
+                {
+                    foreach (var use in UsesWithLocation(called.GetAttributes()))
+                    {
+                        yield return use;
+                    }
+                }
+            }
+        }
+
+        foreach (var use in UsesWithLocation(symbol.GetAttributes()))
+        {
+            yield return use;
+        }
+
+        for (var type = symbol.ContainingType; type is not null; type = type.ContainingType)
+        {
+            foreach (var use in UsesWithLocation(type.GetAttributes()))
+            {
+                yield return use;
+            }
+        }
+
+        foreach (var use in UsesWithLocation(context.SemanticModel.Compilation.Assembly.GetAttributes()))
+        {
+            yield return use;
+        }
+    }
+
+    /// <summary>Like <see cref="AttributeReader.Uses"/>, but paired with the application-site location
+    /// of the specific <c>[Uses&lt;T&gt;]</c> attribute, for RAUN016's fallback location when the
+    /// resource type has none of its own in this compilation.</summary>
+    private static IEnumerable<(INamedTypeSymbol Resource, string Mode, Location Location)> UsesWithLocation(
+        ImmutableArray<AttributeData> attributes)
+    {
+        foreach (var attr in attributes)
+        {
+            foreach (var (resource, mode) in AttributeReader.Uses(ImmutableArray.Create(attr)))
+            {
+                var location = attr.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? Location.None;
+                yield return (resource, mode, location);
+            }
+        }
+    }
+
+    /// <summary>
+    /// RAUN016: report once per resource type that is used by two or more scenarios, that no scenario
+    /// uses exclusively, and whose capacity can never bind: unbounded (Shared), or pooled with room for
+    /// every user (usingScenarioCount &lt;= capacity). An Exclusive-kind resource always binds once two
+    /// or more scenarios use it (capacity 1), so it never qualifies here.
+    /// </summary>
+    private static void ReportInertContendedResources(
+        CompilationAnalysisContext context, ConcurrentDictionary<INamedTypeSymbol, ResourceUsageAccumulator> usage)
+    {
+        foreach (var pair in usage)
+        {
+            try
+            {
+                var resource = pair.Key;
+                var (scenarioCount, anyExclusive, firstUseLocation) = pair.Value.Snapshot();
+
+                // Deliberately excluded: a resource used by fewer than two scenarios is inert today but
+                // is the normal state while a suite is being built up — warning here would fire on work
+                // in progress, not a real gap.
+                if (scenarioCount < 2 || anyExclusive)
+                {
+                    continue;
+                }
+
+                var kind = ReadContendedResourceKind(resource);
+                if (kind.KindsDeclared != 1)
+                {
+                    // RAUN015 already flags a malformed kind declaration; don't pile a second, less
+                    // meaningful diagnostic onto a type that's already broken.
+                    continue;
+                }
+
+                var capacityNeverBinds = kind.Kind switch
+                {
+                    "Shared" => true,
+                    "Pooled" => scenarioCount <= kind.Capacity,
+                    _ => false, // "Exclusive": capacity 1 always binds once scenarioCount >= 2 (guarded above)
+                };
+                if (!capacityNeverBinds)
+                {
+                    continue;
+                }
+
+                var location = resource.Locations.FirstOrDefault(l => l.IsInSource) ?? firstUseLocation ?? Location.None;
+                context.ReportDiagnostic(Diagnostic.Create(Descriptors.InertContendedResourceUse, location, resource.Name));
+            }
+            catch (Exception ex)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Descriptors.UnhandledException, Location.None, GeneratorSafety.Describe(ex)));
+            }
         }
     }
 

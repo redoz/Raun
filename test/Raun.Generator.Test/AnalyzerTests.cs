@@ -902,9 +902,22 @@ public class AnalyzerTests
     }
 
     [Fact]
-    public async Task Contended_resource_samples_are_clean()
+    public async Task Contended_resource_samples_flag_only_Audits_inert_assembly_wide_shared_use()
     {
-        Assert.Empty(await Analyze(SampleSources.UsesDsl + SampleSources.UsesScenario));
+        // UsesDsl's assembly-level [assembly: Uses<Audit>] has no exclusive counterpart anywhere, and
+        // (with UsesFreeScenario in play) two scenarios now use it, so RAUN016 is correct to flag Audit
+        // as inert. Database and Smtp stay clean: Database gets an exclusive use from its step, and
+        // Smtp is used by only one scenario (below RAUN016's two-scenario floor). Analyzed directly via
+        // GeneratorHarness.AnalyzeAsync (NOT the Dsl-prepending Analyze() helper): UsesDsl declares its
+        // own file-scoped `namespace UsesDemo;`, which cannot follow SampleSources.Dsl's own
+        // `namespace Demo;` in the same compilation unit — exactly like every other UsesDsl-based test
+        // (GeneratorSnapshotTests.Uses_scenario, UsesLoweringTests) already analyzes it standalone.
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            SampleSources.UsesDsl + SampleSources.UsesScenario + SampleSources.UsesFreeScenario);
+
+        var d = Assert.Single(diagnostics);
+        Assert.Equal("RAUN016", d.Id);
+        Assert.Contains("Audit", d.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -953,5 +966,127 @@ public class AnalyzerTests
             """
             public sealed class Plain;
             """));
+    }
+
+    // RAUN016: a resource is inert when no scenario uses it exclusively AND its capacity can never
+    // bind. Builds a self-contained compilation with one DSL step and one [Scenario] per element of
+    // `scenarioUsesClauses`, each carrying that clause's [Uses<Db>] attribute (or none, for an empty
+    // string). Independent of SampleSources — RAUN016 doesn't need the shared DSL's other scenarios.
+    private static string ContendedResourceScenarios(string resourceDeclaration, params string[] scenarioUsesClauses)
+    {
+        var scenarios = string.Join("\n\n", scenarioUsesClauses.Select((clause, i) =>
+            $$"""
+            public static class Scenario{{i}}
+            {
+                [Scenario("s{{i}}")]
+                {{clause}}
+                public static async Task Run{{i}}()
+                {
+                    await Given.Step();
+                }
+            }
+            """));
+
+        return $$"""
+            using System.Threading.Tasks;
+            using Raun;
+
+            {{resourceDeclaration}}
+
+            public static class Steps
+            {
+                extension(Given)
+                {
+                    public static Task Step() => Task.CompletedTask;
+                }
+            }
+
+            {{scenarios}}
+            """;
+    }
+
+    private const string SharedDb =
+        """
+        [SharedResource]
+        public sealed class Db : IContendedResource;
+        """;
+
+    private const string ExclusiveDb =
+        """
+        [ExclusiveResource]
+        public sealed class Db : IContendedResource;
+        """;
+
+    private const string PooledDbCapacityTwo =
+        """
+        [PooledResource(2)]
+        public sealed class Db : IContendedResource;
+        """;
+
+    [Fact]
+    public async Task RAUN016_shared_resource_used_by_two_scenarios_neither_exclusive()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            ContendedResourceScenarios(SharedDb, "[Uses<Db>]", "[Uses<Db>]"));
+
+        var d = Assert.Single(diagnostics, x => x.Id == "RAUN016");
+        Assert.Contains("Db", d.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RAUN016_does_not_fire_when_one_use_is_exclusive()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            ContendedResourceScenarios(SharedDb, "[Uses<Db>]", "[Uses<Db>(LockMode.Exclusive)]"));
+
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
+    }
+
+    [Fact]
+    public async Task RAUN016_pooled_capacity_two_used_by_two_scenarios_still_never_binds()
+    {
+        // usingScenarioCount (2) <= capacity (2): capacity can never bind, so this qualifies exactly
+        // like an unbounded shared resource would. Per the rule as specified, this DOES report.
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            ContendedResourceScenarios(PooledDbCapacityTwo, "[Uses<Db>]", "[Uses<Db>]"));
+
+        var d = Assert.Single(diagnostics, x => x.Id == "RAUN016");
+        Assert.Contains("Db", d.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RAUN016_pooled_capacity_two_used_by_three_scenarios_binds()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            ContendedResourceScenarios(PooledDbCapacityTwo, "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]"));
+
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
+    }
+
+    [Fact]
+    public async Task RAUN016_does_not_fire_on_a_resource_used_by_only_one_scenario()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            ContendedResourceScenarios(SharedDb, "[Uses<Db>]"));
+
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
+    }
+
+    [Fact]
+    public async Task RAUN016_does_not_fire_on_an_exclusive_resource_used_by_two_scenarios()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            ContendedResourceScenarios(ExclusiveDb, "[Uses<Db>]", "[Uses<Db>]"));
+
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
+    }
+
+    [Fact]
+    public async Task RAUN016_fires_only_once_no_matter_how_many_scenarios_use_the_resource()
+    {
+        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+            ContendedResourceScenarios(SharedDb, "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]"));
+
+        Assert.Single(diagnostics, x => x.Id == "RAUN016");
     }
 }
