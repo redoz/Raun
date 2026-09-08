@@ -43,7 +43,7 @@ internal static class ScenarioNodePath
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(step);
 
-        ScenarioTestIdentity.Split(definition.MethodName, out var @namespace, out var typeName, out _);
+        ScenarioTestIdentity.Resolve(definition, out var @namespace, out var typeName);
         var type = string.IsNullOrEmpty(definition.ClassDisplayName) ? typeName : definition.ClassDisplayName!;
 
         return string.Concat(

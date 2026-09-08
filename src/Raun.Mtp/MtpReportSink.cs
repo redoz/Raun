@@ -90,8 +90,7 @@ internal sealed class MtpReportSink : RunEventSink
             DisplayName = StepNumbering.Format(labels, node, displayName),
         };
 
-        testNode.Properties.Add(ScenarioTestIdentity.Create(
-            definition.MethodName, definition.DisplayName, definition.ClassDisplayName));
+        testNode.Properties.Add(ScenarioTestIdentity.Create(definition));
 
         if (!string.IsNullOrEmpty(node.SourceFile) && node.SourceLine > 0)
         {

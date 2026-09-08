@@ -172,6 +172,8 @@ internal static class ScenarioEmitter
             Set("ScenarioId", Lit(scenario.ScenarioId)),
             Set("DisplayName", Lit(scenario.DisplayName)),
             Set("MethodName", Lit(scenario.MethodFullName)),
+            Set("Namespace", Lit(scenario.Namespace)),
+            Set("TypeName", Lit(scenario.TypeName)),
             Set("ClassDisplayName", Lit(scenario.ClassDisplayName)),
             Set("SourceFile", Lit(scenario.SourceFile)),
             Set("SourceLine", Num(scenario.SourceLine)),

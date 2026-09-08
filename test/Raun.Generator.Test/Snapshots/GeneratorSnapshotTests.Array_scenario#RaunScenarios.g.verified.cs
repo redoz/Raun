@@ -136,6 +136,8 @@ namespace Raun.Generated
                 ScenarioId = "903e3e1cb803db83",
                 DisplayName = "array import",
                 MethodName = "Demo.ArrayScenarios.Import",
+                Namespace = "Demo",
+                TypeName = "ArrayScenarios",
                 ClassDisplayName = null,
                 SourceFile = "",
                 SourceLine = 74,

@@ -809,4 +809,22 @@ public static class SampleSources
             }
         }
         """;
+
+    // A scenario on a nested type: MethodName stays the dotted form, but the model's TypeName joins
+    // the declaring types with '+', which a dotted split cannot recover.
+    public const string NestedTypeScenario =
+        """
+
+        public static class Outer
+        {
+            public static class Inner
+            {
+                [Scenario("nested")]
+                public static async Task Run()
+                {
+                    await Given.DatabaseIsClean();
+                }
+            }
+        }
+        """;
 }

@@ -127,6 +127,8 @@ internal sealed class HtmlReportModelBuilder
 
             var ordered = _results.OrderBy(r => r.Node.Index).ToList();
             var lanes = PackLanes(ordered, start);
+            // The same "1", "2.1" labels the MTP tree shows, so a step has one name across surfaces.
+            var labels = StepNumbering.Compute(Definition);
 
             var steps = new List<ReportStep>(ordered.Count);
             for (var i = 0; i < ordered.Count; i++)
@@ -139,7 +141,7 @@ internal sealed class HtmlReportModelBuilder
                 {
                     StepId = r.Node.StepId,
                     Index = r.Node.Index,
-                    Label = r.Node.Index.ToString(CultureInfo.InvariantCulture),
+                    Label = labels[r.Node.Index],
                     Phase = r.Node.Phase,
                     DisplayName = r.DisplayName,
                     Status = StatusText(r.Status),

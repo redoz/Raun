@@ -157,6 +157,8 @@ namespace Raun.Generated
                 ScenarioId = "c437082da1b43ab4",
                 DisplayName = "tuple booking",
                 MethodName = "Demo.TupleScenarios.Booking",
+                Namespace = "Demo",
+                TypeName = "TupleScenarios",
                 ClassDisplayName = null,
                 SourceFile = "",
                 SourceLine = 74,

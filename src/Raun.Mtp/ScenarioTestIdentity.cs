@@ -34,17 +34,52 @@ internal static class ScenarioTestIdentity
     private const string VoidReturnTypeName = "System.Void";
 
     /// <summary>
-    /// Builds the method-identity property for a scenario: namespace and type are derived from
-    /// <paramref name="methodFullName"/> (the scenario method's FQN), but the method node is the human
-    /// <paramref name="scenarioDisplayName"/> so a runner groups steps under the scenario name. When
-    /// <paramref name="classDisplayName"/> is non-empty it overrides the derived type name.
+    /// Builds the method-identity property for a scenario: namespace and type come from the
+    /// definition (see <see cref="Resolve"/>), but the method node is the human scenario display
+    /// name so a runner groups steps under the scenario name. A non-empty
+    /// <see cref="ScenarioDefinition.ClassDisplayName"/> overrides the type name.
+    /// </summary>
+    public static TestMethodIdentifierProperty Create(ScenarioDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        Resolve(definition, out var @namespace, out var typeName);
+        return Create(@namespace, typeName, definition.DisplayName, definition.ClassDisplayName);
+    }
+
+    /// <summary>
+    /// The namespace and declaring type of a scenario: what the generator recorded on the
+    /// definition when it is there, otherwise the dotted split of <see cref="ScenarioDefinition.MethodName"/>
+    /// (output of a generator older than the identity members). <see cref="ScenarioNodePath"/> uses
+    /// the same derivation so filtering and IDE grouping agree.
+    /// </summary>
+    public static void Resolve(ScenarioDefinition definition, out string @namespace, out string typeName)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (definition.TypeName.Length > 0)
+        {
+            @namespace = definition.Namespace;
+            typeName = definition.TypeName;
+            return;
+        }
+
+        Split(definition.MethodName, out @namespace, out typeName, out _);
+    }
+
+    /// <summary>
+    /// Builds the method-identity property from a method FQN alone: namespace and type are derived
+    /// by <see cref="Split"/>. This is the fallback path; prefer <see cref="Create(ScenarioDefinition)"/>.
     /// </summary>
     public static TestMethodIdentifierProperty Create(
         string methodFullName, string scenarioDisplayName, string? classDisplayName = null)
     {
-        ArgumentNullException.ThrowIfNull(scenarioDisplayName);
         Split(methodFullName, out var @namespace, out var typeName, out _);
+        return Create(@namespace, typeName, scenarioDisplayName, classDisplayName);
+    }
 
+    private static TestMethodIdentifierProperty Create(
+        string @namespace, string typeName, string scenarioDisplayName, string? classDisplayName)
+    {
+        ArgumentNullException.ThrowIfNull(scenarioDisplayName);
         var type = string.IsNullOrEmpty(classDisplayName) ? typeName : classDisplayName!;
 
         // Positional ctor args (assembly, namespace, type, method, method-arity, parameter-types,

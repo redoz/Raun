@@ -91,6 +91,8 @@ namespace Raun.Generated
                 ScenarioId = "edc37eeb8a916c81",
                 DisplayName = "greeting",
                 MethodName = "Demo.GreetScenarios.Greeting",
+                Namespace = "Demo",
+                TypeName = "GreetScenarios",
                 ClassDisplayName = null,
                 SourceFile = "",
                 SourceLine = 74,

@@ -50,6 +50,8 @@ internal readonly record struct ParseOutcome(ParsedScenario? Scenario, ParseReje
 internal sealed record ParsedScenario
 {
     public string MethodFullName { get; init; } = "";
+    public string Namespace { get; init; } = "";       // declaring namespace, "" for global
+    public string TypeName { get; init; } = "";        // declaring type, nested joined with '+'
     public string SafeName { get; init; } = "";        // identifier-safe form for generated members
     public string ScenarioId { get; init; } = "";
     public string DisplayName { get; init; } = "";

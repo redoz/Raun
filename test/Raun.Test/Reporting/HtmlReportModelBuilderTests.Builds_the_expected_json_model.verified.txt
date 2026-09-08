@@ -19,7 +19,7 @@
         {
           "StepId": "p",
           "Index": 0,
-          "Label": "0",
+          "Label": "1",
           "Phase": "Given",
           "DisplayName": "Given patient Jane exists",
           "Status": "passed",
@@ -47,7 +47,7 @@
         {
           "StepId": "s",
           "Index": 1,
-          "Label": "1",
+          "Label": "2",
           "Phase": "Given",
           "DisplayName": "Given an available slot exists",
           "Status": "passed",
@@ -67,7 +67,7 @@
         {
           "StepId": "c",
           "Index": 2,
-          "Label": "2",
+          "Label": "3",
           "Phase": "When",
           "DisplayName": "When creating an appointment",
           "Status": "passed",

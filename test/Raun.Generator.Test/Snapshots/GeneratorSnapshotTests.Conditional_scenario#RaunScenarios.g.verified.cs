@@ -194,6 +194,8 @@ namespace Raun.Generated
                 ScenarioId = "28414318685d340d",
                 DisplayName = "priority routing",
                 MethodName = "CondDemo.IfElseScenarios.Routing",
+                Namespace = "CondDemo",
+                TypeName = "IfElseScenarios",
                 ClassDisplayName = null,
                 SourceFile = "",
                 SourceLine = 72,

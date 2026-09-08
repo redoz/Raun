@@ -120,6 +120,8 @@ namespace Raun.Generated
                 ScenarioId = "c01f329e4fc6cd1a",
                 DisplayName = "suspended user cannot sign in",
                 MethodName = "ResourceDemo.ResourceScenarios.SuspendedUserCannotSignIn",
+                Namespace = "ResourceDemo",
+                TypeName = "ResourceScenarios",
                 ClassDisplayName = null,
                 SourceFile = "",
                 SourceLine = 78,

@@ -30,6 +30,7 @@ public class LoweringCoverageTests
         [nameof(SampleSources.VoidLinqScenario)] = SampleSources.Dsl,
         [nameof(SampleSources.EmptyArrayScenario)] = SampleSources.Dsl,
         [nameof(SampleSources.EmptyLinqScenario)] = SampleSources.Dsl,
+        [nameof(SampleSources.NestedTypeScenario)] = SampleSources.Dsl,
         [nameof(SampleSources.ResourceScenario)] = SampleSources.ResourceDsl,
         [nameof(SampleSources.BookingScenario)] = SampleSources.ResourceDsl,
         [nameof(SampleSources.LineageScenario)] = SampleSources.ResourceDsl,

@@ -133,4 +133,36 @@ public class ScenarioNodePathTests
         Assert.Equal("When", metadata["Phase"]);
         Assert.Equal("customer books", metadata["Scenario"]);
     }
+
+    [Fact]
+    public void The_namespace_and_class_segments_come_from_the_recorded_identity_when_present()
+    {
+        var step = Node("patient Jane exists");
+        var definition = new ScenarioDefinition
+        {
+            ScenarioId = "scn",
+            DisplayName = "customer books",
+            MethodName = "Demo.Outer.Inner.CustomerBooks",
+            Namespace = "Demo",
+            TypeName = "Outer+Inner",
+            Nodes = [step],
+        };
+
+        var segments = ScenarioNodePath.For(definition, step).Split('/');
+
+        Assert.Equal("Demo", segments[2]);
+        Assert.Equal("Outer+Inner", segments[3]);
+    }
+
+    [Fact]
+    public void Without_recorded_identity_the_segments_fall_back_to_splitting_the_method_name()
+    {
+        var step = Node("patient Jane exists");
+        var definition = Definition("Demo.Booking.CustomerBooks", "customer books", null, step);
+
+        var segments = ScenarioNodePath.For(definition, step).Split('/');
+
+        Assert.Equal("Demo", segments[2]);
+        Assert.Equal("Booking", segments[3]);
+    }
 }

@@ -152,6 +152,10 @@ internal sealed class ScenarioParser
         return new ParsedScenario
         {
             MethodFullName = methodFullName,
+            Namespace = _method.ContainingNamespace is { IsGlobalNamespace: false } declaringNamespace
+                ? declaringNamespace.ToDisplayString(SymbolHelpers.NoGlobal)
+                : "",
+            TypeName = DeclaringTypeName(_method.ContainingType),
             SafeName = SafeName(methodFullName),
             ScenarioId = _scenarioId,
             DisplayName = AttributeReader.ScenarioDisplayName(_method) ?? _method.Name,
@@ -180,6 +184,20 @@ internal sealed class ScenarioParser
                 _uses[fqn] = (TypeSyntaxFactory.From(resource), mode);
             }
         }
+    }
+
+    /// <summary>The declaring type's simple name, with nesting joined by <c>+</c> (outermost first),
+    /// which a dotted split of the method's full name cannot recover.</summary>
+    private static string DeclaringTypeName(INamedTypeSymbol type)
+    {
+        var parts = new List<string>();
+        for (var t = type; t is not null; t = t.ContainingType)
+        {
+            parts.Add(t.Name);
+        }
+
+        parts.Reverse();
+        return string.Join("+", parts);
     }
 
     private bool ParseStatement(StatementSyntax statement)

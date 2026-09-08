@@ -197,4 +197,15 @@ public class ModelTests
         // node resolves to the node the run reports.
         Assert.Equal("scn:b", StepUid.Of("scn", "b"));
     }
+
+    [Fact]
+    public void Namespace_and_type_name_default_to_empty_so_an_older_generator_still_binds()
+    {
+        // Optional, not required: generated code from before these members existed must still
+        // compile against this runtime, and readers fall back to splitting MethodName.
+        var def = Def(Node(0));
+
+        Assert.Equal("", def.Namespace);
+        Assert.Equal("", def.TypeName);
+    }
 }

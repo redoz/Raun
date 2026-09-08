@@ -90,6 +90,8 @@ namespace Raun.Generated
                 ScenarioId = "df09c8dfa69bf244",
                 DisplayName = "clears and reminds",
                 MethodName = "UsesDemo.UsesScenarios.ClearAndRemind",
+                Namespace = "UsesDemo",
+                TypeName = "UsesScenarios",
                 ClassDisplayName = null,
                 SourceFile = "",
                 SourceLine = 41,

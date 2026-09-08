@@ -367,4 +367,25 @@ public class HtmlReportModelBuilderTests
         Assert.Equal(1234, scenario.WaitedMs);
         Assert.Equal("ExclusiveDb", scenario.WaitedFor);
     }
+
+    [Fact]
+    public void Step_labels_are_the_numbering_the_runner_shows_not_the_node_index()
+    {
+        // A standalone step is "1"; a parallel group shares "2" with sub-numbers. The MTP tree already
+        // names steps this way, and the report must not call the same node something else.
+        var n0 = Node(0, "a", "Given", "a");
+        var n1 = Node(1, "b", "When", "b", dependsOn: [0], group: "g1");
+        var n2 = Node(2, "c", "When", "c", dependsOn: [0], group: "g1");
+        var def = Def(n0, n1, n2);
+
+        var builder = new HtmlReportModelBuilder();
+        builder.OnScenarioStarted(def);
+        builder.OnStepFinished(def, Result(n0, T0, 10));
+        builder.OnStepFinished(def, Result(n1, T0.AddMilliseconds(10), 5));
+        builder.OnStepFinished(def, Result(n2, T0.AddMilliseconds(10), 5));
+
+        var steps = builder.Build("now").Scenarios.Single().Steps;
+
+        Assert.Equal(["1", "2.1", "2.2"], steps.Select(s => s.Label));
+    }
 }
