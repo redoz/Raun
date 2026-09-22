@@ -74,8 +74,12 @@ generator as an analyzer), `Raun.Mtp`, and `Raun.Aspire`.
 The generator is packed in `Raun` under `analyzers/dotnet/roslyn5.3/cs`, and reaches a consumer of
 `Raun.Mtp` or `Raun.Aspire` transitively because those packages depend on `Raun` with
 `PrivateAssets="none"` (pack would otherwise write the dependency with `exclude="Build,Analyzers"`).
-A consumer whose compiler is older than Roslyn 5.3 gets no generator and no diagnostics, silently.
-Supported baseline today: the .NET 10 SDK. Adding an older baseline means a
+A consumer whose compiler is older than Roslyn 5.3 would get no generator and no diagnostics,
+silently — a build that succeeds and runs zero tests. `buildTransitive/Raun.props` therefore fails
+such a build up front with `RAUN018`, comparing `$(NETCoreSdkVersion)` against
+`$(RaunMinimumSdkVersion)` (10.0.300); `RaunSkipSdkCheck=true` is the escape hatch, and
+`test/Raun.Mtp.Test/SdkFloorTests.cs` drives the shipped props file over a range of versions.
+Supported baseline today: the .NET 10 SDK 10.0.300 or later. Adding an older baseline means a
 `Raun.Generator.RoslynNN` variant project (see `Directory.Build.props`), not a version bump.
 
 ## Generator ↔ runtime contract

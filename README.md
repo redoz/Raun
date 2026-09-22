@@ -23,6 +23,10 @@ A Roslyn source generator lowers the scenario method into a manifest + executor 
 
 ## Install
 
+**Requires the .NET 10 SDK, version 10.0.300 or later.** The DSL is C# 14 and the generator ships for
+Roslyn 5.3 and newer; an older compiler would load no generator at all — no scenarios, no diagnostics,
+a green run of zero tests — so Raun fails such a build with `RAUN018` instead.
+
 Packages are published to GitHub Packages for now: `Raun` (the runtime, with the source generator
 inside), `Raun.Mtp` (the Microsoft.Testing.Platform adapter, which depends on it), and `Raun.Aspire`.
 Every push to `main` publishes
@@ -53,8 +57,8 @@ dotnet add package xunit.v3.assert      # or any assertion library you like
 
 Raun generates the `Main` that boots Microsoft.Testing.Platform. To write your own entry point (the
 Aspire sample does, to build an AppHost first), set `<RaunGenerateProgram>false</RaunGenerateProgram>`
-and call `RaunTestApplication.RunAsync(args)` yourself. Baseline: the .NET 10 SDK; the generator ships
-for Roslyn 5.3 and newer.
+and call `RaunTestApplication.RunAsync(args)` yourself — see
+[Reports and extensions](#reports-and-extensions).
 
 ## How it works
 

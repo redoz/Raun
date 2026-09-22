@@ -16,4 +16,26 @@
     <CompilerVisibleProperty Include="RaunGenerateProgram" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <!-- The SDK a Raun consumer needs. The generator is packed under analyzers/dotnet/roslyn5.3/cs
+         and the DSL is written with C# 14 extension blocks, so an older compiler loads no generator
+         at all: no scenarios, no diagnostics, a green run of zero tests. That is far worse than a
+         build error, hence the check below. Raise this only together with the Roslyn baseline in
+         Directory.Build.props. -->
+    <RaunMinimumSdkVersion>10.0.300</RaunMinimumSdkVersion>
+  </PropertyGroup>
+
+  <!--
+    Fails the build on an SDK below the floor. Skipped when NETCoreSdkVersion is empty (something
+    other than the .NET SDK is driving MSBuild — guessing wrong would break a build for no reason)
+    and when RaunSkipSdkCheck is set, which is the escape hatch for a consumer who knows better.
+  -->
+  <Target Name="RaunCheckSdkFloor"
+          BeforeTargets="BeforeCompile"
+          Condition="'$(RaunSkipSdkCheck)' != 'true' and '$(NETCoreSdkVersion)' != ''">
+    <Error Condition="$([MSBuild]::VersionLessThan('$(NETCoreSdkVersion)', '$(RaunMinimumSdkVersion)'))"
+           Code="RAUN018"
+           Text="Raun requires the .NET SDK $(RaunMinimumSdkVersion) or later; this build is using $(NETCoreSdkVersion). An older compiler cannot load Raun's source generator, so no scenarios would be generated and no Raun diagnostics reported - the build would succeed and run zero tests. Install a newer SDK (or pin one with global.json). Set RaunSkipSdkCheck=true to bypass this check." />
+  </Target>
+
 </Project>
