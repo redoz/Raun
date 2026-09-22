@@ -17,6 +17,12 @@
     <!-- CS1591: don't require XML docs on every public member (yet).
          xUnit1051: our tests intentionally pass explicit CancellationTokens (timeout/cancel cases). -->
     <NoWarn>$(NoWarn);CS1591;xUnit1051</NoWarn>
+    <!-- Every project writes a packages.lock.json, and CI restores in locked mode: the exact
+         resolved graph (transitives included) is in the diff, and a restore can never silently pick
+         up a different package than the one that was reviewed. Central package management pins the
+         direct versions; the lock file pins everything they drag in, and the floating versions the
+         samples use. Regenerate after changing a reference with a force-evaluate restore. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <Product>Raun</Product>
     <Authors>Patrik Husfloen</Authors>
     <!-- No Version here: MinVer derives it from the nearest v* tag (see Directory.Build.targets). -->

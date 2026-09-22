@@ -1,0 +1,21 @@
+# Dependency updates, grouped so a week's bumps arrive as one reviewable PR per ecosystem rather
+# than one per package. NuGet versions are centrally managed (Directory.Packages.props) and pinned
+# by packages.lock.json, so a Dependabot PR updates both and CI re-restores with --locked-mode.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      all-nuget:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      all-actions:
+        patterns: ['*']

@@ -11,6 +11,22 @@ generator as an analyzer), `Raun.Mtp`, and `Raun.Aspire`.
   for local packing; never published.
 - A pre-release is a tag with a suffix: `v0.2.0-beta.1`. MinVer uses it verbatim.
 
+## Dependencies are locked
+
+`RestorePackagesWithLockFile` is on repo-wide, so every project carries a `packages.lock.json` with
+its fully resolved graph — transitives and the samples' floating `OpenTelemetry 1.*` included — and
+both workflows restore in locked mode before building. A restore therefore cannot pull a package
+nobody reviewed: changing a reference means regenerating the lock files in the same commit.
+
+```bash
+dotnet restore Raun.slnx --force-evaluate   # after adding/changing/removing a PackageReference
+dotnet restore Raun.slnx --locked-mode      # what CI does; fails if a lock file is stale
+```
+
+Dependabot proposes NuGet and GitHub Actions updates weekly, grouped into one PR per ecosystem.
+Workflow actions are pinned to commit SHAs with the tag in a trailing comment; Dependabot updates
+both together.
+
 ## Checklist
 
 1. `main` is green: `dotnet build Raun.slnx` (0 warnings) and `dotnet test Raun.slnx`.
