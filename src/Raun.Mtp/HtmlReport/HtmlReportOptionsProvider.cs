@@ -19,7 +19,7 @@ internal sealed class HtmlReportOptionsProvider : ICommandLineOptionsProvider
     public string Uid => "raun.mtp.htmlreport";
     public string Version => "1.0.0";
     public string DisplayName => "Raun HTML report";
-    public string Description => "Writes a self-contained raun-report.html (Gantt timeline + resource lane).";
+    public string Description => "Writes a self-contained raun-report.html (per-scenario step list with logs, effects and resource lineage).";
 
     public Task<bool> IsEnabledAsync() => Task.FromResult(true);
 
