@@ -18,12 +18,36 @@ internal readonly record struct SourceSpan(
 /// <see cref="Expression"/> is the rewritten argument expression (in terms of <c>__inputs</c>) for a
 /// parameter role, the lineage target's expression for a synthesized claim, or <c>__r</c> for a return role.
 /// </summary>
-internal readonly record struct ResourceRoleClaim(string Verb, ExpressionSyntax Expression, bool IsReturn)
+internal readonly record struct ResourceRoleClaim
 {
+    private readonly Syn<ExpressionSyntax> _expression;
+    private readonly EquatableArray<Syn<ExpressionSyntax>> _subjectExpressions;
+
+    public ResourceRoleClaim(string Verb, ExpressionSyntax Expression, bool IsReturn)
+    {
+        this.Verb = Verb;
+        _expression = Expression;
+        this.IsReturn = IsReturn;
+    }
+
+    public string Verb { get; init; }
+
+    public ExpressionSyntax Expression
+    {
+        get => _expression.Node!;
+        init => _expression = value;
+    }
+
+    public bool IsReturn { get; init; }
+
     /// <summary>For a synthesized Reference/Consume claim, the producing subject's instance expression
     /// (a parameter's rewritten argument, or <c>__r</c>) — emitted as the trailing argument so the
     /// runtime records subject→target. Empty for plain role claims.</summary>
-    public IReadOnlyList<ExpressionSyntax> SubjectExpressions { get; init; } = [];
+    public IReadOnlyList<ExpressionSyntax> SubjectExpressions
+    {
+        get => new SynList<ExpressionSyntax>(_subjectExpressions);
+        init => _subjectExpressions = SynList<ExpressionSyntax>.Wrap(value);
+    }
 }
 
 /// <summary>A lowered branch guard: the node runs only when node <see cref="ConditionIndex"/> passed
@@ -34,7 +58,27 @@ internal readonly record struct ParsedGuard(int ConditionIndex, bool WhenValue);
 /// <c>typeof</c>) and the mode name (<c>Shared</c> or <c>Exclusive</c>) as spelled on
 /// <c>Raun.LockMode</c>. <see cref="SortKey"/> is the type's fully-qualified display string — an
 /// ordering key so emission is deterministic, never emitted itself.</summary>
-internal readonly record struct ParsedUse(TypeSyntax Resource, string Mode, string SortKey);
+internal readonly record struct ParsedUse
+{
+    private readonly Syn<TypeSyntax> _resource;
+
+    public ParsedUse(TypeSyntax Resource, string Mode, string SortKey)
+    {
+        _resource = Resource;
+        this.Mode = Mode;
+        this.SortKey = SortKey;
+    }
+
+    public TypeSyntax Resource
+    {
+        get => _resource.Node!;
+        init => _resource = value;
+    }
+
+    public string Mode { get; init; }
+
+    public string SortKey { get; init; }
+}
 
 /// <summary>Why a scenario was not lowered: the innermost statement the parser rejected (or the
 /// method name, for a body-less method). Carries the span as plain values — never a
@@ -59,15 +103,32 @@ internal sealed record ParsedScenario
     public string? SourceFile { get; init; }
     public int SourceLine { get; init; }
     public int TimeoutMs { get; init; }
-    public IReadOnlyList<UsingDirectiveSyntax> Usings { get; init; } = [];
-    public IReadOnlyList<ParsedStep> Steps { get; init; } = [];
+    private readonly EquatableArray<Syn<UsingDirectiveSyntax>> _usings;
+    private readonly EquatableArray<ParsedStep> _steps;
+    private readonly EquatableArray<ParsedUse> _uses;
+
+    public IReadOnlyList<UsingDirectiveSyntax> Usings
+    {
+        get => new SynList<UsingDirectiveSyntax>(_usings);
+        init => _usings = SynList<UsingDirectiveSyntax>.Wrap(value);
+    }
+
+    public IReadOnlyList<ParsedStep> Steps
+    {
+        get => _steps;
+        init => _steps = Equatable.Of(value);
+    }
 
     /// <summary>The scenario teardown policy as the underlying <c>Raun.Run</c> value.</summary>
     public int TeardownPolicy { get; init; }
 
     /// <summary>Every [Uses&lt;T&gt;] the scenario is subject to, one per type (Exclusive wins),
     /// sorted by <see cref="ParsedUse.SortKey"/> so emission is deterministic. Empty ⇒ no initializer.</summary>
-    public IReadOnlyList<ParsedUse> Uses { get; init; } = [];
+    public IReadOnlyList<ParsedUse> Uses
+    {
+        get => _uses;
+        init => _uses = Equatable.Of(value);
+    }
 }
 
 /// <summary>One lowered step (graph node).</summary>
@@ -85,18 +146,40 @@ internal sealed record ParsedStep
     public SourceSpan? CallSpan { get; init; }
 
     public int TimeoutMs { get; init; }
-    public IReadOnlyList<int> DependsOn { get; init; } = [];
+    private readonly EquatableArray<int> _dependsOn;
+    private readonly EquatableArray<ParsedGuard> _guards;
+    private readonly EquatableArray<int> _mergeSources;
+    private readonly EquatableArray<int> _waitsFor;
+    private readonly EquatableArray<ResourceRoleClaim> _resourceClaims;
+    private readonly Syn<TypeSyntax> _resultType = new(PredefinedType(Token(SyntaxKind.ObjectKeyword)));
+    private readonly Syn<InvocationExpressionSyntax> _invokeCall;
+    private readonly Syn<ExpressionSyntax> _formatExpression;
+    private readonly Syn<TypeSyntax> _conditionCoercionType;
+
+    public IReadOnlyList<int> DependsOn
+    {
+        get => _dependsOn;
+        init => _dependsOn = Equatable.Of(value);
+    }
     public string? GroupId { get; init; }
 
     /// <summary>True when the DSL method returns a value (Task&lt;T&gt;/ValueTask&lt;T&gt;).</summary>
     public bool HasResult { get; init; }
 
     /// <summary>Fully-qualified output type (the T), or <c>object</c> when there is no result.</summary>
-    public TypeSyntax ResultType { get; init; } = PredefinedType(Token(SyntaxKind.ObjectKeyword));
+    public TypeSyntax ResultType
+    {
+        get => _resultType.Node!;
+        init => _resultType = value;
+    }
 
     /// <summary>The rewritten DSL invocation, e.g. <c>Given.PatientExists("Jane")</c>. Null for a
     /// synthetic (merge/pass-through) or teardown node, which never invokes anything.</summary>
-    public InvocationExpressionSyntax? InvokeCall { get; init; }
+    public InvocationExpressionSyntax? InvokeCall
+    {
+        get => _invokeCall.Node;
+        init => _invokeCall = value;
+    }
 
     /// <summary>Display name with constant placeholders already substituted.</summary>
     public string DisplayNameTemplate { get; init; } = "";
@@ -105,24 +188,44 @@ internal sealed record ParsedStep
     /// When non-null, a string expression (in terms of <c>__inputs</c>) for the runtime display-name
     /// formatter; null when the display name is fully constant.
     /// </summary>
-    public ExpressionSyntax? FormatExpression { get; init; }
+    public ExpressionSyntax? FormatExpression
+    {
+        get => _formatExpression.Node;
+        init => _formatExpression = value;
+    }
 
     /// <summary>
     /// Resource roles lowered from the step's role attributes, in declaration order (parameter roles
     /// first, then a return role). Empty when the step declares no roles ⇒ the emitter inserts nothing.
     /// </summary>
-    public IReadOnlyList<ResourceRoleClaim> ResourceClaims { get; init; } = [];
+    public IReadOnlyList<ResourceRoleClaim> ResourceClaims
+    {
+        get => _resourceClaims;
+        init => _resourceClaims = Equatable.Of(value);
+    }
 
     /// <summary>Branch guards gating this step; all must hold. Empty for an unconditional step.</summary>
-    public IReadOnlyList<ParsedGuard> Guards { get; init; } = [];
+    public IReadOnlyList<ParsedGuard> Guards
+    {
+        get => _guards;
+        init => _guards = Equatable.Of(value);
+    }
 
     /// <summary>Mutually exclusive candidate producers for a merge (phi) node, or the single source of
     /// a pass-through alias. Empty for an ordinary step.</summary>
-    public IReadOnlyList<int> MergeSources { get; init; } = [];
+    public IReadOnlyList<int> MergeSources
+    {
+        get => _mergeSources;
+        init => _mergeSources = Equatable.Of(value);
+    }
 
     /// <summary>Ordering-only predecessors (see <c>Raun.Model.ScenarioNode.WaitsFor</c>): the last
     /// steps of every arm of the <c>if</c> this statement follows. Empty for most steps.</summary>
-    public IReadOnlyList<int> WaitsFor { get; init; } = [];
+    public IReadOnlyList<int> WaitsFor
+    {
+        get => _waitsFor;
+        init => _waitsFor = Equatable.Of(value);
+    }
 
     /// <summary>True for generator plumbing (merge/pass-through) rather than a business step.</summary>
     public bool IsSynthetic { get; init; }
@@ -133,5 +236,9 @@ internal sealed record ParsedStep
 
     /// <summary>When this step is used as an <c>if</c> condition, its fully-qualified result type — the
     /// cast target in the emitted <c>EvaluateCondition</c> coercion. Null otherwise.</summary>
-    public TypeSyntax? ConditionCoercionType { get; init; }
+    public TypeSyntax? ConditionCoercionType
+    {
+        get => _conditionCoercionType.Node;
+        init => _conditionCoercionType = value;
+    }
 }

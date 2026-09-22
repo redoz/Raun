@@ -49,6 +49,17 @@ public static class GeneratorHarness
         return refs.ToImmutableArray();
     }
 
+    /// <summary>A compilation over one source file with the standard reference set, for tests that
+    /// drive the driver themselves (incrementality) rather than taking a result.</summary>
+    public static CSharpCompilation CompilationFor(string source, CSharpParseOptions parseOptions)
+        => CSharpCompilation.Create(
+            "Incremental",
+            [CSharpSyntaxTree.ParseText(source, parseOptions, path: "")],
+            References,
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable));
+
     /// <summary>
     /// Compiles generated source as a console app against Raun.Mtp (so the emitted entry point binds
     /// to the real <c>RaunTestApplication.RunAsync</c> signature) and returns any compile errors.
