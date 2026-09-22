@@ -189,6 +189,10 @@ public class RaunTestFramework :
             });
         }
 
+        // A session that attached nothing must not leave an empty folder behind in the results
+        // directory; anything it did write stays, because that is what the user asked for.
+        RaunAttachments.CleanUp(RaunAttachments.Resolve(_services, sessionUid));
+
         return Task.FromResult(new CloseTestSessionResult { IsSuccess = true });
     }
 
@@ -285,7 +289,8 @@ public class RaunTestFramework :
         var selector = ReadSelector(filter, out var unsupported);
         await WarnUnsupportedFilterAsync(unsupported).ConfigureAwait(false);
 
-        var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this) };
+        var attachmentRoot = RaunAttachments.Resolve(_services, sessionUid);
+        var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this, attachmentRoot) };
         if (HtmlReport.HtmlReportPath.Resolve(_services) is { } reportPath)
         {
             sinks.Add(new HtmlReportSink(reportPath, TimeProvider.System));

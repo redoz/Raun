@@ -47,10 +47,82 @@ public class MtpReportSinkTests
         Nodes = nodes.Length == 0 ? [Node(0, "a", "step a")] : nodes,
     };
 
+    /// <summary>Where the tests that do not care about attachments let them land.</summary>
+    private static string AttachmentRoot { get; } =
+        Path.Combine(Path.GetTempPath(), "raun-attach-tests", Guid.NewGuid().ToString("N"));
+
     private static (MtpReportSink Sink, RecordingMessageBus Bus) NewSink()
     {
         var bus = new RecordingMessageBus();
-        return (new MtpReportSink(new SessionUid("sess"), bus, new StubProducer()), bus);
+        return (new MtpReportSink(new SessionUid("sess"), bus, new StubProducer(), AttachmentRoot), bus);
+    }
+
+    [Fact]
+    public async Task Attachments_are_written_under_the_run_s_own_results_directory()
+    {
+        // They used to land in the machine's temp folder and stay there for ever: invisible to the
+        // user, never cleaned up, and an attachment carries whatever the step put in it.
+        // The run's results directory is where a run's output belongs — visible, per run, and
+        // already the user's to keep or delete.
+        var root = Path.Combine(Path.GetTempPath(), "raun-attach-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var bus = new RecordingMessageBus();
+            var sink = new MtpReportSink(new SessionUid("sess"), bus, new StubProducer(), root);
+            var def = Definition(id: "s", nodes: [Node(0, "a", "step a")]);
+
+            await sink.PublishAsync(new ScenarioStarted(def));
+            await sink.PublishAsync(new StepFinished(def, new StepResult
+            {
+                Node = def.Nodes[0],
+                DisplayName = "step a",
+                Status = StepStatus.Passed,
+                StartedAt = DateTimeOffset.UnixEpoch,
+                Attachments = new Dictionary<string, string> { ["reminder.txt"] = "hello" },
+            }));
+
+            var artifact = Assert.Single(bus.Nodes[^1].Properties.OfType<FileArtifactProperty>());
+            Assert.StartsWith(root, artifact.FileInfo.FullName, StringComparison.Ordinal);
+            Assert.Equal("hello", File.ReadAllText(artifact.FileInfo.FullName));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task An_attachment_root_that_stayed_empty_is_removed()
+    {
+        // Every session creates its own folder; a session that attached nothing must not leave one
+        // behind, or a results directory fills up with empty folders one per run.
+        var root = Path.Combine(Path.GetTempPath(), "raun-attach-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        RaunAttachments.CleanUp(root);
+
+        Assert.False(Directory.Exists(root), "an empty attachment root was left behind");
+    }
+
+    [Fact]
+    public async Task An_attachment_root_with_files_in_it_is_kept()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "raun-attach-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "step"));
+        await File.WriteAllTextAsync(Path.Combine(root, "step", "a.txt"), "x");
+        try
+        {
+            RaunAttachments.CleanUp(root);
+
+            Assert.True(Directory.Exists(root), "an attachment the run published was deleted");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
@@ -399,7 +471,7 @@ public class MtpReportSinkTests
     {
         var def = Definition(id: "s", nodes: [Node(0, "a", "step a")]);
         var bus = new RecordingMessageBus();
-        var sink = new MtpReportSink(new SessionUid("the-session"), bus, new StubProducer());
+        var sink = new MtpReportSink(new SessionUid("the-session"), bus, new StubProducer(), AttachmentRoot);
 
         await sink.PublishAsync(new ScenarioStarted(def));
         await sink.PublishAsync(new StepStarted(def, new StepContext { Node = def.Nodes[0], DisplayName = "step a" }));
@@ -417,7 +489,7 @@ public class MtpReportSinkTests
         // never return this task (hanging the test) — which is exactly the hazard this guards against.
         var def = Definition(id: "s", nodes: [Node(0, "a", "step a")]);
         var gate = new TaskCompletionSource();
-        var sink = new MtpReportSink(new SessionUid("sess"), new GatedMessageBus(gate.Task), new StubProducer());
+        var sink = new MtpReportSink(new SessionUid("sess"), new GatedMessageBus(gate.Task), new StubProducer(), AttachmentRoot);
 
         await sink.PublishAsync(new ScenarioStarted(def));
         var task = sink.PublishAsync(new StepFinished(def, new StepResult

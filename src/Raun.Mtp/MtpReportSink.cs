@@ -22,16 +22,21 @@ internal sealed class MtpReportSink : RunEventSink
     private readonly SessionUid _sessionUid;
     private readonly IMessageBus _messageBus;
     private readonly IDataProducer _producer;
+    private readonly string _attachmentRoot;
     private readonly ConcurrentDictionary<string, IReadOnlyDictionary<int, string>> _labels =
         new(StringComparer.Ordinal);
 
-    public MtpReportSink(SessionUid sessionUid, IMessageBus messageBus, IDataProducer producer)
+    /// <summary>Creates the sink. <paramref name="attachmentRoot"/> is where step attachments are
+    /// written before being published as file artifacts; see <see cref="RaunAttachments"/>.</summary>
+    public MtpReportSink(SessionUid sessionUid, IMessageBus messageBus, IDataProducer producer, string attachmentRoot)
     {
         ArgumentNullException.ThrowIfNull(messageBus);
         ArgumentNullException.ThrowIfNull(producer);
+        ArgumentException.ThrowIfNullOrEmpty(attachmentRoot);
         _sessionUid = sessionUid;
         _messageBus = messageBus;
         _producer = producer;
+        _attachmentRoot = attachmentRoot;
     }
 
     protected override ValueTask OnScenarioStartedAsync(ScenarioStarted e)
@@ -184,7 +189,7 @@ internal sealed class MtpReportSink : RunEventSink
         testNode.Properties.Add(new StandardOutputProperty(builder.ToString()));
     }
 
-    private static void AddAttachments(TestNode testNode, ScenarioDefinition definition, StepResult result)
+    private void AddAttachments(TestNode testNode, ScenarioDefinition definition, StepResult result)
     {
         if (result.Attachments.Count == 0)
         {
@@ -214,27 +219,14 @@ internal sealed class MtpReportSink : RunEventSink
         }
     }
 
-    private static string CreateAttachmentDirectory(ScenarioDefinition definition, StepResult result)
+    private string CreateAttachmentDirectory(ScenarioDefinition definition, StepResult result)
     {
-        var path = Path.Combine(
-            Path.GetTempPath(),
-            "raun-mtp",
-            SanitizeFileName(StepUid.Of(definition, result.Node)));
+        var path = Path.Combine(_attachmentRoot, SanitizeFileName(StepUid.Of(definition, result.Node)));
         Directory.CreateDirectory(path);
         return path;
     }
 
-    private static string SanitizeFileName(string name)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(name.Length);
-        foreach (var ch in name)
-        {
-            builder.Append(Array.IndexOf(invalid, ch) >= 0 ? '_' : ch);
-        }
-
-        return builder.ToString();
-    }
+    private static string SanitizeFileName(string name) => RaunAttachments.SanitizeFileName(name);
 
     private Task Publish(TestNode testNode)
     {

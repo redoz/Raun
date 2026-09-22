@@ -285,6 +285,15 @@ touch the same identity with at least one mutating role fail the later one with 
 `ResourceConflictException` naming both. Nothing is locked and nothing waits; the conflict is
 reported, not serialized.
 
+**Keys are test identities, not real data.** A resource key ends up in stdout, in the HTML report
+(embedded as JSON), in OTEL span attributes, in TRX, and in anything a CI job archives — so key your
+resources on synthetic identifiers you invent for the test (`Patient:jane-doe-1`), never on a real
+policy number, national ID, account number, or customer name. The same goes for log lines, exception
+messages, and attachments: `ctx.AddAttachment(name, value)` writes the value to a file in the run's results
+directory and publishes it as a run artifact, so never attach a raw request or response payload from
+a system that holds personal data. Raun does not redact anything — it reports exactly what the steps
+give it.
+
 ### Logging
 
 Steps write through `ctx.Log` or the standard `ILogger` abstraction; the lines are collected as that
