@@ -160,6 +160,26 @@ public sealed class HtmlReportSinkTests : IDisposable
     }
 
     [Fact]
+    public async Task An_overview_table_leads_and_passing_cards_start_collapsed()
+    {
+        var path = Path.Combine(_dir, "raun-report.html");
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var def = Def();
+        await sink.PublishAsync(new RunStarted(1));
+        await sink.PublishAsync(new ScenarioStarted(def));
+        await sink.PublishAsync(new StepFinished(def, Passed(def.Nodes[0])));
+        await sink.PublishAsync(new ScenarioFinished(def, [Passed(def.Nodes[0])]));
+        await sink.PublishAsync(new RunFinished());
+
+        var html = await File.ReadAllTextAsync(path);
+        Assert.Contains("function buildOverview(", html, StringComparison.Ordinal);
+        Assert.Contains("ov.id = \"overview\";", html, StringComparison.Ordinal);
+        // a card is collapsed unless the scenario failed or the reader opened it
+        Assert.Contains("const isExpanded = (sc) => expandedFor.has(sc.scenarioId) ? expandedFor.get(sc.scenarioId) : sc.status === \"failed\";", html, StringComparison.Ordinal);
+        Assert.Contains(".card.collapsed .drill-host{ display:none; }", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task The_wait_reaches_the_json_and_the_template_renders_it()
     {
         var path = Path.Combine(_dir, "raun-report-wait.html");

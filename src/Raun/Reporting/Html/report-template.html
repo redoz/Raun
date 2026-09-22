@@ -172,7 +172,27 @@
   .card.s-failed{ --edge:var(--bar-fail); }
   .card.s-skipped{ --edge:var(--bar-skip); }
 
-  .card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }
+  .card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; cursor:pointer; }
+  .card.collapsed .card-head{ margin-bottom:0; }
+  .card.collapsed .drill-host{ display:none; }
+  .card.collapsed{ padding-bottom:16px; }
+  .card-head .tw{ color:var(--faint); font-size:11px; margin-left:2px; transition:transform .15s; display:inline-block; }
+  .card.collapsed .card-head .tw{ transform:rotate(-90deg); }
+
+  /* ---------- OVERVIEW (one row per scenario; click to open the card) ---------- */
+  .ov{ background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:6px 8px; margin:16px 0 22px; }
+  .ov table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .ov th{ text-align:left; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); font-weight:600; padding:8px 10px; }
+  .ov td{ padding:7px 10px; border-top:1px solid var(--border); vertical-align:middle; }
+  .ov tr.r{ cursor:pointer; }
+  .ov tr.r:hover td{ background:var(--inset); }
+  .ov td.nm{ font-weight:600; }
+  .ov td.cl{ color:var(--muted); font-size:12px; }
+  .ov td.cl .mth{ color:var(--faint); }
+  .ov td.n{ text-align:right; font-family:var(--mono); color:var(--muted); white-space:nowrap; }
+  .ov td.n .f{ color:var(--bar-fail); font-weight:700; }
+  .ov td.n .k{ color:var(--bar-skip); }
+  .ov td.st{ width:1%; white-space:nowrap; }
   .card-title{ min-width:0; }
   .card-title .name{ font-size:15.5px; font-weight:680; letter-spacing:-.01em; }
   .card-title .cls{ font-size:12.5px; color:var(--muted); margin-top:2px; }
@@ -224,7 +244,7 @@
     margin:0 0 7px; font-size:10.5px; font-weight:700; letter-spacing:.07em;
     text-transform:uppercase; color:var(--faint);
   }
-  .logs{ margin:0; padding-left:20px; }
+  .logs{ margin:0; padding:0; list-style:none; }
   .logs li{ font-family:var(--mono); font-size:12px; color:var(--ink); margin:2px 0; }
   .att{ margin:6px 0; }
   .att .an{ font-size:12px; font-weight:600; color:var(--ink); margin:0 0 3px; }
@@ -753,9 +773,55 @@
       return { items, bands, contentBottom, flows };
     }
 
+    // Card expansion survives re-renders (fonts.ready re-runs renderAll). Unset = failed scenarios open, the rest collapsed.
+    const expandedFor = new Map();
+    const isExpanded = (sc) => expandedFor.has(sc.scenarioId) ? expandedFor.get(sc.scenarioId) : sc.status === "failed";
+    function setExpanded(sc, on){
+      expandedFor.set(sc.scenarioId, on);
+      const card = report.querySelector('.card[data-scenario="' + CSS.escape(sc.scenarioId) + '"]');
+      if (card) card.classList.toggle("collapsed", !on);
+      return card;
+    }
+
+    // buildOverview() -> one row per scenario: status, name, class · method, step counts, duration.
+    // Clicking a row opens that card and scrolls to it.
+    function buildOverview(){
+      const ov = el("section", "ov");
+      ov.id = "overview";
+      let h = '<table><thead><tr><th>Status</th><th>Scenario</th><th>Where</th><th style="text-align:right">Steps</th><th style="text-align:right">Duration</th></tr></thead><tbody>';
+      for (const sc of model.scenarios){
+        const failed = sc.steps.filter((s) => s.status === "failed").length;
+        const skipped = sc.steps.filter((s) => s.status === "skipped").length;
+        const counts = sc.steps.length +
+          (failed ? ' <span class="f">' + failed + " failed</span>" : "") +
+          (skipped ? ' <span class="k">' + skipped + " skipped</span>" : "");
+        h += '<tr class="r" data-scenario="' + esc(sc.scenarioId) + '" tabindex="0">' +
+          '<td class="st"><span class="pill ' + sc.status + '"><span class="pd"></span>' + sc.status + "</span></td>" +
+          '<td class="nm">' + esc(sc.displayName) + "</td>" +
+          '<td class="cl">' + esc(sc.classDisplayName || "") + ' <span class="mth mono">· ' + esc(sc.methodName) + "</span></td>" +
+          '<td class="n">' + counts + "</td>" +
+          '<td class="n">' + fmtDur(sc.durationMs) + "</td></tr>";
+      }
+      h += "</tbody></table>";
+      ov.innerHTML = h;
+      const go = (row) => {
+        const sc = model.scenarios.find((x) => x.scenarioId === row.dataset.scenario);
+        if (!sc) return;
+        const card = setExpanded(sc, true);
+        if (card) card.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+      };
+      ov.addEventListener("click", (ev) => { const row = ev.target.closest("tr.r"); if (row) go(row); });
+      ov.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        const row = ev.target.closest("tr.r"); if (row){ go(row); ev.preventDefault(); }
+      });
+      return ov;
+    }
+
     function renderAll(){
       report.replaceChildren();
       openers.length = 0;
+      report.appendChild(buildOverview());
       for (const sc of model.scenarios) report.appendChild(renderScenario(sc));
 
       // pre-expand the first failing step's scenario drill so its detail is visible by default
@@ -1942,7 +2008,8 @@
     // (buildActivityDiagram), and the per-scenario drill panel <div class="drill">
     // (buildScenarioDrill, unchanged).
     function buildScenarioCard(sc, rerender){
-      const card = el("section", "card s-" + sc.status);
+      const card = el("section", "card s-" + sc.status + (isExpanded(sc) ? "" : " collapsed"));
+      card.dataset.scenario = sc.scenarioId;
 
       // header
       const head = el("div", "card-head");
@@ -1951,7 +2018,7 @@
         : "";
       head.innerHTML =
         '<div class="card-title">' +
-          '<div class="name">' + esc(sc.displayName) + "</div>" +
+          '<div class="name">' + esc(sc.displayName) + ' <span class="tw" aria-hidden="true">▼</span></div>' +
           '<div class="cls">' + esc(sc.classDisplayName || "") +
             ' <span class="mth mono">· ' + esc(sc.methodName) + "</span></div>" +
           waited +
@@ -1960,6 +2027,7 @@
           '<span class="dur">' + fmtDur(sc.durationMs) + "</span>" +
           '<span class="pill ' + sc.status + '"><span class="pd"></span>' + sc.status + "</span>" +
         "</div>";
+      head.addEventListener("click", () => setExpanded(sc, !isExpanded(sc)));
       card.appendChild(head);
 
       // activity diagram (frame + centred spine + initial/final; interior nodes come in later tasks)
@@ -2096,12 +2164,12 @@
           h += '<div class="sec"><div class="skipnote">' + esc(s.skipReason) + "</div></div>";
         }
         if (s.logs && s.logs.length){
-          h += '<div class="sec"><h4>Logs</h4><ol class="logs">' +
-            s.logs.map((l) => "<li>" + logHtml(l) + "</li>").join("") + "</ol></div>";
+          h += '<div class="sec"><h4>Logs</h4><ul class="logs">' +
+            s.logs.map((l) => "<li>" + logHtml(l) + "</li>").join("") + "</ul></div>";
         }
         if (s.traceId){
-          h += '<div class="sec"><h4>Trace</h4><ol class="logs"><li>trace ' + esc(s.traceId) +
-            (s.spanId ? " · span " + esc(s.spanId) : "") + "</li></ol></div>";
+          h += '<div class="sec"><h4>Trace</h4><ul class="logs"><li>trace ' + esc(s.traceId) +
+            (s.spanId ? " · span " + esc(s.spanId) : "") + "</li></ul></div>";
         }
         if (s.attachments && s.attachments.length){
           h += '<div class="sec"><h4>Attachments</h4>' +
