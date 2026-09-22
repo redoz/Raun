@@ -224,6 +224,17 @@ waits while holding: no deadlocks. Time spent waiting shows on the scenario's sp
 (`raun.scenario.waited_ms`) and in the HTML report's scenario header. The token is a name, not a
 service — register it in DI yourself if it is also one.
 
+### Scenarios live in the test executable
+
+The generator registers each scenario from a `[ModuleInitializer]` in the generated file, and the
+CLR runs a module initializer when something first touches that module. A scenario in a referenced
+class library therefore never registers: nothing in the test executable touches the library's types,
+so the module never loads, the registry stays empty, and the run reports zero tests and exits green.
+
+Keep scenarios in the test executable itself. Shared helpers, DSL methods, fixtures, and domain types
+belong in a library as usual — it is only the `[Scenario]` methods that have to live in the project
+that runs. Loading scenarios from a referenced library is not supported today.
+
 ## Supported scenario subset
 
 - `[Scenario]` methods are `async Task` / `async ValueTask`.

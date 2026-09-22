@@ -100,6 +100,12 @@ against the `Raun` it referenced, and an application that consumes the library m
 - The generator emits the MTP entry point only when `Raun.Mtp.RaunTestApplication` resolves in the
   compilation, so `Raun` alone (a scenario library, another host) never produces a `Main` that
   cannot compile.
+- A scenario library does not actually *run* today, and the rules above are about staying ready for
+  one, not about supporting it: registration is a `[ModuleInitializer]`, and the CLR loads a module
+  only when something touches it, so scenarios in a referenced library never register and the run
+  reports zero tests, green. Scenarios must live in the test executable; README says so too. A
+  loader (scanning referenced assemblies, or an emitted touch per referenced Raun library) is the
+  work that would change this.
 
 ## Undoing a bad release
 
