@@ -59,6 +59,34 @@ public class PlatformSurfaceTests
         Assert.Equal(FilteredScenarioStepCount, filteredTotal);
     }
 
+    [Fact]
+    public async Task A_platform_extension_added_through_configure_reaches_the_run()
+    {
+        // The generated entry point calls RunAsync(args) with no `configure`, so it registers no
+        // extensions and rejects --report-trx as an unknown option. The supported route is a
+        // hand-written Program.cs that passes `configure` — which is what the sample does, and what
+        // README's "Reports and extensions" section documents. This proves that route end to end.
+        var results = Path.Combine(Path.GetTempPath(), "raun-trx-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(results);
+        try
+        {
+            var result = await RunSampleAsync("--report-trx", "--results-directory", results);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"--report-trx run exited {result.ExitCode}.{Environment.NewLine}{result.Describe()}");
+            var trx = Directory.GetFiles(results, "*.trx", SearchOption.AllDirectories);
+            Assert.True(
+                trx.Length == 1,
+                $"expected exactly one .trx under '{results}', found {trx.Length}.{Environment.NewLine}{result.Describe()}");
+            Assert.Contains("UnitTestResult", File.ReadAllText(trx[0]), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(results, recursive: true);
+        }
+    }
+
     private static async Task<ProcessResult> RunSampleAsync(params string[] sampleArgs)
     {
         var repoRoot = FindRepoRoot();

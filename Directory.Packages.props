@@ -39,6 +39,11 @@
          TypeLoadException after tests pass, not a coverage bug. -->
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
 
+    <!-- TRX reporting, for the AppointmentTests sample only: it is what proves (and documents) that
+         a platform extension reaches a Raun run through RunAsync's `configure` callback. Moves in
+         lockstep with Microsoft.Testing.Platform above. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.0" />
+
     <!-- OpenTelemetry, for the Aspire sample only: the test process exports Raun's spans and the API
          exports its own, both over OTLP, so one trace shows a step and the server work it caused.
          Raun itself takes no OpenTelemetry dependency — it emits through System.Diagnostics. -->

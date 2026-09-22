@@ -103,6 +103,41 @@ timer from scenario start, its resource effects, and a resource lane across the 
 test explorer each step is a test node; selecting one step runs everything up to and including it —
 its dependencies, merge sources, guard conditions, and teardown — and nothing after it.
 
+### Reports and extensions
+
+Raun's own HTML report is built in. Everything else the platform offers — TRX, code coverage, any
+other Microsoft.Testing.Platform extension — is registered by the test executable's entry point, and
+the generated entry point registers nothing: it calls `RaunTestApplication.RunAsync(args)` with no
+`configure` callback, so `--report-trx` on a generated program is an unknown option.
+
+To use an extension, write the entry point yourself. Turn the generated one off and add a
+`Program.cs`:
+
+```xml
+<PropertyGroup>
+  <RaunGenerateProgram>false</RaunGenerateProgram>
+</PropertyGroup>
+<ItemGroup>
+  <CompilerVisibleProperty Include="RaunGenerateProgram" />
+  <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+</ItemGroup>
+```
+
+```csharp
+using Microsoft.Testing.Extensions;
+using Raun.Mtp;
+
+return await RaunTestApplication.RunAsync(args, configure: builder => builder.AddTrxReportProvider());
+```
+
+```bash
+dotnet run --project MyScenarios -- --report-trx --results-directory out
+```
+
+`configure` hands out the platform's own `ITestApplicationBuilder` before Raun registers its
+framework, so anything that works for another MTP test app works here. `samples/AppointmentTests`
+does exactly this, and `samples/AspireAppointments` adds the coverage provider the same way.
+
 ### Selecting what to run
 
 Raun registers the platform's own tree filter, so the syntax is the one every Microsoft.Testing.Platform
