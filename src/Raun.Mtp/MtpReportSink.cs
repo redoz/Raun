@@ -134,16 +134,33 @@ internal sealed class MtpReportSink : RunEventSink
     }
 
     /// <summary>
+    /// The exception type names assertion libraries raise, matched as suffixes so a namespace never
+    /// matters. Each one is a library Raun cannot reference (Raun.Mtp depends on MTP + Raun core and
+    /// nothing else), so the names are the whole contract: <c>XunitException</c> (xunit.v3.assert),
+    /// <c>AssertionException</c> (NUnit and others), <c>AssertionFailedException</c>
+    /// (FluentAssertions), <c>ShouldAssertException</c> (Shouldly), <c>AssertFailedException</c>
+    /// (MSTest). A library not listed here reports as an error rather than a failure — annoying, but
+    /// never wrong about whether the test passed.
+    /// </summary>
+    private static readonly string[] AssertionExceptionNames =
+    [
+        "XunitException",
+        "AssertionException",
+        "AssertionFailedException",
+        "ShouldAssertException",
+        "AssertFailedException",
+    ];
+
+    /// <summary>
     /// Recognizes an assertion failure without taking a compile-time dependency on any assertion
-    /// library (Raun.Mtp references only MTP + Raun core). xunit.v3.assert raises
-    /// <c>Xunit.Sdk.XunitException</c>; Shouldly/NUnit/etc. raise types whose name or interface ends
-    /// in <c>AssertionException</c>. Anything else is treated as an unexpected error.
+    /// library, by walking the exception's base types and its interfaces and matching their names
+    /// against <see cref="AssertionExceptionNames"/>. Anything else is an unexpected error.
     /// </summary>
     private static bool IsAssertionException(Exception exception)
     {
         for (var type = exception.GetType(); type is not null; type = type.BaseType)
         {
-            if (type.Name == "XunitException" || type.Name.EndsWith("AssertionException", StringComparison.Ordinal))
+            if (IsAssertionName(type.Name))
             {
                 return true;
             }
@@ -151,13 +168,26 @@ internal sealed class MtpReportSink : RunEventSink
 
         foreach (var iface in exception.GetType().GetInterfaces())
         {
-            if (iface.Name.EndsWith("AssertionException", StringComparison.Ordinal))
+            if (IsAssertionName(iface.Name))
             {
                 return true;
             }
         }
 
         return false;
+
+        static bool IsAssertionName(string name)
+        {
+            foreach (var known in AssertionExceptionNames)
+            {
+                if (name.EndsWith(known, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
     private static void AddOutput(TestNode testNode, StepResult result)

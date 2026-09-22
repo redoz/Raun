@@ -240,6 +240,42 @@ public class MtpReportSinkTests
         Assert.Empty(node.Properties.OfType<TimeoutTestNodeStateProperty>());
     }
 
+    // Assertion libraries Raun must recognize without referencing them. Matching is by type name,
+    // so standing in for the real type is exactly what the sink sees.
+#pragma warning disable CA1032, CA1064, CA1812, RCS1194 // stand-in exception types, constructed reflectively below
+    private sealed class AssertionFailedException : Exception;      // FluentAssertions
+    private sealed class ShouldAssertException : Exception;         // Shouldly
+    private sealed class NUnitAssertionException : Exception;       // NUnit-style, already matched
+#pragma warning restore CA1032, CA1064, CA1812, RCS1194
+
+    [Theory]
+    [InlineData(typeof(AssertionFailedException))]
+    [InlineData(typeof(ShouldAssertException))]
+    [InlineData(typeof(NUnitAssertionException))]
+    public async Task An_assertion_library_failure_publishes_failed_state_not_error(Type exceptionType)
+    {
+        // FluentAssertions raises AssertionFailedException and Shouldly ShouldAssertException;
+        // neither ends in "AssertionException", so both used to be reported as unexpected errors.
+        var def = Definition(id: "s", nodes: [Node(0, "a", "step a")]);
+        var (sink, bus) = NewSink();
+        var ex = (Exception)Activator.CreateInstance(exceptionType)!;
+
+        await sink.PublishAsync(new ScenarioStarted(def));
+        await sink.PublishAsync(new StepFinished(def, new StepResult
+        {
+            Node = def.Nodes[0],
+            DisplayName = "step a",
+            Status = StepStatus.Failed,
+            StartedAt = TestInstant,
+            Exception = ex,
+        }));
+
+        var node = Assert.Single(bus.Nodes);
+        var failed = Assert.Single(node.Properties.OfType<FailedTestNodeStateProperty>());
+        Assert.Same(ex, failed.Exception);
+        Assert.Empty(node.Properties.OfType<ErrorTestNodeStateProperty>());
+    }
+
     [Fact]
     public async Task Failed_timeout_publishes_timeout_state()
     {
