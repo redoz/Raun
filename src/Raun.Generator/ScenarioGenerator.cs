@@ -13,8 +13,9 @@ namespace Raun.Generator;
 
 /// <summary>
 /// Incremental generator that lowers every <c>[Raun.Scenario]</c> method into a manifest +
-/// executor graph, emitted as a single <c>RaunScenarios.g.cs</c> registered with
-/// <c>Raun.ScenarioRegistry</c> via a module initializer.
+/// executor graph. Each scenario is emitted into its own file, and one <c>RaunScenarios.g.cs</c>
+/// registers them all with <c>Raun.ScenarioRegistry</c> through a module initializer; every file is
+/// a part of the same <c>Raun.Generated.RaunGenerated</c> class.
 /// </summary>
 [Generator]
 public sealed class ScenarioGenerator : IIncrementalGenerator
@@ -26,48 +27,73 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
                 "Raun.ScenarioAttribute",
                 predicate: static (node, _) => node is MethodDeclarationSyntax,
                 transform: static (ctx, _) => Transform(ctx))
-            .Where(static result => result is not null)
-            .Collect();
+            .Where(static result => result is not null);
 
-        context.RegisterSourceOutput(scenarios, static (spc, items) =>
+        // One output per scenario: an edit re-emits that scenario's file and leaves its neighbours
+        // alone. Its diagnostics are reported here too, where the scenario they name is.
+        context.RegisterSourceOutput(scenarios, static (spc, result) =>
         {
-            var parsed = new List<ParsedScenario>();
-            foreach (var result in items)
-            {
-                if (result is not { } r)
-                {
-                    continue;
-                }
-
-                if (r.Error is not null)
-                {
-                    spc.ReportDiagnostic(Diagnostic.Create(
-                        Descriptors.UnhandledException, MakeLocation(r.File, r.Line), r.Error));
-                }
-                else if (r.Rejection is { } rejection)
-                {
-                    spc.ReportDiagnostic(Diagnostic.Create(
-                        Descriptors.ScenarioNotGenerated, MakeLocation(rejection), rejection.ScenarioName));
-                }
-                else if (r.Scenario is not null)
-                {
-                    parsed.Add(r.Scenario);
-                }
-            }
-
-            if (parsed.Count == 0)
+            if (result is not { } r)
             {
                 return;
             }
 
-            var (source, error) = GeneratorSafety.SafeEmit(() => ScenarioEmitter.Emit(parsed));
+            if (r.Error is not null)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    Descriptors.UnhandledException, MakeLocation(r.File, r.Line), r.Error));
+                return;
+            }
+
+            if (r.Rejection is { } rejection)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    Descriptors.ScenarioNotGenerated, MakeLocation(rejection), rejection.ScenarioName));
+                return;
+            }
+
+            if (r.Scenario is not { } scenario)
+            {
+                return;
+            }
+
+            var (source, error) = GeneratorSafety.SafeEmit(() => ScenarioEmitter.EmitScenario(scenario));
             if (error is not null)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(Descriptors.UnhandledException, Location.None, error));
                 return;
             }
 
-            spc.AddSource("RaunScenarios.g.cs", SourceText.From(source!, Encoding.UTF8));
+            spc.AddSource(
+                ScenarioEmitter.ScenarioHintPrefix + scenario.SafeName + ".g.cs",
+                SourceText.From(source!, Encoding.UTF8));
+        });
+
+        // The registry: the module initializer and CreateAll, over the scenario NAMES only, so it
+        // stands still while a step body is edited and moves only when a scenario is added, removed
+        // or renamed.
+        var registry = scenarios
+            .Select(static (result, _) => result?.Scenario is { } s
+                ? new RegistryEntry(s.SafeName, s.MethodFullName)
+                : default)
+            .Where(static entry => entry.SafeName is not null)
+            .Collect();
+
+        context.RegisterSourceOutput(registry, static (spc, entries) =>
+        {
+            if (entries.Length == 0)
+            {
+                return;
+            }
+
+            var (source, error) = GeneratorSafety.SafeEmit(() => ScenarioEmitter.EmitRegistry(entries));
+            if (error is not null)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(Descriptors.UnhandledException, Location.None, error));
+                return;
+            }
+
+            spc.AddSource(ScenarioEmitter.RegistryHintName, SourceText.From(source!, Encoding.UTF8));
         });
 
         // Entry point: emit a Main calling Raun.Mtp's bootstrap, gated on the MSBuild property

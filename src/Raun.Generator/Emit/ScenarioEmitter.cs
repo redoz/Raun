@@ -10,20 +10,42 @@ using static Raun.Generator.Syntax.Literals;
 
 namespace Raun.Generator.Emit;
 
-/// <summary>Emits the generated C# source for a set of lowered scenarios as a Roslyn syntax tree.</summary>
+/// <summary>
+/// Emits the generated C# source for the lowered scenarios as Roslyn syntax trees.
+/// </summary>
+/// <remarks>
+/// One file per scenario, plus one registry file holding the module initializer and
+/// <c>CreateAll</c> — every one of them a part of the same <c>Raun.Generated.RaunGenerated</c>
+/// class. The split is what keeps an editor cheap: a scenario's file re-emits when that scenario
+/// changes, and the registry's content is the scenario names alone, so it stands still while a step
+/// body is being typed.
+/// </remarks>
 internal static class ScenarioEmitter
 {
-    public static string Emit(IReadOnlyList<ParsedScenario> scenarios)
-    {
-        var members = new List<MemberDeclarationSyntax>
-        {
-            BuildCreateAll(scenarios),
-            BuildModuleInitializer(scenarios),
-        };
-        members.AddRange(scenarios.Select(BuildScenarioBuilder));
+    /// <summary>The hint name prefix of a per-scenario file; the rest is the scenario's safe name.</summary>
+    public const string ScenarioHintPrefix = "RaunScenario.";
 
+    /// <summary>The hint name of the registry file.</summary>
+    public const string RegistryHintName = "RaunScenarios.g.cs";
+
+    /// <summary>One scenario's file: its builder method, under the usings its own source file carried.</summary>
+    public static string EmitScenario(ParsedScenario scenario)
+        => Render([scenario], [BuildScenarioBuilder(scenario)]);
+
+    /// <summary>The registry file: <c>CreateAll</c> and the module initializer that registers every
+    /// scenario. Built from the scenario names alone, never from what a step does.</summary>
+    public static string EmitRegistry(IReadOnlyList<RegistryEntry> entries)
+        => Render([], [BuildCreateAll(entries), BuildModuleInitializer(entries)]);
+
+    private static string Render(
+        IReadOnlyList<ParsedScenario> scenarios,
+        IReadOnlyList<MemberDeclarationSyntax> members)
+    {
         var classDecl = ClassDeclaration("RaunGenerated")
-            .AddModifiers(Token(SyntaxKind.InternalKeyword), Token(SyntaxKind.StaticKeyword))
+            .AddModifiers(
+                Token(SyntaxKind.InternalKeyword),
+                Token(SyntaxKind.StaticKeyword),
+                Token(SyntaxKind.PartialKeyword))
             .WithMembers(List(members));
 
         var nsDecl = NamespaceDeclaration(Names.Dotted("Raun", "Generated")).AddMembers(classDecl);
@@ -82,7 +104,7 @@ internal static class ScenarioEmitter
         }
     }
 
-    private static MethodDeclarationSyntax BuildCreateAll(IReadOnlyList<ParsedScenario> scenarios)
+    private static MethodDeclarationSyntax BuildCreateAll(IReadOnlyList<RegistryEntry> scenarios)
     {
         ExpressionSyntax body;
         if (scenarios.Count == 0)
@@ -117,7 +139,7 @@ internal static class ScenarioEmitter
             .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
     }
 
-    private static MethodDeclarationSyntax BuildModuleInitializer(IReadOnlyList<ParsedScenario> scenarios)
+    private static MethodDeclarationSyntax BuildModuleInitializer(IReadOnlyList<RegistryEntry> scenarios)
     {
         // global::Raun.ScenarioRegistry.Register("...", Scenario_X);
         var statements = scenarios.Select(s =>
@@ -140,7 +162,7 @@ internal static class ScenarioEmitter
             .WithBody(Block(statements));
     }
 
-    private static MemberDeclarationSyntax BuildScenarioBuilder(ParsedScenario scenario)
+    private static MethodDeclarationSyntax BuildScenarioBuilder(ParsedScenario scenario)
     {
         // var nodes = new global::Raun.Model.ScenarioNode[N];
         var arrayExpr = ArrayCreationExpression(

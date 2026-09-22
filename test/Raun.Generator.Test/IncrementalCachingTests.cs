@@ -14,23 +14,9 @@ namespace Raun.Generator.Test;
 /// </summary>
 public class IncrementalCachingTests
 {
-    private const string Source = """
-        using System.Threading.Tasks;
-        using Raun;
-
-        namespace Demo;
-
-        public static class Given
-        {
-            [StepName("Given patient {name} exists")]
-            public static Task<string> PatientExists(string name) => Task.FromResult(name);
-        }
-
-        public static class When
-        {
-            [StepName("When booking for {patient}")]
-            public static Task<int> Book(string patient) => Task.FromResult(1);
-        }
+    /// <summary>Two scenarios over the shared sample DSL, so both a per-scenario file and the
+    /// registry are really emitted (a source that lowers to nothing would make these tests vacuous).</summary>
+    private const string Source = SampleSources.Dsl + """
 
         public static class Scenarios
         {
@@ -38,14 +24,16 @@ public class IncrementalCachingTests
             public static async Task Books()
             {
                 var patient = await Given.PatientExists("Jane");
-                await When.Book(patient);
+                var slot = await Given.AvailableSlot();
+                await When.CreateAppointment(patient, slot);
             }
 
             [Scenario("another patient books")]
             public static async Task BooksAgain()
             {
                 var patient = await Given.PatientExists("John");
-                await When.Book(patient);
+                var slot = await Given.AvailableSlot();
+                await When.CreateAppointment(patient, slot);
             }
         }
         """;
@@ -104,10 +92,31 @@ public class IncrementalCachingTests
         _ => SampleSources.Dsl,
     };
 
+    [Fact]
+    public void Editing_one_scenario_leaves_the_other_scenario_s_output_alone()
+    {
+        // Each scenario is emitted into its own file, so an edit re-runs that scenario's emit and
+        // nothing else: not its neighbours, and not the registry (whose content is the scenario
+        // names, which did not move).
+        var edited = Source.Replace("\"John\"", "\"Johnny\"", StringComparison.Ordinal);
+        var (reasons, hints) = RunTwiceTracking(Source, edited);
+
+        Assert.Equal(2, hints.Count(h => h.StartsWith("RaunScenario.", StringComparison.Ordinal)));
+        Assert.Single(reasons, IncrementalStepRunReason.Modified);
+        Assert.True(
+            reasons.Count(r => r == IncrementalStepRunReason.Cached) >= 3,
+            $"expected the other scenario, the registry and the entry point to be cached; got {string.Join(", ", reasons)}");
+    }
+
     /// <summary>Runs the generator over <paramref name="first"/>, then again over
     /// <paramref name="second"/> parsed as a fresh tree, and returns the run reasons of the second
     /// run's source-output steps.</summary>
     private static ImmutableArray<IncrementalStepRunReason> RunTwice(string first, string second)
+        => RunTwiceTracking(first, second).Reasons;
+
+    /// <summary>The second run's source-output run reasons, plus the hint names it produced.</summary>
+    private static (ImmutableArray<IncrementalStepRunReason> Reasons, ImmutableArray<string> Hints) RunTwiceTracking(
+        string first, string second)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
         var compilation = GeneratorHarness.CompilationFor(first, parseOptions);
@@ -129,12 +138,14 @@ public class IncrementalCachingTests
 
         var result = Assert.Single(driver.GetRunResult().Results);
 
-        return
+        ImmutableArray<IncrementalStepRunReason> reasons =
         [
             .. result.TrackedOutputSteps
                 .SelectMany(static kvp => kvp.Value)
                 .SelectMany(static step => step.Outputs)
                 .Select(static output => output.Reason),
         ];
+        ImmutableArray<string> hints = [.. result.GeneratedSources.Select(static source => source.HintName)];
+        return (reasons, hints);
     }
 }

@@ -6,11 +6,10 @@
 using Raun;
 using System.Linq;
 using System.Threading.Tasks;
-using ResourceDemo;
 
 namespace Raun.Generated
 {
-    internal static class RaunGenerated
+    internal static partial class RaunGenerated
     {
         public static global::System.Collections.Generic.IReadOnlyList<global::Raun.Model.ScenarioDefinition> CreateAll() => new global::Raun.Model.ScenarioDefinition[]
         {
@@ -20,115 +19,6 @@ namespace Raun.Generated
         internal static void Initialize()
         {
             global::Raun.ScenarioRegistry.Register("ResourceDemo.ResourceScenarios.SuspendedUserCannotSignIn", Scenario_ResourceDemo_ResourceScenarios_SuspendedUserCannotSignIn);
-        }
-
-        public static global::Raun.Model.ScenarioDefinition Scenario_ResourceDemo_ResourceScenarios_SuspendedUserCannotSignIn()
-        {
-            var nodes = new global::Raun.Model.ScenarioNode[4];
-            nodes[0] = new global::Raun.Model.ScenarioNode
-            {
-                Index = 0,
-                StepId = "915feb2d989ce6e1",
-                Phase = "Given",
-                OperationName = "UserExists",
-                DisplayNameTemplate = "user jane@acme.com exists",
-                SourceFile = "",
-                SourceLine = 80,
-                GroupId = null,
-                Timeout = null,
-                DependsOn = new int[]
-                {
-                },
-                Invoke = static async (__inputs, __ctx) =>
-                {
-                    var __r = await Given.UserExists("jane@acme.com");
-#line hidden
-                    await __ctx.Resources.Create(__r);
-#line hidden
-                    return (object? )__r;
-                }
-            };
-            nodes[1] = new global::Raun.Model.ScenarioNode
-            {
-                Index = 1,
-                StepId = "4ffb9a58c73ac0cc",
-                Phase = "When",
-                OperationName = "Suspend",
-                DisplayNameTemplate = "suspending the user",
-                SourceFile = "",
-                SourceLine = 81,
-                GroupId = null,
-                Timeout = null,
-                DependsOn = new int[]
-                {
-                    0
-                },
-                Invoke = static async (__inputs, __ctx) =>
-                {
-#line hidden
-                    await __ctx.Resources.Edit(__inputs.Get<global::ResourceDemo.User>(0));
-                    var __r = await When.Suspend(__inputs.Get<global::ResourceDemo.User>(0));
-#line hidden
-                    await __ctx.Resources.Edit(__r);
-#line hidden
-                    return (object? )__r;
-                }
-            };
-            nodes[2] = new global::Raun.Model.ScenarioNode
-            {
-                Index = 2,
-                StepId = "d9e8bf4da464fe19",
-                Phase = "Then",
-                OperationName = "CannotSignIn",
-                DisplayNameTemplate = "the user cannot sign in",
-                SourceFile = "",
-                SourceLine = 82,
-                GroupId = null,
-                Timeout = null,
-                DependsOn = new int[]
-                {
-                    1
-                },
-                Invoke = static async (__inputs, __ctx) =>
-                {
-#line hidden
-                    await __ctx.Resources.Read(__inputs.Get<global::ResourceDemo.User>(1));
-                    await Then.CannotSignIn(__inputs.Get<global::ResourceDemo.User>(1));
-#line hidden
-                    return (object? )null;
-                }
-            };
-            nodes[3] = new global::Raun.Model.ScenarioNode
-            {
-                Index = 3,
-                StepId = "d4612f2bbb9e7e99",
-                Phase = "Then",
-                OperationName = "Teardown",
-                DisplayNameTemplate = "Teardown",
-                SourceFile = null,
-                SourceLine = 0,
-                GroupId = null,
-                Timeout = null,
-                DependsOn = new int[]
-                {
-                },
-                IsTeardown = true,
-                Invoke = static (__inputs, __ctx) => global::System.Threading.Tasks.Task.FromResult<object?>(null)
-            };
-            return new global::Raun.Model.ScenarioDefinition
-            {
-                ScenarioId = "c01f329e4fc6cd1a",
-                DisplayName = "suspended user cannot sign in",
-                MethodName = "ResourceDemo.ResourceScenarios.SuspendedUserCannotSignIn",
-                Namespace = "ResourceDemo",
-                TypeName = "ResourceScenarios",
-                ClassDisplayName = null,
-                SourceFile = "",
-                SourceLine = 78,
-                Timeout = null,
-                TeardownPolicy = (global::Raun.Run)0,
-                Nodes = nodes
-            };
         }
     }
 }

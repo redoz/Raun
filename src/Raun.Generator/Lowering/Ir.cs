@@ -90,6 +90,13 @@ internal readonly record struct ParseRejection(
 /// <summary>The parser's verdict on one scenario: exactly one of the two is set.</summary>
 internal readonly record struct ParseOutcome(ParsedScenario? Scenario, ParseRejection? Rejection);
 
+/// <summary>
+/// What the registry file needs to know about one scenario: the name of its generated builder
+/// method and the method full name it registers under. Deliberately nothing else — the registry
+/// must not move when a step body is edited.
+/// </summary>
+internal readonly record struct RegistryEntry(string SafeName, string MethodFullName);
+
 /// <summary>A lowered scenario ready for emission.</summary>
 internal sealed record ParsedScenario
 {
