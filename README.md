@@ -102,8 +102,11 @@ dotnet run --project MyScenarios -- --report-html             # plus a self-cont
 dotnet run --project MyScenarios -- --report-html --results-directory out
 ```
 
-The HTML report shows every step on a timeline (a Gantt of the actual concurrency), its log with a
-timer from scenario start, its resource effects, and a resource lane across the scenario. In an IDE's
+The HTML report opens on a summary of the run and a table with a row per scenario (status, name,
+where it lives, step count, duration). Below it each scenario is a card you can expand: its steps in
+order with their status and duration, and under a step its log with a timer from scenario start, its
+resource effects as `Type:key` in the resource colour, and its exception when it failed. The first
+failing step's scenario is expanded for you. In an IDE's
 test explorer each step is a test node; selecting one step runs everything up to and including it —
 its dependencies, merge sources, guard conditions, and teardown — and nothing after it.
 
@@ -277,7 +280,7 @@ public static Task Cancel([Deleted] Appointment appointment) { ... }
 Roles are `[Created]`, `[Loaded]`, `[Edited]` on a return and `[Read]`, `[Edited]`, `[Deleted]` on a
 parameter; `References`/`Consumes` name the inputs a produced resource is built from, which the
 report draws as lineage. Every effect appears in the step's log (`[resource] Create Patient:Jane`) and
-in the report's resource lane.
+under the step in the report.
 
 Roles also catch a real class of bug. Two parallel steps that both pass the same local to a mutating
 role are rejected at compile time (`RAUN013`), and at run time two steps that nothing orders and that
