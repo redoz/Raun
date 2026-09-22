@@ -1,10 +1,10 @@
 # Overnight result — 2026-09-23: Raun pilot-readiness
 
-All eleven work items from the handoff landed, one commit each, on `main`. Two sub-items were
-deliberately not done; both are listed under **Not done** with the reasoning.
+All eleven work items from the handoff landed, one commit each, on `main`, item 9 in two commits.
+One stretch sub-item was deliberately not done; it is under **Not done** with the reasoning.
 
 Baseline at 53b630d: 687 tests (686 pass, 1 expected skip), 0 warnings.
-Now: **719 tests (718 pass, 1 expected skip), 0 warnings**, all three packages pack, locked restore
+Now: **720 tests (719 pass, 1 expected skip), 0 warnings**, all three packages pack, locked restore
 clean.
 
 ## What landed
@@ -19,7 +19,7 @@ clean.
 | 6 | `docs: describe the HTML report the way it actually looks` | The Gantt/resource-lane promise is gone. |
 | 7 | `docs: tell a migrating suite to start sequential` | `maxParallelScenarios: 1` first, raise later. |
 | 8 | `docs: scenarios must live in the test executable` | The class-library limitation, stated. |
-| 9 | `perf(generator): give the lowered IR value equality so the editor can cache` | Keystrokes stop re-emitting. |
+| 9 | `perf(generator): give the lowered IR value equality so the editor can cache` + `perf(generator): emit one file per scenario` | Keystrokes stop re-emitting; an edit touches one scenario's file. |
 | 10 | `fix(generator): hash a step's uid from what it is, not where it sits` | Inserting a step no longer renames the rest. |
 | 11 | `ci: lock the dependency graph and pin the actions` | Lock files, SHA pins, determinism, Dependabot. |
 
@@ -56,25 +56,27 @@ the sample's attachment now lands under `bin/Release/net10.0/TestResults/raun-at
 **Item 5 — MSTest was added too.** The handoff named FluentAssertions and Shouldly. MSTest's
 `AssertFailedException` has the same problem and is one more string in the same list.
 
+**Item 9 — both halves landed, in two commits.** The IR change (value equality) and the file split
+are independent fixes with independent tests, and the split rewrites the snapshot layout, so they are
+reviewable separately.
+
+The split's snapshot churn was checked mechanically, not eyeballed: every member block of the old
+single-file snapshot is byte-identical to a block in the new files, and the multisets match for all
+eight snapshots. Only file boundaries and the `partial` keyword moved.
+
+One thing the split turned up: `IncrementalCachingTests`'s own source had been hand-written rather
+than built on `SampleSources.Dsl`, and it lowered to **no scenarios at all** — so the caching
+assertions around it were vacuous (the meaningful coverage was the five-shape theory over the real
+samples, which did fail before the IR fix). It now builds on the shared DSL and emits two scenarios.
+Worth remembering as a failure mode: a generator test whose input silently generates nothing still
+passes every assertion about caching.
+
 **Item 10 — merge and pass-through nodes keep their positional keys.** They are synthetic, never
 reported as test nodes, and never named by a filter, so there is nothing for a stable uid to protect.
 Every real step uid changed once; the snapshot diff is uid lines and nothing else (checked line by
 line before accepting). Nothing in `test/` or `samples/` hardcoded a uid.
 
 ## Not done, and why
-
-**Item 9's second half — per-scenario source outputs.** The IR now has value equality, which fixes
-the case that actually hurts in an editor: a keystroke in a file holding scenarios no longer re-emits
-`RaunScenarios.g.cs`. Four of the five lowering shapes re-emitted before and are now cached; there is
-a test per shape and an invalidation guard so caching that never invalidates cannot pass.
-
-Splitting the output into one file per scenario would additionally stop an edit to scenario A
-re-emitting scenario B's code. That means new hint names, a separate collected output for the module
-initializer and the registry, and a snapshot layout change, in the most load-bearing component in the
-repo, with nobody awake to look at it. The remaining cost it would save is re-running `SyntaxFactory`
-over the other scenarios in one file — real for a 500-scenario suite, not a pilot blocker. Left as a
-follow-up; the tests that would prove it (`IncrementalCachingTests`) are already in place and would
-extend to it directly.
 
 **Item 4's stretch — a `Redact` hook.** Deliberately skipped. A redaction callback that a suite can
 forget to set, or that only covers log lines and attachment text while keys still travel into span
@@ -87,7 +89,7 @@ the point each is reported.
 
 ```
 dotnet build Raun.slnx -c Release      # 0 warnings
-dotnet test  Raun.slnx -c Release      # 719 total, 718 passed, 1 skipped (expected)
+dotnet test  Raun.slnx -c Release      # 720 total, 719 passed, 1 skipped (expected)
 dotnet restore Raun.slnx --locked-mode # clean
 dotnet run --project samples/AppointmentTests  # 52 nodes, attachment under TestResults/
 ```
