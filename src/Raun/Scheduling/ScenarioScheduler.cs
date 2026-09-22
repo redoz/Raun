@@ -44,6 +44,10 @@ public sealed class ScenarioScheduler
     /// <summary>Skip reason recorded on steps that never ran because the scenario was canceled.</summary>
     public const string CanceledSkipReason = "scenario canceled";
 
+    /// <summary>Skip reason recorded on steps that never ran because the scenario timed out. Distinct
+    /// from <see cref="CanceledSkipReason"/> because a timeout is the suite's own fault, not the host's.</summary>
+    public const string TimedOutSkipReason = "scenario timed out";
+
     /// <param name="definition">The scenario graph to run.</param>
     /// <param name="services">Per-scenario service provider surfaced as <c>ctx.Services</c>.</param>
     /// <param name="observer">Receives step lifecycle callbacks; nothing is raised for steps a filter left out.</param>
@@ -71,6 +75,23 @@ public sealed class ScenarioScheduler
         var outputs = new object?[count];
         var inputs = new StepInputs(outputs, status);
         var capacity = _maxParallelism > 0 ? _maxParallelism : int.MaxValue;
+
+        // The scenario-wide timeout from [Scenario(Timeout = …)]. Its token asks running steps to stop,
+        // and the race in phase 3 stops the scheduler WAITING for a step that never looks at its token:
+        // a body doing `await Task.Delay(10_000)` would otherwise outlive the timeout it was given.
+        // Real time even in simulated mode, exactly like a per-step timeout — a simulated run advances
+        // its clock from step bodies and returns promptly, so a wall-clock timer cannot misfire on it.
+        var scenarioTimeout = definition.Timeout is { } configured && configured > TimeSpan.Zero
+            ? configured
+            : (TimeSpan?)null;
+        using var timeoutCts = scenarioTimeout is null
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var timerCts = new CancellationTokenSource();
+        var timerTask = scenarioTimeout is null ? null : Task.Delay(scenarioTimeout.Value, timerCts.Token);
+        var scenarioToken = timeoutCts?.Token ?? cancellationToken;
+        var timedOut = false;
+        var launchedAt = new DateTimeOffset[count];
 
         var pending = new HashSet<int>(Enumerable.Range(0, count));
         var running = new Dictionary<Task<NodeOutcome>, int>();
@@ -139,9 +160,10 @@ public sealed class ScenarioScheduler
             // 1. Resolve skips: cancellation, or all dependencies terminal with at least one bad.
             foreach (var i in pending.ToArray())
             {
-                if (cancellationToken.IsCancellationRequested)
+                if (scenarioToken.IsCancellationRequested)
                 {
-                    await ApplyTerminalAsync(i, StepStatus.Skipped, CanceledSkipReason).ConfigureAwait(false);
+                    await ApplyTerminalAsync(
+                        i, StepStatus.Skipped, timedOut ? TimedOutSkipReason : CanceledSkipReason).ConfigureAwait(false);
                     progressed = true;
                     continue;
                 }
@@ -269,7 +291,7 @@ public sealed class ScenarioScheduler
             }
 
             // 2. Launch ready nodes (all dependencies passed), bounded by capacity.
-            if (!cancellationToken.IsCancellationRequested)
+            if (!scenarioToken.IsCancellationRequested)
             {
                 foreach (var i in pending.ToArray())
                 {
@@ -306,8 +328,13 @@ public sealed class ScenarioScheduler
                             simStartOffset![i] = startOffset;
                         }
 
+                        if (scenarioTimeout is not null)
+                        {
+                            launchedAt[i] = _timeProvider.GetUtcNow(); // only read the clock when a timeout can need it
+                        }
+
                         running[RunNodeAsync(
-                            definition, node, inputs, services, displayName, scenarioStart, startOffset, teardownLog, ledger, scenarioStartRef, cancellationToken)] = i;
+                            definition, node, inputs, services, displayName, scenarioStart, startOffset, teardownLog, ledger, scenarioStartRef, scenarioToken)] = i;
                         progressed = true;
                     }
                 }
@@ -330,28 +357,53 @@ public sealed class ScenarioScheduler
                 continue;
             }
 
-            var finishedTask = await Task.WhenAny(running.Keys).ConfigureAwait(false);
+            Task<NodeOutcome> finishedTask;
+            if (timerTask is not null && !timedOut)
+            {
+                var winner = await Task.WhenAny([.. running.Keys, (Task)timerTask]).ConfigureAwait(false);
+                if (winner == timerTask)
+                {
+                    timedOut = true;
+
+                    // Snapshot the winners BEFORE cancelling: a step that only finishes because of the
+                    // cancellation about to be requested belongs to the timeout, not to the race it lost
+                    // by a hair. (A canceled step returns a Skipped outcome normally, so "completed
+                    // successfully" cannot tell the two apart after the fact.)
+                    var raced = running.Keys.Where(t => t.IsCompleted).ToHashSet();
+                    await timeoutCts!.CancelAsync().ConfigureAwait(false); // best-effort: ask the steps to stop
+
+                    // Everything else is abandoned where it stands and reported failed, because waiting
+                    // for a body that ignores its token is exactly what the timeout exists to prevent.
+                    foreach (var (task, i) in running.Select(kv => (kv.Key, kv.Value)).ToList())
+                    {
+                        running.Remove(task);
+                        if (raced.Contains(task))
+                        {
+                            await ApplyFinishedAsync(task, i).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            Abandon(task);
+                            await ApplyTimedOutAsync(i, scenarioTimeout!.Value).ConfigureAwait(false);
+                        }
+                    }
+
+                    continue; // phase 1 now sees the cancellation and skips whatever is still pending
+                }
+
+                finishedTask = (Task<NodeOutcome>)winner;
+            }
+            else
+            {
+                finishedTask = await Task.WhenAny(running.Keys).ConfigureAwait(false);
+            }
+
             var index = running[finishedTask];
             running.Remove(finishedTask);
-            var outcome = await finishedTask.ConfigureAwait(false); // RunNodeAsync never throws
-
-            status[index] = outcome.Result.Status;
-            if (outcome.Result.Status == StepStatus.Passed)
-            {
-                outputs[index] = outcome.Output;
-            }
-
-            if (_simulatedTime)
-            {
-                simFinishOffset![index] = simStartOffset![index] + outcome.Result.Duration;
-            }
-
-            results[index] = outcome.Result;
-            if (observer is not null)
-            {
-                await observer.OnStepFinishedAsync(outcome.Result).ConfigureAwait(false);
-            }
+            await ApplyFinishedAsync(finishedTask, index).ConfigureAwait(false);
         }
+
+        await timerCts.CancelAsync().ConfigureAwait(false); // the scenario is done; stop the timer
 
         if (teardownIndex >= 0)
         {
@@ -511,6 +563,70 @@ public sealed class ScenarioScheduler
                 await observer.OnStepFinishedAsync(results[i]!).ConfigureAwait(false);
             }
         }
+
+        // Records a step task that ran to completion: its status, its output, and its result.
+        async Task ApplyFinishedAsync(Task<NodeOutcome> task, int i)
+        {
+            var outcome = await task.ConfigureAwait(false); // RunNodeAsync never throws
+
+            status[i] = outcome.Result.Status;
+            if (outcome.Result.Status == StepStatus.Passed)
+            {
+                outputs[i] = outcome.Output;
+            }
+
+            if (_simulatedTime)
+            {
+                simFinishOffset![i] = simStartOffset![i] + outcome.Result.Duration;
+            }
+
+            results[i] = outcome.Result;
+            if (observer is not null)
+            {
+                await observer.OnStepFinishedAsync(outcome.Result).ConfigureAwait(false);
+            }
+        }
+
+        // Reports a step the scenario timeout cut short. Failed, not skipped: the scenario ran out of
+        // time while this step held it, and a run that times out has to come back red.
+        async Task ApplyTimedOutAsync(int i, TimeSpan timeout)
+        {
+            var node = nodes[i];
+            var name = FormatName(node, inputs);
+            status[i] = StepStatus.Failed;
+
+            var startedAt = _simulatedTime ? scenarioStart + simStartOffset![i] : launchedAt[i];
+            var duration = _simulatedTime ? TimeSpan.Zero : _timeProvider.GetUtcNow() - startedAt;
+            if (_simulatedTime)
+            {
+                simFinishOffset![i] = simStartOffset![i];
+            }
+
+            var result = new StepResult
+            {
+                Node = node,
+                DisplayName = name,
+                Status = StepStatus.Failed,
+                StartedAt = startedAt,
+                Duration = duration,
+                Exception = new TimeoutException(
+                    $"Scenario '{definition.DisplayName}' exceeded its timeout of {timeout} while running step '{name}'."),
+            };
+
+            results[i] = result;
+            if (observer is not null)
+            {
+                await observer.OnStepFinishedAsync(result).ConfigureAwait(false);
+            }
+        }
+
+        // Keeps an abandoned step's eventual fault from surfacing as an unobserved task exception.
+        static void Abandon(Task task) =>
+            _ = task.ContinueWith(
+                static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
 
         async Task ApplyTerminalAsync(int i, StepStatus terminal, string reason)
         {
