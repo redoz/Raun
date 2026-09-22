@@ -19,6 +19,7 @@
   /* ---------- LIGHT PALETTE (default) ---------- */
   :root{
     color-scheme: light;
+    --cat-1:#2a78d6; --cat-2:#eb6834; --cat-3:#1baf7a; --cat-4:#eda100; --cat-5:#e87ba4; --cat-6:#008300; --cat-7:#4a3aa7; --cat-8:#e34948;
     --bg:#eef1f5; --bg-grad:#e7ebf1;
     --surface:#ffffff; --surface-2:#f5f7fa; --inset:#eef1f4;
     --border:#e3e7ec; --border-strong:#d2d8df;
@@ -42,6 +43,7 @@
   @media (prefers-color-scheme: dark){
     :root{
       color-scheme: dark;
+      --cat-1:#3987e5; --cat-2:#d95926; --cat-3:#199e70; --cat-4:#c98500; --cat-5:#d55181; --cat-6:#008300; --cat-7:#9085e9; --cat-8:#e66767;
       --bg:#0d1117; --bg-grad:#0b0f14;
       --surface:#161b22; --surface-2:#1b2230; --inset:#10151d;
       --border:#2a313c; --border-strong:#39414e;
@@ -65,6 +67,7 @@
   /* ---------- EXPLICIT OVERRIDES (screenshot-deterministic) ---------- */
   :root[data-theme="light"]{
     color-scheme: light;
+    --cat-1:#2a78d6; --cat-2:#eb6834; --cat-3:#1baf7a; --cat-4:#eda100; --cat-5:#e87ba4; --cat-6:#008300; --cat-7:#4a3aa7; --cat-8:#e34948;
     --bg:#eef1f5; --bg-grad:#e7ebf1;
     --surface:#ffffff; --surface-2:#f5f7fa; --inset:#eef1f4;
     --border:#e3e7ec; --border-strong:#d2d8df;
@@ -86,6 +89,7 @@
   }
   :root[data-theme="dark"]{
     color-scheme: dark;
+    --cat-1:#3987e5; --cat-2:#d95926; --cat-3:#199e70; --cat-4:#c98500; --cat-5:#d55181; --cat-6:#008300; --cat-7:#9085e9; --cat-8:#e66767;
     --bg:#0d1117; --bg-grad:#0b0f14;
     --surface:#161b22; --surface-2:#1b2230; --inset:#10151d;
     --border:#2a313c; --border-strong:#39414e;
@@ -245,13 +249,14 @@
   .hint{ color:var(--faint); font-size:11.5px; margin:2px 0 10px; }
   .logs li .lg-tag{ color:var(--faint); }
   .res-chip{
-    display:inline-flex; align-items:stretch; font:12px/1.5 var(--mono); border:1px solid var(--rc); border-radius:6px;
-    padding:0; background:transparent; color:var(--ink); cursor:pointer; vertical-align:baseline; overflow:hidden;
+    display:inline; font:inherit; font-family:var(--mono); font-weight:600; border:0; padding:0; margin:0; background:transparent;
+    color:var(--faint); cursor:pointer; border-radius:3px;
   }
-  .res-chip .rt{ background:var(--rc); color:var(--rc-ink); padding:0 6px; font-weight:600; }
-  .res-chip .rk{ padding:0 6px; }
-  .res-chip:hover, .res-chip:focus-visible{ box-shadow:0 0 0 2px color-mix(in srgb, var(--rc) 40%, transparent); outline:none; }
-  .res-chip.hl{ box-shadow:0 0 0 2px var(--rc); background:color-mix(in srgb, var(--rc) 16%, transparent); }
+  /* slot colour softened toward the ink; --res-mute is the one knob */
+  .res-chip{ --res-mute:62%; }
+  .res-chip .rt, .res-chip .rk{ color:color-mix(in oklab, var(--c) var(--res-mute), var(--ink)); }
+  .res-chip:hover, .res-chip:focus-visible{ text-decoration:underline; text-decoration-color:var(--rc); outline:none; }
+  .res-chip.hl{ background:color-mix(in srgb, var(--rc) 18%, transparent); box-shadow:0 0 0 2px color-mix(in srgb, var(--rc) 18%, transparent); }
   .step-entry.res-hit{ box-shadow:0 0 0 2px var(--rc-hit, var(--accent)); }
 
   /* ---------- ACTIVITY DIAGRAM (pure SVG; built per scenario) ---------- */
@@ -381,17 +386,23 @@
     tg.innerHTML = '<div><div class="n">' + esc(fmtGen(model.generatedAtUtc)) + '</div><div class="l">generated</div></div>';
     chips.appendChild(tg);
 
-    // ---- resource-type colours (stable, distinct, palette-cycled) ---------
-    const PALETTE = ["#2f74d0", "#e07a14", "#8350c4", "#0c8576", "#d2417f", "#2aa36a", "#b3892a", "#5566d6"];
-    const typeColorMap = new Map();
+    // ---- resource colours: the eight categorical slots (--cat-1..8, stepped per theme in CSS) ----
+    // Types take slots in first-seen order; a ninth type wraps. A key hashes into the slots, skipping
+    // its type's slot so type and key never share a colour. (The dormant diagram's shade()/contrastInk()
+    // expect hex, so re-enable it with hex slots rather than these var() references.)
+    const CAT_SLOTS = 8;
+    const KEY_SLOTS = 7; // keys hash into slots 1..7 only
+    const catVar = (i) => "var(--cat-" + ((i % CAT_SLOTS) + 1) + ")";
+    const typeSlotMap = new Map();
     for (const sc of model.scenarios)
       for (const r of sc.resources)
-        if (!typeColorMap.has(r.type)) typeColorMap.set(r.type, PALETTE[typeColorMap.size % PALETTE.length]);
-    function typeColor(t){
-      if (typeColorMap.has(t)) return typeColorMap.get(t);
-      let h = 0; const k = t || ""; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) % 360;
-      return "hsl(" + h + " 60% 45%)";
+        if (!typeSlotMap.has(r.type)) typeSlotMap.set(r.type, typeSlotMap.size);
+    const hashOf = (k) => { let h = 0; for (let i = 0; i < (k || "").length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0; return h; };
+    function typeSlot(t){
+      if (!typeSlotMap.has(t)) typeSlotMap.set(t, typeSlotMap.size);
+      return typeSlotMap.get(t) % CAT_SLOTS;
     }
+    function typeColor(t){ return catVar(typeSlot(t)); }
     function shade(color, amt){ // amt in [-1,1]; >0 -> toward white, <0 -> toward black
       let r,g,b;
       const h = color.match(/^#([0-9a-f]{6})$/i);
@@ -440,8 +451,8 @@
     const PHCOLOR = { given: "var(--ph-given)", when: "var(--ph-when)", then: "var(--ph-then)" };
     // The activity diagram is kept in code but not rendered for now; the drill opens by default instead.
     const SHOW_DIAGRAM = false;
-    // '[resource] {Verb} {Type}: {key}' log lines, optionally timer-stamped ('+0.320s ')
-    const RESOURCE_LINE = /^(\+[\d.]+s )?\[resource\] (\w+) ([^:\s]+): (.*)$/;
+    // '[resource] {Verb} {Type}:{key}' log lines, optionally timer-stamped ('+0.320s ')
+    const RESOURCE_LINE = /^(\+[\d.]+s )?\[resource\] (\w+) ([^:\s]+):(.*)$/;
     // phase-ink (darker, decodable on a white chip riding a saturated lane bar)
     const PHINK = { given: "var(--ph-given-ink)", when: "var(--ph-when-ink)", then: "var(--ph-then-ink)" };
     const report = document.getElementById("report");
@@ -2016,13 +2027,22 @@
       return card;
     }
 
-    // resChip(type, key) -> a clickable identity chip coloured by resource type; data-res is the
-    // identity ("Type:key") every chip for the same resource shares, which the click handler matches on.
+    // keyColor(type, key) -> a stable categorical slot per identifier, never the type's own slot and
+    // never slot 8 (red reads as failure on a plain identifier); KEY_SLOTS lives beside CAT_SLOTS
+    function keyColor(type, key){
+      const ts = typeSlot(type);
+      let slot = hashOf(key) % KEY_SLOTS;
+      if (slot === ts) slot = (slot + 1) % KEY_SLOTS;
+      return catVar(slot);
+    }
+
+    // resChip(type, key) -> clickable "Type:key" text, type in the type colour and key in the key colour;
+    // data-res is the identity every chip for the same resource shares, which the click handler matches on.
     function resChip(type, key){
       const c = typeColor(type);
       return '<button type="button" class="res-chip" data-res="' + esc(type + ":" + key) + '"' +
-        ' style="--rc:' + c + ';--rc-ink:' + contrastInk(c) + '" title="highlight every step touching ' + esc(type) + ": " + esc(key) + '">' +
-        '<span class="rt">' + esc(type) + '</span><span class="rk">' + esc(key) + "</span></button>";
+        ' style="--rc:' + c + '" title="highlight every step touching ' + esc(type) + ":" + esc(key) + '">' +
+        '<span class="rt" style="--c:' + c + '">' + esc(type) + '</span>:<span class="rk" style="--c:' + keyColor(type, key) + '">' + esc(key) + "</span></button>";
     }
 
     // logHtml(line) -> a "[resource] {Verb} {Type}: {key}" log line with the identity as a chip; any other line escaped as-is
