@@ -28,7 +28,7 @@ namespace Raun.Generated
             nodes[0] = new global::Raun.Model.ScenarioNode
             {
                 Index = 0,
-                StepId = "41f859d4ba1039aa",
+                StepId = "f249cffef8ebb82c",
                 Phase = "Given",
                 OperationName = "ScheduleIsEmpty",
                 DisplayNameTemplate = "the schedule is empty",
@@ -49,7 +49,7 @@ namespace Raun.Generated
             nodes[1] = new global::Raun.Model.ScenarioNode
             {
                 Index = 1,
-                StepId = "dcdd1698f574d30b",
+                StepId = "9475f0063ecc0822",
                 Phase = "When",
                 OperationName = "ReminderIsSent",
                 DisplayNameTemplate = "a reminder is sent",

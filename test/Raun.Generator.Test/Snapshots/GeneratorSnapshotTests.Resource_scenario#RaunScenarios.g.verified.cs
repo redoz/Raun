@@ -28,7 +28,7 @@ namespace Raun.Generated
             nodes[0] = new global::Raun.Model.ScenarioNode
             {
                 Index = 0,
-                StepId = "b60cc37490078dc8",
+                StepId = "915feb2d989ce6e1",
                 Phase = "Given",
                 OperationName = "UserExists",
                 DisplayNameTemplate = "user jane@acme.com exists",
@@ -51,7 +51,7 @@ namespace Raun.Generated
             nodes[1] = new global::Raun.Model.ScenarioNode
             {
                 Index = 1,
-                StepId = "54489df35cd31516",
+                StepId = "4ffb9a58c73ac0cc",
                 Phase = "When",
                 OperationName = "Suspend",
                 DisplayNameTemplate = "suspending the user",
@@ -77,7 +77,7 @@ namespace Raun.Generated
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
                 Index = 2,
-                StepId = "9805285c8a9f5d48",
+                StepId = "d9e8bf4da464fe19",
                 Phase = "Then",
                 OperationName = "CannotSignIn",
                 DisplayNameTemplate = "the user cannot sign in",

@@ -28,7 +28,7 @@ namespace Raun.Generated
             nodes[0] = new global::Raun.Model.ScenarioNode
             {
                 Index = 0,
-                StepId = "a90ff89cf522e934",
+                StepId = "409989c70df28d22",
                 Phase = "Given",
                 OperationName = "UserExists",
                 DisplayNameTemplate = "user alice exists",
@@ -49,7 +49,7 @@ namespace Raun.Generated
             nodes[1] = new global::Raun.Model.ScenarioNode
             {
                 Index = 1,
-                StepId = "a90ff99cf522eae7",
+                StepId = "e3a937d2fe56991b",
                 Phase = "Given",
                 OperationName = "UserExists",
                 DisplayNameTemplate = "user bob exists",
@@ -70,7 +70,7 @@ namespace Raun.Generated
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
                 Index = 2,
-                StepId = "e0803707472d5274",
+                StepId = "e3d315bf20316dec",
                 Phase = "When",
                 OperationName = "ImportUsers",
                 DisplayNameTemplate = "importing users",
@@ -93,7 +93,7 @@ namespace Raun.Generated
             nodes[3] = new global::Raun.Model.ScenarioNode
             {
                 Index = 3,
-                StepId = "cdc74a6d6973fd48",
+                StepId = "e54e734040605c4a",
                 Phase = "Then",
                 OperationName = "ImportShouldContainUsers",
                 DisplayNameTemplate = "the import should contain the users",

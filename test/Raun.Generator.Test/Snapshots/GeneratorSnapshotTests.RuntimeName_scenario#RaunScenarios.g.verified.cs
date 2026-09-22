@@ -28,7 +28,7 @@ namespace Raun.Generated
             nodes[0] = new global::Raun.Model.ScenarioNode
             {
                 Index = 0,
-                StepId = "3751aece5ce6a3b0",
+                StepId = "964a6d49a6e4457a",
                 Phase = "Given",
                 OperationName = "PatientExists",
                 DisplayNameTemplate = "patient Jane exists",
@@ -49,7 +49,7 @@ namespace Raun.Generated
             nodes[1] = new global::Raun.Model.ScenarioNode
             {
                 Index = 1,
-                StepId = "219555651c48ed47",
+                StepId = "82150fab3cee56b3",
                 Phase = "Then",
                 OperationName = "Greet",
                 DisplayNameTemplate = "greet {patient}",

@@ -28,7 +28,7 @@ namespace Raun.Generated
             nodes[0] = new global::Raun.Model.ScenarioNode
             {
                 Index = 0,
-                StepId = "fc427b5685e22f40",
+                StepId = "ea42275a0641a48a",
                 Phase = "Given",
                 OperationName = "PatientExists",
                 DisplayNameTemplate = "patient Jane exists",
@@ -50,7 +50,7 @@ namespace Raun.Generated
             nodes[1] = new global::Raun.Model.ScenarioNode
             {
                 Index = 1,
-                StepId = "bddc40ffb5cfd92d",
+                StepId = "d4be74fa4d9b083c",
                 Phase = "Given",
                 OperationName = "AvailableSlot",
                 DisplayNameTemplate = "an available slot exists",
@@ -73,7 +73,7 @@ namespace Raun.Generated
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
                 Index = 2,
-                StepId = "13d67006c7f190e2",
+                StepId = "958b21bfb2637d55",
                 Phase = "When",
                 OperationName = "CreateAppointment",
                 DisplayNameTemplate = "creating an appointment",
@@ -97,7 +97,7 @@ namespace Raun.Generated
             nodes[3] = new global::Raun.Model.ScenarioNode
             {
                 Index = 3,
-                StepId = "629f5e6bf5f7fafd",
+                StepId = "d17b72cf7d550047",
                 Phase = "Then",
                 OperationName = "AppointmentExists",
                 DisplayNameTemplate = "the appointment should exist",

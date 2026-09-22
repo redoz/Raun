@@ -37,6 +37,11 @@ internal sealed class ScenarioParser
     private readonly Dictionary<string, (TypeSyntax Type, string Mode)> _uses =
         new(System.StringComparer.Ordinal);
 
+    // How many steps so far share an identity key (operation + arguments as written). The ordinal
+    // disambiguates genuinely identical steps and nothing else, which is what keeps a step's uid put
+    // when an unrelated step is inserted before it or the step is wrapped in an `if`.
+    private readonly Dictionary<string, int> _stepKeyOrdinals = new(System.StringComparer.Ordinal);
+
     // Indices introduced by the previous top-level statement (source-order barrier / join target).
     private List<int> _prevFrontier = [];
 
@@ -773,7 +778,7 @@ internal sealed class ScenarioParser
         var step = new ParsedStep
         {
             Index = index,
-            StepId = GenStableId.ForStep(_scenarioId, operation + ":" + index),
+            StepId = GenStableId.ForStep(_scenarioId, StepKey(operation, invocation)),
             Phase = phase,
             OperationName = operation,
             HasResult = resultType is not null,
@@ -1031,6 +1036,31 @@ internal sealed class ScenarioParser
     // scenario file's comments and formatting have no business in the generated one.
     private IEnumerable<UsingDirectiveSyntax> CollectUsings()
         => _syntax.SyntaxTree.GetCompilationUnitRoot().Usings.Select(u => u.WithoutTrivia());
+
+    /// <summary>
+    /// The identity a step's uid is hashed from: the DSL operation, the arguments exactly as the
+    /// author wrote them (token texts, so reformatting and comments do not count), and an ordinal
+    /// among earlier steps with the same identity. Position deliberately plays no part — the old
+    /// ordinal-only key renamed every later step whenever one was inserted, which broke saved
+    /// filters and an IDE's "re-run this test". The ORIGINAL invocation is read, not the rewritten
+    /// one: the rewrite names steps by index, which would put position straight back in.
+    /// </summary>
+    private string StepKey(string operation, InvocationExpressionSyntax invocation)
+    {
+        var builder = new StringBuilder(operation);
+        builder.Append('(');
+        foreach (var token in invocation.ArgumentList.DescendantTokens())
+        {
+            builder.Append(token.Text);
+        }
+
+        builder.Append(')');
+        var identity = builder.ToString();
+
+        _stepKeyOrdinals.TryGetValue(identity, out var ordinal);
+        _stepKeyOrdinals[identity] = ordinal + 1;
+        return identity + ":" + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     private static string? Location(SyntaxNode node, out int line)
     {
