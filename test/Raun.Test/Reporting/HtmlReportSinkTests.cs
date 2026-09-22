@@ -137,6 +137,29 @@ public sealed class HtmlReportSinkTests : IDisposable
     }
 
     [Fact]
+    public async Task The_diagram_is_kept_but_not_rendered_and_resources_become_chips()
+    {
+        var path = Path.Combine(_dir, "raun-report.html");
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var def = Def();
+        await sink.PublishAsync(new RunStarted(1));
+        await sink.PublishAsync(new ScenarioStarted(def));
+        await sink.PublishAsync(new StepFinished(def, Passed(def.Nodes[0])));
+        await sink.PublishAsync(new ScenarioFinished(def, [Passed(def.Nodes[0])]));
+        await sink.PublishAsync(new RunFinished());
+
+        var html = await File.ReadAllTextAsync(path);
+        // the activity diagram stays in the template but is switched off; the drill opens by default instead
+        Assert.Contains("const SHOW_DIAGRAM = false;", html, StringComparison.Ordinal);
+        Assert.Contains("if (SHOW_DIAGRAM) card.appendChild(buildActivityDiagram(sc, rerender));", html, StringComparison.Ordinal);
+        Assert.Contains("if (!SHOW_DIAGRAM) drill.classList.add(\"open\");", html, StringComparison.Ordinal);
+        // resource mentions in logs and effects render as clickable chips keyed by identity
+        Assert.Contains("class=\"res-chip\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-res=", html, StringComparison.Ordinal);
+        Assert.Contains("function logHtml(", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task The_wait_reaches_the_json_and_the_template_renders_it()
     {
         var path = Path.Combine(_dir, "raun-report-wait.html");
