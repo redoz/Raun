@@ -192,6 +192,13 @@ dotnet run --project MyScenarios -- --max-parallel-scenarios 4
 The code default is the `maxParallelScenarios` argument of `RaunTestApplication.RunAsync` (or
 `MaxParallelScenarios` on the Aspire options); the command line overrides it per run.
 
+**Bringing an existing suite over?** Start at `maxParallelScenarios: 1`. A suite written against one
+shared database — or any other single environment it assumes it has to itself — will fail in ways
+that look like flakiness the moment two scenarios touch it at once, and a failing first run teaches
+nobody anything about Raun. Get the suite green sequentially, declare what actually contends with
+`[Uses<T>]` (below), then raise the number. The default (the processor count) is the destination, not
+the starting line.
+
 When scenarios genuinely contend for something — one database a few scenarios need to themselves,
 three SMTP servers, a serial port — declare it with a token type and `[Uses<T>]`:
 
