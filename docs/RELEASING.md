@@ -66,7 +66,8 @@ both together.
    - In nuget.org, configure a trusted publishing policy for the package owner with GitHub
      repository owner `redoz`, repository `Raun`, and workflow file `release.yml` (file name only).
      Leave the environment empty because the workflow uses no GitHub environment. Grant the
-     policy permission to publish new packages and new versions of the three package IDs.
+     policy permission to publish new packages and new versions of all three package IDs; a
+     `Raun.*` scope does not include the bare `Raun` package.
    - In GitHub Actions, set the repository **variable** `NUGET_USER` to the nuget.org account's
      username (not its email address). No persistent NuGet API key is needed.
 6. Verify on nuget.org that `Raun`, `Raun.Mtp`, and `Raun.Aspire` show the tagged version, the
