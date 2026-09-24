@@ -7,19 +7,25 @@ generator as an analyzer), `Raun.Mtp`, and `Raun.Aspire`.
 ## Version scheme
 
 - `v0.x.y` while pre-1.0: anything may change between minors.
-- An untagged commit builds as `<next patch>-preview.0.<height>`, e.g. `0.1.1-preview.0.7`. Fine
-  for local packing; never published.
+- An untagged commit builds as `<next patch>-preview.0.<height>`, e.g. `0.1.1-preview.0.7`.
+  Pushes to `main` publish these previews to GitHub Packages, not nuget.org.
 - A pre-release is a tag with a suffix: `v0.2.0-beta.1`. MinVer uses it verbatim.
+  All `v*` tags, including pre-release tags, publish to nuget.org.
 
 ## Dependencies are locked
 
 `RestorePackagesWithLockFile` is on repo-wide, so every project carries a `packages.lock.json` with
 its fully resolved graph — transitives and the samples' floating `OpenTelemetry 1.*` included — and
-both workflows restore in locked mode before building. A restore therefore cannot pull a package
-nobody reviewed: changing a reference means regenerating the lock files in the same commit.
+both workflows restore in locked mode before building. The Aspire AppHost SDK injects host-specific
+Dashboard and Orchestration packages: the AppHost and its referencing test project use the existing
+`packages.lock.json` on `win-x64`, and `packages.<RID>.lock.json` elsewhere (the Linux CI runner
+uses `packages.linux-x64.lock.json`). A restore therefore cannot pull a package nobody reviewed:
+changing a reference means regenerating the affected lock files on each supported host in the same commit.
 
 ```bash
 dotnet restore Raun.slnx --force-evaluate   # after adding/changing/removing a PackageReference
+# From Windows, also refresh the Aspire locks used by the Linux CI runner:
+dotnet restore Raun.slnx --force-evaluate -p:NETCoreSdkRuntimeIdentifier=linux-x64
 dotnet restore Raun.slnx --locked-mode      # what CI does; fails if a lock file is stale
 ```
 
@@ -52,19 +58,27 @@ both together.
    jj git fetch
    ```
 
-5. The `Release` workflow builds, tests, packs with `ContinuousIntegrationBuild`, pushes to the
-   repository's **GitHub Packages** feed, and creates the GitHub release with the packages attached.
-   It authenticates with the workflow's own `GITHUB_TOKEN`; no secret to set up.
-6. Verify under the repository's Packages tab that all three packages show the version, the license
-   (Apache-2.0), and the README.
+5. The `Release` workflow builds, tests, packs with `ContinuousIntegrationBuild`, publishes all
+   three packages to **nuget.org** using trusted publishing, and creates the GitHub release with
+   the packages attached. Before the first tag:
+   - In nuget.org, configure a trusted publishing policy for the package owner with GitHub
+     repository owner `redoz`, repository `Raun`, and workflow file `release.yml` (file name only).
+     Leave the environment empty because the workflow uses no GitHub environment. Grant the
+     policy permission to publish new packages and new versions of the three package IDs.
+   - In GitHub Actions, set the repository **variable** `NUGET_USER` to the nuget.org account's
+     username (not its email address). No persistent NuGet API key is needed.
+6. Verify on nuget.org that `Raun`, `Raun.Mtp`, and `Raun.Aspire` show the tagged version, the
+   license (Apache-2.0), and the README.
 
-## Where the packages live (for now)
+## Where the packages live
 
-- **Feed:** `https://nuget.pkg.github.com/redoz/index.json` (GitHub Packages).
+- **Tagged releases:** `https://api.nuget.org/v3/index.json` (nuget.org); consumers can install
+  `Raun.Mtp` directly without GitHub Packages credentials.
 - **Previews:** every push to `main` publishes its `0.x.y-preview.0.N` build via the CI workflow, so
-  the current head is always consumable without tagging.
-- **Consuming:** GitHub Packages requires authentication even for public packages. A consumer needs
-  a `nuget.config` with the feed and a personal access token that has `read:packages`:
+  the current head is consumable from GitHub Packages without tagging.
+- **Consuming previews:** GitHub Packages requires authentication even for public packages.
+  A consumer needs a `nuget.config` with the feed and a personal access token that has
+  `read:packages`:
 
   ```xml
   <configuration>
@@ -80,10 +94,7 @@ both together.
   </configuration>
   ```
 
-  Then `dotnet add package Raun.Mtp --prerelease`.
-- **Moving to nuget.org later:** in both workflows change `--source` to
-  `https://api.nuget.org/v3/index.json` and `--api-key` to a `NUGET_API_KEY` secret. Versions and
-  tags stay exactly as they are.
+  Then `dotnet add package Raun.Mtp --prerelease` to consume a preview.
 
 ## Consumer baseline
 

@@ -1,5 +1,10 @@
 <Project>
 
+  <!-- Aspire's AppHost SDK injects host-RID-specific packages into the AppHost and its consumer. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'AspireAppointments.AppHost' or '$(MSBuildProjectName)' == 'AspireAppointments.Tests'">
+    <NuGetLockFilePath Condition="'$(NETCoreSdkRuntimeIdentifier)' != 'win-x64'">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'packages.$(NETCoreSdkRuntimeIdentifier).lock.json'))</NuGetLockFilePath>
+  </PropertyGroup>
+
   <!--
     Packaging metadata and tag-driven versioning, for the shippable libraries only. This file is
     imported AFTER each project file, so IsPackable is known here — Directory.Build.props runs before
