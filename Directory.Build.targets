@@ -23,7 +23,6 @@
          -p:ContinuousIntegrationBuild=true so paths are normalized. -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
-    <DebugType>embedded</DebugType>
 
     <!-- MinVer: the version is the nearest `v*` tag plus commit height. Nothing to bump by hand, and
          every project in one commit gets the same version, so Raun, Raun.Mtp, and Raun.Aspire

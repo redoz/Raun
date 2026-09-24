@@ -1,5 +1,10 @@
 <Project>
 
+  <!-- Set this before SDK targets determine whether an external .pdb should be packed. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Raun' or '$(MSBuildProjectName)' == 'Raun.Mtp' or '$(MSBuildProjectName)' == 'Raun.Aspire'">
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
   <!-- Settings shared by every project in the repository. -->
   <PropertyGroup>
     <LangVersion>latest</LangVersion>            <!-- C# 14: static extension members -->
