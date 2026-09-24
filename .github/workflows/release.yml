@@ -3,15 +3,14 @@ name: Release
 # Pushing a tag like v0.1.0 (or v0.2.0-beta.1) publishes that exact version. MinVer reads the tag,
 # so the version is never typed anywhere else. See docs/RELEASING.md.
 #
-# Publishes to the repository's GitHub Packages feed for now. Switching to nuget.org later is one
-# step: change --source to https://api.nuget.org/v3/index.json and --api-key to a NUGET_API_KEY secret.
+# Tags publish to nuget.org; main-branch previews remain on GitHub Packages via ci.yml.
 on:
   push:
     tags: ['v*']
 
 permissions:
   contents: write
-  packages: write
+  id-token: write
 
 jobs:
   publish:
@@ -40,11 +39,19 @@ jobs:
           dotnet pack src/Raun.Mtp/Raun.Mtp.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
           dotnet pack src/Raun.Aspire/Raun.Aspire.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
 
-      - name: Push to GitHub Packages
+      - name: NuGet.org login
+        id: nuget_login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
         run: >
           dotnet nuget push "artifacts/*.nupkg"
-          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-          --api-key "${{ secrets.GITHUB_TOKEN }}"
+          --source "https://api.nuget.org/v3/index.json"
+          --api-key "$NUGET_API_KEY"
           --skip-duplicate
 
       - name: GitHub release
