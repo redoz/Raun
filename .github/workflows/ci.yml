@@ -46,7 +46,7 @@ jobs:
 
       # Every push to main publishes its preview build (0.x.y-preview.0.N) to the repository's
       # GitHub Packages feed, so the current head is always consumable. Tags publish real versions
-      # through release.yml. GitHub Packages does not accept .snupkg, so only .nupkg is pushed.
+      # through release.yml. Symbols are embedded in the packaged assemblies.
       - name: Publish preview to GitHub Packages
         if: github.event_name == 'push'
         run: >

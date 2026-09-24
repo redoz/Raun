@@ -41,7 +41,8 @@ both together.
    `## Release X.Y.Z` heading (RS2000 release tracking). Keep them unshipped for pre-releases:
    RS2007 does not accept a suffix such as `-beta.1` in a release header. Commit any move first.
 3. Check the packages locally and look at the file names — they carry the version MinVer computed
-   for the current commit:
+   for the current commit. Portable PDBs are embedded in the packaged assemblies (including the
+   generator), so no separate symbol packages are produced:
 
    ```bash
    dotnet pack src/Raun/Raun.csproj -c Release -o artifacts

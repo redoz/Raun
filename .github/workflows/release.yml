@@ -62,4 +62,4 @@ jobs:
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             release_flags+=(--prerelease)
           fi
-          gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg artifacts/*.snupkg --generate-notes "${release_flags[@]}"
+          gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg --generate-notes "${release_flags[@]}"
