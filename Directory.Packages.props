@@ -18,31 +18,31 @@
       Pinned at 2.4.0, which adds terminal options (progress, ansi, output minimal,
       show-slowest-tests, show-flaky-tests, show-test-results) needing no code change.
     -->
-    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.4.0" />
+    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.4.1" />
 
     <!-- ILogger bridge: step logs written through the standard .NET logging abstraction.
          Abstractions only — no logging implementation is taken as a dependency. -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
 
     <!-- DI: Raun.Mtp needs only the abstractions (IServiceScopeFactory); the test project needs
          the implementation to build a provider. -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
 
     <!-- Aspire integration (Raun.Aspire + the Aspire sample). -->
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.5.3" />
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.3" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.11" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.5.4" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.4" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
 
     <!-- Coverage spike: does the profiler reach Aspire's child processes?
          Moves in lockstep with Microsoft.Testing.Platform above: a version mismatch surfaces as a
          TypeLoadException after tests pass, not a coverage bug. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
 
     <!-- TRX reporting, for the AppointmentTests sample only: it is what proves (and documents) that
          a platform extension reaches a Raun run through RunAsync's `configure` callback. Moves in
          lockstep with Microsoft.Testing.Platform above. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.1" />
 
     <!-- OpenTelemetry, for the Aspire sample only: the test process exports Raun's spans and the API
          exports its own, both over OTLP, so one trace shows a step and the server work it caused.
@@ -60,20 +60,20 @@
       newer Roslyn than the host). Older .NET 10 SDKs that shipped Roslyn 5.0-5.2 can be
       supported later by adding a lower Raun.Generator.Roslyn<NN> variant.
     -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
 
     <!-- Tag-driven versioning for the packable libraries (referenced from Directory.Build.targets). -->
-    <PackageVersion Include="MinVer" Version="6.0.0" />
+    <PackageVersion Include="MinVer" Version="8.0.0" />
 
     <!-- Test infrastructure. xunit.v3 is pinned to match xunit.v3.extensibility.core. -->
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
-    <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.1" />
     <!-- Assertions only (Assert.Equal/NotNull/...) for Raun.Mtp consumers: scenario step bodies keep
          `using Xunit;` verbatim. Pinned to match the xunit.v3 line above. -->
-    <PackageVersion Include="xunit.v3.assert" Version="3.2.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
-    <PackageVersion Include="Verify.XunitV3" Version="31.19.0" />
+    <PackageVersion Include="xunit.v3.assert" Version="4.0.1" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Verify.XunitV3" Version="33.1.1" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.5.0" />
   </ItemGroup>
 
