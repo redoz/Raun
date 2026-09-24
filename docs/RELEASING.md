@@ -36,9 +36,10 @@ both together.
 ## Checklist
 
 1. `main` is green: `dotnet build Raun.slnx` (0 warnings) and `dotnet test Raun.slnx`.
-2. Move the analyzer rules being released from `src/Raun.Generator/AnalyzerReleases.Unshipped.md`
-   to `AnalyzerReleases.Shipped.md` under a `## Release X.Y.Z` heading (RS2000 release tracking).
-   Commit that first.
+2. For a stable release, move the analyzer rules being released from
+   `src/Raun.Generator/AnalyzerReleases.Unshipped.md` to `AnalyzerReleases.Shipped.md` under a
+   `## Release X.Y.Z` heading (RS2000 release tracking). Keep them unshipped for pre-releases:
+   RS2007 does not accept a suffix such as `-beta.1` in a release header. Commit any move first.
 3. Check the packages locally and look at the file names — they carry the version MinVer computed
    for the current commit:
 
@@ -53,8 +54,8 @@ both together.
 4. Tag with git — jj imports tags but does not create them:
 
    ```bash
-   git tag -a v0.1.0 -m "Raun 0.1.0"
-   git push origin v0.1.0
+   git tag -a v0.1.0-beta.1 -m "Raun 0.1.0 beta 1"
+   git push origin v0.1.0-beta.1
    jj git fetch
    ```
 
