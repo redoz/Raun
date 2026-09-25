@@ -28,6 +28,11 @@
          direct versions; the lock file pins everything they drag in, and the floating versions the
          samples use. Regenerate after changing a reference with a force-evaluate restore. -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- Every restore is a force-evaluate one, which is what makes RaunRefreshRidLockFiles
+         (Directory.Build.targets) fire: a package updated from Visual Studio or the CLI leaves ALL
+         the lock files correct, with no second command to remember. Never in locked mode, where
+         re-evaluating is precisely what must not happen. -->
+    <RestoreForceEvaluate Condition="'$(RestoreLockedMode)' != 'true'">true</RestoreForceEvaluate>
     <Product>Raun</Product>
     <Authors>Patrik Husfloen</Authors>
     <!-- No Version here: MinVer derives it from the nearest v* tag (see Directory.Build.targets). -->

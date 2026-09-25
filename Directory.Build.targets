@@ -11,7 +11,38 @@
     <NuGetLockFilePath Condition="'$(NETCoreSdkRuntimeIdentifier)' != 'win-x64'">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'packages.$(NETCoreSdkRuntimeIdentifier).lock.json'))</NuGetLockFilePath>
     <!-- The RIDs whose lock files are committed: what CI restores on, and what a maintainer develops on. -->
     <RaunLockedRuntimeIdentifiers Condition="'$(RaunLockedRuntimeIdentifiers)' == ''">win-x64;linux-x64</RaunLockedRuntimeIdentifiers>
+    <!-- Exactly one project drives the refresh, so a restore spawns one nested restore per RID
+         rather than one per project. -->
+    <RaunRidLockRefreshRoot Condition="'$(MSBuildProjectName)' == 'AspireAppointments.AppHost'">true</RaunRidLockRefreshRoot>
+    <RaunSolutionPath>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', 'Raun.slnx'))</RaunSolutionPath>
   </PropertyGroup>
+
+  <!--
+    What the refresh reads and what it writes, so MSBuild can skip it when nothing could have
+    changed: anything that can move the resolved graph is an input, and the other RIDs' lock files
+    are the outputs. A no-op build therefore pays nothing, and editing Directory.Packages.props or a
+    project file makes the inputs newer and runs it.
+  -->
+  <ItemGroup Condition="'$(RaunRidLockRefreshRoot)' == 'true'">
+    <_RaunRidLockInput Include="$(MSBuildThisFileDirectory)Directory.Packages.props" />
+    <_RaunRidLockInput Include="$(MSBuildThisFileDirectory)Directory.Build.props" />
+    <_RaunRidLockInput Include="$(MSBuildThisFileDirectory)Directory.Build.targets" />
+    <_RaunRidLockInput Include="$(MSBuildThisFileDirectory)src\**\*.csproj" />
+    <_RaunRidLockInput Include="$(MSBuildThisFileDirectory)samples\**\*.csproj" />
+    <_RaunRidLockInput Include="$(MSBuildThisFileDirectory)test\**\*.csproj" />
+  </ItemGroup>
+
+  <!-- On win-x64 the other RID's files are the packages.<rid>.lock.json pair; everywhere else the
+       one left behind is win-x64's, which is the plain packages.lock.json. -->
+  <ItemGroup Condition="'$(RaunRidLockRefreshRoot)' == 'true' and '$(NETCoreSdkRuntimeIdentifier)' == 'win-x64'">
+    <_RaunRidLockOutput Include="$(MSBuildThisFileDirectory)samples\AspireAppointments\AspireAppointments.AppHost\packages.linux-x64.lock.json" />
+    <_RaunRidLockOutput Include="$(MSBuildThisFileDirectory)samples\AspireAppointments\AspireAppointments.Tests\packages.linux-x64.lock.json" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RaunRidLockRefreshRoot)' == 'true' and '$(NETCoreSdkRuntimeIdentifier)' != 'win-x64'">
+    <_RaunRidLockOutput Include="$(MSBuildThisFileDirectory)samples\AspireAppointments\AspireAppointments.AppHost\packages.lock.json" />
+    <_RaunRidLockOutput Include="$(MSBuildThisFileDirectory)samples\AspireAppointments\AspireAppointments.Tests\packages.lock.json" />
+  </ItemGroup>
 
   <!--
     A lock-writing restore refreshes EVERY committed RID's lock file, not just the host's. Without
@@ -19,9 +50,12 @@
     and the mismatch only surfaces as a failed locked-mode restore on whichever machine did not run
     it — which is exactly how a dependency bump broke CI once already.
 
-    Only a force-evaluate restore does this (that is the one that means "rewrite the lock files");
-    an ordinary restore and a locked-mode check are untouched, so nothing pays for it per build. The
-    inner restores set RaunSkipRidLockRefresh so they cannot recurse.
+    Every restore that may rewrite a lock file does this, because Directory.Build.props turns
+    RestoreForceEvaluate on outside locked mode: updating a package from Visual Studio or the CLI
+    leaves ALL the lock files correct with no second command to remember. Locked mode is excluded
+    there, so CI still fails on a stale lock rather than quietly rewriting it. The Inputs/Outputs
+    above keep a no-op restore free. The inner restores set RaunSkipRidLockRefresh so they cannot
+    recurse.
 
     Two hooks because restoring a solution never runs a project's own Restore target: it collects
     each project's restore graph instead (_GenerateRestoreGraphProjectEntry) and restores once at
@@ -30,13 +64,21 @@
   -->
   <Target Name="RaunRefreshRidLockFiles"
           AfterTargets="Restore;_GenerateRestoreGraphProjectEntry"
-          Condition="'$(RaunRidLockProject)' == 'true' and '$(RestoreForceEvaluate)' == 'true' and '$(RaunSkipRidLockRefresh)' != 'true'">
+          Inputs="@(_RaunRidLockInput)"
+          Outputs="@(_RaunRidLockOutput)"
+          Condition="'$(RaunRidLockRefreshRoot)' == 'true' and '$(RestoreForceEvaluate)' == 'true' and '$(RaunSkipRidLockRefresh)' != 'true'">
     <ItemGroup>
       <_RaunLockRid Include="$(RaunLockedRuntimeIdentifiers)" Exclude="$(NETCoreSdkRuntimeIdentifier)" />
     </ItemGroup>
-    <Exec Command="dotnet restore &quot;$(MSBuildProjectFullPath)&quot; --force-evaluate -p:NETCoreSdkRuntimeIdentifier=%(_RaunLockRid.Identity) -p:RaunSkipRidLockRefresh=true"
+    <!-- One nested restore per missing RID, over the whole solution: it costs the same as restoring
+         the AppHost alone (the Tests project pulls in the same graph) and refreshes both files at
+         once, so only the AppHost carries this target. -->
+    <Exec Command="dotnet restore &quot;$(RaunSolutionPath)&quot; -p:NETCoreSdkRuntimeIdentifier=%(_RaunLockRid.Identity) -p:RaunSkipRidLockRefresh=true"
           Condition="'@(_RaunLockRid)' != ''"
           StandardOutputImportance="low" />
+    <!-- NuGet leaves a lock file's timestamp alone when its content did not change, so without this
+         the outputs would stay older than the inputs and the refresh would re-run on every build. -->
+    <Touch Files="@(_RaunRidLockOutput)" Condition="Exists('%(_RaunRidLockOutput.Identity)')" />
   </Target>
 
   <!--

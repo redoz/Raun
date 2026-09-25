@@ -19,19 +19,27 @@ its fully resolved graph — transitives and the samples' floating `OpenTelemetr
 both workflows restore in locked mode before building. A restore therefore cannot pull a package
 nobody reviewed: changing a reference means regenerating the lock files in the same commit.
 
+**Updating a package needs no second command.** Change a version from Visual Studio, from
+`dotnet add package`, or by editing `Directory.Packages.props`, and the restore that follows brings
+every lock file with it — `Directory.Build.props` turns `RestoreForceEvaluate` on outside locked
+mode, which is what lets a plain restore rewrite them.
+
 ```bash
-dotnet restore Raun.slnx --force-evaluate   # after adding/changing/removing a PackageReference
-dotnet restore Raun.slnx --locked-mode      # what CI does; fails if a lock file is stale
+dotnet restore Raun.slnx                 # rewrites every lock file that moved
+dotnet restore Raun.slnx --locked-mode   # what CI does; fails if a lock file is stale
 ```
 
 The Aspire AppHost SDK injects host-specific Dashboard and Orchestration packages, so one lock file
 cannot describe every host: the AppHost and its referencing test project use `packages.lock.json` on
 `win-x64` and `packages.<RID>.lock.json` elsewhere (the Linux CI runner reads
-`packages.linux-x64.lock.json`). **One force-evaluate restore rewrites every committed RID's file**,
-whichever host it runs on — `RaunRefreshRidLockFiles` in `Directory.Build.targets` re-runs restore
-for the RIDs the host is not, listed in `RaunLockedRuntimeIdentifiers`. Add a RID there when a new
-platform needs a committed lock file. Only a force-evaluate restore does this; an ordinary restore
-and a locked-mode check are untouched.
+`packages.linux-x64.lock.json`). `RaunRefreshRidLockFiles` in `Directory.Build.targets` restores
+once more for each RID the host is not — `RaunLockedRuntimeIdentifiers`, where a new platform's RID
+goes when it needs a committed lock file — so all of them stay correct whichever machine ran the
+restore. It is skipped when no project file or package version has changed since those files were
+written, so a no-op build pays about 0.2s for it.
+
+Locked mode is deliberately excluded from `RestoreForceEvaluate`: re-evaluating is exactly what must
+not happen there, and CI still fails on a stale lock rather than quietly rewriting it.
 
 Dependabot proposes NuGet and GitHub Actions updates weekly, grouped into one PR per ecosystem.
 Workflow actions are pinned to commit SHAs with the tag in a trailing comment; Dependabot updates
