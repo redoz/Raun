@@ -15,11 +15,18 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3.mtp-v2" />
     <PackageReference Include="xunit.runner.visualstudio" />
-    <PackageReference Include="Verify.XunitV3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Raun\Raun.csproj" />
+  </ItemGroup>
+
+  <!-- Snapshot assertions, shared by the projects that take snapshots. Snapshot files of generated
+       C# are data, not sources: they must not be compiled into this project. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\Snapshot.cs" Link="Snapshot.cs" />
+    <Compile Remove="**\*.verified.cs;**\*.received.cs" />
+    <None Include="**\*.verified.cs" />
   </ItemGroup>
 
 </Project>

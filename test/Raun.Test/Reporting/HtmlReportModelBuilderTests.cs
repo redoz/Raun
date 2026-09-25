@@ -3,8 +3,8 @@ using System.Text.Json;
 using Raun;
 using Raun.Model;
 using Raun.Reporting.Html;
-using static VerifyXunit.Verifier;
 using Raun.Running;
+using Raun.Testing;
 using Xunit;
 
 namespace Raun.Test;
@@ -64,7 +64,7 @@ public class HtmlReportModelBuilderTests
     }
 
     [Fact]
-    public Task Builds_the_expected_json_model()
+    public void Builds_the_expected_json_model()
     {
         var n0 = Node(0, "p", "Given", "Given patient Jane exists");
         var n1 = Node(1, "s", "Given", "Given an available slot exists");
@@ -87,7 +87,7 @@ public class HtmlReportModelBuilderTests
 
         var model = builder.Build(generatedAtUtc: "2026-06-09T12:00:01Z");
         var json = JsonSerializer.Serialize(model, JsonOptions);
-        return Verify(json);
+        Snapshot.Verify(json);
     }
 
     [Fact]

@@ -15,7 +15,7 @@ self-contained HTML report is produced per run. Old Norse *raun*: a trial, proof
 | `src/Raun.Generator` | Source generator + analyzer (`RAUN000`…) — netstandard2.0, ships inside `Raun` |
 | `src/Raun.Mtp` | The MTP adapter: discovery, node reporter, filter translation, entry-point bootstrap |
 | `src/Raun.Aspire` | Aspire AppHost bootstrap as the run's preflight node |
-| `test/*` | xUnit v3 test projects (generator tests use Verify snapshots) |
+| `test/*` | xUnit v3 test projects (generator tests snapshot the emitted source; `test/Shared/Snapshot.cs`) |
 | `samples/AppointmentTests` | Canonical end-to-end sample, simulated time, HTML report showcase |
 | `samples/AspireAppointments` | Aspire end-to-end sample driving a real AppHost |
 | `docs/superpowers/specs` | One design document per feature; each records rejected alternatives |
@@ -32,8 +32,11 @@ dotnet run --project samples/AspireAppointments/AspireAppointments.Tests/AspireA
 
 - MTP rejects `--nologo` and `--filter` on the command line. Run whole projects;
   `--max-parallel-scenarios 1` makes a run sequential when you need deterministic output order.
-- Verify snapshots: a changed snapshot leaves a `*.received.*` file next to the `*.verified.*` one
-  under `test/Raun.Generator.Test/Snapshots`. Review the diff, then move received over verified.
+- Snapshots: a changed snapshot leaves a `*.received.*` file next to the `*.verified.*` one under
+  `test/Raun.Generator.Test/Snapshots`. Review the diff, then move received over verified — or re-run
+  with `RAUN_ACCEPT_SNAPSHOTS=1` to have that done for you. The generator's snapshots are one file
+  per generated file (`<test>#<hint name>.verified.cs`), and a verified file the run no longer
+  produces fails the test rather than lingering.
 - `AnalysisLevel=latest-all` with `TreatWarningsAsErrors`: expect CA/IDE rules to fail the build;
   fix the code rather than suppressing, unless the rule is genuinely wrong for the case (comment why).
 - New analyzer rules must be added to `src/Raun.Generator/AnalyzerReleases.Unshipped.md` (RS2000).
