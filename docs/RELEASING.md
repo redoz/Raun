@@ -16,18 +16,22 @@ generator as an analyzer), `Raun.Mtp`, and `Raun.Aspire`.
 
 `RestorePackagesWithLockFile` is on repo-wide, so every project carries a `packages.lock.json` with
 its fully resolved graph — transitives and the samples' floating `OpenTelemetry 1.*` included — and
-both workflows restore in locked mode before building. The Aspire AppHost SDK injects host-specific
-Dashboard and Orchestration packages: the AppHost and its referencing test project use the existing
-`packages.lock.json` on `win-x64`, and `packages.<RID>.lock.json` elsewhere (the Linux CI runner
-uses `packages.linux-x64.lock.json`). A restore therefore cannot pull a package nobody reviewed:
-changing a reference means regenerating the affected lock files on each supported host in the same commit.
+both workflows restore in locked mode before building. A restore therefore cannot pull a package
+nobody reviewed: changing a reference means regenerating the lock files in the same commit.
 
 ```bash
 dotnet restore Raun.slnx --force-evaluate   # after adding/changing/removing a PackageReference
-# From Windows, also refresh the Aspire locks used by the Linux CI runner:
-dotnet restore Raun.slnx --force-evaluate -p:NETCoreSdkRuntimeIdentifier=linux-x64
 dotnet restore Raun.slnx --locked-mode      # what CI does; fails if a lock file is stale
 ```
+
+The Aspire AppHost SDK injects host-specific Dashboard and Orchestration packages, so one lock file
+cannot describe every host: the AppHost and its referencing test project use `packages.lock.json` on
+`win-x64` and `packages.<RID>.lock.json` elsewhere (the Linux CI runner reads
+`packages.linux-x64.lock.json`). **One force-evaluate restore rewrites every committed RID's file**,
+whichever host it runs on — `RaunRefreshRidLockFiles` in `Directory.Build.targets` re-runs restore
+for the RIDs the host is not, listed in `RaunLockedRuntimeIdentifiers`. Add a RID there when a new
+platform needs a committed lock file. Only a force-evaluate restore does this; an ordinary restore
+and a locked-mode check are untouched.
 
 Dependabot proposes NuGet and GitHub Actions updates weekly, grouped into one PR per ecosystem.
 Workflow actions are pinned to commit SHAs with the tag in a trailing comment; Dependabot updates

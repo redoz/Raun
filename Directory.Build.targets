@@ -1,9 +1,43 @@
 <Project>
 
-  <!-- Aspire's AppHost SDK injects host-RID-specific packages into the AppHost and its consumer. -->
+  <!--
+    Aspire's AppHost SDK injects host-RID-specific packages (Aspire.Dashboard.Sdk.<rid> and
+    Aspire.Hosting.Orchestration.<rid>) into the AppHost and its consumer, so one lock file cannot
+    describe every host. These two projects therefore keep one lock file per RID: the default
+    packages.lock.json is win-x64's, and every other host writes packages.<rid>.lock.json.
+  -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'AspireAppointments.AppHost' or '$(MSBuildProjectName)' == 'AspireAppointments.Tests'">
+    <RaunRidLockProject>true</RaunRidLockProject>
     <NuGetLockFilePath Condition="'$(NETCoreSdkRuntimeIdentifier)' != 'win-x64'">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'packages.$(NETCoreSdkRuntimeIdentifier).lock.json'))</NuGetLockFilePath>
+    <!-- The RIDs whose lock files are committed: what CI restores on, and what a maintainer develops on. -->
+    <RaunLockedRuntimeIdentifiers Condition="'$(RaunLockedRuntimeIdentifiers)' == ''">win-x64;linux-x64</RaunLockedRuntimeIdentifiers>
   </PropertyGroup>
+
+  <!--
+    A lock-writing restore refreshes EVERY committed RID's lock file, not just the host's. Without
+    this, regenerating on one platform leaves the other platform's file describing the old graph,
+    and the mismatch only surfaces as a failed locked-mode restore on whichever machine did not run
+    it — which is exactly how a dependency bump broke CI once already.
+
+    Only a force-evaluate restore does this (that is the one that means "rewrite the lock files");
+    an ordinary restore and a locked-mode check are untouched, so nothing pays for it per build. The
+    inner restores set RaunSkipRidLockRefresh so they cannot recurse.
+
+    Two hooks because restoring a solution never runs a project's own Restore target: it collects
+    each project's restore graph instead (_GenerateRestoreGraphProjectEntry) and restores once at
+    the top. A target runs at most once per project, so `dotnet restore Raun.slnx` and
+    `dotnet restore <project>` each refresh the other RIDs exactly one time.
+  -->
+  <Target Name="RaunRefreshRidLockFiles"
+          AfterTargets="Restore;_GenerateRestoreGraphProjectEntry"
+          Condition="'$(RaunRidLockProject)' == 'true' and '$(RestoreForceEvaluate)' == 'true' and '$(RaunSkipRidLockRefresh)' != 'true'">
+    <ItemGroup>
+      <_RaunLockRid Include="$(RaunLockedRuntimeIdentifiers)" Exclude="$(NETCoreSdkRuntimeIdentifier)" />
+    </ItemGroup>
+    <Exec Command="dotnet restore &quot;$(MSBuildProjectFullPath)&quot; --force-evaluate -p:NETCoreSdkRuntimeIdentifier=%(_RaunLockRid.Identity) -p:RaunSkipRidLockRefresh=true"
+          Condition="'@(_RaunLockRid)' != ''"
+          StandardOutputImportance="low" />
+  </Target>
 
   <!--
     Packaging metadata and tag-driven versioning, for the shippable libraries only. This file is
