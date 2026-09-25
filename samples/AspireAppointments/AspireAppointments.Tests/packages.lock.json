@@ -68,10 +68,10 @@
           "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.19.0, 2.0.0)"
         }
       },
-      "Aspire.Dashboard.Sdk.linux-x64": {
+      "Aspire.Dashboard.Sdk.win-x64": {
         "type": "Transitive",
         "resolved": "13.5.4",
-        "contentHash": "5lue0VICBqdjnBN/gipjC8JDc77IhHIx6JpEDdnW2lTxonz+RrzblRIh2Qt5HfZx9TC13r2wLBrL4sDDYCEsIA=="
+        "contentHash": "akkstfiRZzI+b+nckbR+WrQ0o1Q0OJ/RUNRk5e8wq9MNj9daHLgn5ewVJ/YjEU8ij3s/5B2jp6eVtxlIPoz4JQ=="
       },
       "Aspire.Hosting": {
         "type": "Transitive",
@@ -109,10 +109,10 @@
           "YamlDotNet": "16.3.0"
         }
       },
-      "Aspire.Hosting.Orchestration.linux-x64": {
+      "Aspire.Hosting.Orchestration.win-x64": {
         "type": "Transitive",
         "resolved": "13.5.4",
-        "contentHash": "xKrHygWTazTw7JGtsSA4LYWIV80AkaRg8K9oZONTsh2XENIRjOT8VAE3C2MvTy6zdwr+Gfh3hP9MreRB++MJkA=="
+        "contentHash": "Nt9kfr4ihe32xdDOtsDBIgLkCP3mpWPwWNvjMd9J4cptEO81LADizPZUOedoNolidLCLkJfNdCJ9RonpEi935w=="
       },
       "AspNetCore.HealthChecks.Uris": {
         "type": "Transitive",
@@ -786,9 +786,9 @@
       "aspireappointments.apphost": {
         "type": "Project",
         "dependencies": {
-          "Aspire.Dashboard.Sdk.linux-x64": "[13.5.4, )",
+          "Aspire.Dashboard.Sdk.win-x64": "[13.5.4, )",
           "Aspire.Hosting.AppHost": "[13.5.4, )",
-          "Aspire.Hosting.Orchestration.linux-x64": "[13.5.4, )",
+          "Aspire.Hosting.Orchestration.win-x64": "[13.5.4, )",
           "Microsoft.Extensions.DependencyInjection": "[10.0.12, )",
           "Microsoft.Extensions.Http": "[10.0.12, )"
         }
@@ -814,7 +814,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
-          "Microsoft.Testing.Platform": "[2.4.0, )",
+          "Microsoft.Testing.Platform": "[2.4.1, )",
           "Raun": "[1.0.0, )"
         }
       },
@@ -917,9 +917,9 @@
       },
       "Microsoft.Testing.Platform": {
         "type": "CentralTransitive",
-        "requested": "[2.4.0, )",
-        "resolved": "2.4.0",
-        "contentHash": "dp1N3P1ujb0ztwFgqz2o/ItEvq+pm19/AiA+Xq7Zpcy7oPMcxDBZLYGtf0LlU1MveEBJuKVjZhI+LnkfcH/0jQ=="
+        "requested": "[2.4.1, )",
+        "resolved": "2.4.1",
+        "contentHash": "3nW9NyhN1BnHRF994DCOOUQCqVA9pDT+gPpbuhI/xUntZnGnXO4ySovKxFlFuoT/48pnI74LK/DeKVlve1L3VQ=="
       },
       "OpenTelemetry.Extensions.Hosting": {
         "type": "CentralTransitive",
