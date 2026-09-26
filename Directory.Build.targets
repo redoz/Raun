@@ -113,4 +113,13 @@
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
+  <!-- Tests keep their real source paths. CI builds the whole solution with
+       -p:ContinuousIntegrationBuild=true, which maps every compiled path to /_/ for reproducible
+       packages; a test never ships, but it does read its own location — [CallerFilePath] is how a
+       snapshot test finds its .verified files — and under /_/ it looks in a directory that does not
+       exist. Set here, after the Roslyn targets default it, and read only by targets, so it wins. -->
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <DeterministicSourcePaths>false</DeterministicSourcePaths>
+  </PropertyGroup>
+
 </Project>

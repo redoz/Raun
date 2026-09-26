@@ -77,6 +77,13 @@ internal static class Snapshot
         string testName,
         string sourceFile)
     {
+        if (sourceFile.StartsWith("/_/", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"'{sourceFile}' is a deterministic (mapped) source path, so the snapshot cannot be located; "
+                + "test projects must build with DeterministicSourcePaths=false (see Directory.Build.targets).");
+        }
+
         var sourceDirectory = Path.GetDirectoryName(sourceFile)
             ?? throw new InvalidOperationException($"Could not take a directory from '{sourceFile}'.");
         var folder = directory is null ? sourceDirectory : Path.Combine(sourceDirectory, directory);
