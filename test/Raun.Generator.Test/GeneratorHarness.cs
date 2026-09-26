@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using Raun.Generator;
 using Raun.Generator.Analysis;
+using Raun.Generator.Diagnostics;
 using Raun.Model;
 using Raun.Scheduling;
 
@@ -270,24 +271,25 @@ public static class GeneratorHarness
             .ToDictionary(s => s.HintName, s => s.SourceText.ToString());
     }
 
-    /// <summary>Runs the analyzer over source and returns just the Raun diagnostics.
+    /// <summary>Every Raun diagnostic a build of <paramref name="source"/> reports — the generator's
+    /// (everything about lowering a scenario body) and the analyzer's (the rest) — so a test states a
+    /// rule without caring which of the two reports it.
     /// <para>
     /// When <paramref name="requireCompilable"/> is true, this first asserts the compilation is
-    /// error-free. That check is opt-in, not automatic, because a Roslyn analyzer's job legitimately
-    /// includes reporting on code that does not compile — much of the point of an analyzer is to give a
-    /// clear diagnostic on broken code, so a test that feeds deliberately invalid source and asserts a
-    /// diagnostic is present is exercising exactly that. Source that fails to compile does, however,
-    /// produce no analyzer diagnostics at all, which would make an absence assertion
+    /// error-free. That check is opt-in, not automatic, because reporting on code that does not compile
+    /// is legitimately part of the job — a test that feeds deliberately invalid source and asserts a
+    /// diagnostic is present is exercising exactly that. Source that fails to compile can, however,
+    /// produce fewer diagnostics than it should, which would make an absence assertion
     /// (<c>Assert.DoesNotContain(diagnostics, ...)</c> / <c>Assert.Empty(diagnostics)</c>) pass for free
-    /// regardless of what the analyzer actually does — so only a test that asserts a diagnostic is
-    /// absent should opt in, to keep a broken test source from silently making that assertion vacuous.
+    /// — so a test that asserts a diagnostic is absent should opt in, to keep a broken test source from
+    /// silently making that assertion vacuous.
     /// </para></summary>
-    public static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source, bool requireCompilable = false)
+    public static async Task<ImmutableArray<Diagnostic>> DiagnoseAsync(string source, bool requireCompilable = false)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
         var tree = CSharpSyntaxTree.ParseText(source, parseOptions);
         var compilation = CSharpCompilation.Create(
-            "Analyze_" + Guid.NewGuid().ToString("N"),
+            "Diagnose_" + Guid.NewGuid().ToString("N"),
             [tree],
             References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
@@ -303,10 +305,14 @@ public static class GeneratorHarness
                 "test source did not compile: " + string.Join("; ", compileErrors.Take(5).Select(d => d.ToString())));
         }
 
+        CSharpGeneratorDriver.Create([new ScenarioGenerator().AsSourceGenerator()], parseOptions: parseOptions)
+            .RunGeneratorsAndUpdateCompilation(compilation, out _, out var generated);
+
         var withAnalyzers = compilation.WithAnalyzers(
             ImmutableArray.Create<DiagnosticAnalyzer>(new ScenarioAnalyzer()));
-        var diagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync();
-        return diagnostics.Where(d => d.Id.StartsWith("RAUN")).ToImmutableArray();
+        var analyzed = await withAnalyzers.GetAnalyzerDiagnosticsAsync();
+
+        return generated.Concat(analyzed).Where(d => d.Id.StartsWith("RAUN")).ToImmutableArray();
     }
 
     public static IReadOnlyList<ScenarioDefinition> Definitions(this GeneratorResult result)

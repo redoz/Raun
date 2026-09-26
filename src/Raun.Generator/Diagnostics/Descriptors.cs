@@ -1,9 +1,13 @@
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.CodeAnalysis;
-using Raun.Generator.Lowering;
 
-namespace Raun.Generator.Analysis;
+namespace Raun.Generator.Diagnostics;
 
-/// <summary>Diagnostics for the supported scenario subset (see the design's "Analyzer Rules").</summary>
+/// <summary>
+/// Every Raun diagnostic. The parser reports the rules about lowering a scenario body (RAUN001–007,
+/// RAUN011, RAUN013, RAUN017) through the generator; the analyzer reports the rest.
+/// </summary>
 internal static class Descriptors
 {
     private const string Category = "Raun.Usage";
@@ -67,7 +71,7 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor InvalidArgument = new(
         "RAUN007",
         "Scenario step argument is not lowerable",
-        ArgumentViolation.MessageFormat,
+        "Step argument cannot use '{0}': {1}",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -100,14 +104,6 @@ internal static class Descriptors
         "RAUN011",
         "Scenario condition must be an awaited phase-marker call",
         "An 'if' condition in a scenario must be an awaited phase-marker call (Given/When/Then, or any type implementing Raun.IPhase) whose result is usable as a C# condition (bool, an implicit conversion to bool, or 'operator true')",
-        Category,
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor UnmergeableLocal = new(
-        "RAUN012",
-        "Conditionally assigned local has no step-produced definition",
-        "'{0}' is assigned inside a branch but has no step-produced definition outside it, so there is nothing to merge against — give it a prior step output, or assign it in every branch",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -147,11 +143,10 @@ internal static class Descriptors
         helpLinkUri: null,
         customTags: WellKnownDiagnosticTags.CompilationEnd);
 
-    /// <summary>Reported by the generator, not the analyzer: the parser rejected a statement or a step
-    /// argument, so the scenario was not generated. The analyzer normally explains the same thing
-    /// (RAUN002–RAUN007, RAUN011) — for an argument, at the same node and with the same reason, since
-    /// both run one lowering. This is the safety net for the day the two disagree, because a scenario
-    /// that silently vanishes from the test list fails no test.</summary>
+    /// <summary>The scenario was not generated, for a reason no more specific rule names — a body that
+    /// is not a block, a single step's result deconstructed, an array group merged across arms. It
+    /// always says which. Every refusal the parser makes carries a diagnostic, so a scenario is either
+    /// generated or reported; it cannot vanish from the test list.</summary>
     public static readonly DiagnosticDescriptor ScenarioNotGenerated = new(
         "RAUN017",
         "Scenario was not generated",
@@ -159,4 +154,14 @@ internal static class Descriptors
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
+    /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
+    public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
+    {
+        UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
+        InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
+        InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,
+        StepContextInCleanup, ContendedResourceKind, InertContendedResourceUse, ScenarioNotGenerated,
+    }.ToDictionary(d => d.Id);
 }

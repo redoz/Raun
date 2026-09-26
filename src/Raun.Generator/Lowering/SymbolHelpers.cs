@@ -1,5 +1,6 @@
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Raun.Generator.Lowering;
@@ -74,5 +75,21 @@ internal static class SymbolHelpers
         var last = method.Parameters[method.Parameters.Length - 1];
         return last.Type.ToDisplayString(NoGlobal) == ScenarioContextFullName
             && suppliedArgCount == method.Parameters.Length - 1;
+    }
+
+    /// <summary>
+    /// True when <paramref name="type"/> can drive a C# <c>if</c>: it is <c>bool</c>, defines
+    /// <c>operator true</c>, or has an implicit conversion to <c>bool</c>. <c>bool?</c> is correctly
+    /// rejected — C# rejects it too.
+    /// </summary>
+    public static bool IsUsableAsCondition(ITypeSymbol type, Compilation compilation)
+    {
+        if (type.SpecialType == SpecialType.System_Boolean || type.GetMembers("op_True").Any())
+        {
+            return true;
+        }
+
+        var conversion = compilation.ClassifyConversion(type, compilation.GetSpecialType(SpecialType.System_Boolean));
+        return conversion.IsImplicit && conversion.IsUserDefined;
     }
 }

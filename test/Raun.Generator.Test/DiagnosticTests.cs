@@ -4,25 +4,32 @@ using Xunit;
 
 namespace Raun.Generator.Test;
 
-/// <summary>Verifies the analyzer flags code outside the lowerable subset and leaves valid code clean.</summary>
-public class AnalyzerTests
+/// <summary>Every RAUN rule, as a build reports it: code outside the lowerable subset is flagged,
+/// valid code stays clean. Read through <see cref="GeneratorHarness.DiagnoseAsync"/>, so a test states
+/// the rule, not which component reports it.</summary>
+public class DiagnosticTests
 {
     private static async Task<ImmutableArray<Diagnostic>> Analyze(string scenario) =>
-        await GeneratorHarness.AnalyzeAsync(SampleSources.Dsl + scenario);
+        await GeneratorHarness.DiagnoseAsync(SampleSources.Dsl + scenario);
 
     private static void AssertHas(ImmutableArray<Diagnostic> diagnostics, string id) =>
         Assert.Contains(diagnostics, d => d.Id == id);
 
     /// <summary>For tests asserting a diagnostic is absent — requires the source to actually compile.</summary>
     private static Task<ImmutableArray<Diagnostic>> AnalyzeCompilable(string source) =>
-        GeneratorHarness.AnalyzeAsync(source, requireCompilable: true);
+        GeneratorHarness.DiagnoseAsync(source, requireCompilable: true);
+
 
     [Fact]
-    public void RAUN000_is_a_supported_diagnostic()
+    public void The_analyzer_owns_only_the_rules_that_are_not_about_lowering_a_scenario_body()
     {
+        // Everything about what a [Scenario] body may contain is the parser's, reported by the
+        // generator; a second walker judging the same body is how the two used to drift apart.
         var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
 
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN000");
+        Assert.Equal(
+            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016"],
+            analyzer.SupportedDiagnostics.Select(d => d.Id).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -129,14 +136,6 @@ public class AnalyzerTests
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN003");
     }
 
-    [Fact]
-    public void RAUN011_and_RAUN012_are_supported_diagnostics()
-    {
-        var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
-
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN011");
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN012");
-    }
 
     [Fact]
     public async Task Supported_conditional_scenarios_produce_no_diagnostics()
@@ -170,7 +169,7 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN011");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN011");
     }
 
     [Fact]
@@ -190,7 +189,7 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN011");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN011");
     }
 
     [Fact]
@@ -211,36 +210,38 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN011");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN011");
     }
 
     [Fact]
-    public async Task RAUN012_conditional_assignment_to_a_non_step_local()
+    public async Task A_local_assigned_in_one_arm_and_read_only_there_lowers()
     {
-        // `appointment` is initialized by a non-step expression, so the merge has no parent NODE to
-        // merge against — only an initializer.
+        // Retired RAUN012 refused this; the definition map lowers it (the local is branch-local), and
+        // every shape it used to catch is now RAUN002 at a non-step initializer, or a C# error.
         var source = SampleSources.ConditionalDsl +
             """
 
             public static class S
             {
-                [Scenario] public static async Task Bad()
+                [Scenario("arm only")] public static async Task Ok()
                 {
                     var patient = await Given.PatientExists("Jane");
-                    Appointment appointment = null!;
+                    Appointment appointment;
                     if (await Given.IsPriority())
+                    {
                         appointment = await When.CreateUrgent(patient);
-
-                    await Then.AppointmentExists(appointment);
+                        await Then.AppointmentExists(appointment);
+                    }
                 }
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN012");
+        Assert.Empty(await AnalyzeCompilable(source));
+        GeneratorHarness.Run(source).AssertCompiles();
     }
 
     [Fact]
-    public async Task RAUN012_does_not_fire_on_reassignment_within_one_arm()
+    public async Task Reassignment_within_one_arm_lowers()
     {
         // Two definitions inside the SAME arm are fine — the definition map keeps the last one.
         var source = SampleSources.ConditionalDsl +
@@ -263,7 +264,7 @@ public class AnalyzerTests
             }
             """;
 
-        Assert.DoesNotContain(await AnalyzeCompilable(source), d => d.Id == "RAUN012");
+        Assert.Empty(await AnalyzeCompilable(source));
     }
 
     [Fact]
@@ -302,7 +303,7 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN005");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN005");
     }
 
     [Fact]
@@ -323,15 +324,14 @@ public class AnalyzerTests
     }
 
     [Fact]
-    public async Task RAUN007_argument_is_not_a_step_output()
+    public async Task RAUN007_argument_is_a_scenario_parameter()
     {
         var diagnostics = await Analyze(
             """
             public static class S
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public static async Task Bad(string name)
                 {
-                    var name = "Jane";
                     var patient = await Given.PatientExists(name);
                 }
             }
@@ -341,17 +341,16 @@ public class AnalyzerTests
     }
 
     [Fact]
-    public async Task RAUN007_non_step_local_inside_a_compound_argument()
+    public async Task RAUN007_unreachable_name_inside_a_compound_argument()
     {
-        // A bare identifier is flagged, but so must a non-step local buried in an expression —
-        // otherwise the generator emits code referencing a local that doesn't exist.
+        // A bare identifier is flagged, but so must one buried in an expression — otherwise the
+        // generator emits code referencing a name the generated step cannot see.
         var diagnostics = await Analyze(
             """
             public static class S
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public static async Task Bad(string name)
                 {
-                    var name = "Jane";
                     var patient = await Given.PatientExists(name + "!");
                 }
             }
@@ -378,16 +377,9 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN008");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN008");
     }
 
-    [Fact]
-    public void RAUN009_is_a_supported_diagnostic()
-    {
-        var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
-
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN009");
-    }
 
     [Fact]
     public async Task RAUN009_unannotated_resource_parameter()
@@ -412,7 +404,7 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN009");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN009");
     }
 
     [Fact]
@@ -442,7 +434,7 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN009");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN009");
     }
 
     [Fact]
@@ -464,12 +456,6 @@ public class AnalyzerTests
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN009");
     }
 
-    [Fact]
-    public void RAUN010_is_a_supported_diagnostic()
-    {
-        var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN010");
-    }
 
     private const string LineageDsl =
         """
@@ -497,7 +483,7 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN010");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN010");
     }
 
     [Fact]
@@ -516,7 +502,7 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN010");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN010");
     }
 
     [Fact]
@@ -536,7 +522,7 @@ public class AnalyzerTests
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN010");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN010");
     }
 
     [Fact]
@@ -621,7 +607,7 @@ public class AnalyzerTests
     /// all-<c>Task&lt;T&gt;</c> and all-<c>Task</c> parallel forms, so a body that fails to compile is a
     /// test bug rather than an analyzer input.</remarks>
     private static Task<ImmutableArray<Diagnostic>> AnalyzeConflict(string body) =>
-        GeneratorHarness.AnalyzeAsync(ConflictDsl +
+        GeneratorHarness.DiagnoseAsync(ConflictDsl +
             $$"""
             public static class S
             {
@@ -635,13 +621,6 @@ public class AnalyzerTests
             }
             """, requireCompilable: true);
 
-    [Fact]
-    public void RAUN013_is_a_supported_diagnostic()
-    {
-        var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
-
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN013");
-    }
 
     [Fact]
     public async Task RAUN013_two_parallel_mutations_of_one_local()
@@ -774,7 +753,7 @@ public class AnalyzerTests
     /// <summary>A step body around <paramref name="registration"/>, which sees `ctx` (the step's own
     /// nullable context) and `id` (a plain captured value).</summary>
     private static Task<ImmutableArray<Diagnostic>> AnalyzeCleanup(string registration, bool requireCompilable = false) =>
-        GeneratorHarness.AnalyzeAsync(
+        GeneratorHarness.DiagnoseAsync(
             $$"""
             using System.Threading.Tasks;
             using Raun;
@@ -798,13 +777,6 @@ public class AnalyzerTests
             }
             """, requireCompilable);
 
-    [Fact]
-    public void RAUN014_is_a_supported_diagnostic()
-    {
-        var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
-
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN014");
-    }
 
     [Fact]
     public async Task RAUN014_captured_step_context_in_a_parameterless_cleanup()
@@ -932,7 +904,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN015_contended_resource_without_a_kind()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
             """
             using Raun;
             public sealed class Db : IContendedResource;
@@ -945,7 +917,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN015_contended_resource_with_two_kinds()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
             """
             using Raun;
             [ExclusiveResource, SharedResource]
@@ -958,7 +930,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN015_pool_of_nothing()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
             """
             using Raun;
             [PooledResource(0)]
@@ -1037,7 +1009,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN016_shared_resource_used_by_two_scenarios_neither_exclusive()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
             ContendedResourceScenarios(SharedDb, "[Uses<Db>]", "[Uses<Db>]"));
 
         var d = Assert.Single(diagnostics, x => x.Id == "RAUN016");
@@ -1097,7 +1069,7 @@ public class AnalyzerTests
     [Fact]
     public async Task RAUN016_fires_only_once_no_matter_how_many_scenarios_use_the_resource()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
             ContendedResourceScenarios(SharedDb, "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]", "[Uses<Db>]"));
 
         Assert.Single(diagnostics, x => x.Id == "RAUN016");

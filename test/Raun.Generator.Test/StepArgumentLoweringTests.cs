@@ -78,7 +78,7 @@ public class StepArgumentLoweringTests
     [Fact]
     public async Task The_sample_is_clean_under_the_analyzer()
     {
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
             SampleSources.CompositionDsl + SampleSources.CompositionScenario, requireCompilable: true);
 
         Assert.Empty(diagnostics);

@@ -15,17 +15,9 @@ internal readonly record struct StepOutputRead(ILocalSymbol Local, IdentifierNam
 
 /// <summary>
 /// Why part of an argument cannot be lowered: the offending node, what it is (as written), and the
-/// reason. The analyzer reports it as RAUN007; the parser refuses the scenario with it (RAUN017).
+/// reason — reported as RAUN007.
 /// </summary>
-internal readonly record struct ArgumentViolation(SyntaxNode Node, string Subject, string Reason)
-{
-    /// <summary>RAUN007's message format, and the sentence RAUN017 carries: one wording for both.</summary>
-    public const string MessageFormat = "Step argument cannot use '{0}': {1}";
-
-    /// <summary>The violation as <see cref="MessageFormat"/> spells it.</summary>
-    public string Describe()
-        => string.Format(System.Globalization.CultureInfo.InvariantCulture, MessageFormat, Subject, Reason);
-}
+internal readonly record struct ArgumentViolation(SyntaxNode Node, string Subject, string Reason);
 
 /// <summary>An argument re-hosted into the generated step body, with everything the lowering saw.</summary>
 internal sealed record LoweredArgument<TNode>(
@@ -66,9 +58,8 @@ internal sealed record LoweredCall(
 /// call, or a write to a step output.
 /// </para>
 /// <para>
-/// The analyzer and the parser both run this same pass — the analyzer for its violations, the parser
-/// for the lowered node and its reads — so, given the same step outputs, they cannot disagree about
-/// an argument. Binding is by
+/// The parser runs it for every call it lowers and reports its violations as RAUN007; RAUN013's
+/// parallel-access check reads the same pass's reads. Binding is by
 /// symbol throughout: a lambda parameter that shadows a step local is not a read of it, and an
 /// object-initializer member that shares a local's name is not rewritten.
 /// </para>
@@ -113,8 +104,7 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
     }
 
     /// <summary>
-    /// Lowers every argument of a DSL call, and its explicit type arguments — the parser and the
-    /// analyzer both enter here, so they walk exactly the same nodes.
+    /// Lowers every argument of a DSL call, and its explicit type arguments.
     /// </summary>
     public static LoweredCall LowerCall(
         SemanticModel model, InvocationExpressionSyntax call, Func<ISymbol, ExpressionSyntax?> stepValue)

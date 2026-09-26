@@ -80,15 +80,37 @@ internal readonly record struct ParsedUse
     public string SortKey { get; init; }
 }
 
-/// <summary>Why a scenario was not lowered: what the parser rejected — the innermost statement, or
-/// the offending part of a step argument (or the method name, for a body-less method) — and the
-/// reason. Carries the span as plain values — never a <c>Location</c>, which would pin a syntax tree
-/// in the incremental pipeline — and is rebuilt into an external-file location when reported.</summary>
-internal readonly record struct ParseRejection(
-    string ScenarioName, string Reason, string File, int SpanStart, int SpanLength, SourceSpan Lines);
+/// <summary>
+/// A diagnostic the parser found in a scenario: the descriptor id, its message arguments, and where.
+/// Carried as plain values — never a <c>Location</c>, which would pin a syntax tree in the incremental
+/// pipeline — and rebuilt into an external-file location when the generator reports it.
+/// </summary>
+internal readonly record struct ScenarioDiagnostic(
+    string Id, EquatableArray<string> Arguments, string File, int SpanStart, int SpanLength, SourceSpan Lines);
 
-/// <summary>The parser's verdict on one scenario: exactly one of the two is set.</summary>
-internal readonly record struct ParseOutcome(ParsedScenario? Scenario, ParseRejection? Rejection);
+/// <summary>The parser's verdict on one scenario: the lowered scenario, or the diagnostics that kept
+/// it from lowering — never both, never neither, which is why the only ways to make one are
+/// <see cref="Lowered"/> and <see cref="Refused"/>.</summary>
+internal sealed record ParseOutcome
+{
+    private ParseOutcome(ParsedScenario? scenario, EquatableArray<ScenarioDiagnostic> diagnostics)
+    {
+        Scenario = scenario;
+        Diagnostics = diagnostics;
+    }
+
+    public ParsedScenario? Scenario { get; }
+
+    public EquatableArray<ScenarioDiagnostic> Diagnostics { get; }
+
+    public static ParseOutcome Lowered(ParsedScenario scenario)
+        => new(scenario ?? throw new System.ArgumentNullException(nameof(scenario)), EquatableArray<ScenarioDiagnostic>.Empty);
+
+    public static ParseOutcome Refused(EquatableArray<ScenarioDiagnostic> diagnostics)
+        => diagnostics.Count > 0
+            ? new(null, diagnostics)
+            : throw new System.ArgumentException("a refused scenario carries at least one diagnostic", nameof(diagnostics));
+}
 
 /// <summary>
 /// What the registry file needs to know about one scenario: the name of its generated builder

@@ -27,22 +27,24 @@ public class GeneratorSafetyTests
     {
         var scenario = new ParsedScenario { DisplayName = "ok" };
 
-        var result = GeneratorSafety.SafeParse(() => new ParseOutcome(scenario, null), "x", 1);
+        var result = GeneratorSafety.SafeParse(
+            () => ParseOutcome.Lowered(scenario), "x", 1);
 
         Assert.Same(scenario, result.Scenario);
-        Assert.Null(result.Rejection);
+        Assert.Empty(result.Diagnostics);
         Assert.Null(result.Error);
     }
 
     [Fact]
-    public void SafeParse_passes_a_rejection_through()
+    public void SafeParse_passes_diagnostics_through()
     {
-        var rejection = new ParseRejection("Demo.S.Run", "This statement is not a shape the generator lowers", "Scenarios.cs", 120, 10, new SourceSpan("Scenarios.cs", 6, 8, 6, 18));
+        var diagnostic = new ScenarioDiagnostic(
+            "RAUN002", EquatableArray<string>.Empty, "Scenarios.cs", 120, 10, new SourceSpan("Scenarios.cs", 6, 8, 6, 18));
 
-        var result = GeneratorSafety.SafeParse(() => new ParseOutcome(null, rejection), "x", 1);
+        var result = GeneratorSafety.SafeParse(() => ParseOutcome.Refused(new[] { diagnostic }), "x", 1);
 
         Assert.Null(result.Scenario);
-        Assert.Equal(rejection, result.Rejection);
+        Assert.Equal([diagnostic], result.Diagnostics);
         Assert.Null(result.Error);
     }
 

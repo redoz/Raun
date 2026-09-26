@@ -69,8 +69,9 @@ and call `RaunTestApplication.RunAsync(args)` yourself — see
    never executed directly.
 3. The generator lowers each body into a dependency graph (`ScenarioDefinition`): one node per
    step, with **source-order + dataflow** edges, and tuple/array forms lowered to parallel
-   sibling groups. The analyzer and the generator (`RAUN000`–`RAUN017`) reject anything outside
-   the supported subset and catch authoring mistakes at compile time.
+   sibling groups. The generator reports anything outside the supported subset, and an analyzer
+   catches the remaining authoring mistakes (`RAUN000`–`RAUN017`), all at compile time. Only one
+   component ever judges a scenario body, so the two never disagree.
 4. At run time, the MTP test framework discovers each `[Scenario]`, runs the graph through a DAG
    scheduler, and reports **every step as its own test** — passed, failed, skipped, or not taken.
 

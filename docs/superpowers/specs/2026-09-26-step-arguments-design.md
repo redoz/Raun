@@ -2,6 +2,11 @@
 
 Status: implemented 2026-09-26 (autonomous run; decisions below are mine and open to Patrik's veto).
 
+> **Superseded in part by [One scenario walker](2026-09-26-one-scenario-walker-design.md):** the
+> analyzer no longer walks scenario bodies at all. The parser reports RAUN007 (and everything else
+> about a body) through the generator. Where this document says "the analyzer reports" or "RAUN017
+> carries the reason", read "the parser reports RAUN007".
+
 ## What the issue asked for
 
 Issue #2 asks for two things: typed values built inline as step arguments (`new Spec { Customer = customer, ... }`,

@@ -5,9 +5,8 @@ using Xunit;
 namespace Raun.Generator.Test;
 
 /// <summary>
-/// An argument the lowering refuses is reported where it is written, with the reason — by the
-/// analyzer as RAUN007 and by the generator as RAUN017, at the same span and for the same reason,
-/// because both run the one argument lowering. The scenario is refused, never generated half-right.
+/// An argument the lowering refuses is reported once, as RAUN007, where it is written and with the
+/// reason. The scenario is refused, never generated half-right.
 /// </summary>
 public class StepArgumentDiagnosticsTests
 {
@@ -24,23 +23,17 @@ public class StepArgumentDiagnosticsTests
     [InlineData("await Then.Equal(RefusedScenarios.HiddenConstant, null);", "HiddenConstant", "not visible outside its type")]
     [InlineData("await Then.Equal(new HiddenType(), null);", "HiddenType", "not visible outside its type")]
     [InlineData("await Then.Equal(seed, null);", "seed", "parameter of the scenario method")]
-    public async Task A_refused_argument_is_reported_by_both_at_the_same_span_for_the_same_reason(
+    public async Task A_refused_argument_is_reported_once_where_it_is_written_with_the_reason(
         string statement, string offending, string reason)
     {
         var source = SampleSources.CompositionDsl + Scenario("static", "int seed", statement);
 
-        var analyzed = Assert.Single(await GeneratorHarness.AnalyzeAsync(source, requireCompilable: true));
-        var result = GeneratorHarness.Run(source);
-        var generated = Assert.Single(result.GeneratorDiagnostics);
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
 
-        Assert.Equal("RAUN007", analyzed.Id);
-        Assert.Equal(offending, Text(source, analyzed));
-        Assert.Contains(reason, Message(analyzed), StringComparison.Ordinal);
-
-        Assert.Equal("RAUN017", generated.Id);
-        Assert.Equal(analyzed.Location.SourceSpan, generated.Location.SourceSpan);
-        Assert.Contains(Message(analyzed), Message(generated), StringComparison.Ordinal);
-        Assert.DoesNotContain("RefusedScenarios", result.GeneratedSource, StringComparison.Ordinal);
+        Assert.Equal("RAUN007", diagnostic.Id);
+        Assert.Equal(offending, Text(source, diagnostic));
+        Assert.Contains(reason, Message(diagnostic), StringComparison.Ordinal);
+        Assert.DoesNotContain("RefusedScenarios", GeneratorHarness.Run(source).GeneratedSource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -48,24 +41,23 @@ public class StepArgumentDiagnosticsTests
     {
         var source = SampleSources.CompositionDsl + Scenario("", "", "await Then.Equal(Seed, null);", instanceMembers: "public int Seed = 1;");
 
-        var analyzed = Assert.Single(await GeneratorHarness.AnalyzeAsync(source, requireCompilable: true));
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
 
-        Assert.Equal("RAUN007", analyzed.Id);
-        Assert.Equal("Seed", Text(source, analyzed));
-        Assert.Contains("instance member", Message(analyzed), StringComparison.Ordinal);
+        Assert.Equal("RAUN007", diagnostic.Id);
+        Assert.Equal("Seed", Text(source, diagnostic));
+        Assert.Contains("instance member", Message(diagnostic), StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task A_local_no_step_produced_is_refused_at_the_identifier()
+    public async Task A_local_a_failed_statement_declares_is_not_reported_again_where_it_is_read()
     {
-        // The declaration itself is RAUN002; the use is RAUN007 at the identifier, with the reason.
+        // One mistake, one diagnostic: the declaration is RAUN002, and `n` stays a (failed) step
+        // output, so its reader is not also told that no step produced it.
         var source = SampleSources.CompositionDsl + Scenario("static", "", "var n = 1; await Then.Equal(n, null);");
 
-        var diagnostics = await GeneratorHarness.AnalyzeAsync(source);
-        var invalid = Assert.Single(diagnostics, d => d.Id == "RAUN007");
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source));
 
-        Assert.Equal("n", Text(source, invalid));
-        Assert.Contains("a local no step produced", Message(invalid), StringComparison.Ordinal);
+        Assert.Equal("RAUN002", diagnostic.Id);
     }
 
     [Theory]
@@ -79,7 +71,7 @@ public class StepArgumentDiagnosticsTests
         // run inside the lowered expression; none of them is a scenario-level name.
         var source = SampleSources.CompositionDsl + Scenario("static", "", statement);
 
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(source, requireCompilable: true));
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
         GeneratorHarness.Run(source).AssertCompiles();
     }
 
@@ -113,22 +105,21 @@ public class StepArgumentDiagnosticsTests
             }
             """;
 
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(source, requireCompilable: true));
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
         GeneratorHarness.Run(source).AssertCompiles();
     }
 
     [Fact]
     public async Task An_awaited_step_assigned_to_anything_but_a_local_is_refused()
     {
-        // The value would have nowhere to go: the generator has no slot for a field. Refused by both,
-        // never lowered as a bare step that silently drops the write.
+        // The value would have nowhere to go: the graph has no slot for a field. Refused, never
+        // lowered as a bare step that silently drops the write.
         var source = SampleSources.CompositionDsl + Scenario("static", "", "Store = await Given.Isolation(1);");
 
-        var analyzed = Assert.Single(await GeneratorHarness.AnalyzeAsync(source, requireCompilable: true));
-        var generated = Assert.Single(GeneratorHarness.Run(source).GeneratorDiagnostics);
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
 
-        Assert.Equal("RAUN002", analyzed.Id);
-        Assert.Equal("RAUN017", generated.Id);
+        Assert.Equal("RAUN002", diagnostic.Id);
+        Assert.Equal("Store", Text(source, diagnostic));
     }
 
     [Fact]
@@ -139,7 +130,7 @@ public class StepArgumentDiagnosticsTests
             "",
             "await Then.Equal(Describe(customer), \"customer-7\"); await Then.Satisfies<Marker>(new Marker(\"m\"), m => m.State == \"m\");");
 
-        Assert.Empty(await GeneratorHarness.AnalyzeAsync(source, requireCompilable: true));
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
         var result = GeneratorHarness.Run(source);
         result.AssertCompiles();
 
@@ -167,11 +158,10 @@ public class StepArgumentDiagnosticsTests
             "",
             "await Enumerable.Range(1, 2).Select(i => Then.Equal(Hidden + i, null)).ToArray();");
 
-        var analyzed = Assert.Single(await GeneratorHarness.AnalyzeAsync(source, requireCompilable: true));
-        var generated = Assert.Single(GeneratorHarness.Run(source).GeneratorDiagnostics);
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
 
-        Assert.Equal("Hidden", Text(source, analyzed));
-        Assert.Equal(analyzed.Location.SourceSpan, generated.Location.SourceSpan);
+        Assert.Equal("RAUN007", diagnostic.Id);
+        Assert.Equal("Hidden", Text(source, diagnostic));
     }
 
     private static string Scenario(string modifiers, string parameters, string statement, string instanceMembers = "")

@@ -149,7 +149,7 @@ internal static class DisplayNameBuilder
         {
             if (method.Parameters[i].Name == parameterName)
             {
-                return ScenarioParser.ArgumentIndex(arguments, parameterName, i);
+                return CallArguments.IndexOf(arguments, parameterName, i);
             }
         }
 

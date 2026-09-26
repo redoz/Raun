@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
-using Raun.Generator.Analysis;
+using Raun.Generator.Diagnostics;
 using Raun.Generator.Emit;
 using Raun.Generator.Lowering;
 
@@ -45,13 +45,6 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
                 return;
             }
 
-            if (r.Rejection is { } rejection)
-            {
-                spc.ReportDiagnostic(Diagnostic.Create(
-                    Descriptors.ScenarioNotGenerated, MakeLocation(rejection), rejection.ScenarioName, rejection.Reason));
-                return;
-            }
-
             if (r.Scenario is not { } scenario)
             {
                 return;
@@ -67,6 +60,25 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
             spc.AddSource(
                 ScenarioEmitter.ScenarioHintPrefix + scenario.SafeName + ".g.cs",
                 SourceText.From(source!, Encoding.UTF8));
+        });
+
+        // A scenario's diagnostics, located in its source tree so the editor can squiggle them and
+        // #pragma/[SuppressMessage] apply. Finding the tree needs the compilation, which changes on
+        // every edit; joining it here, apart from emission, keeps the emitted files cached while the
+        // cheap reporting re-runs.
+        var diagnostics = scenarios
+            .Select(static (result, _) => result?.Diagnostics ?? EquatableArray<ScenarioDiagnostic>.Empty)
+            .Where(static diagnostics => diagnostics.Count > 0)
+            .Combine(context.CompilationProvider);
+
+        context.RegisterSourceOutput(diagnostics, static (spc, pair) =>
+        {
+            var (found, compilation) = pair;
+            foreach (var diagnostic in found)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    Descriptors.ById[diagnostic.Id], MakeLocation(diagnostic, compilation), [.. diagnostic.Arguments]));
+            }
         });
 
         // The registry: the module initializer and CreateAll, over the scenario NAMES only, so it
@@ -149,20 +161,29 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
 
         var lineSpan = syntax.Identifier.GetLocation().GetLineSpan();
         return GeneratorSafety.SafeParse(
-            () => ScenarioParser.TryParse(ctx.SemanticModel, method, syntax),
+            () => ScenarioParser.Lower(ctx.SemanticModel, method, syntax),
             lineSpan.Path,
             lineSpan.StartLinePosition.Line + 1);
     }
 
-    /// <summary>The rejected statement's span, rebuilt as an external-file location (the pipeline
-    /// carries values, not syntax).</summary>
-    private static Location MakeLocation(ParseRejection rejection)
-        => Location.Create(
-            rejection.File,
-            new TextSpan(rejection.SpanStart, rejection.SpanLength),
+    /// <summary>A parser diagnostic's span as a location in its source tree, found by path (the
+    /// pipeline carries values, not syntax); an external-file location if the tree is gone.</summary>
+    private static Location MakeLocation(ScenarioDiagnostic diagnostic, Compilation compilation)
+    {
+        var span = new TextSpan(diagnostic.SpanStart, diagnostic.SpanLength);
+        var tree = compilation.SyntaxTrees.FirstOrDefault(t => t.FilePath == diagnostic.File);
+        if (tree is not null && span.End <= tree.Length)
+        {
+            return Location.Create(tree, span);
+        }
+
+        return Location.Create(
+            diagnostic.File,
+            span,
             new LinePositionSpan(
-                new LinePosition(rejection.Lines.StartLine, rejection.Lines.StartChar),
-                new LinePosition(rejection.Lines.EndLine, rejection.Lines.EndChar)));
+                new LinePosition(diagnostic.Lines.StartLine, diagnostic.Lines.StartChar),
+                new LinePosition(diagnostic.Lines.EndLine, diagnostic.Lines.EndChar)));
+    }
 
     /// <summary>A 1-based file/line location for a diagnostic, or <see cref="Location.None"/> when the
     /// input had no path.</summary>
