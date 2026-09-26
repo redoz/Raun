@@ -37,7 +37,7 @@ public class GeneratorSafetyTests
     [Fact]
     public void SafeParse_passes_a_rejection_through()
     {
-        var rejection = new ParseRejection("Demo.S.Run", "Scenarios.cs", 120, 10, new SourceSpan("Scenarios.cs", 6, 8, 6, 18));
+        var rejection = new ParseRejection("Demo.S.Run", "This statement is not a shape the generator lowers", "Scenarios.cs", 120, 10, new SourceSpan("Scenarios.cs", 6, 8, 6, 18));
 
         var result = GeneratorSafety.SafeParse(() => new ParseOutcome(null, rejection), "x", 1);
 

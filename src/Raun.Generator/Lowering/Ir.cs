@@ -80,12 +80,12 @@ internal readonly record struct ParsedUse
     public string SortKey { get; init; }
 }
 
-/// <summary>Why a scenario was not lowered: the innermost statement the parser rejected (or the
-/// method name, for a body-less method). Carries the span as plain values — never a
-/// <c>Location</c>, which would pin a syntax tree in the incremental pipeline — and is rebuilt into
-/// an external-file location when reported.</summary>
+/// <summary>Why a scenario was not lowered: what the parser rejected — the innermost statement, or
+/// the offending part of a step argument (or the method name, for a body-less method) — and the
+/// reason. Carries the span as plain values — never a <c>Location</c>, which would pin a syntax tree
+/// in the incremental pipeline — and is rebuilt into an external-file location when reported.</summary>
 internal readonly record struct ParseRejection(
-    string ScenarioName, string File, int SpanStart, int SpanLength, SourceSpan Lines);
+    string ScenarioName, string Reason, string File, int SpanStart, int SpanLength, SourceSpan Lines);
 
 /// <summary>The parser's verdict on one scenario: exactly one of the two is set.</summary>
 internal readonly record struct ParseOutcome(ParsedScenario? Scenario, ParseRejection? Rejection);

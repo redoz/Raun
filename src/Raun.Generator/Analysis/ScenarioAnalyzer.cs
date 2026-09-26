@@ -622,7 +622,19 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
 
             case AssignmentExpressionSyntax { Right: AwaitExpressionSyntax await } assignment:
                 AnalyzeAwaited(context, await.Expression, stepOutputs);
-                RecordDeconstructedLocals(context, assignment.Left, stepOutputs);
+
+                // The same Binding the parser builds: the locals this assignment defines are step
+                // outputs from here on. Anything else on the left (a field, a property) has no slot
+                // in the graph for the value, and the parser refuses it too.
+                if (Binding.FromAssignment(assignment.Left, context.SemanticModel) is { } binding)
+                {
+                    stepOutputs.UnionWith(binding.Locals);
+                }
+                else
+                {
+                    Report(context, Descriptors.UnsupportedStatement, assignment.Left.GetLocation());
+                }
+
                 return;
 
             default:
@@ -724,26 +736,37 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
             Report(context, Descriptors.InvalidReturnType, invocation.GetLocation(), method.Name);
         }
 
-        foreach (var argument in invocation.ArgumentList.Arguments)
-        {
-            foreach (var identifier in argument.Expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
-            {
-                // Skip member names (`x.Member`) and argument labels (`name:`); flag any other
-                // identifier that binds to a local which isn't a prior step output.
-                if ((identifier.Parent is MemberAccessExpressionSyntax access && access.Name == identifier)
-                    || identifier.Parent is NameColonSyntax or NameEqualsSyntax)
-                {
-                    continue;
-                }
+        ReportArgumentViolations(context, invocation, stepOutputs);
+    }
 
-                if (context.SemanticModel.GetSymbolInfo(identifier).Symbol is ILocalSymbol local
-                    && !stepOutputs.Contains(local))
-                {
-                    Report(context, Descriptors.InvalidArgument, identifier.GetLocation(), identifier.Identifier.Text);
-                }
-            }
+    /// <summary>
+    /// RAUN007: runs the generator's own argument lowering over the call and reports what it refused —
+    /// the same node and the same reason the generator's RAUN017 would carry, because it is the same pass.
+    /// </summary>
+    private static void ReportArgumentViolations(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax invocation,
+        HashSet<ILocalSymbol> stepOutputs,
+        IParameterSymbol? loopVariable = null)
+    {
+        foreach (var violation in LowerArguments(context, invocation, stepOutputs, loopVariable).Violations)
+        {
+            Report(context, Descriptors.InvalidArgument, violation.Node.GetLocation(), violation.Subject, violation.Reason);
         }
     }
+
+    /// <summary>The call's arguments lowered as the parser lowers them. The analyzer only needs to know
+    /// WHICH symbols carry a step's value, not how the generator spells them, so each keeps its name.</summary>
+    private static LoweredCall LowerArguments(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax invocation,
+        HashSet<ILocalSymbol> stepOutputs,
+        IParameterSymbol? loopVariable = null)
+        => ArgumentLowering.LowerCall(context.SemanticModel, invocation, symbol =>
+            (symbol is ILocalSymbol local && stepOutputs.Contains(local))
+            || SymbolEqualityComparer.Default.Equals(symbol, loopVariable)
+                ? SyntaxFactory.IdentifierName(symbol.Name)
+                : null);
 
     private static void AnalyzeLinqArray(
         SyntaxNodeAnalysisContext context,
@@ -754,7 +777,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         if (toArray.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax selectInv }
             && selectInv.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Select" }
             && selectInv.ArgumentList.Arguments.Count == 1
-            && selectInv.ArgumentList.Arguments[0].Expression is SimpleLambdaExpressionSyntax { Body: InvocationExpressionSyntax body }
+            && selectInv.ArgumentList.Arguments[0].Expression is SimpleLambdaExpressionSyntax { Body: InvocationExpressionSyntax body } lambda
             && selectInv.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax rangeInv }
             && rangeInv.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Range" }
             && rangeInv.ArgumentList.Arguments.Count == 2
@@ -771,7 +794,9 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
                     Report(context, Descriptors.InvalidReturnType, body.GetLocation(), method.Name);
                 }
 
-                AnalyzeUnrollConflicts(context, body, count, stepOutputs);
+                var loopVariable = context.SemanticModel.GetDeclaredSymbol(lambda.Parameter) as IParameterSymbol;
+                ReportArgumentViolations(context, body, stepOutputs, loopVariable);
+                AnalyzeUnrollConflicts(context, body, count, stepOutputs, loopVariable);
             }
             else
             {
@@ -838,14 +863,15 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         SyntaxNodeAnalysisContext context,
         InvocationExpressionSyntax body,
         int count,
-        HashSet<ILocalSymbol> stepOutputs)
+        HashSet<ILocalSymbol> stepOutputs,
+        IParameterSymbol? loopVariable)
     {
         if (count < 2)
         {
             return;
         }
 
-        foreach (var access in CollectAccesses(context, body, stepOutputs))
+        foreach (var access in CollectAccesses(context, body, stepOutputs, loopVariable))
         {
             if (access.Exclusive)
             {
@@ -871,7 +897,8 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     private static List<GroupAccess> CollectAccesses(
         SyntaxNodeAnalysisContext context,
         InvocationExpressionSyntax invocation,
-        HashSet<ILocalSymbol> stepOutputs)
+        HashSet<ILocalSymbol> stepOutputs,
+        IParameterSymbol? loopVariable = null)
     {
         var accesses = new List<GroupAccess>();
         if (invocation.Expression is not MemberAccessExpressionSyntax member
@@ -883,38 +910,24 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         var operation = member.Name.Identifier.Text;
         var lineageVerbs = LineageVerbs(method);
         var arguments = invocation.ArgumentList.Arguments;
+        var lowered = LowerArguments(context, invocation, stepOutputs, loopVariable);
 
         for (var p = 0; p < method.Parameters.Length; p++)
         {
             var parameter = method.Parameters[p];
             var verb = AttributeReader.ParameterRole(parameter)
                 ?? (lineageVerbs.TryGetValue(parameter.Name, out var lineageVerb) ? lineageVerb : null);
-            if (verb is null)
-            {
-                continue;
-            }
-
-            var argument = ScenarioParser.FindArgument(arguments, parameter.Name, p);
-            if (argument is null)
+            var index = ScenarioParser.ArgumentIndex(arguments, parameter.Name, p);
+            if (verb is null || index < 0)
             {
                 continue;
             }
 
             // Mirrors LifecycleVerb.ToLockMode in the runtime assembly: Edit/Delete exclude, the rest share.
             var exclusive = verb is "Edit" or "Delete";
-            foreach (var identifier in argument.Expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+            foreach (var read in lowered.Arguments[index].Reads)
             {
-                if ((identifier.Parent is MemberAccessExpressionSyntax access && access.Name == identifier)
-                    || identifier.Parent is NameColonSyntax or NameEqualsSyntax)
-                {
-                    continue;
-                }
-
-                if (context.SemanticModel.GetSymbolInfo(identifier).Symbol is ILocalSymbol local
-                    && stepOutputs.Contains(local))
-                {
-                    accesses.Add(new GroupAccess(local, verb, exclusive, operation, identifier.GetLocation()));
-                }
+                accesses.Add(new GroupAccess(read.Local, verb, exclusive, operation, read.Node.GetLocation()));
             }
         }
 
@@ -1029,20 +1042,6 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     /// own parameter or a local it introduces), so it is not a capture from the enclosing step.</summary>
     private static bool DeclaredInside(ISymbol symbol, SyntaxNode scope)
         => symbol.DeclaringSyntaxReferences.Any(r => r.SyntaxTree == scope.SyntaxTree && scope.Span.Contains(r.Span));
-
-    private static void RecordDeconstructedLocals(
-        SyntaxNodeAnalysisContext context,
-        ExpressionSyntax left,
-        HashSet<ILocalSymbol> stepOutputs)
-    {
-        foreach (var designation in left.DescendantNodesAndSelf().OfType<SingleVariableDesignationSyntax>())
-        {
-            if (context.SemanticModel.GetDeclaredSymbol(designation) is ILocalSymbol local)
-            {
-                stepOutputs.Add(local);
-            }
-        }
-    }
 
     private static void AnalyzeStepName(SyntaxNodeAnalysisContext context, IMethodSymbol method)
     {

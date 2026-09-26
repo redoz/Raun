@@ -26,15 +26,17 @@ internal readonly record struct LoweredDisplayName(string Template, ExpressionSy
 /// </remarks>
 internal static class DisplayNameBuilder
 {
+    /// <summary>The display name for one call: <paramref name="written"/> are its arguments as the
+    /// scenario wrote them (for constant folding), <paramref name="lowered"/> the same arguments
+    /// lowered for the generated step, index for index (for runtime holes).</summary>
     public static LoweredDisplayName Build(
         SemanticModel model,
         IMethodSymbol method,
-        SeparatedSyntaxList<ArgumentSyntax> args,
-        Dictionary<string, ExpressionSyntax> replacements)
+        SeparatedSyntaxList<ArgumentSyntax> written,
+        IReadOnlyList<ArgumentSyntax> lowered)
     {
         var template = AttributeReader.StepTemplate(method) ?? method.Name;
         var tokens = TemplateTokenizer.Tokenize(template);
-        var rewriter = new IdentifierReplacer(replacements);
 
         var constant = new StringBuilder();
         var format = new Concatenation();
@@ -48,35 +50,32 @@ internal static class DisplayNameBuilder
                 continue;
             }
 
-            var argExpr = ArgumentForParameter(method, args, token.Text);
-            // LINQ unrolling substitutes the loop variable with a literal, producing detached nodes the
-            // model cannot evaluate. Fold those syntactically when every part is a literal (a plain
-            // literal, or an interpolated string whose holes are literals) — `$"user-{1}"` is
-            // "user-1" — so each unrolled step lists under its real name at discovery time instead of
-            // three identical "{name}" entries. Anything else stays runtime-formatted.
-            var inModel = argExpr is not null && argExpr.SyntaxTree == model.SyntaxTree;
-            var constValue = inModel ? model.GetConstantValue(argExpr!) : default;
-            string? folded = null;
-            var foldedOk = argExpr is not null && !inModel && TryFoldDetached(argExpr, out folded);
+            var index = ArgumentIndexFor(method, written, token.Text);
+            if (index < 0)
+            {
+                // No argument resolves the placeholder: it stays as written, in both forms.
+                constant.Append('{').Append(token.Text).Append('}');
+                format.Append("{" + token.Text + "}");
+                continue;
+            }
 
-            if (argExpr is not null && (constValue.HasValue || foldedOk))
+            // A constant folds into the name. So does a lowered argument made only of literals: a LINQ
+            // unroll binds its loop variable to a literal, and `$"user-{i}"` becomes "user-1" — each
+            // unrolled step then lists under its own name at discovery time, not three "{name}" entries.
+            var constValue = model.GetConstantValue(written[index].Expression);
+            var argument = lowered[index].Expression;
+            string? folded = null;
+            if (constValue.HasValue || TryFoldLiterals(argument, out folded))
             {
                 var text = constValue.HasValue ? constValue.Value?.ToString() ?? "" : folded!;
                 constant.Append(text);
                 format.Append(text);
             }
-            else if (argExpr is not null)
+            else
             {
                 constant.Append('{').Append(token.Text).Append('}');
                 // Parenthesize so the hole binds tighter than the surrounding `+`, whatever it is.
-                format.Append(ParenthesizedExpression(
-                    ((ExpressionSyntax)rewriter.Visit(argExpr)).WithoutTrivia()));
-            }
-            else
-            {
-                // No argument resolves the placeholder: it stays as written, in both forms.
-                constant.Append('{').Append(token.Text).Append('}');
-                format.Append("{" + token.Text + "}");
+                format.Append(ParenthesizedExpression(argument.WithoutTrivia()));
             }
         }
 
@@ -140,26 +139,28 @@ internal static class DisplayNameBuilder
             => LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(text));
     }
 
-    private static ExpressionSyntax? ArgumentForParameter(
+    /// <summary>The index of the argument bound to the parameter a placeholder names, or -1.</summary>
+    private static int ArgumentIndexFor(
         IMethodSymbol method,
-        SeparatedSyntaxList<ArgumentSyntax> args,
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
         string parameterName)
     {
         for (var i = 0; i < method.Parameters.Length; i++)
         {
-            if (method.Parameters[i].Name == parameterName && i < args.Count)
+            if (method.Parameters[i].Name == parameterName)
             {
-                return args[i].Expression;
+                return ScenarioParser.ArgumentIndex(arguments, parameterName, i);
             }
         }
 
-        return null;
+        return -1;
     }
 
-    /// <summary>Folds a detached expression made only of literals: a literal itself, a parenthesized
-    /// one, or an interpolated string whose every hole is such an expression (no alignment or format
-    /// clause). False for anything that needs evaluation.</summary>
-    private static bool TryFoldDetached(ExpressionSyntax expression, out string? text)
+    /// <summary>Folds an expression made only of literals: a literal itself, a parenthesized one, or
+    /// an interpolated string whose every hole is such an expression (no alignment or format clause).
+    /// Purely syntactic, so it works on lowered nodes the semantic model has never seen. False for
+    /// anything that needs evaluation.</summary>
+    private static bool TryFoldLiterals(ExpressionSyntax expression, out string? text)
     {
         switch (expression)
         {
@@ -168,7 +169,7 @@ internal static class DisplayNameBuilder
                 return text is not null;
 
             case ParenthesizedExpressionSyntax parenthesized:
-                return TryFoldDetached(parenthesized.Expression, out text);
+                return TryFoldLiterals(parenthesized.Expression, out text);
 
             case InterpolatedStringExpressionSyntax interpolated:
                 var builder = new StringBuilder();
@@ -180,7 +181,7 @@ internal static class DisplayNameBuilder
                             builder.Append(part.TextToken.ValueText);
                             break;
                         case InterpolationSyntax { AlignmentClause: null, FormatClause: null } hole
-                            when TryFoldDetached(hole.Expression, out var holeText):
+                            when TryFoldLiterals(hole.Expression, out var holeText):
                             builder.Append(holeText);
                             break;
                         default:

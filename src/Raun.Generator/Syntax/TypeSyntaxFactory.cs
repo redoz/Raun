@@ -81,6 +81,26 @@ internal static class TypeSyntaxFactory
         return name;
     }
 
+    /// <summary><c>global::a.b.c</c> for a namespace symbol — the rooted form an expression needs, so
+    /// the name means the same thing wherever the expression is re-hosted.</summary>
+    /// <exception cref="NotSupportedException">The global namespace, which cannot be named in an expression.</exception>
+    public static NameSyntax GlobalNamespaceName(INamespaceSymbol @namespace)
+    {
+        var parts = NamespaceParts(@namespace);
+        if (parts.Count == 0)
+        {
+            throw new NotSupportedException("the global namespace has no name to build");
+        }
+
+        NameSyntax name = AliasQualifiedName(GlobalAlias, IdentifierName(Name(parts[0])));
+        for (var i = 1; i < parts.Count; i++)
+        {
+            name = QualifiedName(name, IdentifierName(Name(parts[i])));
+        }
+
+        return name;
+    }
+
     private static TypeSyntax FromNamed(INamedTypeSymbol named)
     {
         if (Keywords.TryGetValue(named.SpecialType, out var keyword))

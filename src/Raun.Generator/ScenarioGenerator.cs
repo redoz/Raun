@@ -48,7 +48,7 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
             if (r.Rejection is { } rejection)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(
-                    Descriptors.ScenarioNotGenerated, MakeLocation(rejection), rejection.ScenarioName));
+                    Descriptors.ScenarioNotGenerated, MakeLocation(rejection), rejection.ScenarioName, rejection.Reason));
                 return;
             }
 

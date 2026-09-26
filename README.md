@@ -251,10 +251,60 @@ that runs. Loading scenarios from a referenced library is not supported today.
   runs; steps in the other are reported **not taken** (skipped with the reason), never green. A local
   assigned in both arms is merged automatically, and the statement after the `if` waits for the arm
   to finish before it runs.
+- A step argument is an ordinary C# expression, including construction, `with`, and projections of
+  earlier results; see [Step arguments](#step-arguments).
 - Loops (`for`/`foreach`/`while`/`do`), `switch`, `try`/`catch`, and `goto` are rejected with a
   diagnostic: put the loop, retry, or polling **inside a step**. A step is an ordinary
   `async Task<T>` method, so it can loop, retry, or poll internally; what a step cannot do is stop a
   later step from running, which is why `if`/`else` is the one construct the graph models.
+
+### Step arguments
+
+A few reusable steps fed typed values scale better than a step per fixture variant. An argument
+can build a value from constants and earlier results, and can reach into an earlier result:
+
+```csharp
+var isolation = await Given.Isolation(2135);
+var customer = await Given.Customer(isolation);
+
+var setup = await Given.AppointmentCreationContext(isolation, new CreationSpecification
+{
+    Customer = customer,
+    DossierNumber = "22012000753",
+    RappelCreation = DependencyOutcome.Fail,
+});
+
+var creation = await When.CreateAppointment(isolation, setup.Customer, setup.Request);
+await Then.AppointmentStateIs(isolation, setup.ExpectedPartialState);
+```
+
+The rule behind this:
+
+- **An argument is evaluated inside its step**, when that step starts (after everything it depends
+  on has finished), once per run of the step. The argument is not evaluated where it is written.
+- **A step output is read, not re-run.** Every mention of a step's result, including its members,
+  its elements, and mentions inside an initializer, a `with`, or a lambda, makes the consuming step
+  depend on the producing one and read its recorded value. Above, `CreateAppointment` depends on
+  `setup` and `isolation`, and `AppointmentCreationContext` runs exactly once.
+- **Names keep their meaning.** Types, static members, and constants reached by a simple name (from
+  the scenario's class, its namespace, or a `using`) are emitted fully qualified, so they resolve in
+  the generated code exactly as they did in the scenario.
+
+Anything that cannot move into the generated step, or that would hide scenario structure, is
+`RAUN007`. The diagnostic is reported at the offending expression and says why:
+
+| In an argument | Why it is refused |
+|---|---|
+| a local no step produced | only a step's result flows between steps: produce it with a step, or compute it inside one |
+| `await …` or a `Given`/`When`/`Then` call | it would run as an invisible part of another step: await it as its own statement |
+| `result.X = …`, `++`, `ref`/`out` on a step output | later steps read the same value |
+| a `private`/`protected` member or nested type | the step runs in generated code: make it `internal` |
+| an instance member, or a scenario-method parameter | the scenario body is lowered into static code and never executed |
+
+Method calls are allowed (`Clock.GetUtcNow().AddDays(10)`). Raun cannot prove that a call is pure,
+but the call runs at a well-defined point: when its step starts. Only *assignments* to a step output
+are caught. A mutating call such as `setup.Items.Add(x)` is not, so keep step results immutable (records with
+`init` properties) and the question never comes up.
 
 ### Conditionals
 

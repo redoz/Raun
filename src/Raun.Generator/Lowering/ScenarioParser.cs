@@ -24,8 +24,10 @@ internal sealed class ScenarioParser
     private readonly IMethodSymbol _method;
     private readonly MethodDeclarationSyntax _syntax;
 
-    // Variable name -> the step(s) that produced it.
-    private readonly Dictionary<string, VarSource> _vars = [];
+    // Step-output local -> the step(s) that produced it. Keyed by symbol, never by name: an argument
+    // is lowered by binding its identifiers, so a lambda parameter or a sibling scope's local that
+    // happens to share a name is a different key.
+    private readonly Dictionary<ILocalSymbol, VarSource> _vars = new(SymbolEqualityComparer.Default);
 
     // Namespaces that contain the invoked DSL extension members; imported into the generated file
     // so `Given.PatientExists(...)` resolves there too. Kept as symbols: a using directive is built
@@ -45,8 +47,14 @@ internal sealed class ScenarioParser
     // Indices introduced by the previous top-level statement (source-order barrier / join target).
     private List<int> _prevFrontier = [];
 
-    /// <summary>The innermost statement the walk rejected, for RAUN017. Null while the walk succeeds.</summary>
-    private StatementSyntax? _rejected;
+    private const string UnsupportedStatement = "This statement is not a shape the generator lowers";
+
+    /// <summary>What the walk rejected first, for RAUN017: the innermost statement, or the offending
+    /// part of a step argument, with why. Null while the walk succeeds.</summary>
+    private (SyntaxNode Node, string Reason)? _rejection;
+
+    /// <summary>A LINQ unroll's loop variable and its value for the element being built.</summary>
+    private readonly record struct LoopElement(IParameterSymbol Variable, int Value);
 
     // Ordering-only predecessors the NEXT statement must wait for: the last steps of every arm of the
     // `if` that just closed. DependsOn cannot carry them (an arm may be not-taken, and DependsOn would
@@ -70,6 +78,9 @@ internal sealed class ScenarioParser
 
     private readonly record struct VarSource(bool IsArray, int Index, int[] Indices, TypeSyntax? ElementType)
     {
+        /// <summary>The step(s) a read of this local depends on.</summary>
+        public IEnumerable<int> Producers => IsArray ? Indices : [Index];
+
         public static VarSource Scalar(int index) => new(false, index, [], null);
         public static VarSource Array(int[] indices, TypeSyntax elementType) => new(true, -1, indices, elementType);
     }
@@ -85,12 +96,13 @@ internal sealed class ScenarioParser
             return new ParseOutcome(scenario, null);
         }
 
-        // The innermost rejected statement, or the method name when there was no body to walk.
-        var at = _rejected is not null ? _rejected.GetLocation() : _syntax.Identifier.GetLocation();
+        // What the walk rejected, or the method name when there was no body to walk.
+        var at = _rejection?.Node.GetLocation() ?? _syntax.Identifier.GetLocation();
         var lines = at.GetLineSpan();
         var name = _method.ContainingType.ToDisplayString(SymbolHelpers.NoGlobal) + "." + _method.Name;
         return new ParseOutcome(null, new ParseRejection(
             name,
+            _rejection?.Reason ?? UnsupportedStatement,
             lines.Path,
             at.SourceSpan.Start,
             at.SourceSpan.Length,
@@ -114,7 +126,7 @@ internal sealed class ScenarioParser
         {
             if (!ParseStatement(statement))
             {
-                return null; // reported as RAUN017 by TryParse, at _rejected
+                return null; // reported as RAUN017 by TryParse, at _rejection
             }
         }
 
@@ -216,10 +228,11 @@ internal sealed class ScenarioParser
             _ => false,
         };
 
-        // Recursion unwinds leaf-first, so the first statement recorded is the innermost one.
+        // Recursion unwinds leaf-first, so the first rejection recorded is the innermost one — an
+        // argument's, when a step inside this statement refused one.
         if (!ok)
         {
-            _rejected ??= statement;
+            _rejection ??= (statement, UnsupportedStatement);
         }
 
         return ok;
@@ -259,7 +272,7 @@ internal sealed class ScenarioParser
 
         MarkAsCondition(condition);
 
-        var parentVars = new Dictionary<string, VarSource>(_vars);
+        var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
 
         var thenArm = WalkArm(statement.Statement, condition.Index, whenValue: true, parentVars);
         if (thenArm is null)
@@ -268,7 +281,7 @@ internal sealed class ScenarioParser
         }
 
         var thenVars = thenArm.Value.Vars;
-        Dictionary<string, VarSource>? elseVars = null;
+        Dictionary<ILocalSymbol, VarSource>? elseVars = null;
         var waits = new SortedSet<int>(thenArm.Value.Waits);
         if (statement.Else is { } elseClause)
         {
@@ -293,9 +306,9 @@ internal sealed class ScenarioParser
         }
 
         var frontier = new List<int>();
-        foreach (var name in DifferingLocals(parentVars, thenVars, elseVars))
+        foreach (var local in DifferingLocals(parentVars, thenVars, elseVars))
         {
-            var mergeIndex = InsertMerge(name, condition.Index, parentVars, thenVars, elseVars);
+            var mergeIndex = InsertMerge(local, condition.Index, parentVars, thenVars, elseVars);
             if (mergeIndex < 0)
             {
                 return false;
@@ -332,8 +345,8 @@ internal sealed class ScenarioParser
     /// waits a nested <c>if</c> left unconsumed — which the statement after the enclosing <c>if</c>
     /// must wait for. Null when the arm is unsupported.
     /// </summary>
-    private (Dictionary<string, VarSource> Vars, List<int> Waits)? WalkArm(
-        StatementSyntax arm, int conditionIndex, bool whenValue, Dictionary<string, VarSource> parentVars)
+    private (Dictionary<ILocalSymbol, VarSource> Vars, List<int> Waits)? WalkArm(
+        StatementSyntax arm, int conditionIndex, bool whenValue, Dictionary<ILocalSymbol, VarSource> parentVars)
     {
         var savedFrontier = _prevFrontier;
         var savedWaits = _pendingWaits;
@@ -354,50 +367,45 @@ internal sealed class ScenarioParser
         _prevFrontier = savedFrontier;
         _pendingWaits = savedWaits;
 
-        return ok ? (new Dictionary<string, VarSource>(_vars), tail) : null;
+        return ok ? (new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default), tail) : null;
     }
 
     /// <summary>Locals whose definition differs between the arms (or between an arm and the parent) —
-    /// exactly the set that needs a phi. A local defined only inside one arm and absent from the parent
-    /// is branch-local: C# scoping already forbids its later use, so it is dropped.</summary>
-    private static IEnumerable<string> DifferingLocals(
-        Dictionary<string, VarSource> parentVars,
-        Dictionary<string, VarSource> thenVars,
-        Dictionary<string, VarSource>? elseVars)
+    /// exactly the set that needs a phi. A local declared inside one arm is branch-local: it is absent
+    /// from the parent and from the other arm (a sibling scope's same-named local is another symbol),
+    /// and C# scoping already forbids its later use, so it is dropped. Ordered by name, then by
+    /// declaration position, so merge nodes are inserted identically on every run.</summary>
+    private static IEnumerable<ILocalSymbol> DifferingLocals(
+        Dictionary<ILocalSymbol, VarSource> parentVars,
+        Dictionary<ILocalSymbol, VarSource> thenVars,
+        Dictionary<ILocalSymbol, VarSource>? elseVars)
     {
-        var names = new SortedSet<string>(System.StringComparer.Ordinal);
-        foreach (var name in thenVars.Keys)
-        {
-            names.Add(name);
-        }
+        var locals = thenVars.Keys
+            .Concat(elseVars?.Keys ?? Enumerable.Empty<ILocalSymbol>())
+            .Distinct<ILocalSymbol>(SymbolEqualityComparer.Default)
+            .OrderBy(l => l.Name, System.StringComparer.Ordinal)
+            .ThenBy(l => l.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0);
 
-        if (elseVars is not null)
+        foreach (var local in locals)
         {
-            foreach (var name in elseVars.Keys)
-            {
-                names.Add(name);
-            }
-        }
+            var inThen = thenVars.TryGetValue(local, out var thenSource);
+            var elseSource = default(VarSource);
+            var inElse = elseVars is not null && elseVars.TryGetValue(local, out elseSource);
+            var inParent = parentVars.TryGetValue(local, out var parentDef);
 
-        foreach (var name in names)
-        {
-            var inThen = thenVars.TryGetValue(name, out var thenSource);
-            var inElse = elseVars is not null && elseVars.TryGetValue(name, out _);
-            var inParent = parentVars.TryGetValue(name, out var parentSource);
-
+            // Declared before the `if` without a value (`Appointment a;`) and assigned in both arms is
+            // the ordinary phi; anything else missing from the parent is branch-local.
             if (!inParent && !(inThen && inElse))
             {
-                continue; // branch-local
+                continue;
             }
 
-            var thenDef = inThen ? thenSource : parentSource;
-            var elseDef = elseVars is not null && elseVars.TryGetValue(name, out var elseSource)
-                ? elseSource
-                : parentSource;
+            var thenDef = inThen ? thenSource : parentDef;
+            var elseDef = inElse ? elseSource : parentDef;
 
             if (!thenDef.Equals(elseDef))
             {
-                yield return name;
+                yield return local;
             }
         }
     }
@@ -410,11 +418,11 @@ internal sealed class ScenarioParser
     /// not taken. Arrays are not mergeable; returns -1 (the analyzer rejects the shape).
     /// </summary>
     private int InsertMerge(
-        string name,
+        ILocalSymbol local,
         int conditionIndex,
-        Dictionary<string, VarSource> parentVars,
-        Dictionary<string, VarSource> thenVars,
-        Dictionary<string, VarSource>? elseVars)
+        Dictionary<ILocalSymbol, VarSource> parentVars,
+        Dictionary<ILocalSymbol, VarSource> thenVars,
+        Dictionary<ILocalSymbol, VarSource>? elseVars)
     {
         var thenDef = Side(thenVars, whenValue: true);
         var elseDef = Side(elseVars, whenValue: false);
@@ -428,12 +436,12 @@ internal sealed class ScenarioParser
         var merge = new ParsedStep
         {
             Index = index,
-            StepId = GenStableId.ForStep(_scenarioId, "merge:" + name + ":" + index),
+            StepId = GenStableId.ForStep(_scenarioId, "merge:" + local.Name + ":" + index),
             Phase = producer.Phase,
             OperationName = "Merge",
             HasResult = true,
             ResultType = producer.ResultType,
-            DisplayNameTemplate = "«merge " + name + "»",
+            DisplayNameTemplate = "«merge " + local.Name + "»",
             MergeSources = [thenDef, elseDef],
             IsSynthetic = true,
             Guards = [.. _guards],
@@ -441,22 +449,22 @@ internal sealed class ScenarioParser
         };
 
         _steps.Add(merge);
-        _vars[name] = VarSource.Scalar(index);
+        _vars[local] = VarSource.Scalar(index);
         return index;
 
-        int Side(Dictionary<string, VarSource>? armVars, bool whenValue)
+        int Side(Dictionary<ILocalSymbol, VarSource>? armVars, bool whenValue)
         {
-            if (armVars is not null && armVars.TryGetValue(name, out var armSource))
+            if (armVars is not null && armVars.TryGetValue(local, out var armSource))
             {
                 return armSource.IsArray ? -1 : armSource.Index;
             }
 
-            if (!parentVars.TryGetValue(name, out var parentSource) || parentSource.IsArray)
+            if (!parentVars.TryGetValue(local, out var parentSource) || parentSource.IsArray)
             {
                 return -1;
             }
 
-            return InsertPassThrough(name, conditionIndex, whenValue, parentSource.Index);
+            return InsertPassThrough(local.Name, conditionIndex, whenValue, parentSource.Index);
         }
     }
 
@@ -505,12 +513,13 @@ internal sealed class ScenarioParser
             return true;
         }
 
-        if (variables[0].Initializer?.Value is not AwaitExpressionSyntax await)
+        if (variables[0].Initializer?.Value is not AwaitExpressionSyntax await
+            || _model.GetDeclaredSymbol(variables[0]) is not ILocalSymbol declared)
         {
             return false;
         }
 
-        return ParseAwaited(await.Expression, binding: Binding.Single(variables[0].Identifier.Text));
+        return ParseAwaited(await.Expression, binding: Binding.Single(declared));
     }
 
     private bool ParseExpressionStatement(ExpressionStatementSyntax statement)
@@ -518,7 +527,10 @@ internal sealed class ScenarioParser
         return statement.Expression switch
         {
             AwaitExpressionSyntax bareAwait => ParseAwaited(bareAwait.Expression, binding: null),
-            AssignmentExpressionSyntax { Right: AwaitExpressionSyntax await } assignment => ParseAwaited(await.Expression, binding: Binding.FromAssignment(assignment.Left)),
+            // An assignment binds locals; one that binds nothing (a field, a property) has nowhere to
+            // put the value, and lowering it as a bare step would drop the write without a word.
+            AssignmentExpressionSyntax { Right: AwaitExpressionSyntax await } assignment
+                => Binding.FromAssignment(assignment.Left, _model) is { } binding && ParseAwaited(await.Expression, binding),
             _ => false,
         };
 
@@ -558,7 +570,7 @@ internal sealed class ScenarioParser
 
         if (binding is { Kind: BindingKind.Single })
         {
-            _vars[binding.Names[0]] = VarSource.Scalar(step.Index);
+            _vars[binding.Locals[0]] = VarSource.Scalar(step.Index);
         }
 
         Advance([step.Index]);
@@ -569,7 +581,7 @@ internal sealed class ScenarioParser
     {
         var groupId = "g" + _nextIndex;
         var frontier = new List<int>();
-        var names = binding?.Names;
+        var locals = binding?.Locals;
 
         for (var i = 0; i < tuple.Arguments.Count; i++)
         {
@@ -584,9 +596,9 @@ internal sealed class ScenarioParser
                 return false;
             }
 
-            if (names is not null && i < names.Count)
+            if (locals is not null && i < locals.Count)
             {
-                _vars[names[i]] = VarSource.Scalar(step.Index);
+                _vars[locals[i]] = VarSource.Scalar(step.Index);
             }
 
             frontier.Add(step.Index);
@@ -626,7 +638,7 @@ internal sealed class ScenarioParser
 
         if (binding is not null)
         {
-            _vars[binding.Names[0]] = VarSource.Array(frontier.ToArray(), elementType);
+            _vars[binding.Locals[0]] = VarSource.Array(frontier.ToArray(), elementType);
         }
 
         // An empty group ran nothing, so the step after it still follows the step before it.
@@ -679,19 +691,19 @@ internal sealed class ScenarioParser
             return false;
         }
 
-        var loopVar = lambda.Parameter.Identifier.Text;
+        if (_model.GetDeclaredSymbol(lambda.Parameter) is not IParameterSymbol loopVariable)
+        {
+            return false;
+        }
+
         var groupId = "g" + _nextIndex;
         var frontier = new List<int>();
         TypeSyntax elementType = PredefinedType(Token(SyntaxKind.ObjectKeyword));
 
         for (var k = 0; k < count; k++)
         {
-            var value = start + k;
-            // Replace the loop variable with the constant value for this element.
-            var substituted = (InvocationExpressionSyntax)new IdentifierReplacer(
-                new Dictionary<string, ExpressionSyntax> { [loopVar] = Num(value) }).Visit(bodyCall);
-
-            var step = BuildStep(substituted, groupId, _prevFrontier, semanticNode: bodyCall);
+            // Each element is the lambda body with the loop variable bound to that element's value.
+            var step = BuildStep(bodyCall, groupId, _prevFrontier, new LoopElement(loopVariable, start + k));
             if (step is null)
             {
                 return false;
@@ -703,7 +715,7 @@ internal sealed class ScenarioParser
 
         if (binding is not null)
         {
-            _vars[binding.Names[0]] = VarSource.Array(frontier.ToArray(), elementType);
+            _vars[binding.Locals[0]] = VarSource.Array(frontier.ToArray(), elementType);
         }
 
         // An empty group ran nothing, so the step after it still follows the step before it.
@@ -719,17 +731,17 @@ internal sealed class ScenarioParser
         => invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "ToArray" };
 
     /// <summary>
-    /// Builds a step from a DSL invocation. <paramref name="semanticNode"/> is the invocation to use
-    /// for semantic lookups when the emitted call has been syntactically rewritten (LINQ unroll).
+    /// Builds a step from a DSL invocation in the scenario's tree. <paramref name="loop"/> binds a LINQ
+    /// unroll's loop variable to the value of the element being built. Null, with the rejection
+    /// recorded, when an argument cannot be lowered.
     /// </summary>
     private ParsedStep? BuildStep(
         InvocationExpressionSyntax invocation,
         string? groupId,
         List<int> sourceOrderDeps,
-        InvocationExpressionSyntax? semanticNode = null)
+        LoopElement? loop = null)
     {
-        var lookup = semanticNode ?? invocation;
-        if (lookup.Expression is not MemberAccessExpressionSyntax member)
+        if (invocation.Expression is not MemberAccessExpressionSyntax member)
         {
             return null;
         }
@@ -740,13 +752,31 @@ internal sealed class ScenarioParser
             return null;
         }
 
-        if (_model.GetSymbolInfo(lookup).Symbol is not IMethodSymbol method)
+        if (_model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method)
         {
             return null;
         }
 
         if (!SymbolHelpers.TryUnwrapReturn(method.ReturnType, out var resultType))
         {
+            return null;
+        }
+
+        // Every argument goes through the one lowering the analyzer also runs: a violation refuses
+        // the scenario here and is RAUN007 there, at the same node, for the same reason.
+        ExpressionSyntax? StepValue(ISymbol symbol) => symbol switch
+        {
+            ILocalSymbol local when _vars.TryGetValue(local, out var source) => Spell(source),
+            IParameterSymbol parameter when loop is { } element
+                && SymbolEqualityComparer.Default.Equals(parameter, element.Variable) => Num(element.Value),
+            _ => null,
+        };
+
+        var lowering = ArgumentLowering.LowerCall(_model, invocation, StepValue);
+        if (lowering.Violations.Any())
+        {
+            var violation = lowering.Violations.First();
+            _rejection ??= (violation.Node, violation.Describe());
             return null;
         }
 
@@ -759,26 +789,26 @@ internal sealed class ScenarioParser
         var index = _nextIndex++;
         var operation = member.Name.Identifier.Text;
 
-        // Dataflow dependencies: variables referenced in the (original) arguments.
-        var dataflow = CollectDataflowDeps(invocation);
+        // Source order, plus every step whose output an argument reads.
         var deps = new SortedSet<int>(sourceOrderDeps);
-        foreach (var d in dataflow)
+        foreach (var read in lowering.Reads)
         {
-            deps.Add(d);
+            deps.UnionWith(_vars[read.Local].Producers);
         }
 
-        var replacements = BuildReplacements();
-        var wantsCtx = SymbolHelpers.WantsContext(method, invocation.ArgumentList.Arguments.Count);
-        var call = BuildCall(invocation, replacements, wantsCtx);
-        var resourceClaims = BuildResourceClaims(invocation, method, resultType is not null, replacements);
+        var written = invocation.ArgumentList.Arguments;
+        var lowered = lowering.Arguments.Select(a => a.Node).ToList();
+        var wantsCtx = SymbolHelpers.WantsContext(method, written.Count);
+        var call = BuildCall(invocation, member, lowering.TypeArguments?.Node, lowered, wantsCtx);
+        var resourceClaims = BuildResourceClaims(written, method, resultType is not null, lowered);
         AddUses(method.GetAttributes());
 
-        var (template, formatExpr) = DisplayNameBuilder.Build(_model, method, invocation.ArgumentList.Arguments, replacements);
+        var (template, formatExpr) = DisplayNameBuilder.Build(_model, method, written, lowered);
 
         var step = new ParsedStep
         {
             Index = index,
-            StepId = GenStableId.ForStep(_scenarioId, StepKey(operation, invocation)),
+            StepId = GenStableId.ForStep(_scenarioId, StepKey(operation, invocation, loop)),
             Phase = phase,
             OperationName = operation,
             HasResult = resultType is not null,
@@ -803,57 +833,26 @@ internal sealed class ScenarioParser
         return step;
     }
 
-    private List<int> CollectDataflowDeps(InvocationExpressionSyntax invocation)
-    {
-        var deps = new List<int>();
-        foreach (var identifier in invocation.ArgumentList.DescendantNodes().OfType<IdentifierNameSyntax>())
-        {
-            if (_vars.TryGetValue(identifier.Identifier.Text, out var source))
-            {
-                if (source.IsArray)
-                {
-                    deps.AddRange(source.Indices);
-                }
-                else
-                {
-                    deps.Add(source.Index);
-                }
-            }
-        }
-
-        return deps;
-    }
-
     /// <summary>
-    /// How each in-scope step-output local is spelled inside an emitted call: a scalar becomes
-    /// <c>__inputs.Get&lt;T&gt;(i)</c>, an array-bound group becomes <c>new T[] { … }</c> over its
-    /// elements' gets.
+    /// How a step-output local is read inside an emitted step: a scalar is
+    /// <c>__inputs.Get&lt;T&gt;(i)</c>, an array-bound group a <c>new T[] { … }</c> over its elements'
+    /// gets.
     /// </summary>
-    private Dictionary<string, ExpressionSyntax> BuildReplacements()
+    private ExpressionSyntax Spell(VarSource source)
     {
-        var map = new Dictionary<string, ExpressionSyntax>();
-        foreach (var pair in _vars)
+        if (!source.IsArray)
         {
-            if (pair.Value.IsArray)
-            {
-                var elementType = pair.Value.ElementType!;
-                map[pair.Key] = ArrayCreationExpression(
-                        ArrayType(elementType).WithRankSpecifiers(SingletonList(
-                            ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
-                                OmittedArraySizeExpression())))))
-                    .WithInitializer(InitializerExpression(
-                        SyntaxKind.ArrayInitializerExpression,
-                        SeparatedList<ExpressionSyntax>(
-                            pair.Value.Indices.Select(i => InputsGet(elementType, i)))));
-            }
-            else
-            {
-                var producer = _steps.First(s => s.Index == pair.Value.Index);
-                map[pair.Key] = InputsGet(producer.ResultType, pair.Value.Index);
-            }
+            return InputsGet(_steps.First(s => s.Index == source.Index).ResultType, source.Index);
         }
 
-        return map;
+        var elementType = source.ElementType!;
+        return ArrayCreationExpression(
+                ArrayType(elementType).WithRankSpecifiers(SingletonList(
+                    ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
+                        OmittedArraySizeExpression())))))
+            .WithInitializer(InitializerExpression(
+                SyntaxKind.ArrayInitializerExpression,
+                SeparatedList<ExpressionSyntax>(source.Indices.Select(i => InputsGet(elementType, i)))));
     }
 
     /// <summary><c>__inputs.Get&lt;type&gt;(index)</c>.</summary>
@@ -868,57 +867,84 @@ internal sealed class ScenarioParser
 
     /// <summary>
     /// The DSL invocation as the generated file will call it: the original receiver and method, its
-    /// arguments rewritten in terms of <c>__inputs</c>, and <c>__ctx</c> appended when the method
-    /// takes a trailing <c>ScenarioContext</c> the scenario left out. Outer trivia is dropped — the
-    /// call is re-hosted inside a lambda, and the emitter formats the whole file.
+    /// type and value arguments lowered, and <c>__ctx</c> appended when the method takes a trailing
+    /// <c>ScenarioContext</c> the scenario left out. Outer trivia is dropped — the call is re-hosted
+    /// inside a lambda, and the emitter formats the whole file.
     /// </summary>
     private static InvocationExpressionSyntax BuildCall(
         InvocationExpressionSyntax invocation,
-        Dictionary<string, ExpressionSyntax> replacements,
+        MemberAccessExpressionSyntax member,
+        TypeArgumentListSyntax? typeArguments,
+        List<ArgumentSyntax> arguments,
         bool appendCtx)
     {
-        var rewriter = new IdentifierReplacer(replacements);
-        var arguments = invocation.ArgumentList.Arguments
-            .Select(a => (ArgumentSyntax)rewriter.Visit(a))
-            .ToList();
-
+        var emitted = arguments.ToList();
         if (appendCtx)
         {
-            arguments.Add(Argument(IdentifierName("__ctx")));
+            emitted.Add(Argument(IdentifierName("__ctx")));
         }
 
+        var callee = member.Name is GenericNameSyntax generic && typeArguments is not null
+            ? member.WithName(generic.WithTypeArgumentList(typeArguments))
+            : member;
+
         return invocation
-            .WithArgumentList(ArgumentList(SeparatedList(arguments)))
+            .WithExpression(callee)
+            .WithArgumentList(ArgumentList(SeparatedList(emitted)))
             .WithoutTrivia();
     }
 
     /// <summary>
     /// Lowers the method's resource role attributes into <see cref="ResourceRoleClaim"/>s: one per
-    /// role-bearing parameter (its rewritten argument expression), then one for a return role when the
-    /// step yields a value (using <c>__r</c>). Argument expressions are rewritten with the SAME
-    /// replacements as the call text, so step-output locals become <c>__inputs.Get&lt;…&gt;(i)</c>.
-    /// Empty when the method declares no roles ⇒ the emitter inserts nothing.
+    /// role-bearing parameter (its lowered argument expression), then one for a return role when the
+    /// step yields a value (using <c>__r</c>). Claims read the SAME lowered arguments as the call, so a
+    /// claim names exactly the value the step receives. Empty when the method declares no roles ⇒ the
+    /// emitter inserts nothing.
     /// </summary>
     private static List<ResourceRoleClaim> BuildResourceClaims(
-        InvocationExpressionSyntax invocation,
+        SeparatedSyntaxList<ArgumentSyntax> written,
         IMethodSymbol method,
         bool hasResult,
-        Dictionary<string, ExpressionSyntax> replacements)
+        List<ArgumentSyntax> lowered)
     {
         var claims = new List<ResourceRoleClaim>();
-        var rewriter = new IdentifierReplacer(replacements);
-        var arguments = invocation.ArgumentList.Arguments;
+
+        // The lowered argument bound to the parameter at `position`, or null when the call left it out.
+        ExpressionSyntax? ArgumentFor(string parameterName, int position)
+            => ArgumentIndex(written, parameterName, position) is var i and >= 0
+                ? lowered[i].Expression.WithoutTrivia()
+                : null;
+
+        // A producer's lineage target: Subject.Return is the step's own value; a parameter name is
+        // that parameter's argument. Null when the name resolves to no supplied argument (the analyzer
+        // reports it as RAUN010).
+        ExpressionSyntax? TargetFor(string name)
+        {
+            if (name == AttributeReader.ReturnSubject)
+            {
+                return ReturnValue;
+            }
+
+            for (var i = 0; i < method.Parameters.Length; i++)
+            {
+                if (method.Parameters[i].Name == name)
+                {
+                    return ArgumentFor(name, i);
+                }
+            }
+
+            return null;
+        }
 
         // Emits the lineage relations a producing subject declares via [Created]/[Loaded]/[Edited]'s
         // References/Consumes: one Reference/Consume claim per resolvable target, the subject expression
         // riding along (the runtime records subject→target). Emitted BEFORE the subject's own role claim,
         // so effect order stays target-lineage-then-subject (e.g. Reference, Consume, then Create).
-        void EmitLineage((System.Collections.Immutable.ImmutableArray<string> References,
-            System.Collections.Immutable.ImmutableArray<string> Consumes) lineage, ExpressionSyntax subjectExpression)
+        void EmitLineage((ImmutableArray<string> References, ImmutableArray<string> Consumes) lineage, ExpressionSyntax subjectExpression)
         {
             foreach (var target in lineage.References)
             {
-                if (ResolveTargetExpression(target, method, arguments, rewriter) is { } expr)
+                if (TargetFor(target) is { } expr)
                 {
                     claims.Add(new ResourceRoleClaim("Reference", expr, IsReturn: false) { SubjectExpressions = [subjectExpression] });
                 }
@@ -926,7 +952,7 @@ internal sealed class ScenarioParser
 
             foreach (var target in lineage.Consumes)
             {
-                if (ResolveTargetExpression(target, method, arguments, rewriter) is { } expr)
+                if (TargetFor(target) is { } expr)
                 {
                     claims.Add(new ResourceRoleClaim("Consume", expr, IsReturn: false) { SubjectExpressions = [subjectExpression] });
                 }
@@ -942,8 +968,7 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            var argument = FindArgument(arguments, parameter.Name, p);
-            if (argument is null)
+            if (ArgumentFor(parameter.Name, p) is not { } expression)
             {
                 // No supplied argument. The trailing-ScenarioContext case is correct (nothing to claim).
                 // The omitted-optional case (a declared role on a defaulted param that the call left out)
@@ -952,7 +977,6 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            var expression = ((ExpressionSyntax)rewriter.Visit(argument.Expression)).WithoutTrivia();
             if (role == "Edit")
             {
                 EmitLineage(AttributeReader.ProducerLineage(parameter.GetAttributes()), expression);
@@ -980,57 +1004,32 @@ internal sealed class ScenarioParser
     private static IdentifierNameSyntax ReturnValue => IdentifierName("__r");
 
     /// <summary>
-    /// Maps a producer's lineage target name to an instance expression: <c>Subject.Return</c> ⇒
-    /// <c>__r</c>; a parameter name ⇒ that parameter's rewritten argument expression. Null when the
-    /// name resolves to no supplied argument (the analyzer reports it as RAUN010).
+    /// The index of the argument bound to the parameter at <paramref name="position"/>: a named
+    /// argument (<c>name: value</c>) matching <paramref name="parameterName"/> if present, else the
+    /// positional argument at that index. -1 when neither exists (e.g. an omitted optional parameter).
     /// </summary>
-    private static ExpressionSyntax? ResolveTargetExpression(
-        string name,
-        IMethodSymbol method,
-        SeparatedSyntaxList<ArgumentSyntax> arguments,
-        IdentifierReplacer rewriter)
-    {
-        if (name == AttributeReader.ReturnSubject)
-        {
-            return ReturnValue;
-        }
-
-        for (var i = 0; i < method.Parameters.Length; i++)
-        {
-            if (method.Parameters[i].Name != name)
-            {
-                continue;
-            }
-
-            var arg = FindArgument(arguments, name, i);
-            return arg is null ? null : ((ExpressionSyntax)rewriter.Visit(arg.Expression)).WithoutTrivia();
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Finds the argument bound to the parameter at <paramref name="position"/>: a named argument
-    /// (<c>name: value</c>) matching <paramref name="parameterName"/> if present, else the positional
-    /// argument at that index. Null when neither exists (e.g. an omitted optional parameter).
-    /// </summary>
-    internal static ArgumentSyntax? FindArgument(
+    internal static int ArgumentIndex(
         SeparatedSyntaxList<ArgumentSyntax> arguments,
         string parameterName,
         int position)
     {
-        foreach (var argument in arguments)
+        for (var i = 0; i < arguments.Count; i++)
         {
-            if (argument.NameColon?.Name.Identifier.Text == parameterName)
+            if (arguments[i].NameColon?.Name.Identifier.Text == parameterName)
             {
-                return argument;
+                return i;
             }
         }
 
-        return position < arguments.Count && arguments[position].NameColon is null
-            ? arguments[position]
-            : null;
+        return position < arguments.Count && arguments[position].NameColon is null ? position : -1;
     }
+
+    /// <summary>The argument <see cref="ArgumentIndex"/> finds, or null.</summary>
+    internal static ArgumentSyntax? FindArgument(
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        string parameterName,
+        int position)
+        => ArgumentIndex(arguments, parameterName, position) is var i and >= 0 ? arguments[i] : null;
 
     // The emitter dedupes the merged using set, so no need to dedupe here. Trivia is stripped: the
     // scenario file's comments and formatting have no business in the generated one.
@@ -1042,16 +1041,19 @@ internal sealed class ScenarioParser
     /// author wrote them (token texts, so reformatting and comments do not count), and an ordinal
     /// among earlier steps with the same identity. Position deliberately plays no part — the old
     /// ordinal-only key renamed every later step whenever one was inserted, which broke saved
-    /// filters and an IDE's "re-run this test". The ORIGINAL invocation is read, not the rewritten
-    /// one: the rewrite names steps by index, which would put position straight back in.
+    /// filters and an IDE's "re-run this test". The WRITTEN arguments are read, not the lowered
+    /// ones: lowering names steps by index, which would put position straight back in. The one
+    /// substitution is a LINQ unroll's loop variable, spelled as its value so each element differs.
     /// </summary>
-    private string StepKey(string operation, InvocationExpressionSyntax invocation)
+    private string StepKey(string operation, InvocationExpressionSyntax invocation, LoopElement? loop)
     {
         var builder = new StringBuilder(operation);
         builder.Append('(');
         foreach (var token in invocation.ArgumentList.DescendantTokens())
         {
-            builder.Append(token.Text);
+            builder.Append(loop is { } element && IsReferenceTo(token, element.Variable)
+                ? element.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : token.Text);
         }
 
         builder.Append(')');
@@ -1061,6 +1063,10 @@ internal sealed class ScenarioParser
         _stepKeyOrdinals[identity] = ordinal + 1;
         return identity + ":" + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
+
+    private bool IsReferenceTo(SyntaxToken token, ISymbol symbol)
+        => token.Parent is IdentifierNameSyntax identifier
+            && SymbolEqualityComparer.Default.Equals(_model.GetSymbolInfo(identifier).Symbol, symbol);
 
     private static string? Location(SyntaxNode node, out int line)
     {

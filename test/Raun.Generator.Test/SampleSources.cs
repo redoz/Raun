@@ -827,4 +827,157 @@ public static class SampleSources
             }
         }
         """;
+
+    // Issue #2: reusable steps fed typed values. A context step consumes an inline specification that
+    // mixes constants and earlier results; later steps consume projections of the context. The domain
+    // lives in its own namespace and the scenarios in another, so an argument naming a scenario-side
+    // type or member has to be re-hosted by symbol to survive the move into generated code.
+    public const string CompositionDsl =
+        """
+        using System;
+        using System.Linq;
+        using System.Threading.Tasks;
+        using Raun;
+        using Composition.Domain;
+
+        namespace Composition.Domain
+        {
+            public sealed record Isolation(int Seed);
+            public sealed record Customer(string Name);
+            public sealed record Employee(string Name);
+            public sealed record Address(string City);
+            public sealed record Profile(Address? Address, string? Nickname);
+            public enum Outcome { Succeed, Fail }
+
+            public sealed record CreationSpec
+            {
+                public required Customer Customer { get; init; }
+                public required Employee Employee { get; init; }
+                public required string Dossier { get; init; }
+                public Outcome Rappel { get; init; }
+            }
+
+            public sealed record CreationContext(
+                Customer Customer, string Request, Profile Profile, string? ExpectedState, string[] Existing);
+
+            public static class Calls
+            {
+                public static int Contexts;
+            }
+
+            public static class CompositionDsl
+            {
+                extension(Given)
+                {
+                    [StepName("isolation {seed}")]
+                    public static Task<Isolation> Isolation(int seed) => Task.FromResult(new Isolation(seed));
+
+                    [StepName("a customer")]
+                    public static Task<Customer> Customer(Isolation isolation)
+                        => Task.FromResult(new Customer("customer-" + isolation.Seed));
+
+                    [StepName("an employee")]
+                    public static Task<Employee> Employee(Isolation isolation)
+                        => Task.FromResult(new Employee("employee-" + isolation.Seed));
+
+                    [StepName("the clock is frozen")]
+                    public static Task ClockIsFrozen() => Task.CompletedTask;
+
+                    [StepName("an appointment creation context")]
+                    public static Task<CreationContext> CreationContext(Isolation isolation, CreationSpec spec)
+                    {
+                        Calls.Contexts++;
+                        return Task.FromResult(new CreationContext(
+                            spec.Customer,
+                            spec.Dossier + ":" + spec.Employee.Name + ":" + spec.Rappel,
+                            new Profile(new Address("Oslo"), null),
+                            spec.Rappel == Outcome.Fail ? "partial" : null,
+                            ["first", "second"]));
+                    }
+                }
+
+                extension(When)
+                {
+                    [StepName("{customer} creates an appointment")]
+                    public static Task<string> CreateAppointment(Isolation isolation, Customer customer, string request)
+                        => Task.FromResult(customer.Name + "|" + request);
+                }
+
+                extension(Then)
+                {
+                    [StepName("{actual} equals {expected}")]
+                    public static Task Equal(object? actual, object? expected)
+                        => Equals(actual, expected)
+                            ? Task.CompletedTask
+                            : throw new InvalidOperationException("expected '" + expected + "' but was '" + actual + "'");
+
+                    [StepName("{value} satisfies the predicate")]
+                    public static Task Satisfies<T>(T value, Func<T, bool> predicate)
+                        => predicate(value) ? Task.CompletedTask : throw new InvalidOperationException("predicate failed");
+                }
+            }
+        }
+        """;
+
+    public const string CompositionScenario =
+        """
+
+        namespace Composition.Tests
+        {
+            public sealed record Expected(string State);
+
+            public static class CompositionScenarios
+            {
+                internal const string Dossier = "22012000753";
+                internal static readonly string City = "Oslo";
+
+                [Scenario("customer creates an appointment when rappel creation fails")]
+                public static async Task RappelFailure()
+                {
+                    var isolation = await Given.Isolation(2135);
+                    var customer = await Given.Customer(isolation);
+                    var employee = await Given.Employee(isolation);
+                    await Given.ClockIsFrozen();
+
+                    var setup = await Given.CreationContext(isolation, new CreationSpec
+                    {
+                        Customer = customer,
+                        Employee = employee,
+                        Dossier = Dossier,
+                        Rappel = Outcome.Fail,
+                    });
+
+                    var creation = await When.CreateAppointment(isolation, setup.Customer, setup.Request);
+
+                    await Then.Equal(creation, "customer-2135|22012000753:employee-2135:Fail");
+                    await Then.Equal(setup.ExpectedState, new Expected("partial").State);
+                    await Then.Equal(setup.Profile.Address?.City, City);
+                    await Then.Equal(setup.Profile.Nickname, null);
+                    await Then.Equal(setup.Existing[1], "second");
+                    await Then.Equal(setup with { Request = "changed" } == setup, false);
+                    await Then.Equal(nameof(setup), "setup");
+                    await Then.Equal(new { customer }.customer, customer);
+                    await Then.Equal(setup is { ExpectedState: var state } ? state : "none", "partial");
+                    await Then.Satisfies(customer, employee => employee.Name.StartsWith("customer-", StringComparison.Ordinal));
+                    await Then.Equal(Calls.Contexts, 1);
+                }
+
+                [Scenario("a projection that throws fails its own step")]
+                public static async Task ProjectionThrows()
+                {
+                    var isolation = await Given.Isolation(1);
+                    var customer = await Given.Customer(isolation);
+                    var employee = await Given.Employee(isolation);
+                    var setup = await Given.CreationContext(isolation, new CreationSpec
+                    {
+                        Customer = customer,
+                        Employee = employee,
+                        Dossier = "d",
+                    });
+
+                    await Then.Equal(setup.Existing[5], "sixth");
+                }
+            }
+        }
+        """;
 }

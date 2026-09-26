@@ -52,6 +52,37 @@ public class ConditionalLoweringTests
     }
 
     [Fact]
+    public void Same_named_locals_in_sibling_arms_are_two_locals_and_need_no_merge()
+    {
+        // Each arm declares its own `appointment`; nothing after the `if` can see either, so there
+        // is nothing to merge. Keyed by name, the two looked like one local defined twice.
+        var def = Lower(
+            """
+
+            public static class SiblingLocalScenarios
+            {
+                [Scenario("sibling locals")]
+                public static async Task Run()
+                {
+                    var patient = await Given.PatientExists("Alice");
+                    if (await Given.IsPriority())
+                    {
+                        var appointment = await When.CreateUrgent(patient);
+                        await Then.AppointmentExists(appointment);
+                    }
+                    else
+                    {
+                        var appointment = await When.CreateStandard(patient);
+                        await Then.AppointmentExists(appointment);
+                    }
+                }
+            }
+            """);
+
+        Assert.DoesNotContain(def.Nodes, n => n.IsSynthetic);
+    }
+
+    [Fact]
     public void Bare_if_guards_the_arm_and_inserts_no_merge()
     {
         var def = Lower(SampleSources.BareIfScenario);
