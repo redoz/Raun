@@ -1,12 +1,12 @@
-# Step Numbering + Scenario-Name Grouping (PUnit.Mtp) Implementation Plan
+# Step Numbering + Scenario-Name Grouping (Raun.Mtp) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Number each scenario's step leaves so VS Test Explorer (which sorts siblings lexically) shows them in execution order, and surface the human scenario name as the method-level grouping node.
 
-**Architecture:** A new pure helper `ScenarioStepNumbering` computes an `Index → label` map per scenario (standalone steps take the next integer; a parallel/array group takes one integer with sub-numbered members; numbers are zero-padded to a per-scenario width so lexical sort = numeric order). Discovery (`PUnitDiscoverer`) and execution (`PUnitStepReporter`) both build their leaf text from that single source, dropping the old `"{scenario} ▸ {step}"` prefix. `ScenarioTestIdentity.Create` gains a second parameter so the method identity carries the scenario display name while namespace/type still derive from the FQN.
+**Architecture:** A new pure helper `ScenarioStepNumbering` computes an `Index → label` map per scenario (standalone steps take the next integer; a parallel/array group takes one integer with sub-numbered members; numbers are zero-padded to a per-scenario width so lexical sort = numeric order). Discovery (`RaunDiscoverer`) and execution (`RaunStepReporter`) both build their leaf text from that single source, dropping the old `"{scenario} ▸ {step}"` prefix. `ScenarioTestIdentity.Create` gains a second parameter so the method identity carries the scenario display name while namespace/type still derive from the FQN.
 
-**Tech Stack:** C# / .NET, Microsoft.Testing.Platform (MTP) 1.9.1, xUnit.v3 for the unit tests, `jj` for version control. Test command: `dotnet test PUnit.slnx` (never `--nologo` — MTP rejects it and reports "Zero tests ran").
+**Tech Stack:** C# / .NET, Microsoft.Testing.Platform (MTP) 1.9.1, xUnit.v3 for the unit tests, `jj` for version control. Test command: `dotnet test Raun.slnx` (never `--nologo` — MTP rejects it and reports "Zero tests ran").
 
 **Spec:** `docs/superpowers/specs/2026-06-05-step-numbering-design.md` (approved). **Handoff:** `docs/superpowers/handoffs/2026-06-05-step-numbering-handoff.md`.
 
@@ -15,20 +15,20 @@
 ## File Structure
 
 **New files:**
-- `src/PUnit.Mtp/ScenarioStepNumbering.cs` — pure `Compute(ScenarioDefinition) → IReadOnlyDictionary<int,string>` plus a `Format(labels, node, stepText)` leaf-text composer shared by both call sites (keeps R7 — discovery/execution agreement — DRY).
-- `test/PUnit.Mtp.Test/ScenarioStepNumberingTests.cs` — unit tests for the numbering + formatting.
+- `src/Raun.Mtp/ScenarioStepNumbering.cs` — pure `Compute(ScenarioDefinition) → IReadOnlyDictionary<int,string>` plus a `Format(labels, node, stepText)` leaf-text composer shared by both call sites (keeps R7 — discovery/execution agreement — DRY).
+- `test/Raun.Mtp.Test/ScenarioStepNumberingTests.cs` — unit tests for the numbering + formatting.
 
 **Modified files:**
-- `src/PUnit.Mtp/ScenarioTestIdentity.cs` — `Create` takes `(methodFullName, scenarioDisplayName)`; method identity = scenario name.
-- `src/PUnit.Mtp/PUnitDiscoverer.cs` — compose numbered leaf text; drop the `DisplayNameSeparator` prefix; pass display name into `Create`.
-- `src/PUnit.Mtp/PUnitStepReporter.cs` — compute the label map once; compose numbered leaf text; pass display name into `Create`.
-- `test/PUnit.Mtp.Test/ScenarioTestIdentityTests.cs` — `Create` now maps the display name onto `MethodName`.
-- `test/PUnit.Mtp.Test/PUnitDiscovererTests.cs` — numbered leaf text, identity method = scenario name.
-- `test/PUnit.Mtp.Test/PUnitStepReporterTests.cs` — numbered leaf text, no prefix.
-- `test/PUnit.Mtp.Test/DiscoveryRequestTests.cs` — one display-name assertion updated to the numbered form.
+- `src/Raun.Mtp/ScenarioTestIdentity.cs` — `Create` takes `(methodFullName, scenarioDisplayName)`; method identity = scenario name.
+- `src/Raun.Mtp/RaunDiscoverer.cs` — compose numbered leaf text; drop the `DisplayNameSeparator` prefix; pass display name into `Create`.
+- `src/Raun.Mtp/RaunStepReporter.cs` — compute the label map once; compose numbered leaf text; pass display name into `Create`.
+- `test/Raun.Mtp.Test/ScenarioTestIdentityTests.cs` — `Create` now maps the display name onto `MethodName`.
+- `test/Raun.Mtp.Test/RaunDiscovererTests.cs` — numbered leaf text, identity method = scenario name.
+- `test/Raun.Mtp.Test/RaunStepReporterTests.cs` — numbered leaf text, no prefix.
+- `test/Raun.Mtp.Test/DiscoveryRequestTests.cs` — one display-name assertion updated to the numbered form.
 - `samples/AppointmentTests/AppointmentDsl.cs` — revert the debug `await Task.Delay(5000)` (Task 1, before the baseline commit).
 
-**Decision — keep `NodeDiagnostics`:** the env-gated (`PUNIT_NODE_DEBUG`) tracer is zero-cost when off, already proved its worth diagnosing the grouping collapse, and this change puts spaces in the method identity (the bridge managed-name path the handoff flags as fragile). Its `Log()` calls are interleaved into the same three files the feature touches, so splitting it out is not cleanly separable. It rides in the baseline commit (Task 1).
+**Decision — keep `NodeDiagnostics`:** the env-gated (`RAUN_NODE_DEBUG`) tracer is zero-cost when off, already proved its worth diagnosing the grouping collapse, and this change puts spaces in the method identity (the bridge managed-name path the handoff flags as fragile). Its `Log()` calls are interleaved into the same three files the feature touches, so splitting it out is not cleanly separable. It rides in the baseline commit (Task 1).
 
 ---
 
@@ -54,13 +54,13 @@ In `samples/AppointmentTests/AppointmentDsl.cs`, the `ImportUsers` When-step has
 
 - [ ] **Step 2: Verify the suite is green**
 
-Run: `dotnet test PUnit.slnx`
+Run: `dotnet test Raun.slnx`
 Expected: PASS — 143 passed, 0 failed (the sample now runs fast, no 5s stall).
 
 - [ ] **Step 3: Commit the baseline**
 
 ```bash
-jj describe -m "PUnit.Mtp: scenario-method grouping identity + async StepContext observer + node diagnostics"
+jj describe -m "Raun.Mtp: scenario-method grouping identity + async StepContext observer + node diagnostics"
 jj new
 ```
 
@@ -70,22 +70,22 @@ jj new
 
 ## Task 2: `ScenarioStepNumbering` — Compute + Format
 
-A pure, unit-testable helper mirroring the `ScenarioTestIdentity` precedent. No MTP types; lives in `PUnit.Mtp` so the discoverer/reporter can share it.
+A pure, unit-testable helper mirroring the `ScenarioTestIdentity` precedent. No MTP types; lives in `Raun.Mtp` so the discoverer/reporter can share it.
 
 **Files:**
-- Create: `src/PUnit.Mtp/ScenarioStepNumbering.cs`
-- Test: `test/PUnit.Mtp.Test/ScenarioStepNumberingTests.cs`
+- Create: `src/Raun.Mtp/ScenarioStepNumbering.cs`
+- Test: `test/Raun.Mtp.Test/ScenarioStepNumberingTests.cs`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/PUnit.Mtp.Test/ScenarioStepNumberingTests.cs`:
+Create `test/Raun.Mtp.Test/ScenarioStepNumberingTests.cs`:
 
 ```csharp
-using PUnit.Mtp;
-using PUnit.Model;
+using Raun.Mtp;
+using Raun.Model;
 using Xunit;
 
-namespace PUnit.Mtp.Test;
+namespace Raun.Mtp.Test;
 
 /// <summary>
 /// Unit tests for <see cref="ScenarioStepNumbering"/>: standalone steps take the next top-level
@@ -273,18 +273,18 @@ public class ScenarioStepNumberingTests
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `dotnet test PUnit.slnx`
+Run: `dotnet test Raun.slnx`
 Expected: FAIL — compile error, `ScenarioStepNumbering` does not exist.
 
 - [ ] **Step 3: Implement `ScenarioStepNumbering`**
 
-Create `src/PUnit.Mtp/ScenarioStepNumbering.cs`:
+Create `src/Raun.Mtp/ScenarioStepNumbering.cs`:
 
 ```csharp
 using System.Globalization;
-using PUnit.Model;
+using Raun.Model;
 
-namespace PUnit.Mtp;
+namespace Raun.Mtp;
 
 /// <summary>
 /// Computes per-step display labels for a scenario so a runner that sorts sibling leaves
@@ -374,7 +374,7 @@ internal static class ScenarioStepNumbering
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `dotnet test PUnit.slnx`
+Run: `dotnet test Raun.slnx`
 Expected: PASS — all `ScenarioStepNumberingTests` green, no regressions.
 
 - [ ] **Step 5: Commit**
@@ -387,16 +387,16 @@ jj commit -m "feat(mtp): add ScenarioStepNumbering for ordered, padded step labe
 
 ## Task 3: Wire scenario name + numbered leaves into discovery & execution
 
-`ScenarioTestIdentity.Create` gains the scenario display name; both `PUnitDiscoverer` and `PUnitStepReporter` compose their leaf text via `ScenarioStepNumbering.Format`, dropping the `" ▸ "` prefix. Tests are updated first (red), then the source. Changing `Create`'s signature is a compile-breaking change, so the three source edits and their test updates land together in one commit.
+`ScenarioTestIdentity.Create` gains the scenario display name; both `RaunDiscoverer` and `RaunStepReporter` compose their leaf text via `ScenarioStepNumbering.Format`, dropping the `" ▸ "` prefix. Tests are updated first (red), then the source. Changing `Create`'s signature is a compile-breaking change, so the three source edits and their test updates land together in one commit.
 
 **Files:**
-- Modify: `src/PUnit.Mtp/ScenarioTestIdentity.cs:37-52` (the `Create` method + its doc)
-- Modify: `src/PUnit.Mtp/PUnitDiscoverer.cs:28-66` (drop `DisplayNameSeparator`, rework `BuildNodes`/`BuildNode`)
-- Modify: `src/PUnit.Mtp/PUnitStepReporter.cs:46-65,153-171` (label-map field, rework `BuildNode`)
-- Test: `test/PUnit.Mtp.Test/ScenarioTestIdentityTests.cs`
-- Test: `test/PUnit.Mtp.Test/PUnitDiscovererTests.cs`
-- Test: `test/PUnit.Mtp.Test/PUnitStepReporterTests.cs`
-- Test: `test/PUnit.Mtp.Test/DiscoveryRequestTests.cs:82`
+- Modify: `src/Raun.Mtp/ScenarioTestIdentity.cs:37-52` (the `Create` method + its doc)
+- Modify: `src/Raun.Mtp/RaunDiscoverer.cs:28-66` (drop `DisplayNameSeparator`, rework `BuildNodes`/`BuildNode`)
+- Modify: `src/Raun.Mtp/RaunStepReporter.cs:46-65,153-171` (label-map field, rework `BuildNode`)
+- Test: `test/Raun.Mtp.Test/ScenarioTestIdentityTests.cs`
+- Test: `test/Raun.Mtp.Test/RaunDiscovererTests.cs`
+- Test: `test/Raun.Mtp.Test/RaunStepReporterTests.cs`
+- Test: `test/Raun.Mtp.Test/DiscoveryRequestTests.cs:82`
 
 - [ ] **Step 1: Update `ScenarioTestIdentityTests`**
 
@@ -416,7 +416,7 @@ Replace the `Create_maps_the_parts_onto_the_identity_property` test (the `Split`
     }
 ```
 
-- [ ] **Step 2: Update `PUnitDiscovererTests`**
+- [ ] **Step 2: Update `RaunDiscovererTests`**
 
 (a) Add a `group` parameter to the `Node` helper (so group-member cases can be built):
 
@@ -446,7 +446,7 @@ Replace the `Create_maps_the_parts_onto_the_identity_property` test (the `Split`
             display: "patient booking",
             nodes: [Node(0, "a", "patient Jane exists")]);
 
-        var node = Assert.Single(PUnitDiscoverer.BuildNodes(definition));
+        var node = Assert.Single(RaunDiscoverer.BuildNodes(definition));
 
         Assert.Equal("1. patient Jane exists", node.DisplayName);
     }
@@ -463,7 +463,7 @@ Replace the `Create_maps_the_parts_onto_the_identity_property` test (the `Split`
                 Node(3, "c", "creating an appointment"),
             ]);
 
-        var nodes = PUnitDiscoverer.BuildNodes(definition);
+        var nodes = RaunDiscoverer.BuildNodes(definition);
 
         Assert.Equal("1. the database is clean", nodes[0].DisplayName);
         Assert.Equal("2.1 patient Jane exists", nodes[1].DisplayName);
@@ -486,7 +486,7 @@ Replace the `Create_maps_the_parts_onto_the_identity_property` test (the `Split`
             method: "MyApp.Booking.Scenarios.BookAppointment",
             nodes: [Node(0, "a", "step a")]);
 
-        var node = Assert.Single(PUnitDiscoverer.BuildNodes(definition));
+        var node = Assert.Single(RaunDiscoverer.BuildNodes(definition));
 
         var id = Assert.Single(node.Properties.OfType<TestMethodIdentifierProperty>());
         Assert.Equal("MyApp.Booking", id.Namespace);
@@ -495,7 +495,7 @@ Replace the `Create_maps_the_parts_onto_the_identity_property` test (the `Split`
     }
 ```
 
-- [ ] **Step 3: Update `PUnitStepReporterTests`**
+- [ ] **Step 3: Update `RaunStepReporterTests`**
 
 (a) Add a `group` parameter to the `Node` helper:
 
@@ -593,12 +593,12 @@ to:
 
 - [ ] **Step 5: Run the tests to verify they fail**
 
-Run: `dotnet test PUnit.slnx`
+Run: `dotnet test Raun.slnx`
 Expected: FAIL — `ScenarioTestIdentity.Create` no longer compiles with the new 2-arg call in the test (and the discoverer/reporter still call it with one arg), and the display-name assertions don't match. This is the red state.
 
 - [ ] **Step 6: Update `ScenarioTestIdentity.Create`**
 
-In `src/PUnit.Mtp/ScenarioTestIdentity.cs`, replace the `Create` method (lines 36-52) and its doc with:
+In `src/Raun.Mtp/ScenarioTestIdentity.cs`, replace the `Create` method (lines 36-52) and its doc with:
 
 ```csharp
     /// <summary>
@@ -625,9 +625,9 @@ In `src/PUnit.Mtp/ScenarioTestIdentity.cs`, replace the `Create` method (lines 3
     }
 ```
 
-- [ ] **Step 7: Update `PUnitDiscoverer`**
+- [ ] **Step 7: Update `RaunDiscoverer`**
 
-In `src/PUnit.Mtp/PUnitDiscoverer.cs`:
+In `src/Raun.Mtp/RaunDiscoverer.cs`:
 
 (a) Delete the now-unused separator constant (lines 28-29):
 
@@ -686,9 +686,9 @@ Also update the class-doc bullet that mentions the `{scenario} ▸ {step templat
 ///   <see cref="ScenarioStepNumbering"/>; the reporter refines runtime-bound names at execution time;</item>
 ```
 
-- [ ] **Step 8: Update `PUnitStepReporter`**
+- [ ] **Step 8: Update `RaunStepReporter`**
 
-In `src/PUnit.Mtp/PUnitStepReporter.cs`:
+In `src/Raun.Mtp/RaunStepReporter.cs`:
 
 (a) Add a label-map field next to the other readonly fields (after line 49, `readonly IDataProducer producer;`):
 
@@ -707,7 +707,7 @@ In `src/PUnit.Mtp/PUnitStepReporter.cs`:
 ```csharp
         var testNode = new TestNode
         {
-            Uid = PUnitDiscoverer.MakeUid(definition.ScenarioId, node.StepId),
+            Uid = RaunDiscoverer.MakeUid(definition.ScenarioId, node.StepId),
             DisplayName = ScenarioStepNumbering.Format(labels, node, displayName),
         };
 
@@ -718,7 +718,7 @@ Also update the `BuildNode` doc-comment phrase "the runtime-formatted display na
 
 - [ ] **Step 9: Run the tests to verify they pass**
 
-Run: `dotnet test PUnit.slnx`
+Run: `dotnet test Raun.slnx`
 Expected: PASS — 143 baseline + the new numbering tests, 0 failed. (No references to `DisplayNameSeparator` remain — confirm the build has no unused-const or compile warnings-as-errors.)
 
 - [ ] **Step 10: Commit**
@@ -751,7 +751,7 @@ Expected: all sample scenarios pass; the run completes quickly (the 5s debug del
 
 - [ ] **Step 3: VS Test Explorer re-verification (manual — the method identity now has spaces)**
 
-Per the handoff: VS renders the idle tree from a cache that does not refresh on identity changes. Close VS, delete `.vs/PUnit.slnx/v18/TestStore`, reopen, Run All. Confirm the tree groups as `AppointmentTests → Scenarios → <scenario name> → 1. … numbered steps`, and that the scenario-name method (with spaces) does not break the bridge managed name. `PUNIT_NODE_DEBUG=<file> dotnet run --project samples/AppointmentTests --no-build -- --list-tests` traces the exact emitted identity if anything looks off.
+Per the handoff: VS renders the idle tree from a cache that does not refresh on identity changes. Close VS, delete `.vs/Raun.slnx/v18/TestStore`, reopen, Run All. Confirm the tree groups as `AppointmentTests → Scenarios → <scenario name> → 1. … numbered steps`, and that the scenario-name method (with spaces) does not break the bridge managed name. `RAUN_NODE_DEBUG=<file> dotnet run --project samples/AppointmentTests --no-build -- --list-tests` traces the exact emitted identity if anything looks off.
 
 This step is a human-in-the-loop check; surface it to the user rather than marking it done autonomously.
 

@@ -1,4 +1,4 @@
-# Handoff — Fork "graph view" + per-fork view-toggle (PUnit HTML report)
+# Handoff — Fork "graph view" + per-fork view-toggle (Raun HTML report)
 
 > Paste this whole file into a fresh context window to continue. We are **mid-brainstorm** on a new
 > feature; no code written yet. The terminal step of brainstorming is: lock the remaining visuals →
@@ -6,10 +6,10 @@
 
 ## ▶ PASTE-READY KICKOFF (copy this into the new chat)
 
-> Continue a **mid-brainstorm** PUnit task: adding a UML **graph view** + per-fork **view-toggle** to the
+> Continue a **mid-brainstorm** Raun task: adding a UML **graph view** + per-fork **view-toggle** to the
 > HTML-report activity diagram. Use `superpowers:brainstorming` (we're at the "iterate on mockups" step).
 > First read: (1) this handoff `docs/superpowers/handoffs/2026-06-21-fork-graph-view-toggle-handoff.md`
-> in full, (2) memory `punit-report-activity-diagram` (the shipped diagram this builds on), (3) open the
+> in full, (2) memory `raun-report-activity-diagram` (the shipped diagram this builds on), (3) open the
 > mockups under `.git/sdd/` in a browser (`Start-Process`) — especially `mockup-toggle.html` (locked
 > interaction) and `mockup-hoverfocus.html` (the live OPEN item). Then resume at **OPEN #2 (hover/focus
 > states)** — iterate a few more options with me, lock it, then write the spec
@@ -18,8 +18,8 @@
 
 ## What this feature is
 
-The PUnit HTML report renders a per-scenario **SVG activity diagram** (already shipped — see memory
-`punit-report-activity-diagram`, all in `src/PUnit.Mtp/HtmlReport/report-template.html`). Today a
+The Raun HTML report renders a per-scenario **SVG activity diagram** (already shipped — see memory
+`raun-report-activity-diagram`, all in `src/Raun.Mtp/HtmlReport/report-template.html`). Today a
 **fork** renders ONLY as the inline-Gantt "timeline cell" (`buildForkCell`). This feature adds a second
 rendering — a **standard UML graph view** (fork bar → parallel branch nodes → join bar) — and a
 **per-fork toggle** to switch a fork between the two views.
@@ -28,12 +28,12 @@ rendering — a **standard UML graph view** (fork bar → parallel branch nodes 
 
 - **VCS = `jj` only**, never `git` mutations (colocated repo; read-only `git log/diff/status` ok). No
   `Co-Authored-By`/tooling trailers in commit messages.
-- Single embedded template `src/PUnit.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model
-  injected at the one `<script id="model" .../*__PUNIT_REPORT_JSON__*/>` token). **Self-contained** — no
+- Single embedded template `src/Raun.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model
+  injected at the one `<script id="model" .../*__RAUN_REPORT_JSON__*/>` token). **Self-contained** — no
   external URL/CDN/web-font/`@import` (only the SVG-ns `http://www.w3.org/2000/svg` literal allowed).
   Source Serif 4 is base64-embedded.
 - **C# model + builder UNCHANGED**; `HtmlReportModelBuilderTests` `Verify(json)` snapshot must NOT
-  change; keep `HtmlReportSinkTests` green; 0-warning build (`dotnet build PUnit.slnx -warnaserror`).
+  change; keep `HtmlReportSinkTests` green; 0-warning build (`dotnet build Raun.slnx -warnaserror`).
   Both light + dark palettes (`--ad-*` / `--ph-*` vars).
 - **NO decision/merge diamonds** (model is a step-DAG, no branch data — out of scope, unchanged).
 - main is at the shipped activity diagram (commit `4c9df0d8`); this feature builds on top.
@@ -89,7 +89,7 @@ rendering — a **standard UML graph view** (fork bar → parallel branch nodes 
 
 ## Mockups (on disk — open in a browser or headless-render)
 
-All under `C:\dev\punit\.git\sdd\` (untracked scratch; persist on disk):
+All under `C:\dev\raun\.git\sdd\` (untracked scratch; persist on disk):
 - `mockup-toggle.html` — **the locked interaction, live**: hover the fork → block highlight + segmented
   pill; click a segment → graph↔timeline swaps in place. Has a `?theme=light|dark` param + a theme
   button. (Highlight here is the old plain outline; pill grouping is the old ambiguous one — both
@@ -134,7 +134,7 @@ Brainstorming (`superpowers:brainstorming`), step "produce mockups / iterate". R
 
 ## Verify loop (for the implementation phase)
 
-`dotnet run --project samples/AppointmentTests -c Debug -- --report-html` (rebuilds PUnit.Mtp →
-re-embeds the template) → `samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html`.
+`dotnet run --project samples/AppointmentTests -c Debug -- --report-html` (rebuilds Raun.Mtp →
+re-embeds the template) → `samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html`.
 The **"customer books with parallel arrange"** scenario is the fork test case. Force theme via
 `?theme=dark|light` (Playwright CLI defaults to light). Root `*.png`/`*.cjs` scratch is gitignored.

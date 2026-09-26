@@ -8,7 +8,7 @@ The primary authoring experience is legal C# 14 using static extension members:
 
 ```csharp
 using AppointmentTests;
-using PUnit;
+using Raun;
 
 [Scenario("customer books an appointment")]
 public static async Task Booking()
@@ -47,7 +47,7 @@ This maps onto xUnit v3 extension seams:
 The framework defines marker phase types:
 
 ```csharp
-namespace PUnit;
+namespace Raun;
 
 public static class Given;
 public static class When;

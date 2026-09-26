@@ -1,4 +1,4 @@
-# Design: PUnit as its own Microsoft.Testing.Platform test framework (v1)
+# Design: Raun as its own Microsoft.Testing.Platform test framework (v1)
 
 **Date:** 2026-06-05
 **Status:** Approved design shape (Patrik, "full send"). Ready for implementation plan.
@@ -8,27 +8,27 @@
 
 ## 1. Problem & decision
 
-PUnit reports each scenario *step* as its own visible test. Today it rides xUnit as an extension: one `ScenarioTestCase` per `[Scenario]`, self-executing, inventing per-step `TestUniqueID`s on xUnit's `IMessageBus`. Those run-time per-step results get **folded onto the single discovered scenario node** — by the VSTest bridge (`No test found corresponding to testResult …` ×18) and, independently, by xUnit's own MTP sink, which keys every node to `TestCaseUniqueID` and emits no tree. Per-step visibility — PUnit's entire point — collapses.
+Raun reports each scenario *step* as its own visible test. Today it rides xUnit as an extension: one `ScenarioTestCase` per `[Scenario]`, self-executing, inventing per-step `TestUniqueID`s on xUnit's `IMessageBus`. Those run-time per-step results get **folded onto the single discovered scenario node** — by the VSTest bridge (`No test found corresponding to testResult …` ×18) and, independently, by xUnit's own MTP sink, which keys every node to `TestCaseUniqueID` and emits no tree. Per-step visibility — Raun's entire point — collapses.
 
-**Decision (locked):** PUnit stops being an xUnit extension and becomes **its own Microsoft.Testing.Platform (MTP) `ITestFramework`.** We own discovery, the run loop, and node reporting, so N step nodes per scenario are first-class and nothing folds them.
+**Decision (locked):** Raun stops being an xUnit extension and becomes **its own Microsoft.Testing.Platform (MTP) `ITestFramework`.** We own discovery, the run loop, and node reporting, so N step nodes per scenario are first-class and nothing folds them.
 
 ### Why this is a bounded adapter, not "reinventing xUnit" (evidence)
-- All xUnit usage lives in the 5 files of `src/PUnit.Xunit/`. `src/PUnit` (the `ScenarioScheduler` DAG engine) and `src/PUnit.Generator` are already **xUnit-free**.
+- All xUnit usage lives in the 5 files of `src/Raun.Xunit/`. `src/Raun` (the `ScenarioScheduler` DAG engine) and `src/Raun.Generator` are already **xUnit-free**.
 - The scheduler already owns execution (DAG, bounded parallelism, dependency-aware skips, per-step timeouts, linked-CTS cancellation, output/attachment capture). xUnit never ran it (`ISelfExecutingXunitTestCase`).
 - xUnit's *entire* MTP integration is ~1,700 lines, most of it bridging MTP to xUnit's own heavy runner/project/config/reporter/serialization stack — which **we don't have and won't replicate**. The MTP `ITestFramework` contract itself is ~3 methods (`CreateTestSessionAsync` / `CloseTestSessionAsync` / `ExecuteRequestAsync`) plus a `RunAsync` bootstrap that calls `builder.RegisterTestFramework(...)` (`vendor/xunit @ v3-3.2.2: src/common/MicrosoftTestingPlatform/TestPlatformTestFramework.cs`).
 - The "tried-and-true infra" we keep is **MTP's**, not xUnit's: host, process lifecycle, command line, `--filter`, `--list-tests`, TRX/reporting, IDE & `dotnet test` integration. We are a tenant of that platform.
 
 ### What we deliberately give up (acceptable for a focused tool)
-`[Fact]`/`[Theory]` coexistence in one project (MTP allows one framework per test app), xUnit fixtures (`IClassFixture`/`ICollectionFixture`/`IAsyncLifetime`), `[Collection]` grouping, `ITestOutputHelper`, the xUnit plugin/extensibility surface. **None of these are surfaced to scenario authors today** (scenarios use PUnit's own `ScenarioContext`), so nothing existing is lost.
+`[Fact]`/`[Theory]` coexistence in one project (MTP allows one framework per test app), xUnit fixtures (`IClassFixture`/`ICollectionFixture`/`IAsyncLifetime`), `[Collection]` grouping, `ITestOutputHelper`, the xUnit plugin/extensibility surface. **None of these are surfaced to scenario authors today** (scenarios use Raun's own `ScenarioContext`), so nothing existing is lost.
 
 ### Assertions (locked)
-Keep **`xunit.v3.assert`**. Step bodies keep `using Xunit; Assert.Equal(...)` verbatim — assertions are just exceptions, already caught by `ScenarioScheduler` (`src/PUnit/Scheduling/ScenarioScheduler.cs:224`). Users could also choose Shouldly/etc. No assertion code is written by us.
+Keep **`xunit.v3.assert`**. Step bodies keep `using Xunit; Assert.Equal(...)` verbatim — assertions are just exceptions, already caught by `ScenarioScheduler` (`src/Raun/Scheduling/ScenarioScheduler.cs:224`). Users could also choose Shouldly/etc. No assertion code is written by us.
 
 ---
 
 ## 2. Scope
 
-**In (v1):** scenario steps become first-class MTP test nodes via PUnit's own `ITestFramework`; per-step discovery, execution, and pass/fail/skip reporting; single-step runs that "light up all" executed siblings; the `AppointmentTests` sample running end-to-end under `dotnet test` on MTP.
+**In (v1):** scenario steps become first-class MTP test nodes via Raun's own `ITestFramework`; per-step discovery, execution, and pass/fail/skip reporting; single-step runs that "light up all" executed siblings; the `AppointmentTests` sample running end-to-end under `dotnet test` on MTP.
 
 **Out (explicitly deferred, own spec later):** the **cross-run resource scheduler** (lease / pool / share / teardown resources across scenarios). v1 does **not** add speculative resource hooks — owning the run loop *is* the seam that keeps this future open.
 
@@ -36,14 +36,14 @@ Keep **`xunit.v3.assert`**. Step bodies keep `using Xunit; Assert.Equal(...)` ve
 
 ## 3. Project / package shape
 
-- `PUnit` (core engine) and `PUnit.Generator` — **unchanged**.
-- **New `PUnit.Mtp`** package replaces `PUnit.Xunit`. References `Microsoft.Testing.Platform` + `PUnit` core; packages the generator as an analyzer (same pattern `PUnit.Xunit.csproj` uses today). Contains: the `ITestFramework` shell, discovery, the run loop, the node reporter, and a **public bootstrap API** (`RunAsync`-style) for the escape hatch.
-- A consumer's test project references **`PUnit.Mtp`** (brings the generator) **+ `xunit.v3.assert`**. It drops `Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio`, and `xunit.v3`. It adds `global.json` `{ "test": { "runner": "Microsoft.Testing.Platform" } }`.
-- `PUnit.Xunit` is **not deleted in v1** (migration is out of scope per "skip §6"); `PUnit.Mtp` is added alongside, and the sample switches to it.
+- `Raun` (core engine) and `Raun.Generator` — **unchanged**.
+- **New `Raun.Mtp`** package replaces `Raun.Xunit`. References `Microsoft.Testing.Platform` + `Raun` core; packages the generator as an analyzer (same pattern `Raun.Xunit.csproj` uses today). Contains: the `ITestFramework` shell, discovery, the run loop, the node reporter, and a **public bootstrap API** (`RunAsync`-style) for the escape hatch.
+- A consumer's test project references **`Raun.Mtp`** (brings the generator) **+ `xunit.v3.assert`**. It drops `Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio`, and `xunit.v3`. It adds `global.json` `{ "test": { "runner": "Microsoft.Testing.Platform" } }`.
+- `Raun.Xunit` is **not deleted in v1** (migration is out of scope per "skip §6"); `Raun.Mtp` is added alongside, and the sample switches to it.
 
 ### Entry point (locked: generated by default, with an escape hatch)
-- The **generator emits `Program.cs`** (the MTP `Main` calling `PUnit.Mtp`'s public bootstrap → `RegisterTestFramework`), mirroring xUnit's auto-generated entry point. This gives "just add the package" UX.
-- **Escape hatch:** an MSBuild property (e.g. `<PUnitGenerateProgram>false</PUnitGenerateProgram>`, default `true`) disables emission so the user can write their own `Program.cs` and call the same public bootstrap API directly — taking full control of the host (custom MTP extensions, builder config, etc.). The bootstrap API must therefore be public and documented.
+- The **generator emits `Program.cs`** (the MTP `Main` calling `Raun.Mtp`'s public bootstrap → `RegisterTestFramework`), mirroring xUnit's auto-generated entry point. This gives "just add the package" UX.
+- **Escape hatch:** an MSBuild property (e.g. `<RaunGenerateProgram>false</RaunGenerateProgram>`, default `true`) disables emission so the user can write their own `Program.cs` and call the same public bootstrap API directly — taking full control of the host (custom MTP extensions, builder config, etc.). The bootstrap API must therefore be public and documented.
 
 ---
 
@@ -108,14 +108,14 @@ These are the "tried-and-true" bits xUnit handled that become ours — small ind
 
 ## 8. Testing strategy
 
-- `PUnit` core + generator tests: unchanged.
-- New `PUnit.Mtp` tests (TDD, behavioral):
+- `Raun` core + generator tests: unchanged.
+- New `Raun.Mtp` tests (TDD, behavioral):
   - Discovery emits N nodes per scenario with correct uids, display names, and file locations.
   - Reporter maps each `StepStatus` → the correct node state, with timing and location.
   - Run loop: a multi-step filter for one scenario triggers exactly **one** scheduler run.
   - Single-step filter ⇒ all executed siblings are published (light-up-all).
   - Cancellation: one step's cancellation does not kill the shared scenario run for siblings.
-- End-to-end: `AppointmentTests` sample migrated to `PUnit.Mtp` + `xunit.v3.assert` + `global.json`; `dotnet test` shows the full per-step breakdown; a single-step run lights up siblings.
+- End-to-end: `AppointmentTests` sample migrated to `Raun.Mtp` + `xunit.v3.assert` + `global.json`; `dotnet test` shows the full per-step breakdown; a single-step run lights up siblings.
 
 ---
 
@@ -124,16 +124,16 @@ These are the "tried-and-true" bits xUnit handled that become ours — small ind
 - **Platform:** own MTP `ITestFramework` (Path 2). LOCKED.
 - **Assertions:** keep `xunit.v3.assert`. LOCKED.
 - **Scope:** steps-as-MTP-nodes only; resource scheduler deferred to its own spec. LOCKED.
-- **Entry point:** generator emits `Program.cs`; escape hatch via `<PUnitGenerateProgram>false</PUnitGenerateProgram>` + public bootstrap API. LOCKED.
+- **Entry point:** generator emits `Program.cs`; escape hatch via `<RaunGenerateProgram>false</RaunGenerateProgram>` + public bootstrap API. LOCKED.
 - **① Parent node:** step nodes only, no parent. LOCKED.
 - **② Working tree:** bus-debugging deliverable reset (stashed) — not part of this design. DONE.
-- **③ Package name:** `PUnit.Mtp` (default pick; rename trivially if preferred before/at implementation).
+- **③ Package name:** `Raun.Mtp` (default pick; rename trivially if preferred before/at implementation).
 - **De-risk spike (§5 of handoff):** skipped per Patrik — go straight to implementation.
 
 ---
 
 ## 10. Open / smallest-stakes items (decide during planning, not blocking)
 
-- Final package name (`PUnit.Mtp` assumed).
+- Final package name (`Raun.Mtp` assumed).
 - Cross-scenario concurrency degree default (sequential vs small bound) for v1.
 - Exact MSBuild property name for the entry-point escape hatch.

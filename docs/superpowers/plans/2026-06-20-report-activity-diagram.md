@@ -4,16 +4,16 @@
 
 **Goal:** Replace the per-scenario Gantt-timeline + object-flow SVG overlay in the HTML report with a single, flat, top-down **SVG activity diagram** per scenario, in both light and dark themes.
 
-**Architecture:** All work is in one embedded template, `src/PUnit.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model injected as JSON at one token). `renderScenario(sc)` is rewritten to build a pure-SVG activity diagram computed from `model.scenarios[i]`. The old Gantt bars / resource rows / `buildFlowOverlay` / flow-highlight machinery are removed. The drill panel, summary chips, theme system, `PALETTE`/`typeColor`, and the time-axis math (`niceAxis`/`fmtTick`) are kept and reused. Source Serif 4 is embedded as base64 woff2.
+**Architecture:** All work is in one embedded template, `src/Raun.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model injected as JSON at one token). `renderScenario(sc)` is rewritten to build a pure-SVG activity diagram computed from `model.scenarios[i]`. The old Gantt bars / resource rows / `buildFlowOverlay` / flow-highlight machinery are removed. The drill panel, summary chips, theme system, `PALETTE`/`typeColor`, and the time-axis math (`niceAxis`/`fmtTick`) are kept and reused. Source Serif 4 is embedded as base64 woff2.
 
-**Tech Stack:** Hand-authored SVG + vanilla JS inside one HTML file; C#/xUnit tests (`PUnit.Mtp.Test`); .NET 10 build; `npx playwright` (chromium) for headless visual verification; `jj` for VCS.
+**Tech Stack:** Hand-authored SVG + vanilla JS inside one HTML file; C#/xUnit tests (`Raun.Mtp.Test`); .NET 10 build; `npx playwright` (chromium) for headless visual verification; `jj` for VCS.
 
 ## Global Constraints
 
 Copied verbatim from the spec (`docs/superpowers/specs/2026-06-20-report-activity-diagram-design.md`) — every task implicitly includes these:
 
 - **Self-contained HTML, HARD rule:** inline `<style>`/`<script>` only — **zero** external URLs/CDNs/web-fonts/`@import`. Source Serif 4 → **base64 woff2 embedded** via inline `@font-face`.
-- **JSON token:** exactly one `<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>`; `HtmlReportSink` string-replaces it. Don't break it.
+- **JSON token:** exactly one `<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>`; `HtmlReportSink` string-replaces it. Don't break it.
 - **Model field names are FIXED** (camelCase serialized); the C# model + builder do **not** change.
 - **Both themes:** auto light/dark + `?theme=light|dark`; the light palette must be defined.
 - **Keep tests green:** `HtmlReportModelBuilderTests` (the `Verify(json)` snapshot **must NOT change**) and `HtmlReportSinkTests` (substring asserts). **0-warning build.**
@@ -34,10 +34,10 @@ Generate + render a real report:
 ```bash
 # 1. emit a real report from the sample suite
 dotnet run --project samples/AppointmentTests -c Debug -- --report-html
-#    → samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html
+#    → samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html
 
 # 2. headless-render it (chromium is installed; the Playwright MCP defaults to Chrome which is NOT)
-R="samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html"
+R="samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html"
 npx playwright screenshot --browser=chromium --full-page --viewport-size=1100,2200 "$R" out-dark.png
 npx playwright screenshot --browser=chromium --full-page --viewport-size=1100,2200 "file://$(pwd)/$R?theme=light" out-light.png
 ```
@@ -50,9 +50,9 @@ Inspect `out-dark.png` / `out-light.png`; compare the "customer books with paral
 
 | File | Responsibility | Action |
 |---|---|---|
-| `src/PUnit.Mtp/HtmlReport/report-template.html` | The entire report shell + per-scenario activity-diagram renderer (inline CSS/JS) | **Modify** (the only production file touched) |
-| `src/PUnit.Mtp/HtmlReport/<font>.woff2` (build-time only) | Source Serif 4 source(s) to base64-encode and inline; **not** shipped — the bytes live inline in the template | **Add (transient)** |
-| `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs` | C# substring guards on the emitted HTML | **Modify** (add guards; keep existing) |
+| `src/Raun.Mtp/HtmlReport/report-template.html` | The entire report shell + per-scenario activity-diagram renderer (inline CSS/JS) | **Modify** (the only production file touched) |
+| `src/Raun.Mtp/HtmlReport/<font>.woff2` (build-time only) | Source Serif 4 source(s) to base64-encode and inline; **not** shipped — the bytes live inline in the template | **Add (transient)** |
+| `test/Raun.Mtp.Test/HtmlReportSinkTests.cs` | C# substring guards on the emitted HTML | **Modify** (add guards; keep existing) |
 
 The renderer is organized as labelled sections inside the template's single `<script>` (layout → control → fork → object-flow → labels → collapse → interaction) and matching CSS blocks, so each task touches a focused region.
 
@@ -61,8 +61,8 @@ The renderer is organized as labelled sections inside the template's single `<sc
 ## Task 1: Embed Source Serif 4 + self-contained guard
 
 **Files:**
-- Modify: `src/PUnit.Mtp/HtmlReport/report-template.html` (`<head>` `<style>`: add `@font-face` + `--ad-font`)
-- Test: `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs`
+- Modify: `src/Raun.Mtp/HtmlReport/report-template.html` (`<head>` `<style>`: add `@font-face` + `--ad-font`)
+- Test: `test/Raun.Mtp.Test/HtmlReportSinkTests.cs`
 
 **Interfaces:**
 - Produces: an inline `@font-face { font-family:'Source Serif 4'; ... src: url(data:font/woff2;base64,...) }` (italic 500 + roman 400/500/600 coverage); CSS var `--ad-font: 'Source Serif 4', Georgia, serif;` on `:root`.
@@ -73,7 +73,7 @@ The renderer is organized as labelled sections inside the template's single `<sc
 [Fact]
 public async Task Report_embeds_the_serif_font_and_links_no_external_assets()
 {
-    var path = Path.Combine(_dir, "punit-report.html");
+    var path = Path.Combine(_dir, "raun-report.html");
     var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
     var def = Def();
     await sink.PublishAsync(new RunStarted(1));
@@ -97,7 +97,7 @@ public async Task Report_embeds_the_serif_font_and_links_no_external_assets()
 
 - [ ] **Step 2: Run it — expect FAIL** (no `@font-face` yet)
 
-Run: `dotnet test test/PUnit.Mtp.Test --filter "Report_embeds_the_serif_font_and_links_no_external_assets"`
+Run: `dotnet test test/Raun.Mtp.Test --filter "Report_embeds_the_serif_font_and_links_no_external_assets"`
 Expected: FAIL — assertion on `@font-face`.
 
 - [ ] **Step 3: Obtain + encode the font.** Download Source Serif 4 woff2 (OFL, e.g. the google-fonts/fontsource distribution): the **italic** instance covering weight 500 and the **roman** instance covering 400/500/600 (variable woff2 if one file covers each axis; subset to Latin to limit size). Base64-encode each:
@@ -124,7 +124,7 @@ base64 -w0 SourceSerif4-Roman-latin.woff2  > roman.b64
 
 - [ ] **Step 5: Run the new test + the whole sink suite — expect PASS**
 
-Run: `dotnet test test/PUnit.Mtp.Test --filter "HtmlReportSinkTests"`
+Run: `dotnet test test/Raun.Mtp.Test --filter "HtmlReportSinkTests"`
 Expected: PASS (new test + the 3 existing).
 
 - [ ] **Step 6: Commit**
@@ -197,7 +197,7 @@ jj commit -m "report: activity-diagram palette vars (light+dark) + shade/labelCo
 
 **Files:**
 - Modify: `report-template.html` — remove the old viz CSS/JS; rewrite `renderScenario(sc)`; add diagram CSS.
-- Test: `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs`
+- Test: `test/Raun.Mtp.Test/HtmlReportSinkTests.cs`
 
 **Interfaces:**
 - Produces (JS): `renderScenario(sc)` → an element containing (a) a header (unchanged), (b) `<svg class="actdiag" ...>` built by `buildActivityDiagram(sc)`, (c) the unchanged drill from `buildScenarioDrill(sc)`. `buildActivityDiagram(sc)` returns an `<svg>` element with a computed `viewBox`.
@@ -209,7 +209,7 @@ jj commit -m "report: activity-diagram palette vars (light+dark) + shade/labelCo
 [Fact]
 public async Task Renders_the_activity_diagram_and_drops_the_old_overlay()
 {
-    var path = Path.Combine(_dir, "punit-report.html");
+    var path = Path.Combine(_dir, "raun-report.html");
     var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
     var def = Def();
     await sink.PublishAsync(new RunStarted(1));
@@ -231,7 +231,7 @@ public async Task Renders_the_activity_diagram_and_drops_the_old_overlay()
 
 - [ ] **Step 2: Run it — expect FAIL** (`class="actdiag"` not present).
 
-Run: `dotnet test test/PUnit.Mtp.Test --filter "Renders_the_activity_diagram_and_drops_the_old_overlay"`
+Run: `dotnet test test/Raun.Mtp.Test --filter "Renders_the_activity_diagram_and_drops_the_old_overlay"`
 Expected: FAIL.
 
 - [ ] **Step 3: Remove the old per-scenario viz.** Delete: the `.flow-svg/.conn/.dock/.flow-label/.res-row/.lifeline/.marker/.flow-bar` CSS; the Gantt bar/lane CSS that is only used per-scenario; `buildFlowOverlay()`; the highlight machinery (`clearLit/applyLit/litByStep/litByRes/refresh`); the `flows/flowCtx/pinned/SVGNS`-overlay state; the flow-legend builder + `.flow-legend` CSS. **Keep** `.timeline/.tl-*/.bar/.tick` CSS for now (Task 5 reuses the *math*; remove the unused HTML-timeline CSS only once Task 5 confirms the SVG timeline replaces it). Keep `niceAxis/fmtTick/typeColor/fmtDur/fmtGen/buildScenarioDrill/focusStep` and the chips/theme/`?theme` code.
@@ -258,7 +258,7 @@ Expected: FAIL.
 
 - [ ] **Step 6: Run C# guard + full suite — expect PASS**
 
-Run: `dotnet test test/PUnit.Mtp.Test --filter "HtmlReport"`
+Run: `dotnet test test/Raun.Mtp.Test --filter "HtmlReport"`
 Expected: PASS (new guard + existing sink + model-snapshot unchanged).
 
 - [ ] **Step 7: Headless-verify the frame.** Run the fixture loop (top of plan). The "customer books…" scenario should show the 3 bands, rotated phase labels, tabs, the centred spine, initial dot + final ring — empty interior. Matches the mock's frame.
@@ -296,7 +296,7 @@ function measureText(str, px, weight, italic){
 
 - [ ] **Step 3: Headless-verify** vs the mock: the When `CreateAppointment` box and Then `the appointment should exist` box appear on the spine, content-sized, phase-tinted, joined by the spine with arrowheads. (No fork interior yet — that's Task 5.)
 
-- [ ] **Step 4: Run C# suite — expect PASS** (`dotnet test test/PUnit.Mtp.Test --filter "HtmlReport"`).
+- [ ] **Step 4: Run C# suite — expect PASS** (`dotnet test test/Raun.Mtp.Test --filter "HtmlReport"`).
 
 - [ ] **Step 5: Commit** `jj commit -m "report: content-sized action/assert nodes + control-flow edges"`
 
@@ -425,14 +425,14 @@ function tierBundle(objs){
 
 - [ ] **Step 3: Full test + build gate.**
 
-Run: `dotnet test test/PUnit.Mtp.Test` (all green, incl. model snapshot unchanged) and `dotnet build PUnit.slnx -warnaserror` (0 warnings).
+Run: `dotnet test test/Raun.Mtp.Test` (all green, incl. model snapshot unchanged) and `dotnet build Raun.slnx -warnaserror` (0 warnings).
 Expected: all PASS, 0 warnings.
 
 - [ ] **Step 4:** Self-contained final check: re-run the Task 1 guard; confirm the emitted report has no `http(s)://` asset refs / `@import` and the font is inline base64.
 
 - [ ] **Step 5: Commit** `jj commit -m "report: activity-diagram interaction (hover emphasis, node->drill) + final both-theme pass"`
 
-- [ ] **Step 6 (optional): Update the handoff/memory.** Note the diagram shipped; the decision/merge gap remains deferred (model has no branch data); the rename thread (PUnit → Junction/Tracery/Cascade) is still separate.
+- [ ] **Step 6 (optional): Update the handoff/memory.** Note the diagram shipped; the decision/merge gap remains deferred (model has no branch data); the rename thread (Raun → Junction/Tracery/Cascade) is still separate.
 
 ---
 

@@ -1,4 +1,4 @@
-# Design: Explicit lineage subjects + PUNIT010
+# Design: Explicit lineage subjects + RAUN010
 
 **Date:** 2026-06-22
 **Status:** Design — awaiting user review (then writing-plans → implement)
@@ -15,7 +15,7 @@ A lineage edge connects a **subject** (a resource the step creates/edits) to a *
 `[References]`/`[Consumes]`). On `main` the subject is **never declared — it is reconstructed at runtime**:
 `HtmlReportModelBuilder` collects every `Create`/`Edit` effect in a step, dedups by `ResourceIdentity`, and
 *only if exactly one survives* treats it as the subject (`subjects.Count != 1 → skip`,
-`src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs` ~line 114–158).
+`src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs` ~line 114–158).
 
 Two consequences the user rejected:
 
@@ -35,7 +35,7 @@ identity prediction. Concretely:
 - Add an optional `params string[] subjects` to `[References]` / `[Consumes]`. Each entry is a parameter name
   (via `nameof`) or the `Subject.Return` sentinel.
 - **No `subjects` ⇒ no edge** (the effect is still recorded for C1/C2 semantics). Lineage is opt-in per target.
-- **PUNIT010 (Error)** fires when a named subject does not resolve to a real subject of the step.
+- **RAUN010 (Error)** fires when a named subject does not resolve to a real subject of the step.
 - Existing role/effect attributes (`[Creates]`, `[Edits]`, `[Loads]`, `[Reads]`, `[Deletes]`,
   `[return: Edits]`) keep their current meaning. Lineage is **fully decoupled** from effect inference — so
   there is no edit-in-place special case and **no `Suspend` migration**.
@@ -53,7 +53,7 @@ entirely: there is nothing to infer.
 - **Opt-in:** a target with an empty/absent `subjects` list records its `Reference`/`Consume` effect but
   produces **no edge**.
 - **Compile-time validity:** every `subjects` entry must resolve to a subject of the same step (an `[Edits]`
-  parameter, or `Subject.Return` when the return is `[Creates]`/`[Edits]`). Otherwise → **PUNIT010**.
+  parameter, or `Subject.Return` when the return is `[Creates]`/`[Edits]`). Otherwise → **RAUN010**.
 
 ### Worked examples
 
@@ -63,10 +63,10 @@ entirely: there is nothing to infer.
 | `AssignOwner([Edits] Account acc, [References(nameof(acc))] User u)` | `acc` | `acc→u` |
 | `Transfer([Edits] Account from, [Edits] Account to, [References(nameof(from), nameof(to))] User bank)` | `from`,`to` | `from→bank`, `to→bank` |
 | `Suspend([Edits] User u, [References] Policy pol)` *(no subjects)* | — | none (effect only) |
-| `Reassign([Edits] Appt appt, [References(nameof(zzz))] Patient p)` — `zzz` is not a subject | invalid | **PUNIT010** |
-| `Validate([References(Subject.Return)] Patient p)` — no `[Creates]`/`[Edits]` return | invalid | **PUNIT010** |
+| `Reassign([Edits] Appt appt, [References(nameof(zzz))] Patient p)` — `zzz` is not a subject | invalid | **RAUN010** |
+| `Validate([References(Subject.Return)] Patient p)` — no `[Creates]`/`[Edits]` return | invalid | **RAUN010** |
 
-## 4. Public API (`src/PUnit/Resources/ResourceRoleAttributes.cs`)
+## 4. Public API (`src/Raun/Resources/ResourceRoleAttributes.cs`)
 
 ```csharp
 [AttributeUsage(AttributeTargets.Parameter)]
@@ -96,13 +96,13 @@ public static class Subject
   (`nameof(x)` → `"x"`); the return sentinel shares that string property as a reserved const.
 - The `"<return>"` token cannot collide with a parameter name (not a legal identifier).
 
-## 5. Compile-time validation — PUNIT010 (`Descriptors.cs` + `ScenarioAnalyzer.cs`)
+## 5. Compile-time validation — RAUN010 (`Descriptors.cs` + `ScenarioAnalyzer.cs`)
 
-Add to `Descriptors.cs` (next code after PUNIT009):
+Add to `Descriptors.cs` (next code after RAUN009):
 
 ```csharp
 public static readonly DiagnosticDescriptor InvalidLineageSubject = new(
-    "PUNIT010",
+    "RAUN010",
     "Lineage subject must name a step subject",
     "'{0}' is not a valid lineage subject for step '{1}' — Subject must name an [Edits] parameter "
         + "or the [Creates]/[Edits] return (use Subject.Return)",
@@ -117,14 +117,14 @@ params array) and validate each entry:
 
 - `Subject.Return` (`"<return>"`) is valid **iff** `AttributeReader.ReturnRole(method)` is `Create` or `Edit`.
 - any other string is valid **iff** it names a parameter of the method whose `ParameterRole` is `Edit`.
-- otherwise report **PUNIT010** with `{0}` = the offending entry, `{1}` = step name, squiggle on the
+- otherwise report **RAUN010** with `{0}` = the offending entry, `{1}` = step name, squiggle on the
   parameter (`parameter.Locations.FirstOrDefault() ?? method.Locations.FirstOrDefault() ?? Location.None`).
 
-Add a PUNIT010 row to `src/PUnit.Generator/AnalyzerReleases.Unshipped.md`.
+Add a RAUN010 row to `src/Raun.Generator/AnalyzerReleases.Unshipped.md`.
 
 > Note: 0-subject and same-type-multi-subject ambiguities no longer need diagnostics — they cannot arise.
 > A target either names valid subjects (edges drawn) or names none (no edge) or names something invalid
-> (PUNIT010). The runtime `subjects.Count != 1` guard is removed (replaced by recorded edges, §6). This
+> (RAUN010). The runtime `subjects.Count != 1` guard is removed (replaced by recorded edges, §6). This
 > supersedes the predecessor handoff's "keep the runtime guard as defense-in-depth" decision, which assumed
 > the inference model — with edges recorded directly from named instances there is no inference to guard.
 
@@ -142,7 +142,7 @@ Add a PUNIT010 row to `src/PUnit.Generator/AnalyzerReleases.Unshipped.md`.
   building that parameter's `[Edits]` claim — look it up by name);
 - `Subject.Return` → `"__r"`.
 
-(Subjects are validated by PUNIT010, so lowering can assume they resolve; defensively skip unresolved.)
+(Subjects are validated by RAUN010, so lowering can assume they resolve; defensively skip unresolved.)
 
 **Emitting (`ScenarioEmitter`, `BuildInvokeLambda`/`ResourceCallStatement`, ~line 220–291).** The invoke
 lambda already emits `var __r = await CALL;` then one `await __ctx.Resources.{Verb}({arg});` per claim, with
@@ -159,7 +159,7 @@ A claim with no subjects emits exactly today's `await __ctx.Resources.Reference(
 `Reference<T>(T resource, params object[] subjects)`. They record the `Reference`/`Consume` effect as today,
 then for each subject resolve its identity (`_resolver.Resolve(subject)`) and append a
 `ResourceLineageEdge { SubjectIdentity, TargetIdentity = resolved(resource), Kind }` (new record in
-`PUnit.Model`, alongside `ResourceEffect`) to a new per-step `_edges` list, exposed as
+`Raun.Model`, alongside `ResourceEffect`) to a new per-step `_edges` list, exposed as
 `IReadOnlyList<ResourceLineageEdge> Edges` (mirrors `Effects`). The exact subject-overload signature
 (`params object[]` vs a typed path) and whether `_resolver.Resolve` needs a non-generic entry point for
 `object` subjects are settled in writing-plans.
@@ -188,16 +188,16 @@ The shipped feature drew edges by inference; explicit-only removes that. Therefo
   unaffected.
 - No change to `[Creates]`/`[Edits]`/`[Loads]`/`[Reads]`/`[Deletes]` semantics or their tests.
 
-## 9. Testing (TDD; `test/PUnit.Generator.Test` + report-builder tests)
+## 9. Testing (TDD; `test/Raun.Generator.Test` + report-builder tests)
 
-- **Analyzer:** PUNIT010 fires for an entry that names a non-subject param, a non-existent name, and
-  `Subject.Return` without a `[Creates]`/`[Edits]` return; PUNIT010 does **not** fire for valid single
-  subject, valid multi-subject, and a `[References]` with no subjects (mirror existing PUNIT009 tests).
+- **Analyzer:** RAUN010 fires for an entry that names a non-subject param, a non-existent name, and
+  `Subject.Return` without a `[Creates]`/`[Edits]` return; RAUN010 does **not** fire for valid single
+  subject, valid multi-subject, and a `[References]` with no subjects (mirror existing RAUN009 tests).
 - **Lowering/emit:** snapshot the invoke lambda — no-subjects claim is byte-identical to today; single- and
   multi-subject claims emit the edge call with correct instance expressions (params, `__r`).
 - **Runtime/builder:** a step recording `from→bank` and `to→bank` yields two `references`; a no-subjects
   reference yields none; cross-step dedup holds; the `references` JSON shape is unchanged (golden test).
-- Full `dotnet build PUnit.slnx` clean (0 warnings) and full test pass before completion.
+- Full `dotnet build Raun.slnx` clean (0 warnings) and full test pass before completion.
 
 ## 10. Out of scope / future
 
@@ -207,7 +207,7 @@ The shipped feature drew edges by inference; explicit-only removes that. Therefo
 
 ## Appendix — environment
 
-Work proceeds in an isolated `jj` workspace off `main` (`C:/dev/punit-punit010`, driven via
-`jj -R "C:/dev/punit-punit010"`). Version control is `jj`, never `git`; no `Co-Authored-By` trailers.
-Tests via `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test"` (MTP; filter with
+Work proceeds in an isolated `jj` workspace off `main` (`C:/dev/raun`, driven via
+`jj -R "C:/dev/raun"`). Version control is `jj`, never `git`; no `Co-Authored-By` trailers.
+Tests via `dotnet test "C:/dev/raun/test/Raun.Generator.Test"` (MTP; filter with
 `--filter-method "*Name*"`).

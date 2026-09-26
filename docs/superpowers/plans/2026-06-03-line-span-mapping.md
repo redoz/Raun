@@ -12,7 +12,7 @@
 
 **Repo gates (apply to every task):**
 - Build must report **`0 Warning(s), 0 Error(s)`** (`TreatWarningsAsErrors`, full analyzers). Fix any CA/IDE nit the new helpers raise.
-- Tests: `dotnet test PUnit.slnx --nologo`. Current baseline: **92 passing**.
+- Tests: `dotnet test Raun.slnx --nologo`. Current baseline: **92 passing**.
 - Commits: `jj commit -m "..."`. **No `Co-Authored-By` / tooling trailer.**
 - Snapshots: on mismatch Verify writes `*.received.cs` (DiffEngine disabled). **Never blind-accept** — diff received vs verified, confirm the change is exactly expected, then `Move-Item -Force` received→verified and delete any leftover received.
 
@@ -23,7 +23,7 @@
 Resolves the one real unknown before touching the emitter: does `NormalizeWhitespace` render structured `#line` directive trivia on its own line, compiler-legal, with a predictable statement column — and what is the directive's base convention (1-based positions; `charOffset` meaning)? **This file is deleted at the end of the task and never committed.**
 
 **Files:**
-- Create (temporary): `test/PUnit.Generator.Test/LineSpanSpikeTests.cs`
+- Create (temporary): `test/Raun.Generator.Test/LineSpanSpikeTests.cs`
 
 - [ ] **Step 1: Write the spike**
 
@@ -34,7 +34,7 @@ using Xunit;
 using Xunit.Abstractions;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace PUnit.Generator.Test;
+namespace Raun.Generator.Test;
 
 public class LineSpanSpikeTests(ITestOutputHelper output)
 {
@@ -77,7 +77,7 @@ public class LineSpanSpikeTests(ITestOutputHelper output)
 
 - [ ] **Step 2: Run the spike**
 
-Run: `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~LineSpanSpikeTests"`
+Run: `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~LineSpanSpikeTests"`
 
 Read the printed `text`. **Record (you'll paste these into Task 5's commit body):**
 1. Exact rendered form of the span directive (spacing, whether positions are `(78, 33)` or `(78,33)`, where `charOffset` and the file sit).
@@ -89,10 +89,10 @@ Adjust the two `Assert.Contains` to match the actual rendering until the test **
 - [ ] **Step 3: Delete the spike**
 
 ```powershell
-Remove-Item test\PUnit.Generator.Test\LineSpanSpikeTests.cs
+Remove-Item test\Raun.Generator.Test\LineSpanSpikeTests.cs
 ```
 
-Run: `dotnet test PUnit.slnx --nologo`
+Run: `dotnet test Raun.slnx --nologo`
 Expected: **92 passing** (back to baseline; spike gone). **Do not commit** anything in this task.
 
 ---
@@ -102,18 +102,18 @@ Expected: **92 passing** (back to baseline; spike gone). **Do not commit** anyth
 Add the test infrastructure the later tasks need: parse the *user* source with a real path (so spans carry a path), and emit a portable PDB whose sequence points we can read. No production code changes.
 
 **Files:**
-- Modify: `test/PUnit.Generator.Test/GeneratorHarness.cs`
+- Modify: `test/Raun.Generator.Test/GeneratorHarness.cs`
 
 - [ ] **Step 1: Write the failing test**
 
 Append to `GeneratorSnapshotTests.cs`? No — put harness tests in a new file.
 
-Create `test/PUnit.Generator.Test/HarnessPdbTests.cs`:
+Create `test/Raun.Generator.Test/HarnessPdbTests.cs`:
 
 ```csharp
 using Xunit;
 
-namespace PUnit.Generator.Test;
+namespace Raun.Generator.Test;
 
 public class HarnessPdbTests
 {
@@ -133,7 +133,7 @@ public class HarnessPdbTests
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~HarnessPdbTests"`
+Run: `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~HarnessPdbTests"`
 Expected: FAIL — `EmitWithPdb` / `ReadSequencePoints` / `SeqPoint` do not exist (compile error).
 
 - [ ] **Step 3: Add the harness members**
@@ -234,13 +234,13 @@ public static IReadOnlyList<SeqPoint> ReadSequencePoints(ImmutableArray<byte> pd
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~HarnessPdbTests"`
+Run: `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~HarnessPdbTests"`
 Expected: PASS.
 
 - [ ] **Step 5: Full build + suite**
 
-Run: `dotnet build PUnit.slnx --nologo` → `0 Warning(s), 0 Error(s)`.
-Run: `dotnet test PUnit.slnx --nologo` → **93 passing** (92 + 1 new).
+Run: `dotnet build Raun.slnx --nologo` → `0 Warning(s), 0 Error(s)`.
+Run: `dotnet test Raun.slnx --nologo` → **93 passing** (92 + 1 new).
 
 - [ ] **Step 6: Commit**
 
@@ -255,8 +255,8 @@ jj commit -m "test: path-bearing + portable-PDB harness plumbing for #line mappi
 Make the generated file hidden by default and hide each step's `return`. No span directive yet — the 3 existing snapshots change by **exactly** one baseline `#line hidden` + one `#line hidden` per `return`.
 
 **Files:**
-- Modify: `src/PUnit.Generator/Emit/ScenarioEmitter.cs` (`Header` const L14; `BuildInvokeLambda` L216-257)
-- Modify (re-accept): `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.{Linear,Tuple,Array}_scenario#PUnitScenarios.g.verified.cs`
+- Modify: `src/Raun.Generator/Emit/ScenarioEmitter.cs` (`Header` const L14; `BuildInvokeLambda` L216-257)
+- Modify (re-accept): `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.{Linear,Tuple,Array}_scenario#RaunScenarios.g.verified.cs`
 
 - [ ] **Step 1: Append `#line hidden` to the `Header` const**
 
@@ -315,18 +315,18 @@ to:
 
 - [ ] **Step 3: Build**
 
-Run: `dotnet build PUnit.slnx --nologo`
+Run: `dotnet build Raun.slnx --nologo`
 Expected: `0 Warning(s), 0 Error(s)`.
 
 - [ ] **Step 4: Regenerate snapshots (they will fail and write `.received.cs`)**
 
-Run: `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~GeneratorSnapshotTests"`
+Run: `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~GeneratorSnapshotTests"`
 Expected: 3 snapshot facts FAIL, producing `*.received.cs` next to each verified file.
 
 - [ ] **Step 5: Diff each received vs verified — confirm ONLY the hidden lines changed**
 
 ```powershell
-Get-ChildItem test\PUnit.Generator.Test\Snapshots\*.received.cs | ForEach-Object {
+Get-ChildItem test\Raun.Generator.Test\Snapshots\*.received.cs | ForEach-Object {
     $verified = $_.FullName -replace '\.received\.cs$', '.verified.cs'
     git diff --no-index $verified $_.FullName
 }
@@ -337,18 +337,18 @@ Confirm the **only** additions are: (a) one `#line hidden` immediately after `#p
 - [ ] **Step 6: Accept the 3 snapshots**
 
 ```powershell
-Get-ChildItem test\PUnit.Generator.Test\Snapshots\*.received.cs | ForEach-Object {
+Get-ChildItem test\Raun.Generator.Test\Snapshots\*.received.cs | ForEach-Object {
     Move-Item -Force $_.FullName ($_.FullName -replace '\.received\.cs$', '.verified.cs')
 }
 ```
 
 - [ ] **Step 7: Re-run to confirm green**
 
-Run: `dotnet test PUnit.slnx --nologo`
+Run: `dotnet test Raun.slnx --nologo`
 Expected: **93 passing**, no `*.received.cs` left:
 
 ```powershell
-Get-ChildItem test\PUnit.Generator.Test\Snapshots\*.received.cs   # expect: nothing
+Get-ChildItem test\Raun.Generator.Test\Snapshots\*.received.cs   # expect: nothing
 ```
 
 - [ ] **Step 8: Commit**
@@ -364,15 +364,15 @@ jj commit -m "emit: default generated file to #line hidden; hide step returns"
 Add `ParsedStep.CallSpan`, populate it in the parser, and emit a span-form `#line` directive on each step's awaited call. Driven by the PDB fidelity test, which calibrates `charOffset` and proves column-accurate mapping.
 
 **Files:**
-- Modify: `src/PUnit.Generator/Lowering/Ir.cs` (add `SourceSpan`; add `ParsedStep.CallSpan`)
-- Modify: `src/PUnit.Generator/Lowering/ScenarioParser.cs` (add `SpanOf`; populate `CallSpan` at L357-373)
-- Modify: `src/PUnit.Generator/Emit/ScenarioEmitter.cs` (`BuildInvokeLambda` + a `LineMappedTrivia` helper)
-- Create: `test/PUnit.Generator.Test/LineMappingPdbTests.cs`
-- Modify (re-accept/add): `test/PUnit.Generator.Test/GeneratorSnapshotTests.cs` + new `Snapshots/*PathBearing*` verified file
+- Modify: `src/Raun.Generator/Lowering/Ir.cs` (add `SourceSpan`; add `ParsedStep.CallSpan`)
+- Modify: `src/Raun.Generator/Lowering/ScenarioParser.cs` (add `SpanOf`; populate `CallSpan` at L357-373)
+- Modify: `src/Raun.Generator/Emit/ScenarioEmitter.cs` (`BuildInvokeLambda` + a `LineMappedTrivia` helper)
+- Create: `test/Raun.Generator.Test/LineMappingPdbTests.cs`
+- Modify (re-accept/add): `test/Raun.Generator.Test/GeneratorSnapshotTests.cs` + new `Snapshots/*PathBearing*` verified file
 
 - [ ] **Step 1: Write the failing PDB fidelity test**
 
-Create `test/PUnit.Generator.Test/LineMappingPdbTests.cs`:
+Create `test/Raun.Generator.Test/LineMappingPdbTests.cs`:
 
 ```csharp
 using System.Linq;
@@ -382,7 +382,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace PUnit.Generator.Test;
+namespace Raun.Generator.Test;
 
 public class LineMappingPdbTests(ITestOutputHelper output)
 {
@@ -435,12 +435,12 @@ public class LineMappingPdbTests(ITestOutputHelper output)
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~LineMappingPdbTests"`
-Expected: FAIL on assertion (1) — without span directives, the generated lambdas' statements are visible points in the generated file (`PUnitScenarios.g.cs`), so not all visible points have `Document == "Scenario.cs"`.
+Run: `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~LineMappingPdbTests"`
+Expected: FAIL on assertion (1) — without span directives, the generated lambdas' statements are visible points in the generated file (`RaunScenarios.g.cs`), so not all visible points have `Document == "Scenario.cs"`.
 
 - [ ] **Step 3: Add `SourceSpan` + `ParsedStep.CallSpan`**
 
-In `src/PUnit.Generator/Lowering/Ir.cs`, add the struct (after the `using`, before `ParsedScenario`):
+In `src/Raun.Generator/Lowering/Ir.cs`, add the struct (after the `using`, before `ParsedScenario`):
 
 ```csharp
 /// <summary>The original-source span of a step's DSL call, for span-form #line emission. 0-based
@@ -459,7 +459,7 @@ Add this property to `ParsedStep` (after `SourceLine`, L27):
 
 - [ ] **Step 4: Add `SpanOf` and populate `CallSpan` in the parser**
 
-In `src/PUnit.Generator/Lowering/ScenarioParser.cs`, add next to `Location` (~L446):
+In `src/Raun.Generator/Lowering/ScenarioParser.cs`, add next to `Location` (~L446):
 
 ```csharp
     static SourceSpan? SpanOf(SyntaxNode node)
@@ -533,16 +533,16 @@ In the `else` branch, change the `awaitStmt`:
 
 - [ ] **Step 6: Build**
 
-Run: `dotnet build PUnit.slnx --nologo`
+Run: `dotnet build Raun.slnx --nologo`
 Expected: `0 Warning(s), 0 Error(s)`. (If CA flags `LambdaBodyIndent` or the helper, address per analyzer guidance — e.g. concrete return types.)
 
 - [ ] **Step 7: Run the PDB fidelity test and calibrate `charOffset`**
 
-Run: `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~LineMappingPdbTests"`
+Run: `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~LineMappingPdbTests"`
 
 - If **PASS** → `charOffset = 20` is correct; continue.
 - If assertion (2) FAILS → read the test output's printed visible points. Find the point on the `expected` line whose column is *closest* to (but not equal to) `expected.startCol`. The difference tells you the calibration: **`LambdaBodyIndent += (expected.startCol - actualStartColumn)`**. Adjust the const, rebuild, re-run. Converges in one step (the only unknown is `NormalizeWhitespace`'s exact indent/base convention).
-- If assertion (1) FAILS (a visible point still in `PUnitScenarios.g.cs`) → a generated statement isn't covered: confirm the baseline `#line hidden` (Task 3) is present and the directive attached to the call statement; the `return` is hidden. Re-check Task 3 + Step 5.
+- If assertion (1) FAILS (a visible point still in `RaunScenarios.g.cs`) → a generated statement isn't covered: confirm the baseline `#line hidden` (Task 3) is present and the directive attached to the call statement; the `return` is hidden. Re-check Task 3 + Step 5.
 
 - [ ] **Step 8: Add the path-bearing snapshot fact**
 
@@ -569,8 +569,8 @@ This requires `RunDriver` to accept a path. In `GeneratorHarness.cs`, change `Ru
 
 - [ ] **Step 9: Generate + inspect + accept the new snapshot**
 
-Run: `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~GeneratorSnapshotTests.PathBearing_scenario"`
-Expected: FAIL — writes `GeneratorSnapshotTests.PathBearing_scenario#PUnitScenarios.g.received.cs`.
+Run: `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~GeneratorSnapshotTests.PathBearing_scenario"`
+Expected: FAIL — writes `GeneratorSnapshotTests.PathBearing_scenario#RaunScenarios.g.received.cs`.
 
 Inspect the received file. Confirm each of the 4 steps shows, on its own line immediately before the `var __r = await …` / `await …` line:
 
@@ -584,14 +584,14 @@ Inspect the received file. Confirm each of the 4 steps shows, on its own line im
 (exact column numbers `C1`/`C2` and directive spacing as rendered; lines 76-79 match the existing snapshots' `SourceLine` values) and `#line hidden` before each `return`. No other differences vs the Linear snapshot beyond the path-bearing directives. Then accept:
 
 ```powershell
-$r = "test\PUnit.Generator.Test\Snapshots\GeneratorSnapshotTests.PathBearing_scenario#PUnitScenarios.g.received.cs"
+$r = "test\Raun.Generator.Test\Snapshots\GeneratorSnapshotTests.PathBearing_scenario#RaunScenarios.g.received.cs"
 Move-Item -Force $r ($r -replace '\.received\.cs$', '.verified.cs')
 ```
 
 - [ ] **Step 10: Build + full suite**
 
-Run: `dotnet build PUnit.slnx --nologo` → `0 Warning(s), 0 Error(s)`.
-Run: `dotnet test PUnit.slnx --nologo` → **95 passing** (93 + PDB fidelity + PathBearing snapshot). Confirm no `*.received.cs` remain.
+Run: `dotnet build Raun.slnx --nologo` → `0 Warning(s), 0 Error(s)`.
+Run: `dotnet test Raun.slnx --nologo` → **95 passing** (93 + PDB fidelity + PathBearing snapshot). Confirm no `*.received.cs` remain.
 
 - [ ] **Step 11: Commit**
 
@@ -618,7 +618,7 @@ Spike outcome: <structured trivia | raw-text fallback>; charOffset calibrated to
 Lock the populated-path compile path with an explicit assertion, run the manual-checklist reminder, and update the docs.
 
 **Files:**
-- Modify: `test/PUnit.Generator.Test/GeneratorSnapshotTests.cs` (or `LineMappingPdbTests.cs`) — add compile-success fact
+- Modify: `test/Raun.Generator.Test/GeneratorSnapshotTests.cs` (or `LineMappingPdbTests.cs`) — add compile-success fact
 - Modify: `docs/superpowers/handoffs/2026-06-03-line-directives-handoff.md` (supersede note)
 
 - [ ] **Step 1: Write the compile-success fact**
@@ -637,7 +637,7 @@ Add to `LineMappingPdbTests.cs`:
 
 - [ ] **Step 2: Run it**
 
-Run: `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~LineMappingPdbTests"`
+Run: `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~LineMappingPdbTests"`
 Expected: PASS (the C# compiler accepts the span directives with a real path).
 
 - [ ] **Step 3: Spot-check snapshot invariants**
@@ -645,15 +645,15 @@ Expected: PASS (the C# compiler accepts the span directives with a real path).
 Confirm the 3 pathless snapshots have **zero** span directives and the path-bearing one has them:
 
 ```powershell
-Select-String -Path test\PUnit.Generator.Test\Snapshots\*.verified.cs -Pattern '#line \(' |
+Select-String -Path test\Raun.Generator.Test\Snapshots\*.verified.cs -Pattern '#line \(' |
     Select-Object Filename, LineNumber, Line
 ```
 
-Expected: matches appear **only** in `…PathBearing_scenario#PUnitScenarios.g.verified.cs` (4 of them); the Linear/Tuple/Array snapshots show none. Also confirm all four snapshots contain `#line hidden`.
+Expected: matches appear **only** in `…PathBearing_scenario#RaunScenarios.g.verified.cs` (4 of them); the Linear/Tuple/Array snapshots show none. Also confirm all four snapshots contain `#line hidden`.
 
 - [ ] **Step 4: Full suite**
 
-Run: `dotnet test PUnit.slnx --nologo` → **96 passing** (95 + compile-success). Build `0 Warning(s), 0 Error(s)`.
+Run: `dotnet test Raun.slnx --nologo` → **96 passing** (95 + compile-success). Build `0 Warning(s), 0 Error(s)`.
 
 - [ ] **Step 5: Add the supersede note to the old handoff**
 
@@ -674,7 +674,7 @@ jj commit -m "test: assert path-bearing generated code compiles; note handoff su
 - [ ] **Step 7: Manual debugger checklist (human, once — not automated)**
 
 Per design §8, in an IDE against the sample `AppointmentTests`:
-1. Breakpoint on a `When.CreateAppointment(...)` line in the original `*Tests.cs` → binds and hits **on that original call**, highlight covers the call span; not in `PUnitScenarios.g.cs`.
+1. Breakpoint on a `When.CreateAppointment(...)` line in the original `*Tests.cs` → binds and hits **on that original call**, highlight covers the call span; not in `RaunScenarios.g.cs`.
 2. Step Over / Step Into → moves between original DSL call sites; never descends into generated plumbing.
 3. Breakpoint on a void step (`Then.AppointmentExists(...)`) → binds and hits.
 4. `__r`/`__inputs` in Locals (instead of the user's names) is expected.

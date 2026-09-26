@@ -1,7 +1,7 @@
-# Handoff — PUnit scenario resources (feature C)
+# Handoff — Raun scenario resources (feature C)
 
 **Date:** 2026-06-06
-**Version control:** `jj` (Jujutsu), not git. Repo root `C:\dev\punit`. Working copy is **clean**;
+**Version control:** `jj` (Jujutsu), not git. Repo root `C:\dev\raun`. Working copy is **clean**;
 everything below is committed on top of `main`. `jj log` shows the spec/roadmap commits at the tip.
 **Status:** Feature C is **brainstormed and spec'd — spec committed and approved.** The implementation
 **plan has NOT been written yet.** Next session starts at `superpowers:writing-plans`.
@@ -10,7 +10,7 @@ everything below is committed on top of `main`. `jj log` shows the spec/roadmap 
 
 ## You are picking up
 
-Building **scenario resources** for PUnit: scenario steps declare that they create/load/read/edit/
+Building **scenario resources** for Raun: scenario steps declare that they create/load/read/edit/
 delete symbolic resources, which drive (1) real cross-scenario locking and (2) tracing. This is
 **feature C** of `docs/superpowers/plans/2026-06-06-roadmap-aspire-report-resources.md`.
 
@@ -42,7 +42,7 @@ phase C1 only** (see Phasing), saved to
   `IResource<User>` half. **Key resolver chain** (first match wins): `[ResourceKey]` → registered
   selector `Resources.Identify<User>(u => u.Email)` → `IResourceIdentity` (runtime keys) → value equality.
 - **EXPLICIT ROLES, NO DEFAULTS.** A resource-typed parameter/return with no role attribute is a build
-  error → new diagnostic **PUNIT009**. Menu: return `[Creates]`(excl,new) / `[Loads]`(shared,existing) /
+  error → new diagnostic **RAUN009**. Menu: return `[Creates]`(excl,new) / `[Loads]`(shared,existing) /
   `[Edits]`(excl); parameter `[Reads]`(shared) / `[Edits]`(excl) / `[Deletes]`(excl). Mode map:
   Read/Load = shared; Create/Edit/Delete = exclusive. Claims **dedup by identity** (exclusive > shared;
   lifecycle precedence Delete > Edit > Create > Load > Read). Method-level `[Creates]` etc. is an
@@ -64,7 +64,7 @@ phase C1 only** (see Phasing), saved to
 
 - **C1 — effects & tracing (NO locking).** `ctx.Resources` verbs + identity resolver + `ResourceEffect`
   stream through the existing `IStepObserver`/`StepResult` channel + the `[Creates]/[Loads]/[Reads]/
-  [Edits]/[Deletes]` attributes + **PUNIT009** analyzer rule + generator lowering/catalog. NO scheduler
+  [Edits]/[Deletes]` attributes + **RAUN009** analyzer rule + generator lowering/catalog. NO scheduler
   or session changes. Low-risk, exercises the whole authoring surface, unblocks the HTML report's
   resource lane. **This is what you plan and build first.**
 - **C2 — real locking & scheduling.** `IResourceLockManager` + async RW gate + `ScenarioLockScope` +
@@ -80,40 +80,40 @@ phase C1 only** (see Phasing), saved to
 - **jj, no trailers.** `jj commit -m "<msg>"` finalizes the working copy and starts a fresh one; no
   `git add`, no `Co-Authored-By`/tooling trailers. **Green commits, TDD** — failing test first, watch it
   fail, minimal impl, watch it pass, commit.
-- **.NET 10, C# `LangVersion=preview`.** Build whole repo: `dotnet build` from `C:\dev\punit`.
+- **.NET 10, C# `LangVersion=preview`.** Build whole repo: `dotnet build` from `C:\dev\raun`.
 - **Tests are xUnit v3 on Microsoft.Testing.Platform.** Full project run (always works):
   `dotnet test test\<Project>\<Project>.csproj`. To NARROW, use **MTP** filter syntax:
-  `dotnet test <proj> -- --filter-class "PUnit.Generator.Test.Foo"` or `--filter-method "*Bar*"`.
+  `dotnet test <proj> -- --filter-class "Raun.Generator.Test.Foo"` or `--filter-method "*Bar*"`.
   **Do NOT** use VSTest `--filter "FullyQualifiedName~X"` — MTP rejects it (dumps help, "Zero tests ran").
 - **Warnings are errors repo-wide** (`Directory.Build.props`: `TreatWarningsAsErrors`,
   `AnalysisLevel=latest-all`, `EnforceCodeStyleInBuild`). Notes:
   - An **empty** marker interface trips **CA1040** → scope a `#pragma warning disable CA1040` around it.
-    Precedent: `src/PUnit/Phases.cs` (`IPhase`). `ISingletonResource<TSelf>` will need this; `IResource<TSelf>`
+    Precedent: `src/Raun/Phases.cs` (`IPhase`). `ISingletonResource<TSelf>` will need this; `IResource<TSelf>`
     won't (it has `KeyFor`).
   - Catch-all `catch (Exception)` is fine — CA1031 is disabled in `.editorconfig`.
-- **New diagnostic PUNIT009** must be added in THREE places or RS2008 fails the build:
-  `src/PUnit.Generator/Analysis/Descriptors.cs`, `ScenarioAnalyzer.SupportedDiagnostics`, and a row in
-  `src/PUnit.Generator/AnalyzerReleases.Unshipped.md`.
+- **New diagnostic RAUN009** must be added in THREE places or RS2008 fails the build:
+  `src/Raun.Generator/Analysis/Descriptors.cs`, `ScenarioAnalyzer.SupportedDiagnostics`, and a row in
+  `src/Raun.Generator/AnalyzerReleases.Unshipped.md`.
 - **Generator snapshot tests:** if emitted output changes, the `*.verified.cs` snapshots under
-  `test/PUnit.Generator.Test/Snapshots/` go stale. DiffEngine is disabled, so Verify writes
+  `test/Raun.Generator.Test/Snapshots/` go stale. DiffEngine is disabled, so Verify writes
   `*.received.cs`; confirm the diff is only what you expect, then overwrite `.verified.cs` with it.
 
 ## Key files to know
 
-- `src/PUnit/ScenarioContext.cs` — has `Log`/`AddAttachment`/`Services`; add a `Resources` facade here.
-- `src/PUnit/Scheduling/ScenarioScheduler.cs` — DAG runner; per-step `CancellationTokenSource`,
+- `src/Raun/ScenarioContext.cs` — has `Log`/`AddAttachment`/`Services`; add a `Resources` facade here.
+- `src/Raun/Scheduling/ScenarioScheduler.cs` — DAG runner; per-step `CancellationTokenSource`,
   `IStepObserver`, `IServiceProvider` (the C2 seams).
-- `src/PUnit/Scheduling/IStepObserver.cs`, `StepContext.cs`; `src/PUnit/Model/{ScenarioNode,StepResult,
+- `src/Raun/Scheduling/IStepObserver.cs`, `StepContext.cs`; `src/Raun/Model/{ScenarioNode,StepResult,
   ScenarioDefinition}.cs` (StepResult already carries Duration/Logs/Attachments).
-- Generator pipeline: `src/PUnit.Generator/Lowering/{AttributeReader,Ir,ScenarioParser,SymbolHelpers}.cs`,
+- Generator pipeline: `src/Raun.Generator/Lowering/{AttributeReader,Ir,ScenarioParser,SymbolHelpers}.cs`,
   `Emit/ScenarioEmitter.cs`, `ScenarioGenerator.cs`, `Analysis/{Descriptors,ScenarioAnalyzer}.cs`.
-- Behavioral generator test harness: `test/PUnit.Generator.Test/GeneratorHarness.cs`
+- Behavioral generator test harness: `test/Raun.Generator.Test/GeneratorHarness.cs`
   (`Run(src).AssertCompiles()`, `.Definitions()`, `.AnalyzeAsync(src)`).
-- MTP/session: `src/PUnit.Mtp/{PUnitTestApplication,PUnitDiscoverer,PUnitStepReporter}.cs`.
+- MTP/session: `src/Raun.Mtp/{RaunTestApplication,RaunDiscoverer,RaunStepReporter}.cs`.
 
 ## Already shipped this session (context, not your task)
 
-Separately from feature C, the DSL-display-names / pluggable-`IPhase` / PUNIT000 work from
-`docs/superpowers/plans/2026-06-05-punit-dsl-display-pluggable-phases.md` is **done** — 6 green jj
-commits, whole-repo build clean, all test projects green (PUnit.Test 30, Generator.Test 45,
+Separately from feature C, the DSL-display-names / pluggable-`IPhase` / RAUN000 work from
+`docs/superpowers/plans/2026-06-05-raun-dsl-display-pluggable-phases.md` is **done** — 6 green jj
+commits, whole-repo build clean, all test projects green (Raun.Test 30, Generator.Test 45,
 Mtp.Test 73, sample 18). Don't redo it.

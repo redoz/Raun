@@ -1,12 +1,12 @@
-# Design — Fork "graph view" + per-fork view-toggle + sun-driven lighting (PUnit HTML report)
+# Design — Fork "graph view" + per-fork view-toggle + sun-driven lighting (Raun HTML report)
 
 > Status: **design, approved to spec** (2026-06-21). Builds on the shipped activity diagram
-> (`src/PUnit.Mtp/HtmlReport/report-template.html`, main `4c9df0d8`). No code written yet.
+> (`src/Raun.Mtp/HtmlReport/report-template.html`, main `4c9df0d8`). No code written yet.
 > Terminal step of this doc: user review → `writing-plans` → `subagent-driven-development`.
 
 ## 1. Summary
 
-The PUnit HTML report renders a per-scenario **SVG activity diagram** (GWT swimlanes; initial → action/assert
+The Raun HTML report renders a per-scenario **SVG activity diagram** (GWT swimlanes; initial → action/assert
 nodes → final ring; objects as entity cards crossing fork walls). Today a **fork** renders only as the inline
 "timeline cell" (`buildForkCell`, a cropped Gantt). This feature adds:
 
@@ -24,12 +24,12 @@ All of this lives in the single embedded template; the **C# model + builder are 
 ## 2. Binding constraints (unchanged)
 
 - **VCS = `jj` only** (colocated repo; read-only `git` ok). No `Co-Authored-By` / tooling trailers.
-- Single self-contained template `src/PUnit.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model
-  injected at the one `<script id="model" .../*__PUNIT_REPORT_JSON__*/>` token). **No external URL/CDN/web-font/
+- Single self-contained template `src/Raun.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model
+  injected at the one `<script id="model" .../*__RAUN_REPORT_JSON__*/>` token). **No external URL/CDN/web-font/
   `@import`** — only the SVG-ns literal `http://www.w3.org/2000/svg` is allowed. Source Serif 4 stays base64-embedded.
   Time-of-day uses the **client's local clock** (`new Date()`) — no network, fully self-contained.
 - **C# `HtmlReportModel` + builder UNCHANGED**; `HtmlReportModelBuilderTests` snapshot unchanged; keep
-  `HtmlReportSinkTests` green; `dotnet build PUnit.slnx -warnaserror` is **0 warnings**.
+  `HtmlReportSinkTests` green; `dotnet build Raun.slnx -warnaserror` is **0 warnings**.
 - Define **both palettes** (`--ad-*` / `--ph-*` and the lighting vars below) for light + dark.
 - **NO decision/merge diamonds** (model is a step-DAG; out of scope).
 
@@ -202,10 +202,10 @@ opacity stops are new. Light theme: white sheen on white tiles is intentionally 
 
 - **C# unchanged** → `HtmlReportModelBuilderTests` `Verify(json)` snapshot unchanged; `HtmlReportSinkTests`
   green. The whole feature is template-side (HTML/CSS/JS).
-- **0-warning build** (`dotnet build PUnit.slnx -warnaserror`).
+- **0-warning build** (`dotnet build Raun.slnx -warnaserror`).
 - **Verify loop** (impl phase): `dotnet run --project samples/AppointmentTests -c Debug -- --report-html`
-  (rebuilds PUnit.Mtp → re-embeds template) → `samples/AppointmentTests/bin/Debug/net10.0/TestResults/
-  punit-report.html`. Fork test case = the **"customer books with parallel arrange"** scenario. Force theme via
+  (rebuilds Raun.Mtp → re-embeds template) → `samples/AppointmentTests/bin/Debug/net10.0/TestResults/
+  raun-report.html`. Fork test case = the **"customer books with parallel arrange"** scenario. Force theme via
   `?theme=dark|light` (Playwright CLI defaults to light). Headless: `npx playwright screenshot
   --browser=chromium` (chromium installed; Playwright MCP defaults to Chrome which is NOT). To verify the
   cursor-tracked lighting / glint side / time-of-day, drive with a Playwright script (hover + `getScreenCTM`

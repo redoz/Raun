@@ -9,7 +9,7 @@ session can finalize the spec (`docs/superpowers/specs/`) → `writing-plans` �
 
 ## 1. What we're doing & why
 
-The current per-scenario visualization in `src/PUnit.Mtp/HtmlReport/report-template.html` is a Gantt timeline
+The current per-scenario visualization in `src/Raun.Mtp/HtmlReport/report-template.html` is a Gantt timeline
 with an **object-flow SVG overlay** (connectors docking resource lifelines into bars, identity chips, hover/pin
 highlighting). The user finds the overlay **clunky**. Goal: replace it with a clean, modern **UML activity
 diagram** rendered per scenario that shows **control flow + object flow** — styled so it doesn't look like a
@@ -21,12 +21,12 @@ Key realization during brainstorming: the activity diagram and the timeline **co
 
 ## 2. Fixed context the implementer must respect
 
-- **File:** `src/PUnit.Mtp/HtmlReport/report-template.html` (an `EmbeddedResource`). Rendering is plain
+- **File:** `src/Raun.Mtp/HtmlReport/report-template.html` (an `EmbeddedResource`). Rendering is plain
   inline HTML/CSS/JS; the model is injected as JSON.
 - **Self-contained, hard rule:** inline `<style>`/`<script>` only. **Zero external URLs/CDNs/web-fonts/@import.**
   → the chosen distinctive font (see §4) MUST be embedded as **base64 woff2**, not linked. (The mockups link
   Google Fonts only because the companion isn't bound by this rule.)
-- **JSON-injection contract:** exactly one `<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>`;
+- **JSON-injection contract:** exactly one `<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>`;
   `HtmlReportSink` string-replaces that token. Don't break it.
 - **Model field names are fixed** (`HtmlReportModel.cs`, camelCase serialized). The renderer already has
   everything needed:
@@ -39,7 +39,7 @@ Key realization during brainstorming: the activity diagram and the timeline **co
     timing = `offsetMs`/`durationMs` (now realistic thanks to the simulated-clock work, see the
     `2026-06-19-report-restyle-and-simulated-time` spec).
 - Auto light/dark + `?theme=light|dark` override; 0-warning build; tests in
-  `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs` (substring asserts) and `HtmlReportModelBuilderTests.cs`
+  `test/Raun.Mtp.Test/HtmlReportSinkTests.cs` (substring asserts) and `HtmlReportModelBuilderTests.cs`
   (model snapshot — must stay green; the model/builder are NOT being changed).
 
 ---
@@ -135,14 +135,14 @@ under gitignored `.superpowers/brainstorm/3812-1781945456/content/`). Open in a 
   filled-core=output).
 
 To restart the visual companion (same port, user's tab auto-reconnects):
-`bash "$SUPERPOWERS/skills/brainstorming/scripts/start-server.sh" --project-dir "/c/dev/punit" --open`
+`bash "$SUPERPOWERS/skills/brainstorming/scripts/start-server.sh" --project-dir "/c/dev/raun" --open`
 (run in background on Windows). Session dir: `.superpowers/brainstorm/3812-1781945456/`.
 
 ---
 
 ## 6. Naming (separate thread)
 
-User wants to rename **PUnit**. Subagent shortlist (verify NuGet id + GitHub org + `.dev`/`.io` domain +
+User wants to rename **Raun**. Subagent shortlist (verify NuGet id + GitHub org + `.dev`/`.io` domain +
 trademark before committing):
 - **Top picks:** **Junction** (DAG node / fork-join / transit-map — strongest), **Tracery** (the traced
   flow-lines the report draws; note JS lib collision, different ecosystem), **Cascade** (dependency flow;

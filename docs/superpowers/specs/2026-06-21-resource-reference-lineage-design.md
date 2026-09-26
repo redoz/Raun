@@ -6,7 +6,7 @@
 
 ## Problem
 
-PUnit records what each step does to resources as per-step `ResourceEffect`s — a verb (`Create`/`Load`/`Read`/`Edit`/`Delete`) against a `ResourceIdentity` (`Type` + `Key`). That captures *step → resource* actions, but not *resource → resource* structure. When `CreateAppointment([Reads] Patient, [Reads] Slot)` produces an `Appointment`, nothing records that the Appointment **references the Patient and the Slot**. We want that lineage: a graph of which resources are built from which, so the report can later show a connected data chain.
+Raun records what each step does to resources as per-step `ResourceEffect`s — a verb (`Create`/`Load`/`Read`/`Edit`/`Delete`) against a `ResourceIdentity` (`Type` + `Key`). That captures *step → resource* actions, but not *resource → resource* structure. When `CreateAppointment([Reads] Patient, [Reads] Slot)` produces an `Appointment`, nothing records that the Appointment **references the Patient and the Slot**. We want that lineage: a graph of which resources are built from which, so the report can later show a connected data chain.
 
 The relationship is a property of the produced *resource* (it outlives the step that created it), not of the step's action — so it is new information. But, crucially, it can be **derived** from per-step effects rather than stored as a separate edge (see Edge derivation).
 
@@ -17,7 +17,7 @@ Capture resource→resource reference lineage, declared at the DSL via two new p
 ## Non-goals (explicitly out of scope)
 
 - **Report visualization** — the relations marker, hover behavior, connected-component highlight, and all of `report-template.html`. Owned by the parallel report agent; it consumes the model this spec populates.
-- **Scheduling / locking (C2).** There *is* a working DAG scheduler (`ScenarioScheduler.cs`) that parallelizes independent steps within a scenario, but it consumes **only** `DependsOn` (dataflow + source-order). It never reads `LockMode`; resource-lock-driven serialization is C2 and unbuilt, and scenarios run sequentially anyway (`PUnitRunLoop.cs` — a plain `foreach`). So `[Consumes]` carries **no** scheduling weight in this spec. The exclusivity it implies is recorded as forward-looking intent in doc-comments only (matching the existing verbs' "(exclusive in C2)" style).
+- **Scheduling / locking (C2).** There *is* a working DAG scheduler (`ScenarioScheduler.cs`) that parallelizes independent steps within a scenario, but it consumes **only** `DependsOn` (dataflow + source-order). It never reads `LockMode`; resource-lock-driven serialization is C2 and unbuilt, and scenarios run sequentially anyway (`RaunRunLoop.cs` — a plain `foreach`). So `[Consumes]` carries **no** scheduling weight in this spec. The exclusivity it implies is recorded as forward-looking intent in doc-comments only (matching the existing verbs' "(exclusive in C2)" style).
 - **Inference.** Edges are explicit only — a `[Reads]` parameter draws nothing. No "every input to a creating step becomes an edge" heuristic.
 
 ## The model: two new effect verbs in the Read family
@@ -51,7 +51,7 @@ Edge derivation assumes a step mutates **one** subject (one `Create` or one `Edi
 
 ## Data model
 
-Changed existing type — **`src/PUnit/Resources/LifecycleVerb.cs`**:
+Changed existing type — **`src/Raun/Resources/LifecycleVerb.cs`**:
 
 - Add `Reference` and `Consume` to the `LifecycleVerb` enum, documented in the existing house style (`Reference`: shared; `Consume`: "used up; exclusive in C2").
 - `ToLockMode` — **add explicit `Shared` cases** for both. (The method defaults to `Exclusive`, so omitting them would silently make these verbs exclusive — a trap.)
@@ -60,7 +60,7 @@ Changed existing type — **`src/PUnit/Resources/LifecycleVerb.cs`**:
 
 No new runtime model type, and **no new `StepResult` field** — references ride the existing `IReadOnlyList<ResourceEffect> Effects`.
 
-Report-model addition (the handoff surface) — **`src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs`**:
+Report-model addition (the handoff surface) — **`src/Raun.Mtp/HtmlReport/HtmlReportModel.cs`**:
 
 ```csharp
 /// One resource→resource edge for the report's lineage view, derived from a step's
@@ -82,11 +82,11 @@ public sealed record ReportReference
 
 Mirrors the existing effect plumbing at every hop — the runtime change is **2 attributes + 2 enum values + 2 `ResourceContext` methods**, plus builder-side derivation.
 
-1. **`src/PUnit/Resources/ResourceRoleAttributes.cs`** — add `ReferencesAttribute` and `ConsumesAttribute`, both `[AttributeUsage(AttributeTargets.Parameter)]`, doc-commented in the house style **and carrying the single-subject limitation remark** for IntelliSense.
+1. **`src/Raun/Resources/ResourceRoleAttributes.cs`** — add `ReferencesAttribute` and `ConsumesAttribute`, both `[AttributeUsage(AttributeTargets.Parameter)]`, doc-commented in the house style **and carrying the single-subject limitation remark** for IntelliSense.
 
-2. **`src/PUnit/Resources/LifecycleVerb.cs`** — the enum + `ToLockMode` + `Precedence` changes above.
+2. **`src/Raun/Resources/LifecycleVerb.cs`** — the enum + `ToLockMode` + `Precedence` changes above.
 
-3. **`src/PUnit/Resources/ResourceContext.cs`** — add `Reference<T>(T)` and `Consume<T>(T)` methods, each a one-liner delegating to the existing private `Record(...)` exactly like `Read`:
+3. **`src/Raun/Resources/ResourceContext.cs`** — add `Reference<T>(T)` and `Consume<T>(T)` methods, each a one-liner delegating to the existing private `Record(...)` exactly like `Read`:
    ```csharp
    public ValueTask Reference<T>(T resource) where T : notnull
        => Record(LifecycleVerb.Reference, _resolver.Resolve(resource), resource);
@@ -95,11 +95,11 @@ Mirrors the existing effect plumbing at every hop — the runtime change is **2 
    ```
    Dedup, identity resolution, and timestamping are inherited unchanged.
 
-4. **`src/PUnit.Generator/Lowering/AttributeReader.cs`** (`ParameterRole`) — map `[References]` → verb `Reference`, `[Consumes]` → verb `Consume`, alongside the existing `[Reads]` → `Read`.
+4. **`src/Raun.Generator/Lowering/AttributeReader.cs`** (`ParameterRole`) — map `[References]` → verb `Reference`, `[Consumes]` → verb `Consume`, alongside the existing `[Reads]` → `Read`.
 
-5. **`src/PUnit.Generator/Emit/ScenarioEmitter.cs`** — emit a single `await __ctx.Resources.Consume(slot)` / `.Reference(patient)` call where it emits `.Read(...)` today, with the same `#line hidden` trivia. No separate edge call.
+5. **`src/Raun.Generator/Emit/ScenarioEmitter.cs`** — emit a single `await __ctx.Resources.Consume(slot)` / `.Reference(patient)` call where it emits `.Read(...)` today, with the same `#line hidden` trivia. No separate edge call.
 
-6. **`src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs`** — derive edges: for each step, find the subject (its `Create`/`Edit` effect identity) and emit a `ReportReference` per `Consume`/`Reference` effect; dedup edges by `(Subject, Target)` across the scenario; attach to the scenario model. Steps with no subject contribute no edges.
+6. **`src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs`** — derive edges: for each step, find the subject (its `Create`/`Edit` effect identity) and emit a `ReportReference` per `Consume`/`Reference` effect; dedup edges by `(Subject, Target)` across the scenario; attach to the scenario model. Steps with no subject contribute no edges.
 
 ## Testing (behavioral-first)
 

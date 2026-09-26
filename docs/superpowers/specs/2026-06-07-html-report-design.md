@@ -2,15 +2,15 @@
 
 - **Date:** 2026-06-07
 - **Status:** Implemented (2026-06-09) on MTP 2.2.3.
-- **Scope:** `src/PUnit` (new `Reporting` event bus; scheduler timestamps; `StepResult`),
-  `src/PUnit.Mtp` (run-loop emission; reporter refactor; new HTML report sink + option provider),
-  `test/PUnit.Test`, `test/PUnit.Mtp.Test`, `samples/AppointmentTests` (showcase).
+- **Scope:** `src/Raun` (new `Reporting` event bus; scheduler timestamps; `StepResult`),
+  `src/Raun.Mtp` (run-loop emission; reporter refactor; new HTML report sink + option provider),
+  `test/Raun.Test`, `test/Raun.Mtp.Test`, `samples/AppointmentTests` (showcase).
 - **Lineage:** Realizes section **B** of `docs/superpowers/plans/2026-06-06-roadmap-aspire-report-resources.md`.
   Builds on the resourcing **C1** effects already shipped (`ResourceEffect`, `ScenarioContext.Resources`).
 
 ## 1. Intent
 
-After a run, emit a single shareable `punit-report.html`: a per-scenario **Gantt-style timeline**
+After a run, emit a single shareable `raun-report.html`: a per-scenario **Gantt-style timeline**
 that shows the DAG's parallelism (concurrent steps overlap), a **resource lane** of effect lifelines
 (`create → read → edit → delete` per `Type:Key`), and click-to-drill **step detail** (logs, resource
 effects, exception / skip reason) — all with real timing. Self-contained (embedded JSON + vanilla
@@ -18,10 +18,10 @@ JS/CSS, zero runtime deps), opt-in via an MTP command-line flag, written once at
 
 ## 2. Locked decisions (from brainstorming)
 
-1. **A small typed run-event bus in PUnit core** is the event source. The MTP reporter and the HTML
+1. **A small typed run-event bus in Raun core** is the event source. The MTP reporter and the HTML
    report are both **subscribers**; future consumers (console, resource view, Aspire) just subscribe.
    The scheduler stays runner-neutral.
-2. **Gantt timeline** is the v1 layout (parallelism is PUnit's differentiator), with a resource lane
+2. **Gantt timeline** is the v1 layout (parallelism is Raun's differentiator), with a resource lane
    and click-to-drill detail.
 3. **Absolute timestamps, stamped scheduler-side.** `StepResult` gains `StartedAt`; the scheduler
    stamps it via an injected `TimeProvider`. Chosen over subscriber-observed timing because the bus
@@ -29,21 +29,21 @@ JS/CSS, zero runtime deps), opt-in via an MTP command-line flag, written once at
    sink's `PublishAsync` latency (meaningless for sub-ms steps). Absolute (not relative offsets)
    because resource effects already carry an absolute `Timestamp`; one absolute axis overlays steps
    and effects without a separate anchor (`scenarioStart = min(StartedAt)`).
-4. **Enable via `--report-html`** (+ `--report-html-filename`, default `punit-report.html`), written
+4. **Enable via `--report-html`** (+ `--report-html-filename`, default `raun-report.html`), written
    under MTP's `--results-directory`. Mirrors the built-in `--report-trx`. Off by default; the HTML
    sink only attaches to the bus when the flag is present. (Generic option name — low collision risk
-   since PUnit owns the framework and the loaded extension set; namespace later if it ever clashes.)
+   since Raun owns the framework and the loaded extension set; namespace later if it ever clashes.)
 
 ## 3. Architecture
 
-### 3.A Run-event bus — `PUnit.Reporting` (core, new)
+### 3.A Run-event bus — `Raun.Reporting` (core, new)
 
 Runner-neutral pub/sub. Event payloads carry the `ScenarioDefinition` so a single **session-scoped**
 subscriber can attribute every step to its scenario (today's reporter is per-scenario *only* because
 `StepResult` lacks the scenario id).
 
 ```csharp
-namespace PUnit.Reporting;
+namespace Raun.Reporting;
 
 public abstract record RunEvent;
 public sealed record RunStarted(int ScenarioCount) : RunEvent;
@@ -96,15 +96,15 @@ diagnostics (a broken HTML report must never fail the test run, and must not sta
 - `RunNodeAsync` stamps `StartedAt = timeProvider.GetUtcNow()` at the invoke boundary; `FinishedAt`
   is derived (`StartedAt + Duration`), not stored. The scheduler passes `timeProvider` into the
   `ScenarioContext` 6-arg ctor (already supported) so step effects and step timing share one clock.
-- Bonus: `PUnitStepReporter`'s `TimingProperty` uses the real `StartedAt` instead of anchoring the
+- Bonus: `RaunStepReporter`'s `TimingProperty` uses the real `StartedAt` instead of anchoring the
   window at finish (`UtcNow - Duration`).
 
 `StepContext` (carried on `StepStarted`) is unchanged — live "in progress" needs no absolute time;
 the absolute timeline data lives on the terminal `StepResult` (self-contained `StepFinished`).
 
-### 3.C Run-loop emission + reporter refactor — `PUnit.Mtp`
+### 3.C Run-loop emission + reporter refactor — `Raun.Mtp`
 
-`PUnitRunLoop` becomes the bus **emitter**. Its `RunAsync` takes an `IRunEventSink bus` in place of
+`RaunRunLoop` becomes the bus **emitter**. Its `RunAsync` takes an `IRunEventSink bus` in place of
 `(messageBus, producer)`; the MTP-specific reporter is constructed by the framework (§3.E) and handed
 in as a sink, so the loop no longer references `IMessageBus`/`IDataProducer` directly. For each run:
 
@@ -117,7 +117,7 @@ in as a sink, so the loop no longer references `IMessageBus`/`IDataProducer` dir
 The per-scenario `CancellationTokenSource` ownership and "stop launching after cancel" logic are
 unchanged.
 
-`PUnitStepReporter` → **`MtpReportSink : RunEventSink`** (session-scoped, constructed once per run):
+`RaunStepReporter` → **`MtpReportSink : RunEventSink`** (session-scoped, constructed once per run):
 - `OnScenarioStartedAsync`: compute `ScenarioStepNumbering` labels for `def`, cache keyed by
   `ScenarioId`.
 - `OnStepStartedAsync`: publish the in-progress `TestNodeUpdateMessage` (as today).
@@ -126,7 +126,7 @@ unchanged.
 The emitted `TestNodeUpdateMessage`s are **byte-for-byte unchanged**, so existing reporter/run-loop
 tests hold (adjusted only for the new construction/wiring seam).
 
-### 3.D HTML report sink + rendering — `PUnit.Mtp`
+### 3.D HTML report sink + rendering — `Raun.Mtp`
 
 **`HtmlReportSink : RunEventSink`** (constructed only when `--report-html` is set):
 - Accumulates an in-memory model from `ScenarioStarted` + `StepFinished` (self-contained results).
@@ -145,18 +145,18 @@ tests hold (adjusted only for the new construction/wiring seam).
   (`verb · Type:Key · +offset` with best-effort `Data.ToString()`), and exception / skip reason.
 - **Summary header:** counts (passed/failed/skipped), total wall-clock, per-scenario status.
 
-### 3.E Enablement & wiring — `PUnit.Mtp`
+### 3.E Enablement & wiring — `Raun.Mtp`
 
 - **`HtmlReportOptionsProvider : ICommandLineOptionsProvider`** registers `--report-html` (flag) and
-  `--report-html-filename` (single arg, default `punit-report.html`). Registered in
-  `PUnitTestApplication.RunAsync` via `builder.CommandLine.AddProvider(...)`, so the generated
+  `--report-html-filename` (single arg, default `raun-report.html`). Registered in
+  `RaunTestApplication.RunAsync` via `builder.CommandLine.AddProvider(...)`, so the generated
   `Program.cs` gets it automatically.
-- **`PUnitTestFramework.OnExecuteAsync`** builds the sink list and the bus:
+- **`RaunTestFramework.OnExecuteAsync`** builds the sink list and the bus:
   ```
   sinks = [ new MtpReportSink(sessionUid, messageBus, this) ]
   if (--report-html present) sinks.Add(new HtmlReportSink(resolvedPath))
   bus = new RunEventBus(sinks)
-  await new PUnitRunLoop(EnumerateRegisteredScenarios).RunAsync(uids, bus, cancellationToken)
+  await new RaunRunLoop(EnumerateRegisteredScenarios).RunAsync(uids, bus, cancellationToken)
   // after: if (bus.Failures.Count > 0) log each as an MTP diagnostic/warning
   ```
   The flag, filename, and `--results-directory` are read from MTP's `ICommandLineOptions` /
@@ -196,19 +196,19 @@ layout is deterministic and snapshot-testable. Times are pre-reduced to `ms` off
 
 ## 5. Testing plan (TDD, behavioural-first)
 
-- **Bus** (`PUnit.Test`): fan-out hits sinks in registration order across a full event sequence; a
+- **Bus** (`Raun.Test`): fan-out hits sinks in registration order across a full event sequence; a
   throwing sink is isolated (siblings still receive every event; `Failures` records it; run completes).
-- **Scheduler** (`PUnit.Test`): `StartedAt` comes from an injected `FakeTimeProvider`; two concurrent
+- **Scheduler** (`Raun.Test`): `StartedAt` comes from an injected `FakeTimeProvider`; two concurrent
   group steps yield overlapping `[StartedAt, StartedAt+Duration)` windows; skipped step carries a
   `StartedAt` and zero `Duration`.
-- **Run loop** (`PUnit.Mtp.Test`): a fake sink records the exact event ordering for a linear scenario,
+- **Run loop** (`Raun.Mtp.Test`): a fake sink records the exact event ordering for a linear scenario,
   a parallel-group scenario, and a failure-with-skips scenario.
-- **HTML sink** (`PUnit.Mtp.Test`): from a synthesized event stream, **Verify-snapshot the JSON model**
+- **HTML sink** (`Raun.Mtp.Test`): from a synthesized event stream, **Verify-snapshot the JSON model**
   (deterministic — fake clock, fixed durations) and assert key HTML structure (one Gantt section per
   scenario, a bar per step, a lifeline per resource identity, drill-down contains logs + exception).
   Assert **no file is written when the flag is absent**, and the file lands at the resolved path when
   present.
-- **Option provider** (`PUnit.Mtp.Test`): `--report-html` recognized; `--report-html-filename`
+- **Option provider** (`Raun.Mtp.Test`): `--report-html` recognized; `--report-html-filename`
   overrides; default resolves under `--results-directory`.
 - **Regression:** existing reporter/run-loop/framework tests stay green (unchanged MTP messages).
 - **Sample:** `samples/AppointmentTests` already exercises logs + effects; a manual `--report-html`
@@ -221,8 +221,8 @@ layout is deterministic and snapshot-testable. Times are pre-reduced to `ms` off
 - Rendering arbitrary `ResourceEffect.Data` beyond best-effort `ToString()`.
 - Resource **locking** visuals (Wounded/Retried/Contended) — that's resourcing **C2**.
 - Auto-opening the report; theming/configuration knobs.
-- Moving `PUnitRunLoop` to core (it becomes nearly runner-neutral, but `SelectScenarios` still uses
-  the MTP uid format via `PUnitDiscoverer.MakeUid`); leave it in `PUnit.Mtp`.
+- Moving `RaunRunLoop` to core (it becomes nearly runner-neutral, but `SelectScenarios` still uses
+  the MTP uid format via `RaunDiscoverer.MakeUid`); leave it in `Raun.Mtp`.
 
 ## 7. Risks / open points
 
@@ -237,13 +237,13 @@ layout is deterministic and snapshot-testable. Times are pre-reduced to `ms` off
 
 ## 8. File-by-file change list
 
-**New (core):** `src/PUnit/Reporting/RunEvent.cs`, `IRunEventSink.cs`, `RunEventSink.cs`,
+**New (core):** `src/Raun/Reporting/RunEvent.cs`, `IRunEventSink.cs`, `RunEventSink.cs`,
 `RunEventBus.cs`.
-**New (mtp):** `src/PUnit.Mtp/HtmlReport/HtmlReportSink.cs`, `HtmlReportModel.cs`,
+**New (mtp):** `src/Raun.Mtp/HtmlReport/HtmlReportSink.cs`, `HtmlReportModel.cs`,
 `HtmlReportOptionsProvider.cs`, `report-template.html` (embedded resource).
 **Changed (core):** `ScenarioScheduler.cs` (TimeProvider + stamp), `Model/StepResult.cs` (`StartedAt`).
-**Changed (mtp):** `PUnitRunLoop.cs` (emit to bus), `PUnitStepReporter.cs` → `MtpReportSink.cs`
-(reporter→sink), `PUnitTestFramework.cs` (build bus/sinks, log `Failures`), `PUnitTestApplication.cs`
+**Changed (mtp):** `RaunRunLoop.cs` (emit to bus), `RaunStepReporter.cs` → `MtpReportSink.cs`
+(reporter→sink), `RaunTestFramework.cs` (build bus/sinks, log `Failures`), `RaunTestApplication.cs`
 (register option provider).
-**Tests:** new bus/scheduler tests in `PUnit.Test`; new run-loop/HTML-sink/option tests +
-snapshots in `PUnit.Mtp.Test`.
+**Tests:** new bus/scheduler tests in `Raun.Test`; new run-loop/HTML-sink/option tests +
+snapshots in `Raun.Mtp.Test`.

@@ -169,7 +169,7 @@ they link Google Fonts only because the companion isn't bound by the self-contai
 **Companion** (brainstorming visual companion): session dir `.superpowers/brainstorm/9542-1781954515/`. If the
 server is down, restart with the **same `--project-dir`** (reuses the port; the user's tab auto-reconnects):
 ```
-bash "/c/Users/redoz/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.0/skills/brainstorming/scripts/start-server.sh" --project-dir "/c/dev/punit" --open
+bash "/c/Users/redoz/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.0/skills/brainstorming/scripts/start-server.sh" --project-dir "/c/dev/raun" --open
 ```
 (Windows: run in background; then read `.superpowers/brainstorm/9542-1781954515/state/server-info` for the URL.)
 Push a screen by writing the HTML into `…/content/` (server serves the newest file). The companion serifs are
@@ -187,14 +187,14 @@ needs admin and is not available. `--clip` is unsupported by the CLI; render ful
 
 ## 7. Fixed constraints the implementer MUST respect (unchanged across all handoffs)
 
-- **File:** `src/PUnit.Mtp/HtmlReport/report-template.html` (an `EmbeddedResource`); inline HTML/CSS/JS, model
+- **File:** `src/Raun.Mtp/HtmlReport/report-template.html` (an `EmbeddedResource`); inline HTML/CSS/JS, model
   injected as JSON. The activity diagram **replaces** the current Gantt-timeline + object-flow SVG **overlay**
   (`.flow-svg`/`.conn`/`.dock`/`.flow-label`) the user found clunky.
 - **Self-contained, HARD rule:** inline `<style>`/`<script>` only — **zero external URLs/CDNs/web-fonts/@import**.
   Chosen serif (**Source Serif 4**) → **base64 woff2 embedded**.
-- **JSON token:** exactly one `<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>`;
+- **JSON token:** exactly one `<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>`;
   `HtmlReportSink` string-replaces that token. Don't break it.
-- **Model field names are FIXED** (`src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs`, camelCase serialized) — model &
+- **Model field names are FIXED** (`src/Raun.Mtp/HtmlReport/HtmlReportModel.cs`, camelCase serialized) — model &
   builder are NOT changing. The renderer already has everything:
   - `scenarios[].steps[]`: `stepId, index, label, phase` (Given/When/Then), `displayName, status, offsetMs,
     durationMs, lane, dependsOn[]` (**control flow / DAG edges**), `groupId, logs[],
@@ -205,7 +205,7 @@ needs admin and is not available. `--clip` is unsupported by the CLI; render ful
     `offsetMs`/`durationMs`; forks = steps sharing `dependsOn`/`groupId` that overlap on different `lane`s.
 - **Both themes:** auto light/dark + `?theme=light|dark`. The mockups are **dark-only** — the spec MUST define the
   **light** palette for the new diagram too.
-- **0-warning build. Keep tests green:** `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs` (substring asserts — may
+- **0-warning build. Keep tests green:** `test/Raun.Mtp.Test/HtmlReportSinkTests.cs` (substring asserts — may
   need updating for new markup) and `HtmlReportModelBuilderTests.cs` (**model snapshot — must NOT change**).
 - **Rendering-tech choice (flag in the spec):** the mockups are pure SVG. **Content-sized boxes** need a
   text-measure pass (`getBBox`) or a char-width estimate; the **cropped/centered inline timeline** and the
@@ -227,5 +227,5 @@ needs admin and is not available. `--clip` is unsupported by the CLI; render ful
 4. Self-review the spec → user review → `writing-plans` → implement (**TDD**; keep the model snapshot + sink
    substring tests green; preserve the JSON token + the self-contained rule).
 
-(Naming thread from session 1 — rename **PUnit**, candidates **Junction / Tracery / Cascade** — remains a
+(Naming thread from session 1 — rename **Raun**, candidates **Junction / Tracery / Cascade** — remains a
 separate, untouched thread.)

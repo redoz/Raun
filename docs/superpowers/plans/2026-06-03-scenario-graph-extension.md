@@ -1,4 +1,4 @@
-# PUnit Scenario Graph Extension — Implementation Plan
+# Raun Scenario Graph Extension — Implementation Plan
 
 > **For agentic workers:** This plan is executed **inline in the authoring session** with TDD,
 > keeping the build green and committing each logical unit via `jj`. Steps use checkbox
@@ -12,13 +12,13 @@ step is reported as an individual xUnit test, with sequential-by-default executi
 fork/join parallelism, typed state flow, and dependency-aware skip-after-failure.
 
 **Architecture:** Three layers.
-1. **`PUnit` (core, net10.0, no xUnit dep)** — phase markers, attributes, parallel awaiters,
+1. **`Raun` (core, net10.0, no xUnit dep)** — phase markers, attributes, parallel awaiters,
    the runner-neutral scenario graph model, the per-step `ScenarioContext`, and the DAG
    scheduler. Independently testable.
-2. **`PUnit.Generator` (netstandard2.0 Roslyn incremental generator + analyzer)** — lowers
+2. **`Raun.Generator` (netstandard2.0 Roslyn incremental generator + analyzer)** — lowers
    `[Scenario]` method bodies into a graph definition (manifest + invoke delegates) and reports
    diagnostics for unsupported syntax.
-3. **`PUnit.Xunit` (net10.0)** — xUnit v3 discoverer, scenario test case, one visible test per
+3. **`Raun.Xunit` (net10.0)** — xUnit v3 discoverer, scenario test case, one visible test per
    step, and a self-executing test case that drives the core scheduler and reports per-step
    pass/fail/skip/timeout.
 
@@ -37,7 +37,7 @@ highest-risk layer (intricate extensibility API, hard to iterate against a live 
 
 ## File structure
 
-### `src/PUnit` (core)
+### `src/Raun` (core)
 - `Phases.cs` *(exists)* — `Given` / `When` / `Then` markers.
 - `Attributes/ScenarioAttribute.cs` — `[Scenario(name)]`, optional `TimeoutMs`.
 - `Attributes/StepNameAttribute.cs` — `[StepName("template {param}")]`.
@@ -57,25 +57,25 @@ highest-risk layer (intricate extensibility API, hard to iterate against a live 
   fail→skip-dependents, cancellation, skip-reason synthesis, output storage.
 - `Identity/StableId.cs` — deterministic hash for scenario/step ids (FQN + key, never line #).
 
-### `src/PUnit.Generator`
+### `src/Raun.Generator`
 - `ScenarioGenerator.cs` — `IIncrementalGenerator` entry point.
 - `Lowering/ScenarioParser.cs` — body → intermediate graph (steps, deps, groups).
 - `Lowering/StepKind.cs` + `Lowering/ParsedStep.cs` — IR types.
 - `Lowering/SymbolHelpers.cs` — DSL-call recognition, return-type unwrap, phase detection.
 - `Emit/ScenarioEmitter.cs` — IR → C# source (ScenarioDefinition + invoke delegates).
-- `Diagnostics/Descriptors.cs` — all `DiagnosticDescriptor`s (PUNIT0xx).
+- `Diagnostics/Descriptors.cs` — all `DiagnosticDescriptor`s (RAUN0xx).
 - `Analysis/ScenarioAnalyzer.cs` — `DiagnosticAnalyzer` for the supported subset.
 
-### `src/PUnit.Xunit`
+### `src/Raun.Xunit`
 - `ScenarioDiscoverer.cs` — `IXunitTestCaseDiscoverer`.
 - `ScenarioTestCase.cs` — `IXunitTestCase` + `ISelfExecutingXunitTestCase`.
 - `ScenarioStepReporter.cs` — bridges `IStepObserver` → xUnit message bus.
 - `ScenarioRegistry.cs` — maps `[Scenario]` method → generated `ScenarioDefinition`.
 
 ### Tests
-- `test/PUnit.Test` — awaiters, scheduler, model (xUnit-free logic).
-- `test/PUnit.Generator.Test` — Verify snapshots of generated output + diagnostics.
-- `test/PUnit.Xunit.Test` — acceptance tests through the real runner.
+- `test/Raun.Test` — awaiters, scheduler, model (xUnit-free logic).
+- `test/Raun.Generator.Test` — Verify snapshots of generated output + diagnostics.
+- `test/Raun.Xunit.Test` — acceptance tests through the real runner.
 - `samples/AppointmentTests` *(new)* — end-to-end DSL sample.
 
 ---
@@ -83,7 +83,7 @@ highest-risk layer (intricate extensibility API, hard to iterate against a live 
 ## Public contracts (locked)
 
 ```csharp
-namespace PUnit;
+namespace Raun;
 
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class ScenarioAttribute(string? displayName = null) : Attribute
@@ -113,7 +113,7 @@ public sealed class ScenarioContext
 ```
 
 ```csharp
-namespace PUnit.Model;
+namespace Raun.Model;
 
 public enum StepStatus { Pending, Running, Passed, Failed, Skipped }
 
@@ -159,7 +159,7 @@ public sealed class StepResult
 ```
 
 ```csharp
-namespace PUnit.Scheduling;
+namespace Raun.Scheduling;
 
 public interface IStepInputs { T Get<T>(int producerIndex); }
 
@@ -182,7 +182,7 @@ public sealed class ScenarioScheduler
 
 ---
 
-## Phase 1 — PUnit core runtime (TDD, no xUnit)
+## Phase 1 — Raun core runtime (TDD, no xUnit)
 
 ### Task 1.1 — Attributes
 - [ ] `ScenarioAttribute`, `StepNameAttribute` per contracts above. No test (pure data); covered
@@ -190,7 +190,7 @@ public sealed class ScenarioScheduler
 - [ ] Commit.
 
 ### Task 1.2 — Parallel awaiters
-- **Files:** `src/PUnit/Awaiters/ScenarioAwaiters.cs`, `test/PUnit.Test/AwaiterTests.cs`.
+- **Files:** `src/Raun/Awaiters/ScenarioAwaiters.cs`, `test/Raun.Test/AwaiterTests.cs`.
 - [ ] Failing test: `await (Task.FromResult(1), Task.FromResult("a"))` yields `(1,"a")`; array
   `await new[]{ Task.FromResult(1), Task.FromResult(2) }` yields `int[]{1,2}`; both run
   concurrently (use two TCS + assert both observed before completion).
@@ -198,13 +198,13 @@ public sealed class ScenarioScheduler
 - [ ] Run → pass. Commit.
 
 ### Task 1.3 — ScenarioContext
-- **Files:** `src/PUnit/ScenarioContext.cs`, `test/PUnit.Test/ScenarioContextTests.cs`.
+- **Files:** `src/Raun/ScenarioContext.cs`, `test/Raun.Test/ScenarioContextTests.cs`.
 - [ ] Failing test: `Log` accumulates; `AddAttachment` stores; cancellation token surfaces;
   `StepId`/`StepDisplayName` reflect ctor args.
 - [ ] Implement (thread-safe log/attachment collections). Run → pass. Commit.
 
 ### Task 1.4 — Model: nodes/definition/result + StableId
-- **Files:** `Model/*.cs`, `Identity/StableId.cs`, `test/PUnit.Test/ModelTests.cs`.
+- **Files:** `Model/*.cs`, `Identity/StableId.cs`, `test/Raun.Test/ModelTests.cs`.
 - [ ] Failing test: `ScenarioDefinition.Validate()` throws on cycle and on out-of-range
   `DependsOn`; passes on a valid linear graph. `StableId.For("Ns.M","step:0")` is deterministic
   and independent of any line number.
@@ -212,7 +212,7 @@ public sealed class ScenarioScheduler
 
 ### Task 1.5 — DAG scheduler (the core)
 - **Files:** `Scheduling/ScenarioScheduler.cs` (+ `IStepInputs`, `IStepObserver`),
-  `test/PUnit.Test/SchedulerTests.cs`.
+  `test/Raun.Test/SchedulerTests.cs`.
 - [ ] Failing tests (one behavior each):
   - **Source-order sequencing:** three nodes chained by `DependsOn` run in written order
     (record start order).
@@ -237,9 +237,9 @@ public sealed class ScenarioScheduler
 ## Phase 2 — Source generator (TDD with Verify)
 
 ### Task 2.1 — Generator skeleton + registry
-- **Files:** `ScenarioGenerator.cs`, `Emit/ScenarioEmitter.cs`, `PUnit/ScenarioRegistry`
-  (core side: a registration hook), `test/PUnit.Generator.Test/GeneratorTestBase.cs`.
-- [ ] Verify test harness: compile input source + `PUnit` refs through `CSharpGeneratorDriver`,
+- **Files:** `ScenarioGenerator.cs`, `Emit/ScenarioEmitter.cs`, `Raun/ScenarioRegistry`
+  (core side: a registration hook), `test/Raun.Generator.Test/GeneratorTestBase.cs`.
+- [ ] Verify test harness: compile input source + `Raun` refs through `CSharpGeneratorDriver`,
   snapshot generated trees. (Use `Verify.SourceGenerators`.)
 - [ ] Generator finds `[Scenario]` methods via `ForAttributeWithMetadataName` and emits a stub
   registration file. Snapshot. Commit.
@@ -281,14 +281,14 @@ public sealed class ScenarioScheduler
 ## Phase 3 — Analyzer diagnostics (TDD with Verify)
 
 **Descriptors (`Diagnostics/Descriptors.cs`):**
-- `PUNIT001` `[Scenario]` method must be `async Task`/`async ValueTask`.
-- `PUNIT002` Step statement must be an awaited DSL call / tuple / array of DSL calls.
-- `PUNIT003` Unsupported control flow in scenario body (v1).
-- `PUNIT004` DSL call must resolve to a static extension member on `Given`/`When`/`Then`.
-- `PUNIT005` DSL method must return `Task`/`Task<T>`/`ValueTask`/`ValueTask<T>`.
-- `PUNIT006` Tuple/array group must contain only lowerable DSL calls.
-- `PUNIT007` DSL argument must be a prior step output or an allowed constant/parameter.
-- `PUNIT008` Display-name placeholder must bind to a parameter (no unsafe object dumping).
+- `RAUN001` `[Scenario]` method must be `async Task`/`async ValueTask`.
+- `RAUN002` Step statement must be an awaited DSL call / tuple / array of DSL calls.
+- `RAUN003` Unsupported control flow in scenario body (v1).
+- `RAUN004` DSL call must resolve to a static extension member on `Given`/`When`/`Then`.
+- `RAUN005` DSL method must return `Task`/`Task<T>`/`ValueTask`/`ValueTask<T>`.
+- `RAUN006` Tuple/array group must contain only lowerable DSL calls.
+- `RAUN007` DSL argument must be a prior step output or an allowed constant/parameter.
+- `RAUN008` Display-name placeholder must bind to a parameter (no unsafe object dumping).
 
 ### Tasks 3.1–3.8 — one diagnostic per task
 - [ ] For each: Verify test asserting the diagnostic id + location on offending input, and that
@@ -325,7 +325,7 @@ public sealed class ScenarioScheduler
 
 ### Task 5.1 — AppointmentDsl sample
 - **Files:** `samples/AppointmentTests/*` (AppointmentDsl + Patient/Slot/Appointment + scenarios:
-  linear, tuple-parallel, array-import). Reference `PUnit.Xunit` + generator.
+  linear, tuple-parallel, array-import). Reference `Raun.Xunit` + generator.
 - [ ] `dotnet test` on the sample: scenarios discovered, steps reported individually, parallel
   groups run concurrently and the following step waits for all. Commit.
 - [ ] Add `samples/` to the solution.
@@ -337,7 +337,7 @@ public sealed class ScenarioScheduler
 | Spec section | Covered by |
 | --- | --- |
 | Goal / primary authoring API | Validated experiment; Phases 1–5 |
-| Two packages | `PUnit`+`PUnit.Generator` / `PUnit.Xunit` |
+| Two packages | `Raun`+`Raun.Generator` / `Raun.Xunit` |
 | xUnit v3 seams (discoverer, test case, self-executing) | Phase 4 |
 | Phase types + domain DSL | `Phases.cs`; sample DSL Phase 5 |
 | Source generation model (nodes, outputs, deps, groups) | Phase 2 |

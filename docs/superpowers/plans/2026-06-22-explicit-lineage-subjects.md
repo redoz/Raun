@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make report lineage edges explicit and opt-in — a `[References]`/`[Consumes]` target names its subject(s) via `Subjects = [nameof(x), Subject.Return]`; the runtime records `subject→target` edges from real instances; an analyzer (PUNIT010) rejects invalid subject names — replacing the current runtime subject-inference.
+**Goal:** Make report lineage edges explicit and opt-in — a `[References]`/`[Consumes]` target names its subject(s) via `Subjects = [nameof(x), Subject.Return]`; the runtime records `subject→target` edges from real instances; an analyzer (RAUN010) rejects invalid subject names — replacing the current runtime subject-inference.
 
 **Architecture:** Edges are recorded at the step call site (where every parameter value and the return `__r` are in scope) by extending `ResourceContext.Reference`/`Consume` with subject instances. Recorded edges flow `ResourceContext.Edges → StepResult.Edges → HtmlReportModelBuilder`, which stops inferring subjects and just maps recorded edges to the unchanged `ReportReference` output shape. The generator lowers each target's declared subject names to instance expressions and emits the extended calls; an analyzer validates the names at compile time.
 
@@ -12,12 +12,12 @@ Spec: `docs/superpowers/specs/2026-06-22-explicit-lineage-subjects-design.md` (c
 
 ## Global Constraints
 
-- **Version control is `jj`, never `git`.** Mutations via `jj` only. Commit with `jj -R "C:/dev/punit-punit010" commit -m "<msg>"`. **No `Co-Authored-By` / tooling trailers** in messages.
-- **All work is in the isolated workspace `C:/dev/punit-punit010` (off `main`).** The harness shell cwd is pinned to `C:\dev\punit` and `cd` does not persist — use absolute paths and `jj -R "C:/dev/punit-punit010"`.
-- **Build:** `dotnet build "C:/dev/punit-punit010/PUnit.slnx"` must be clean — **0 warnings** — before any task is considered done.
-- **Test:** `dotnet test "C:/dev/punit-punit010/test/<Project>" --filter-method "*<Name>*"` (Microsoft.Testing.Platform filter). If the filter flag is rejected by the runner, run the whole project: `dotnet test "C:/dev/punit-punit010/test/<Project>"`.
+- **Version control is `jj`, never `git`.** Mutations via `jj` only. Commit with `jj -R "C:/dev/raun" commit -m "<msg>"`. **No `Co-Authored-By` / tooling trailers** in messages.
+- **All work is in the isolated workspace `C:/dev/raun` (off `main`).** The harness shell cwd is pinned to `C:\dev\raun` and `cd` does not persist — use absolute paths and `jj -R "C:/dev/raun"`.
+- **Build:** `dotnet build "C:/dev/raun/Raun.slnx"` must be clean — **0 warnings** — before any task is considered done.
+- **Test:** `dotnet test "C:/dev/raun/test/<Project>" --filter-method "*<Name>*"` (Microsoft.Testing.Platform filter). If the filter flag is rejected by the runner, run the whole project: `dotnet test "C:/dev/raun/test/<Project>"`.
 - **TDD:** every behavioral change starts with a failing test. **The `references` JSON output shape (`ReportReference`) must not change.**
-- The sentinel literal `"<return>"` is defined in **two** assemblies that don't share code: `PUnit.Subject.Return` (runtime) and `AttributeReader.ReturnSubject` (generator). They must stay identical — call this out in both code comments.
+- The sentinel literal `"<return>"` is defined in **two** assemblies that don't share code: `Raun.Subject.Return` (runtime) and `AttributeReader.ReturnSubject` (generator). They must stay identical — call this out in both code comments.
 
 ---
 
@@ -25,19 +25,19 @@ Spec: `docs/superpowers/specs/2026-06-22-explicit-lineage-subjects-design.md` (c
 
 | File | Responsibility | Tasks |
 |---|---|---|
-| `src/PUnit/Resources/ResourceRoleAttributes.cs` | `Subjects` ctor on `[References]`/`[Consumes]` | 1 |
-| `src/PUnit/Resources/Subject.cs` *(new)* | `Subject.Return` sentinel | 1 |
-| `src/PUnit/Model/ResourceLineageEdge.cs` *(new)* | recorded edge record | 2 |
-| `src/PUnit/Resources/ResourceContext.cs` | record edges; `Edges` property | 2 |
-| `src/PUnit/Model/StepResult.cs` | carry `Edges` | 3 |
-| `src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs` | map recorded edges → `ReportReference` | 3 |
-| `src/PUnit.Generator/Lowering/AttributeReader.cs` | `ParameterSubjects`, `ReturnSubject` const | 4 |
-| `src/PUnit.Generator/Lowering/Ir.cs` | `ResourceRoleClaim.SubjectExpressions` | 4 |
-| `src/PUnit.Generator/Lowering/ScenarioParser.cs` | resolve subject names → expressions | 4 |
-| `src/PUnit.Generator/Emit/ScenarioEmitter.cs` | emit multi-arg edge calls | 4 |
-| `src/PUnit/Scheduling/ScenarioScheduler.cs` | propagate `Edges` into `StepResult` | 5 |
-| `src/PUnit.Generator/Analysis/Descriptors.cs` + `ScenarioAnalyzer.cs` + `AnalyzerReleases.Unshipped.md` | PUNIT010 | 6 |
-| `test/PUnit.Generator.Test/SampleSources.cs` | migrate `BookWithLineage` fixture | 4 |
+| `src/Raun/Resources/ResourceRoleAttributes.cs` | `Subjects` ctor on `[References]`/`[Consumes]` | 1 |
+| `src/Raun/Resources/Subject.cs` *(new)* | `Subject.Return` sentinel | 1 |
+| `src/Raun/Model/ResourceLineageEdge.cs` *(new)* | recorded edge record | 2 |
+| `src/Raun/Resources/ResourceContext.cs` | record edges; `Edges` property | 2 |
+| `src/Raun/Model/StepResult.cs` | carry `Edges` | 3 |
+| `src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs` | map recorded edges → `ReportReference` | 3 |
+| `src/Raun.Generator/Lowering/AttributeReader.cs` | `ParameterSubjects`, `ReturnSubject` const | 4 |
+| `src/Raun.Generator/Lowering/Ir.cs` | `ResourceRoleClaim.SubjectExpressions` | 4 |
+| `src/Raun.Generator/Lowering/ScenarioParser.cs` | resolve subject names → expressions | 4 |
+| `src/Raun.Generator/Emit/ScenarioEmitter.cs` | emit multi-arg edge calls | 4 |
+| `src/Raun/Scheduling/ScenarioScheduler.cs` | propagate `Edges` into `StepResult` | 5 |
+| `src/Raun.Generator/Analysis/Descriptors.cs` + `ScenarioAnalyzer.cs` + `AnalyzerReleases.Unshipped.md` | RAUN010 | 6 |
+| `test/Raun.Generator.Test/SampleSources.cs` | migrate `BookWithLineage` fixture | 4 |
 | `samples/AppointmentTests/AppointmentDsl.cs` | migrate `CreateAppointment` | 7 |
 
 ---
@@ -45,22 +45,22 @@ Spec: `docs/superpowers/specs/2026-06-22-explicit-lineage-subjects-design.md` (c
 ## Task 1: Attribute API — `Subjects` + `Subject.Return`
 
 **Files:**
-- Modify: `C:/dev/punit-punit010/src/PUnit/Resources/ResourceRoleAttributes.cs` (the `ReferencesAttribute` and `ConsumesAttribute` declarations)
-- Create: `C:/dev/punit-punit010/src/PUnit/Resources/Subject.cs`
-- Test: `C:/dev/punit-punit010/test/PUnit.Test/Resources/SubjectAttributeTests.cs` (new)
+- Modify: `C:/dev/raun/src/Raun/Resources/ResourceRoleAttributes.cs` (the `ReferencesAttribute` and `ConsumesAttribute` declarations)
+- Create: `C:/dev/raun/src/Raun/Resources/Subject.cs`
+- Test: `C:/dev/raun/test/Raun.Test/Resources/SubjectAttributeTests.cs` (new)
 
 **Interfaces:**
-- Produces: `ReferencesAttribute(params string[] subjects)` with `string[] Subjects`; `ConsumesAttribute(params string[] subjects)` with `string[] Subjects`; `static class Subject { const string Return = "<return>"; }` in namespace `PUnit`.
+- Produces: `ReferencesAttribute(params string[] subjects)` with `string[] Subjects`; `ConsumesAttribute(params string[] subjects)` with `string[] Subjects`; `static class Subject { const string Return = "<return>"; }` in namespace `Raun`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `C:/dev/punit-punit010/test/PUnit.Test/Resources/SubjectAttributeTests.cs`:
+Create `C:/dev/raun/test/Raun.Test/Resources/SubjectAttributeTests.cs`:
 
 ```csharp
-using PUnit;
+using Raun;
 using Xunit;
 
-namespace PUnit.Test.Resources;
+namespace Raun.Test.Resources;
 
 public class SubjectAttributeTests
 {
@@ -88,12 +88,12 @@ public class SubjectAttributeTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Test" --filter-method "*SubjectAttribute*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Test" --filter-method "*SubjectAttribute*"`
 Expected: FAIL to compile — `ReferencesAttribute` has no constructor taking arguments; `Subject` does not exist.
 
 - [ ] **Step 3: Implement — extend the attributes**
 
-In `C:/dev/punit-punit010/src/PUnit/Resources/ResourceRoleAttributes.cs`, replace the two marker declarations (currently `public sealed class ReferencesAttribute : Attribute;` and `public sealed class ConsumesAttribute : Attribute;`) with bodies. Keep their existing XML doc comments above them; the new bodies are:
+In `C:/dev/raun/src/Raun/Resources/ResourceRoleAttributes.cs`, replace the two marker declarations (currently `public sealed class ReferencesAttribute : Attribute;` and `public sealed class ConsumesAttribute : Attribute;`) with bodies. Keep their existing XML doc comments above them; the new bodies are:
 
 ```csharp
 [AttributeUsage(AttributeTargets.Parameter)]
@@ -119,10 +119,10 @@ public sealed class ConsumesAttribute : Attribute
 
 - [ ] **Step 4: Implement — the sentinel**
 
-Create `C:/dev/punit-punit010/src/PUnit/Resources/Subject.cs`:
+Create `C:/dev/raun/src/Raun/Resources/Subject.cs`:
 
 ```csharp
-namespace PUnit;
+namespace Raun;
 
 /// <summary>Well-known lineage subjects for <c>[References]</c>/<c>[Consumes]</c>.</summary>
 public static class Subject
@@ -130,7 +130,7 @@ public static class Subject
     /// <summary>
     /// The step's <c>[Creates]</c>/<c>[Edits]</c> return value, as a lineage subject. The value is a
     /// reserved token no C# parameter can be named. MUST stay identical to
-    /// <c>PUnit.Generator.Lowering.AttributeReader.ReturnSubject</c> (separate assembly).
+    /// <c>Raun.Generator.Lowering.AttributeReader.ReturnSubject</c> (separate assembly).
     /// </summary>
     public const string Return = "<return>";
 }
@@ -138,14 +138,14 @@ public static class Subject
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Test" --filter-method "*SubjectAttribute*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Test" --filter-method "*SubjectAttribute*"`
 Expected: PASS (3 tests).
 
 - [ ] **Step 6: Build clean + commit**
 
-Run: `dotnet build "C:/dev/punit-punit010/PUnit.slnx"` → 0 warnings.
+Run: `dotnet build "C:/dev/raun/Raun.slnx"` → 0 warnings.
 ```bash
-jj -R "C:/dev/punit-punit010" commit -m "feat(resources): Subjects params on [References]/[Consumes] + Subject.Return sentinel"
+jj -R "C:/dev/raun" commit -m "feat(resources): Subjects params on [References]/[Consumes] + Subject.Return sentinel"
 ```
 
 ---
@@ -153,9 +153,9 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(resources): Subjects params on [Re
 ## Task 2: Runtime edge model + recording
 
 **Files:**
-- Create: `C:/dev/punit-punit010/src/PUnit/Model/ResourceLineageEdge.cs`
-- Modify: `C:/dev/punit-punit010/src/PUnit/Resources/ResourceContext.cs` (add `_edges`/`Edges`; add subjects to `Reference`/`Consume`; add `RecordEdges`)
-- Test: `C:/dev/punit-punit010/test/PUnit.Test/Resources/ResourceContextTests.cs` (add tests)
+- Create: `C:/dev/raun/src/Raun/Model/ResourceLineageEdge.cs`
+- Modify: `C:/dev/raun/src/Raun/Resources/ResourceContext.cs` (add `_edges`/`Edges`; add subjects to `Reference`/`Consume`; add `RecordEdges`)
+- Test: `C:/dev/raun/test/Raun.Test/Resources/ResourceContextTests.cs` (add tests)
 
 **Interfaces:**
 - Consumes: `ResourceIdentity` (`(Type Type, ResourceKey Key)`), `LifecycleVerb`, `ResourceIdentityResolver.Resolve(Type, object)`.
@@ -163,7 +163,7 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(resources): Subjects params on [Re
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `C:/dev/punit-punit010/test/PUnit.Test/Resources/ResourceContextTests.cs` (the class already has `static ResourceContext NewContext(out FixedTimeProvider clock)` and uses the `User(string Email)` resource record):
+Add to `C:/dev/raun/test/Raun.Test/Resources/ResourceContextTests.cs` (the class already has `static ResourceContext NewContext(out FixedTimeProvider clock)` and uses the `User(string Email)` resource record):
 
 ```csharp
     [Fact]
@@ -216,17 +216,17 @@ Add to `C:/dev/punit-punit010/test/PUnit.Test/Resources/ResourceContextTests.cs`
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Test" --filter-method "*records_a_lineage_edge*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Test" --filter-method "*records_a_lineage_edge*"`
 Expected: FAIL to compile — `ctx.Reference` has no 2-arg overload, `ctx.Edges` does not exist, `ResourceLineageEdge` does not exist.
 
 - [ ] **Step 3: Implement — the edge record**
 
-Create `C:/dev/punit-punit010/src/PUnit/Model/ResourceLineageEdge.cs`:
+Create `C:/dev/raun/src/Raun/Model/ResourceLineageEdge.cs`:
 
 ```csharp
-using PUnit;
+using Raun;
 
-namespace PUnit.Model;
+namespace Raun.Model;
 
 /// <summary>
 /// One explicitly-declared lineage edge recorded by a step: the produced/edited
@@ -247,7 +247,7 @@ public sealed record ResourceLineageEdge
 
 - [ ] **Step 4: Implement — recording in `ResourceContext`**
 
-In `C:/dev/punit-punit010/src/PUnit/Resources/ResourceContext.cs`:
+In `C:/dev/raun/src/Raun/Resources/ResourceContext.cs`:
 
 (a) Add the backing list next to `_effects` (after the `readonly List<ResourceEffect> _effects = [];` line):
 ```csharp
@@ -306,18 +306,18 @@ In `C:/dev/punit-punit010/src/PUnit/Resources/ResourceContext.cs`:
     }
 ```
 
-> Note: `ResourceContext.cs` already has `using PUnit.Model;`. The `params object[]` overloads replace the prior single-arg `Reference`/`Consume`; existing callers like `await ctx.Reference(user)` still bind (empty array), so `ResourceContextTests` Reference/Consume effect tests keep passing.
+> Note: `ResourceContext.cs` already has `using Raun.Model;`. The `params object[]` overloads replace the prior single-arg `Reference`/`Consume`; existing callers like `await ctx.Reference(user)` still bind (empty array), so `ResourceContextTests` Reference/Consume effect tests keep passing.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Test" --filter-method "*ResourceContext*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Test" --filter-method "*ResourceContext*"`
 Expected: PASS — the three new tests plus all pre-existing `ResourceContextTests`.
 
 - [ ] **Step 6: Build clean + commit**
 
-Run: `dotnet build "C:/dev/punit-punit010/PUnit.slnx"` → 0 warnings.
+Run: `dotnet build "C:/dev/raun/Raun.slnx"` → 0 warnings.
 ```bash
-jj -R "C:/dev/punit-punit010" commit -m "feat(resources): record lineage edges from [References]/[Consumes] subjects"
+jj -R "C:/dev/raun" commit -m "feat(resources): record lineage edges from [References]/[Consumes] subjects"
 ```
 
 ---
@@ -325,9 +325,9 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(resources): record lineage edges f
 ## Task 3: Carry edges to the report builder
 
 **Files:**
-- Modify: `C:/dev/punit-punit010/src/PUnit/Model/StepResult.cs` (add `Edges`)
-- Modify: `C:/dev/punit-punit010/src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs` (replace inference loop)
-- Test: `C:/dev/punit-punit010/test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs` (extend `Result` helper; rewrite the 4 lineage tests)
+- Modify: `C:/dev/raun/src/Raun/Model/StepResult.cs` (add `Edges`)
+- Modify: `C:/dev/raun/src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs` (replace inference loop)
+- Test: `C:/dev/raun/test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs` (extend `Result` helper; rewrite the 4 lineage tests)
 
 **Interfaces:**
 - Consumes: `ResourceLineageEdge` (Task 2), `ReportReference` (`SubjectType/Key, TargetType/Key, Kind` strings).
@@ -335,13 +335,13 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(resources): record lineage edges f
 
 - [ ] **Step 1: Add `Edges` to `StepResult` and the test helper (enabling step — no behavior yet)**
 
-In `C:/dev/punit-punit010/src/PUnit/Model/StepResult.cs`, directly after the `Effects` property (`public IReadOnlyList<ResourceEffect> Effects { get; init; } = [];`) add:
+In `C:/dev/raun/src/Raun/Model/StepResult.cs`, directly after the `Effects` property (`public IReadOnlyList<ResourceEffect> Effects { get; init; } = [];`) add:
 ```csharp
     /// <summary>Lineage edges the step recorded from [References]/[Consumes] subjects.</summary>
     public IReadOnlyList<ResourceLineageEdge> Edges { get; init; } = [];
 ```
 
-In `C:/dev/punit-punit010/test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs`, change the `Result` helper signature and body to accept edges:
+In `C:/dev/raun/test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs`, change the `Result` helper signature and body to accept edges:
 ```csharp
     private static StepResult Result(ScenarioNode node, DateTimeOffset startedAt, double ms,
         StepStatus status = StepStatus.Passed, IReadOnlyList<ResourceEffect>? effects = null,
@@ -458,12 +458,12 @@ with the explicit-edge versions below:
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Mtp.Test" --filter-method "*edges*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Mtp.Test" --filter-method "*edges*"`
 Expected: FAIL — the builder still derives from effects, so `Recorded_edges_become_lineage_references` and `Multiple_subjects...` produce 0 references.
 
 - [ ] **Step 4: Implement — builder maps recorded edges**
 
-In `C:/dev/punit-punit010/src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs`, replace the entire inference block (the comment starting `// Lineage edges (2026-06-21 spec)` through the closing brace of the `foreach (var r in ordered)` loop that builds `references`) with:
+In `C:/dev/raun/src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs`, replace the entire inference block (the comment starting `// Lineage edges (2026-06-21 spec)` through the closing brace of the `foreach (var r in ordered)` loop that builds `references`) with:
 
 ```csharp
             // Lineage edges (2026-06-22 spec): edges are recorded explicitly at runtime from each
@@ -500,14 +500,14 @@ In `C:/dev/punit-punit010/src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs`, r
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Mtp.Test"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Mtp.Test"`
 Expected: PASS — the four rewritten tests plus the existing model/json tests (the `Builds_the_expected_json_model` golden assertion is unaffected: that scenario records no edges and the `references` array stays `[]`).
 
 - [ ] **Step 6: Build clean + commit**
 
-Run: `dotnet build "C:/dev/punit-punit010/PUnit.slnx"` → 0 warnings.
+Run: `dotnet build "C:/dev/raun/Raun.slnx"` → 0 warnings.
 ```bash
-jj -R "C:/dev/punit-punit010" commit -m "feat(report): build lineage from recorded edges instead of subject inference"
+jj -R "C:/dev/raun" commit -m "feat(report): build lineage from recorded edges instead of subject inference"
 ```
 
 ---
@@ -515,12 +515,12 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(report): build lineage from record
 ## Task 4: Lowering + emit the edge calls
 
 **Files:**
-- Modify: `C:/dev/punit-punit010/src/PUnit.Generator/Lowering/AttributeReader.cs` (add `ReturnSubject`, `ParameterSubjects`)
-- Modify: `C:/dev/punit-punit010/src/PUnit.Generator/Lowering/Ir.cs` (add `SubjectExpressions` to `ResourceRoleClaim`)
-- Modify: `C:/dev/punit-punit010/src/PUnit.Generator/Lowering/ScenarioParser.cs` (`BuildResourceClaims` + `ResolveSubjectExpressions`)
-- Modify: `C:/dev/punit-punit010/src/PUnit.Generator/Emit/ScenarioEmitter.cs` (`ResourceCallStatement`)
-- Modify: `C:/dev/punit-punit010/test/PUnit.Generator.Test/SampleSources.cs` (`BookWithLineage` gets explicit subjects)
-- Test: `C:/dev/punit-punit010/test/PUnit.Generator.Test/ResourceLoweringTests.cs` (new emitted-text test)
+- Modify: `C:/dev/raun/src/Raun.Generator/Lowering/AttributeReader.cs` (add `ReturnSubject`, `ParameterSubjects`)
+- Modify: `C:/dev/raun/src/Raun.Generator/Lowering/Ir.cs` (add `SubjectExpressions` to `ResourceRoleClaim`)
+- Modify: `C:/dev/raun/src/Raun.Generator/Lowering/ScenarioParser.cs` (`BuildResourceClaims` + `ResolveSubjectExpressions`)
+- Modify: `C:/dev/raun/src/Raun.Generator/Emit/ScenarioEmitter.cs` (`ResourceCallStatement`)
+- Modify: `C:/dev/raun/test/Raun.Generator.Test/SampleSources.cs` (`BookWithLineage` gets explicit subjects)
+- Test: `C:/dev/raun/test/Raun.Generator.Test/ResourceLoweringTests.cs` (new emitted-text test)
 
 **Interfaces:**
 - Consumes: `ResourceContext.Reference/Consume(target, params object[])` (Task 2, so generated code compiles).
@@ -528,7 +528,7 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(report): build lineage from record
 
 - [ ] **Step 1: Write the failing test + migrate the fixture**
 
-In `C:/dev/punit-punit010/test/PUnit.Generator.Test/SampleSources.cs`, change the `BookWithLineage` step (currently `BookWithLineage([References] User user, [Consumes] Slot slot)`) so its target params declare the created return as their subject:
+In `C:/dev/raun/test/Raun.Generator.Test/SampleSources.cs`, change the `BookWithLineage` step (currently `BookWithLineage([References] User user, [Consumes] Slot slot)`) so its target params declare the created return as their subject:
 
 ```csharp
                 [StepName("booking with lineage")]
@@ -540,7 +540,7 @@ In `C:/dev/punit-punit010/test/PUnit.Generator.Test/SampleSources.cs`, change th
                 }
 ```
 
-Add a test to `C:/dev/punit-punit010/test/PUnit.Generator.Test/ResourceLoweringTests.cs`:
+Add a test to `C:/dev/raun/test/Raun.Generator.Test/ResourceLoweringTests.cs`:
 
 ```csharp
     [Fact]
@@ -557,16 +557,16 @@ Add a test to `C:/dev/punit-punit010/test/PUnit.Generator.Test/ResourceLoweringT
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test" --filter-method "*subjects_emit_edge_calls*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Generator.Test" --filter-method "*subjects_emit_edge_calls*"`
 Expected: FAIL — the emitter still renders single-argument `Resources.Reference(<target>);`, so the regex does not match.
 
 - [ ] **Step 3: Implement — `AttributeReader`**
 
-In `C:/dev/punit-punit010/src/PUnit.Generator/Lowering/AttributeReader.cs`, add a const at the top of the class and a reader method (mirror `ParameterRole`). It needs `using System.Collections.Immutable;` and `using System.Linq;` (already present):
+In `C:/dev/raun/src/Raun.Generator/Lowering/AttributeReader.cs`, add a const at the top of the class and a reader method (mirror `ParameterRole`). It needs `using System.Collections.Immutable;` and `using System.Linq;` (already present):
 
 ```csharp
     /// <summary>The reserved <c>[References]</c>/<c>[Consumes]</c> subject token meaning the step's return.
-    /// MUST stay identical to <c>PUnit.Subject.Return</c> (separate assembly).</summary>
+    /// MUST stay identical to <c>Raun.Subject.Return</c> (separate assembly).</summary>
     public const string ReturnSubject = "<return>";
 
     /// <summary>
@@ -594,7 +594,7 @@ In `C:/dev/punit-punit010/src/PUnit.Generator/Lowering/AttributeReader.cs`, add 
 
 - [ ] **Step 4: Implement — `ResourceRoleClaim` gains `SubjectExpressions`**
 
-In `C:/dev/punit-punit010/src/PUnit.Generator/Lowering/Ir.cs`, change the `ResourceRoleClaim` record struct to carry subject expressions (keep the doc comment above it):
+In `C:/dev/raun/src/Raun.Generator/Lowering/Ir.cs`, change the `ResourceRoleClaim` record struct to carry subject expressions (keep the doc comment above it):
 
 ```csharp
 internal readonly record struct ResourceRoleClaim(string Verb, string Expression, bool IsReturn)
@@ -609,7 +609,7 @@ internal readonly record struct ResourceRoleClaim(string Verb, string Expression
 
 - [ ] **Step 5: Implement — resolve subjects in `BuildResourceClaims`**
 
-In `C:/dev/punit-punit010/src/PUnit.Generator/Lowering/ScenarioParser.cs`, in `BuildResourceClaims`, replace the parameter-claim add (currently the two lines
+In `C:/dev/raun/src/Raun.Generator/Lowering/ScenarioParser.cs`, in `BuildResourceClaims`, replace the parameter-claim add (currently the two lines
 `var expression = ((ExpressionSyntax)rewriter.Visit(argument.Expression)).ToFullString().Trim();`
 `claims.Add(new ResourceRoleClaim(role, expression, IsReturn: false));`)
 with:
@@ -628,7 +628,7 @@ Then add the helper next to `BuildResourceClaims`:
     /// <summary>
     /// Maps a [References]/[Consumes] parameter's declared subject names to instance expressions:
     /// <c>Subject.Return</c> ⇒ <c>__r</c>; a parameter name ⇒ that parameter's rewritten argument
-    /// expression. Unresolved names are skipped (the analyzer reports them as PUNIT010).
+    /// expression. Unresolved names are skipped (the analyzer reports them as RAUN010).
     /// </summary>
     private static IReadOnlyList<string> ResolveSubjectExpressions(
         IParameterSymbol parameter,
@@ -668,7 +668,7 @@ Then add the helper next to `BuildResourceClaims`:
 
 - [ ] **Step 6: Implement — emit extra arguments in `ScenarioEmitter`**
 
-In `C:/dev/punit-punit010/src/PUnit.Generator/Emit/ScenarioEmitter.cs`, replace the body of `ResourceCallStatement` (currently builds a `SingletonSeparatedList` of one argument) with a multi-argument version:
+In `C:/dev/raun/src/Raun.Generator/Emit/ScenarioEmitter.cs`, replace the body of `ResourceCallStatement` (currently builds a `SingletonSeparatedList` of one argument) with a multi-argument version:
 
 ```csharp
     private static StatementSyntax ResourceCallStatement(ResourceRoleClaim claim)
@@ -697,19 +697,19 @@ In `C:/dev/punit-punit010/src/PUnit.Generator/Emit/ScenarioEmitter.cs`, replace 
 
 - [ ] **Step 7: Run the test to verify it passes**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test" --filter-method "*subjects_emit_edge_calls*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Generator.Test" --filter-method "*subjects_emit_edge_calls*"`
 Expected: PASS.
 
 - [ ] **Step 8: Run the full generator suite (catch snapshot/lowering regressions)**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Generator.Test"`
 Expected: PASS. In particular `Role_free_scenario_emits_no_resource_calls` and `Reference_and_consume_params_lower_to_shared_lineage_effects` (effects unchanged) and the `Resource_scenario` Verify snapshot (its scenario uses `Suspend`, not `BookWithLineage`, so the golden file is unaffected) all stay green.
 
 - [ ] **Step 9: Build clean + commit**
 
-Run: `dotnet build "C:/dev/punit-punit010/PUnit.slnx"` → 0 warnings.
+Run: `dotnet build "C:/dev/raun/Raun.slnx"` → 0 warnings.
 ```bash
-jj -R "C:/dev/punit-punit010" commit -m "feat(generator): lower and emit lineage subject edge calls"
+jj -R "C:/dev/raun" commit -m "feat(generator): lower and emit lineage subject edge calls"
 ```
 
 ---
@@ -717,8 +717,8 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(generator): lower and emit lineage
 ## Task 5: Propagate edges through the scheduler (end-to-end)
 
 **Files:**
-- Modify: `C:/dev/punit-punit010/src/PUnit/Scheduling/ScenarioScheduler.cs` (two `StepResult` construction sites)
-- Test: `C:/dev/punit-punit010/test/PUnit.Generator.Test/ResourceLoweringTests.cs` (new end-to-end test)
+- Modify: `C:/dev/raun/src/Raun/Scheduling/ScenarioScheduler.cs` (two `StepResult` construction sites)
+- Test: `C:/dev/raun/test/Raun.Generator.Test/ResourceLoweringTests.cs` (new end-to-end test)
 
 **Interfaces:**
 - Consumes: `ResourceContext.Edges` (Task 2), `StepResult.Edges` (Task 3), the emitted edge calls (Task 4).
@@ -726,7 +726,7 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(generator): lower and emit lineage
 
 - [ ] **Step 1: Write the failing end-to-end test**
 
-Add to `C:/dev/punit-punit010/test/PUnit.Generator.Test/ResourceLoweringTests.cs`:
+Add to `C:/dev/raun/test/Raun.Generator.Test/ResourceLoweringTests.cs`:
 
 ```csharp
     [Fact]
@@ -752,12 +752,12 @@ Add to `C:/dev/punit-punit010/test/PUnit.Generator.Test/ResourceLoweringTests.cs
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test" --filter-method "*records_edges_from_the_created_appointment*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Generator.Test" --filter-method "*records_edges_from_the_created_appointment*"`
 Expected: FAIL — `results[2].Edges` is empty; the scheduler never copies `context.Resources.Edges` into `StepResult`.
 
 - [ ] **Step 3: Implement — wire both `StepResult` sites**
 
-In `C:/dev/punit-punit010/src/PUnit/Scheduling/ScenarioScheduler.cs`, in the **success** `StepResult` initializer (the one with `Status = StepStatus.Passed`), add an `Edges` line directly after `Effects = context.Resources.Effects,`:
+In `C:/dev/raun/src/Raun/Scheduling/ScenarioScheduler.cs`, in the **success** `StepResult` initializer (the one with `Status = StepStatus.Passed`), add an `Edges` line directly after `Effects = context.Resources.Effects,`:
 ```csharp
                 Effects = context.Resources.Effects,
                 Edges = context.Resources.Edges,
@@ -771,46 +771,46 @@ In the **fail/skip** `StepResult` initializer (inside the `Outcome(...)` helper,
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test" --filter-method "*records_edges_from_the_created_appointment*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Generator.Test" --filter-method "*records_edges_from_the_created_appointment*"`
 Expected: PASS.
 
 - [ ] **Step 5: Build clean + commit**
 
-Run: `dotnet build "C:/dev/punit-punit010/PUnit.slnx"` → 0 warnings.
+Run: `dotnet build "C:/dev/raun/Raun.slnx"` → 0 warnings.
 ```bash
-jj -R "C:/dev/punit-punit010" commit -m "feat(scheduling): propagate recorded lineage edges into StepResult"
+jj -R "C:/dev/raun" commit -m "feat(scheduling): propagate recorded lineage edges into StepResult"
 ```
 
 ---
 
-## Task 6: Analyzer — PUNIT010 invalid lineage subject
+## Task 6: Analyzer — RAUN010 invalid lineage subject
 
 **Files:**
-- Modify: `C:/dev/punit-punit010/src/PUnit.Generator/Analysis/Descriptors.cs` (add descriptor)
-- Modify: `C:/dev/punit-punit010/src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs` (register + validate)
-- Modify: `C:/dev/punit-punit010/src/PUnit.Generator/AnalyzerReleases.Unshipped.md` (add row)
-- Test: `C:/dev/punit-punit010/test/PUnit.Generator.Test/AnalyzerTests.cs` (add tests)
+- Modify: `C:/dev/raun/src/Raun.Generator/Analysis/Descriptors.cs` (add descriptor)
+- Modify: `C:/dev/raun/src/Raun.Generator/Analysis/ScenarioAnalyzer.cs` (register + validate)
+- Modify: `C:/dev/raun/src/Raun.Generator/AnalyzerReleases.Unshipped.md` (add row)
+- Test: `C:/dev/raun/test/Raun.Generator.Test/AnalyzerTests.cs` (add tests)
 
 **Interfaces:**
 - Consumes: `AttributeReader.ParameterSubjects`, `AttributeReader.ReturnSubject`, `AttributeReader.ParameterRole`, `AttributeReader.ReturnRole` (Tasks 4).
-- Produces: `Descriptors.InvalidLineageSubject` (id `PUNIT010`, Error); validation in `AnalyzeStepResources`.
+- Produces: `Descriptors.InvalidLineageSubject` (id `RAUN010`, Error); validation in `AnalyzeStepResources`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `C:/dev/punit-punit010/test/PUnit.Generator.Test/AnalyzerTests.cs` (uses the existing `GeneratorHarness.AnalyzeAsync` + `AssertHas` helpers):
+Add to `C:/dev/raun/test/Raun.Generator.Test/AnalyzerTests.cs` (uses the existing `GeneratorHarness.AnalyzeAsync` + `AssertHas` helpers):
 
 ```csharp
     [Fact]
-    public void PUNIT010_is_a_supported_diagnostic()
+    public void RAUN010_is_a_supported_diagnostic()
     {
-        var analyzer = new PUnit.Generator.Analysis.ScenarioAnalyzer();
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "PUNIT010");
+        var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
+        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN010");
     }
 
     private const string LineageDsl =
         """
         using System.Threading.Tasks;
-        using PUnit;
+        using Raun;
         namespace Bad;
         public sealed record User(string Email) : IResource<User> { public static ResourceKey KeyFor(User i) => i.Email; }
         public sealed record Account(string Id) : IResource<Account> { public static ResourceKey KeyFor(Account i) => i.Id; }
@@ -818,7 +818,7 @@ Add to `C:/dev/punit-punit010/test/PUnit.Generator.Test/AnalyzerTests.cs` (uses 
         """;
 
     [Fact]
-    public async Task PUNIT010_unknown_subject_name()
+    public async Task RAUN010_unknown_subject_name()
     {
         var source = LineageDsl +
             """
@@ -832,11 +832,11 @@ Add to `C:/dev/punit-punit010/test/PUnit.Generator.Test/AnalyzerTests.cs` (uses 
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "PUNIT010");
+        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN010");
     }
 
     [Fact]
-    public async Task PUNIT010_subject_names_a_non_subject_role()
+    public async Task RAUN010_subject_names_a_non_subject_role()
     {
         var source = LineageDsl +
             """
@@ -850,11 +850,11 @@ Add to `C:/dev/punit-punit010/test/PUnit.Generator.Test/AnalyzerTests.cs` (uses 
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "PUNIT010");
+        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN010");
     }
 
     [Fact]
-    public async Task PUNIT010_return_sentinel_without_a_creating_return()
+    public async Task RAUN010_return_sentinel_without_a_creating_return()
     {
         var source = LineageDsl +
             """
@@ -868,11 +868,11 @@ Add to `C:/dev/punit-punit010/test/PUnit.Generator.Test/AnalyzerTests.cs` (uses 
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "PUNIT010");
+        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN010");
     }
 
     [Fact]
-    public async Task PUNIT010_clean_for_valid_subjects()
+    public async Task RAUN010_clean_for_valid_subjects()
     {
         var source = LineageDsl +
             """
@@ -893,22 +893,22 @@ Add to `C:/dev/punit-punit010/test/PUnit.Generator.Test/AnalyzerTests.cs` (uses 
             }
             """;
 
-        Assert.DoesNotContain(await GeneratorHarness.AnalyzeAsync(source), d => d.Id == "PUNIT010");
+        Assert.DoesNotContain(await GeneratorHarness.AnalyzeAsync(source), d => d.Id == "RAUN010");
     }
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test" --filter-method "*PUNIT010*"`
-Expected: FAIL — `PUNIT010_is_a_supported_diagnostic` fails (not registered) and the positive tests fail (no PUNIT010 produced).
+Run: `dotnet test "C:/dev/raun/test/Raun.Generator.Test" --filter-method "*RAUN010*"`
+Expected: FAIL — `RAUN010_is_a_supported_diagnostic` fails (not registered) and the positive tests fail (no RAUN010 produced).
 
 - [ ] **Step 3: Implement — descriptor**
 
-In `C:/dev/punit-punit010/src/PUnit.Generator/Analysis/Descriptors.cs`, add after `MissingResourceRole`:
+In `C:/dev/raun/src/Raun.Generator/Analysis/Descriptors.cs`, add after `MissingResourceRole`:
 
 ```csharp
     public static readonly DiagnosticDescriptor InvalidLineageSubject = new(
-        "PUNIT010",
+        "RAUN010",
         "Lineage subject must name a step subject",
         "'{0}' is not a valid lineage subject for step '{1}' — Subject must name an [Edits] parameter or the [Creates]/[Edits] return (use Subject.Return)",
         Category,
@@ -918,7 +918,7 @@ In `C:/dev/punit-punit010/src/PUnit.Generator/Analysis/Descriptors.cs`, add afte
 
 - [ ] **Step 4: Implement — register + validate**
 
-In `C:/dev/punit-punit010/src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs`, add `Descriptors.InvalidLineageSubject,` to the `SupportedDiagnostics` collection initializer (after `Descriptors.MissingResourceRole,`).
+In `C:/dev/raun/src/Raun.Generator/Analysis/ScenarioAnalyzer.cs`, add `Descriptors.InvalidLineageSubject,` to the `SupportedDiagnostics` collection initializer (after `Descriptors.MissingResourceRole,`).
 
 Then extend `AnalyzeStepResources` — append this validation at the end of the method (after the existing return-role check), reusing `SymbolHelpers.TryUnwrapReturn`:
 
@@ -957,27 +957,27 @@ Then extend `AnalyzeStepResources` — append this validation at the end of the 
 
 - [ ] **Step 5: Implement — release tracking**
 
-In `C:/dev/punit-punit010/src/PUnit.Generator/AnalyzerReleases.Unshipped.md`, add one row after the `PUNIT009` row, in the same pipe-delimited format:
+In `C:/dev/raun/src/Raun.Generator/AnalyzerReleases.Unshipped.md`, add one row after the `RAUN009` row, in the same pipe-delimited format:
 
 ```
-PUNIT010 | PUnit.Usage | Error | Lineage subject must name a step subject
+RAUN010 | Raun.Usage | Error | Lineage subject must name a step subject
 ```
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test" --filter-method "*PUNIT010*"`
+Run: `dotnet test "C:/dev/raun/test/Raun.Generator.Test" --filter-method "*RAUN010*"`
 Expected: PASS (5 tests).
 
 - [ ] **Step 7: Run the full generator suite**
 
-Run: `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test"`
-Expected: PASS — including `Valid_scenarios_produce_no_diagnostics` and the PUNIT009 tests (BookWithLineage now declares valid `Subject.Return` subjects, so no PUNIT010 noise there).
+Run: `dotnet test "C:/dev/raun/test/Raun.Generator.Test"`
+Expected: PASS — including `Valid_scenarios_produce_no_diagnostics` and the RAUN009 tests (BookWithLineage now declares valid `Subject.Return` subjects, so no RAUN010 noise there).
 
 - [ ] **Step 8: Build clean + commit**
 
-Run: `dotnet build "C:/dev/punit-punit010/PUnit.slnx"` → 0 warnings (the release-tracking analyzer is satisfied by the new Unshipped row).
+Run: `dotnet build "C:/dev/raun/Raun.slnx"` → 0 warnings (the release-tracking analyzer is satisfied by the new Unshipped row).
 ```bash
-jj -R "C:/dev/punit-punit010" commit -m "feat(analyzer): PUNIT010 — reject invalid lineage subjects"
+jj -R "C:/dev/raun" commit -m "feat(analyzer): RAUN010 — reject invalid lineage subjects"
 ```
 
 ---
@@ -985,14 +985,14 @@ jj -R "C:/dev/punit-punit010" commit -m "feat(analyzer): PUNIT010 — reject inv
 ## Task 7: Migrate the sample DSL + final green
 
 **Files:**
-- Modify: `C:/dev/punit-punit010/samples/AppointmentTests/AppointmentDsl.cs:89-90` (`CreateAppointment`)
+- Modify: `C:/dev/raun/samples/AppointmentTests/AppointmentDsl.cs:89-90` (`CreateAppointment`)
 
 **Interfaces:**
 - Consumes: `Subject.Return` (Task 1).
 
 - [ ] **Step 1: Migrate `CreateAppointment` to declare its subject**
 
-In `C:/dev/punit-punit010/samples/AppointmentTests/AppointmentDsl.cs`, the `CreateAppointment` step currently reads
+In `C:/dev/raun/samples/AppointmentTests/AppointmentDsl.cs`, the `CreateAppointment` step currently reads
 `public static Task<Appointment> CreateAppointment([References] Patient patient, [Consumes] Slot slot, ScenarioContext? ctx = null)`.
 Change the two role attributes so the created `Appointment` is the lineage subject (the method has `[return: Creates]`):
 
@@ -1000,24 +1000,24 @@ Change the two role attributes so the created `Appointment` is the lineage subje
     public static Task<Appointment> CreateAppointment([References(Subject.Return)] Patient patient, [Consumes(Subject.Return)] Slot slot, ScenarioContext? ctx = null)
 ```
 
-(Leave the rest of the signature/body unchanged. Confirm `AppointmentDsl.cs` has `using PUnit;` — it does, given it already uses `[References]`.)
+(Leave the rest of the signature/body unchanged. Confirm `AppointmentDsl.cs` has `using Raun;` — it does, given it already uses `[References]`.)
 
 - [ ] **Step 2: Verify the whole solution builds and all tests pass**
 
-Run: `dotnet build "C:/dev/punit-punit010/PUnit.slnx"`
-Expected: build succeeds, **0 warnings** (includes the samples project; PUNIT010 sees valid `Subject.Return` subjects).
+Run: `dotnet build "C:/dev/raun/Raun.slnx"`
+Expected: build succeeds, **0 warnings** (includes the samples project; RAUN010 sees valid `Subject.Return` subjects).
 
 Run, in turn:
-- `dotnet test "C:/dev/punit-punit010/test/PUnit.Test"`
-- `dotnet test "C:/dev/punit-punit010/test/PUnit.Generator.Test"`
-- `dotnet test "C:/dev/punit-punit010/test/PUnit.Mtp.Test"`
+- `dotnet test "C:/dev/raun/test/Raun.Test"`
+- `dotnet test "C:/dev/raun/test/Raun.Generator.Test"`
+- `dotnet test "C:/dev/raun/test/Raun.Mtp.Test"`
 
-Expected: ALL PASS. If any other test project exists under `C:/dev/punit-punit010/test`, run it too.
+Expected: ALL PASS. If any other test project exists under `C:/dev/raun/test`, run it too.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-jj -R "C:/dev/punit-punit010" commit -m "chore(samples): declare explicit lineage subjects on CreateAppointment"
+jj -R "C:/dev/raun" commit -m "chore(samples): declare explicit lineage subjects on CreateAppointment"
 ```
 
 ---
@@ -1025,7 +1025,7 @@ jj -R "C:/dev/punit-punit010" commit -m "chore(samples): declare explicit lineag
 ## Self-review (completed against the spec)
 
 - **§2 API** → Task 1 (attributes + `Subject.Return`). ✅
-- **§5 PUNIT010** → Task 6 (descriptor + register + validate + release tracking + tests). ✅
+- **§5 RAUN010** → Task 6 (descriptor + register + validate + release tracking + tests). ✅
 - **§6 lowering/runtime** → `ParameterSubjects`/`SubjectExpressions`/`BuildResourceClaims`/emitter (Task 4), `ResourceContext` edge recording + `ResourceLineageEdge` (Task 2), `StepResult.Edges` + scheduler (Tasks 3, 5), builder mapping (Task 3). ✅
 - **§7 output shape preserved** → Task 3 keeps `ReportReference` fields and dedup; builder json test unaffected. ✅
 - **§8 migration** → `BookWithLineage` (Task 4, needed for its tests), `CreateAppointment` (Task 7), the four builder tests rewritten (Task 3). The only existing `[References]`/`[Consumes]` usages in the repo are those two plus the test fixture; all are covered. ✅

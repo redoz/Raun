@@ -8,7 +8,7 @@
 
 ## 1. The problem (one paragraph)
 
-PUnit reports each scenario *step* as its own visible test. Today `ScenarioDiscoverer` discovers **one** `ScenarioTestCase` per `[Scenario]` method; at run time `ScenarioStepReporter` invents per-step `TestUniqueID`s (`UniqueIDGenerator.ForTest(caseId, index)`) and queues `TestStarting/TestPassed|Failed|Skipped/TestFinished` on the `IMessageBus`. The xUnit **native** runner accepts these dynamically (18 steps in the AppointmentTests sample show fine), but the **VSTest** path (`xunit.runner.visualstudio` + `dotnet test`/classic Test Explorer) folds all 18 step results onto the 4 discovered scenario cases and logs `TestRunCache: No test found corresponding to testResult '… ▸ …' in inProgress list` ×18. In VS Test Explorer the per-step breakdown collapses. This is the unresolved "double-check" item **D.2** in `docs/reference/xunit-v3-extensibility-api.md`.
+Raun reports each scenario *step* as its own visible test. Today `ScenarioDiscoverer` discovers **one** `ScenarioTestCase` per `[Scenario]` method; at run time `ScenarioStepReporter` invents per-step `TestUniqueID`s (`UniqueIDGenerator.ForTest(caseId, index)`) and queues `TestStarting/TestPassed|Failed|Skipped/TestFinished` on the `IMessageBus`. The xUnit **native** runner accepts these dynamically (18 steps in the AppointmentTests sample show fine), but the **VSTest** path (`xunit.runner.visualstudio` + `dotnet test`/classic Test Explorer) folds all 18 step results onto the 4 discovered scenario cases and logs `TestRunCache: No test found corresponding to testResult '… ▸ …' in inProgress list` ×18. In VS Test Explorer the per-step breakdown collapses. This is the unresolved "double-check" item **D.2** in `docs/reference/xunit-v3-extensibility-api.md`.
 
 ---
 
@@ -24,7 +24,7 @@ PUnit reports each scenario *step* as its own visible test. Today `ScenarioDisco
 - Pre-discovery is **per `IXunitTestCase`** only. `TestFrameworkDiscoverer.Find` walks `ITestCase`s and **never calls `CreateTests()`**. Discovery emits one `ITestCaseDiscovered` per case → one MTP node (`TestPlatformDiscoveryMessageSink.OnTestCaseDiscovered`: `Uid = discovered.TestCaseUniqueID`).
 - **The only way to get N pre-discovered, individually-addressable nodes is N distinct `IXunitTestCase`s** (exactly how `TheoryDiscoverer` pre-enumerates — one case per data row).
 - `CreateTests()` / `IXunitTest` is **execution-time only**, never pre-discovered. The default runner invokes the body **once per `IXunitTest`** (`XunitTestCaseRunner.RunTest` → `XunitTestRunner.Run`) — so N tests on one *ordinary* case = N executions.
-- **Escape hatch:** `ISelfExecutingXunitTestCase` (what PUnit uses). `XunitTestMethodRunnerBase.RunTestCase` calls `Run(...)` **once** and skips `CreateTests`/the per-test fan-out. So a self-executing case runs its body once regardless of how many tests it reports.
+- **Escape hatch:** `ISelfExecutingXunitTestCase` (what Raun uses). `XunitTestMethodRunnerBase.RunTestCase` calls `Run(...)` **once** and skips `CreateTests`/the per-test fan-out. So a self-executing case runs its body once regardless of how many tests it reports.
 - xUnit's MTP sinks key **every** node to `TestCaseUniqueID` (`TestPlatformExecutionMessageSink` line ~239) and **never set `ParentTestNodeUid`** — **no tree**. (And per testfx#2537, current Test Explorer doesn't render the MTP hierarchy anyway, so even owning the framework we'd show flat `Scenario ▸ step` nodes today.)
 - Net: our per-step `TestUniqueID`s on one case **collapse onto the single scenario node** — the same symptom on the xUnit side, independent of VSTest.
 
@@ -37,7 +37,7 @@ PUnit reports each scenario *step* as its own visible test. Today `ScenarioDisco
 ## 3. Decisions settled — do NOT re-litigate
 
 - **MTP v2 only. No legacy / no VSTest.** (`xunit.v3.mtp-v2`, drop `xunit.runner.visualstudio` + `Microsoft.NET.Test.Sdk`, `global.json` MTP runner.)
-- **Model B: one MTP node per step** (per-step visibility is PUnit's whole point), implemented as **N self-executing step-cases per scenario sharing one memoized scenario run** so the DAG executes exactly once. Proven viable (§2 spike).
+- **Model B: one MTP node per step** (per-step visibility is Raun's whole point), implemented as **N self-executing step-cases per scenario sharing one memoized scenario run** so the DAG executes exactly once. Proven viable (§2 spike).
 - **Single-step UX = (b) "light up all":** running any one step should report results for **every** step that executed, not just the selected one. (Rationale: with a dependency DAG, running "the appointment should exist" also runs patient/slot/create, so they should light up too.)
 
 ---
@@ -47,9 +47,9 @@ PUnit reports each scenario *step* as its own visible test. Today `ScenarioDisco
 Patrik asked: *"you said xUnit does something we might not like — could we plug-and-replace that part?"* The part (the message-sink→TestNode mapping) is **internal to `xunit.v3.core`**; you can't swap it while riding on xUnit, and step granularity is already lost by the time it's an MTP node, so a downstream rewriter can't recover it. So the real choice is:
 
 - **Path 1 — stay an xUnit extension.** Get N nodes via N self-executing step-cases (spike). (b) "light up all" requires a **workaround**: when one step runs, publish results for sibling step nodes that the platform never scheduled (no `TestCaseStarting/Finished` lifecycle for them) — feasibility **not yet verified** (the spike edit for this is staged but unrun; see §6). Keeps full xUnit ecosystem **and `[Fact]` coexistence in the same project.**
-- **Path 2 — PUnit becomes its own MTP `ITestFramework`.** Replace xUnit's adapter; we own discovery, node reporting, run semantics. Makes (b) **clean** (we own the node lifecycle — no sibling hack). Cost: **leaves the xUnit host.** MTP allows **one** framework per test app, so `[Scenario]` and ordinary xUnit `[Fact]` **cannot coexist in one project** unless our framework also hosts/delegates to xUnit (meaningfully more work). Bigger build (own run loop, filtering, cancellation, `dotnet test` wiring). Still no literal tree today.
+- **Path 2 — Raun becomes its own MTP `ITestFramework`.** Replace xUnit's adapter; we own discovery, node reporting, run semantics. Makes (b) **clean** (we own the node lifecycle — no sibling hack). Cost: **leaves the xUnit host.** MTP allows **one** framework per test app, so `[Scenario]` and ordinary xUnit `[Fact]` **cannot coexist in one project** unless our framework also hosts/delegates to xUnit (meaningfully more work). Bigger build (own run loop, filtering, cancellation, `dotnet test` wiring). Still no literal tree today.
 
-**Gating question put to Patrik (awaiting answer):** *Do you want PUnit scenarios to live alongside regular xUnit `[Fact]` tests in the same project?*
+**Gating question put to Patrik (awaiting answer):** *Do you want Raun scenarios to live alongside regular xUnit `[Fact]` tests in the same project?*
 - **Yes** → Path 1 (finish the (b) sibling-reporting spike to see how it behaves within xUnit's constraints).
 - **No / separate test projects are fine** → Path 2 (cleaner; (b) falls out naturally). This matches Patrik's earlier "it feels more proper to discover everything upfront."
 
@@ -76,9 +76,9 @@ Patrik asked: *"you said xUnit does something we might not like — could we plu
 Nothing committed this session. `git status` shows:
 
 **Separate, self-contained deliverable — "enable full xUnit message-bus debugging" (green, independently committable):**
-- `src/PUnit.Xunit/TracingMessageBus.cs` (new) — `IMessageBus` decorator logging every `QueueMessage` (kind, test id, result detail, accept/stop bool). Opt-in via `PUNIT_BUS_DEBUG` (file path, or `1`/`stderr`/`console`); zero-cost off.
-- `src/PUnit.Xunit/ScenarioTestCase.cs` (edit) — wraps the bus via `TracingMessageBus.MaybeWrap(messageBus)`.
-- `test/PUnit.Xunit.Test/TracingMessageBusTests.cs` (new) — 2 behavioral tests (TDD). Full suite green: 21 / 18 / 30 / 29, 0 warnings.
+- `src/Raun.Xunit/TracingMessageBus.cs` (new) — `IMessageBus` decorator logging every `QueueMessage` (kind, test id, result detail, accept/stop bool). Opt-in via `RAUN_BUS_DEBUG` (file path, or `1`/`stderr`/`console`); zero-cost off.
+- `src/Raun.Xunit/ScenarioTestCase.cs` (edit) — wraps the bus via `TracingMessageBus.MaybeWrap(messageBus)`.
+- `test/Raun.Xunit.Test/TracingMessageBusTests.cs` (new) — 2 behavioral tests (TDD). Full suite green: 21 / 18 / 30 / 29, 0 warnings.
 - `samples/AppointmentTests/xunit.runner.json` (new) + csproj edit — `diagnosticMessages` + `internalDiagnosticMessages` on.
 - `.gitignore` (edit) — ignores transient diag/trace artifacts.
 - **Note:** this rides on xUnit's `IMessageBus`. If we go **Path 2**, `TracingMessageBus` doesn't transfer (we'd trace MTP `TestNodeUpdateMessage`s instead) — but it was the instrument that *found* the root cause and is still useful while on xUnit. Decide whether to commit it regardless (recommended: yes — it's good standalone diagnostics).
@@ -91,7 +91,7 @@ Nothing committed this session. `git status` shows:
 
 ## 7. Key references
 
-- `docs/reference/xunit-v3-extensibility-api.md` — PUnit's own xUnit v3 API notes; item **D.2** is exactly this bug.
+- `docs/reference/xunit-v3-extensibility-api.md` — Raun's own xUnit v3 API notes; item **D.2** is exactly this bug.
 - xUnit MTP docs: https://xunit.net/docs/getting-started/v3/microsoft-testing-platform
 - MTP framework authoring (TestNode / states / `ParentTestNodeUid`): https://learn.microsoft.com/en-us/dotnet/core/testing/microsoft-testing-platform-architecture-test-framework
 - xUnit v3.2.2 source (tag `v3-3.2.2`): `XunitTestMethodRunnerBase.cs`, `XunitTestCaseRunner.cs`, `ISelfExecutingXunitTestCase.cs`, `TheoryDiscoverer.cs`, `TestFrameworkDiscoverer.cs`, `src/common/MicrosoftTestingPlatform/{TestPlatformDiscoveryMessageSink,TestPlatformExecutionMessageSink,TestNodeExtensions}.cs`.

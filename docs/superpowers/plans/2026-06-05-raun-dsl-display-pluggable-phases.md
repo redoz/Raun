@@ -1,10 +1,10 @@
-# PUnit DSL display names, pluggable phases & PUNIT000 — Implementation Plan
+# Raun DSL display names, pluggable phases & RAUN000 — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let scenario steps read with their phase word and let a scenario class be renamed in the runner, make phase markers pluggable via a `PUnit.IPhase` marker interface, and turn unexpected generator/analyzer throws into a clean `PUNIT000` diagnostic.
+**Goal:** Let scenario steps read with their phase word and let a scenario class be renamed in the runner, make phase markers pluggable via a `Raun.IPhase` marker interface, and turn unexpected generator/analyzer throws into a clean `RAUN000` diagnostic.
 
-**Architecture:** Three of the four changes are framework-level and follow the existing `[Scenario]`/`[StepName]` pipeline (attribute → `ScenarioParser` → `ParsedScenario` → `ScenarioEmitter` → `ScenarioDefinition` → `PUnit.Mtp` consumers). Phase recognition is centralized in `SymbolHelpers.PhaseOf`, so pluggability is a single-method change plus a shape change on `Given/When/Then` (static classes cannot implement interfaces — compiler-verified). The fourth change wraps the generator's parse/emit stages and the analyzer's per-method analysis in delegate-driven safety helpers that are unit-testable without forcing the real code to throw.
+**Architecture:** Three of the four changes are framework-level and follow the existing `[Scenario]`/`[StepName]` pipeline (attribute → `ScenarioParser` → `ParsedScenario` → `ScenarioEmitter` → `ScenarioDefinition` → `Raun.Mtp` consumers). Phase recognition is centralized in `SymbolHelpers.PhaseOf`, so pluggability is a single-method change plus a shape change on `Given/When/Then` (static classes cannot implement interfaces — compiler-verified). The fourth change wraps the generator's parse/emit stages and the analyzer's per-method analysis in delegate-driven safety helpers that are unit-testable without forcing the real code to throw.
 
 **Tech Stack:** C# 14 / .NET 10, Roslyn incremental source generator + analyzer (`netstandard2.0`), xUnit, VerifyXunit snapshots, Microsoft.Testing.Platform. Version control is **jj** (Jujutsu).
 
@@ -12,26 +12,26 @@
 
 ## Conventions for every task
 
-- **Build (whole repo):** `dotnet build` from `C:\dev\punit`.
+- **Build (whole repo):** `dotnet build` from `C:\dev\raun`.
 - **Run a test project:** `dotnet test test\<Project>\<Project>.csproj` (these are the canonical full-project runs used in the steps; they always work regardless of runner). To narrow while iterating you may append `--filter "FullyQualifiedName~<Name>"`.
 - **Commit (jj):** `jj commit -m "<message>"` — this finalizes the current working-copy change and starts a fresh one. jj auto-tracks files; there is **no** `git add`. Do **not** add `Co-Authored-By`/tooling trailers (project rule).
 - Each task is TDD: write the failing test, watch it fail, implement minimally, watch it pass, then commit.
 
 ## File structure (what each touched file is responsible for)
 
-- `src/PUnit/Phases.cs` — the `IPhase` marker + the built-in `Given/When/Then` markers.
-- `src/PUnit/Model/ScenarioDefinition.cs` — adds `ClassDisplayName` (carries the class node label to the runtime).
-- `src/PUnit.Generator/Lowering/SymbolHelpers.cs` — `PhaseOf` recognizes any `IPhase` implementer.
-- `src/PUnit.Generator/Lowering/AttributeReader.cs` — reads `[DisplayName]` off the declaring type.
-- `src/PUnit.Generator/Lowering/Ir.cs` — `ParsedScenario.ClassDisplayName`.
-- `src/PUnit.Generator/Lowering/ScenarioParser.cs` — populates `ClassDisplayName`.
-- `src/PUnit.Generator/Emit/ScenarioEmitter.cs` — emits `ClassDisplayName`.
-- `src/PUnit.Generator/GeneratorSafety.cs` (new) — `SafeParse`/`SafeEmit`/`Describe` exception-wrapping helpers.
-- `src/PUnit.Generator/ScenarioGenerator.cs` — wires the safety helpers into the pipeline.
-- `src/PUnit.Generator/Analysis/Descriptors.cs` — `PUNIT000` + reworded phase-marker messages.
-- `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs` — wraps `AnalyzeMethod`; supports `PUNIT000`.
-- `src/PUnit.Generator/AnalyzerReleases.Unshipped.md` — release rows.
-- `src/PUnit.Mtp/ScenarioTestIdentity.cs` + `PUnitDiscoverer.cs` + `PUnitStepReporter.cs` — use the class display name.
+- `src/Raun/Phases.cs` — the `IPhase` marker + the built-in `Given/When/Then` markers.
+- `src/Raun/Model/ScenarioDefinition.cs` — adds `ClassDisplayName` (carries the class node label to the runtime).
+- `src/Raun.Generator/Lowering/SymbolHelpers.cs` — `PhaseOf` recognizes any `IPhase` implementer.
+- `src/Raun.Generator/Lowering/AttributeReader.cs` — reads `[DisplayName]` off the declaring type.
+- `src/Raun.Generator/Lowering/Ir.cs` — `ParsedScenario.ClassDisplayName`.
+- `src/Raun.Generator/Lowering/ScenarioParser.cs` — populates `ClassDisplayName`.
+- `src/Raun.Generator/Emit/ScenarioEmitter.cs` — emits `ClassDisplayName`.
+- `src/Raun.Generator/GeneratorSafety.cs` (new) — `SafeParse`/`SafeEmit`/`Describe` exception-wrapping helpers.
+- `src/Raun.Generator/ScenarioGenerator.cs` — wires the safety helpers into the pipeline.
+- `src/Raun.Generator/Analysis/Descriptors.cs` — `RAUN000` + reworded phase-marker messages.
+- `src/Raun.Generator/Analysis/ScenarioAnalyzer.cs` — wraps `AnalyzeMethod`; supports `RAUN000`.
+- `src/Raun.Generator/AnalyzerReleases.Unshipped.md` — release rows.
+- `src/Raun.Mtp/ScenarioTestIdentity.cs` + `RaunDiscoverer.cs` + `RaunStepReporter.cs` — use the class display name.
 - `samples/AppointmentTests/AppointmentDsl.cs` + `Scenarios.cs` — phase words + `[DisplayName]`.
 
 ---
@@ -39,30 +39,30 @@
 ## Task 1: Pluggable phase markers via `IPhase`
 
 **Files:**
-- Modify: `src/PUnit/Phases.cs`
-- Modify: `src/PUnit.Generator/Lowering/SymbolHelpers.cs`
-- Modify: `src/PUnit.Generator/Analysis/Descriptors.cs`
-- Modify: `src/PUnit.Generator/AnalyzerReleases.Unshipped.md`
-- Test: `test/PUnit.Generator.Test/PluggablePhaseTests.cs` (create)
+- Modify: `src/Raun/Phases.cs`
+- Modify: `src/Raun.Generator/Lowering/SymbolHelpers.cs`
+- Modify: `src/Raun.Generator/Analysis/Descriptors.cs`
+- Modify: `src/Raun.Generator/AnalyzerReleases.Unshipped.md`
+- Test: `test/Raun.Generator.Test/PluggablePhaseTests.cs` (create)
 
 - [ ] **Step 1: Write the failing test**
 
-Create `test/PUnit.Generator.Test/PluggablePhaseTests.cs`:
+Create `test/Raun.Generator.Test/PluggablePhaseTests.cs`:
 
 ```csharp
-using PUnit.Model;
+using Raun.Model;
 using Xunit;
 
-namespace PUnit.Generator.Test;
+namespace Raun.Generator.Test;
 
-/// <summary>A custom type implementing PUnit.IPhase is recognised as a phase marker, just like the
+/// <summary>A custom type implementing Raun.IPhase is recognised as a phase marker, just like the
 /// built-in Given/When/Then, and its type name becomes the step's phase label.</summary>
 public class PluggablePhaseTests
 {
     const string CustomPhaseSource =
         """
         using System.Threading.Tasks;
-        using PUnit;
+        using Raun;
 
         namespace Demo;
 
@@ -109,15 +109,15 @@ public class PluggablePhaseTests
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~PluggablePhaseTests"`
-Expected: FAIL. Either the source fails to compile (no `PUnit.IPhase` type yet) or `Definitions()` is empty because `PhaseOf` does not recognise `Arrange`.
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~PluggablePhaseTests"`
+Expected: FAIL. Either the source fails to compile (no `Raun.IPhase` type yet) or `Definitions()` is empty because `PhaseOf` does not recognise `Arrange`.
 
 - [ ] **Step 3: Add the `IPhase` marker and reshape the built-in markers**
 
-Replace the body of `src/PUnit/Phases.cs` with:
+Replace the body of `src/Raun/Phases.cs` with:
 
 ```csharp
-namespace PUnit;
+namespace Raun;
 
 // Marker "phase" types. Domain DSLs hang steps off these with C# 14 static extension
 // members, e.g. `extension(Given) { public static Task<Patient> PatientExists(...) }`.
@@ -141,10 +141,10 @@ public sealed class Then : IPhase { private Then() { } }
 
 - [ ] **Step 4: Recognize any `IPhase` implementer in `PhaseOf`**
 
-In `src/PUnit.Generator/Lowering/SymbolHelpers.cs`, add `using System.Linq;` at the top of the using block, then replace the `PhaseOf` method:
+In `src/Raun.Generator/Lowering/SymbolHelpers.cs`, add `using System.Linq;` at the top of the using block, then replace the `PhaseOf` method:
 
 ```csharp
-    /// <summary>Returns the receiver type's name if it implements <c>PUnit.IPhase</c> (the built-in
+    /// <summary>Returns the receiver type's name if it implements <c>Raun.IPhase</c> (the built-in
     /// Given/When/Then markers do; so does any user-defined marker), else null.</summary>
     public static string? PhaseOf(ExpressionSyntax receiver, SemanticModel model)
     {
@@ -155,7 +155,7 @@ In `src/PUnit.Generator/Lowering/SymbolHelpers.cs`, add `using System.Linq;` at 
 
         var isPhase = type.AllInterfaces.Any(i =>
             i.Name == "IPhase"
-            && i.ContainingNamespace?.ToDisplayString(NoGlobal) == "PUnit");
+            && i.ContainingNamespace?.ToDisplayString(NoGlobal) == "Raun");
 
         return isPhase ? type.Name : null;
     }
@@ -163,13 +163,13 @@ In `src/PUnit.Generator/Lowering/SymbolHelpers.cs`, add `using System.Linq;` at 
 
 - [ ] **Step 5: Reword the phase-marker diagnostics**
 
-In `src/PUnit.Generator/Analysis/Descriptors.cs`, update three descriptors so their text reflects pluggable markers. Replace `UnsupportedStatement`, `NotADslCall`, and `InvalidGroupElement` with:
+In `src/Raun.Generator/Analysis/Descriptors.cs`, update three descriptors so their text reflects pluggable markers. Replace `UnsupportedStatement`, `NotADslCall`, and `InvalidGroupElement` with:
 
 ```csharp
     public static readonly DiagnosticDescriptor UnsupportedStatement = new(
-        "PUNIT002",
+        "RAUN002",
         "Unsupported scenario statement",
-        "Scenario statements must be an awaited phase-marker call (Given/When/Then, or any type implementing PUnit.IPhase), an awaited tuple, or an awaited array of such calls",
+        "Scenario statements must be an awaited phase-marker call (Given/When/Then, or any type implementing Raun.IPhase), an awaited tuple, or an awaited array of such calls",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -177,9 +177,9 @@ In `src/PUnit.Generator/Analysis/Descriptors.cs`, update three descriptors so th
 
 ```csharp
     public static readonly DiagnosticDescriptor NotADslCall = new(
-        "PUNIT004",
+        "RAUN004",
         "Scenario step must be a phase-marker call",
-        "Scenario steps must call a static extension member on a phase marker (Given/When/Then, or any type implementing PUnit.IPhase)",
+        "Scenario steps must call a static extension member on a phase marker (Given/When/Then, or any type implementing Raun.IPhase)",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -187,9 +187,9 @@ In `src/PUnit.Generator/Analysis/Descriptors.cs`, update three descriptors so th
 
 ```csharp
     public static readonly DiagnosticDescriptor InvalidGroupElement = new(
-        "PUNIT006",
+        "RAUN006",
         "Parallel group element must be a phase-marker call",
-        "Every element of a tuple/array parallel group must be a phase-marker call (Given/When/Then, or any type implementing PUnit.IPhase)",
+        "Every element of a tuple/array parallel group must be a phase-marker call (Given/When/Then, or any type implementing Raun.IPhase)",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -197,29 +197,29 @@ In `src/PUnit.Generator/Analysis/Descriptors.cs`, update three descriptors so th
 
 - [ ] **Step 6: Keep the analyzer release notes in sync with the new titles**
 
-In `src/PUnit.Generator/AnalyzerReleases.Unshipped.md`, update the PUNIT004 and PUNIT006 rows' Notes to match the new titles (leave PUNIT002's Notes — its title is unchanged):
+In `src/Raun.Generator/AnalyzerReleases.Unshipped.md`, update the RAUN004 and RAUN006 rows' Notes to match the new titles (leave RAUN002's Notes — its title is unchanged):
 
 ```
-PUNIT004 | PUnit.Usage | Error | Scenario step must be a phase-marker call
-PUNIT006 | PUnit.Usage | Error | Parallel group element must be a phase-marker call
+RAUN004 | Raun.Usage | Error | Scenario step must be a phase-marker call
+RAUN006 | Raun.Usage | Error | Parallel group element must be a phase-marker call
 ```
 
 - [ ] **Step 7: Run the new test to verify it passes**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~PluggablePhaseTests"`
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~PluggablePhaseTests"`
 Expected: PASS.
 
 - [ ] **Step 8: Run the full suites to confirm Given/When/Then still work**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj`
-Then: `dotnet test test\PUnit.Test\PUnit.Test.csproj`
-Then: `dotnet test test\PUnit.Mtp.Test\PUnit.Mtp.Test.csproj`
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj`
+Then: `dotnet test test\Raun.Test\Raun.Test.csproj`
+Then: `dotnet test test\Raun.Mtp.Test\Raun.Mtp.Test.csproj`
 Expected: all PASS (the snapshot tests still pass — this task does not change emitted output).
 
 - [ ] **Step 9: Commit**
 
 ```bash
-jj commit -m "feat(punit): make phase markers pluggable via PUnit.IPhase"
+jj commit -m "feat(raun): make phase markers pluggable via Raun.IPhase"
 ```
 
 ---
@@ -227,15 +227,15 @@ jj commit -m "feat(punit): make phase markers pluggable via PUnit.IPhase"
 ## Task 2: `ScenarioDefinition.ClassDisplayName` + `ScenarioTestIdentity` honors it
 
 **Files:**
-- Modify: `src/PUnit/Model/ScenarioDefinition.cs`
-- Modify: `src/PUnit.Mtp/ScenarioTestIdentity.cs`
-- Modify: `src/PUnit.Mtp/PUnitDiscoverer.cs:57`
-- Modify: `src/PUnit.Mtp/PUnitStepReporter.cs:163`
-- Test: `test/PUnit.Mtp.Test/ScenarioTestIdentityTests.cs`
+- Modify: `src/Raun/Model/ScenarioDefinition.cs`
+- Modify: `src/Raun.Mtp/ScenarioTestIdentity.cs`
+- Modify: `src/Raun.Mtp/RaunDiscoverer.cs:57`
+- Modify: `src/Raun.Mtp/RaunStepReporter.cs:163`
+- Test: `test/Raun.Mtp.Test/ScenarioTestIdentityTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
-In `test/PUnit.Mtp.Test/ScenarioTestIdentityTests.cs`, add two facts to the class:
+In `test/Raun.Mtp.Test/ScenarioTestIdentityTests.cs`, add two facts to the class:
 
 ```csharp
     [Fact]
@@ -262,12 +262,12 @@ In `test/PUnit.Mtp.Test/ScenarioTestIdentityTests.cs`, add two facts to the clas
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `dotnet test test\PUnit.Mtp.Test\PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~ScenarioTestIdentityTests"`
+Run: `dotnet test test\Raun.Mtp.Test\Raun.Mtp.Test.csproj --filter "FullyQualifiedName~ScenarioTestIdentityTests"`
 Expected: FAIL to compile — `Create` currently takes only two arguments.
 
 - [ ] **Step 3: Add `ClassDisplayName` to the model**
 
-In `src/PUnit/Model/ScenarioDefinition.cs`, immediately after the `MethodName` property add:
+In `src/Raun/Model/ScenarioDefinition.cs`, immediately after the `MethodName` property add:
 
 ```csharp
     /// <summary>Optional display name for the scenario's declaring class (from a <c>[DisplayName]</c>
@@ -277,7 +277,7 @@ In `src/PUnit/Model/ScenarioDefinition.cs`, immediately after the `MethodName` p
 
 - [ ] **Step 4: Make `Create` honor the class display name**
 
-In `src/PUnit.Mtp/ScenarioTestIdentity.cs`, replace the `Create` method with:
+In `src/Raun.Mtp/ScenarioTestIdentity.cs`, replace the `Create` method with:
 
 ```csharp
     /// <summary>
@@ -310,13 +310,13 @@ In `src/PUnit.Mtp/ScenarioTestIdentity.cs`, replace the `Create` method with:
 
 - [ ] **Step 5: Pass the class display name from both call sites**
 
-In `src/PUnit.Mtp/PUnitDiscoverer.cs` line ~57, change:
+In `src/Raun.Mtp/RaunDiscoverer.cs` line ~57, change:
 
 ```csharp
         node.Properties.Add(ScenarioTestIdentity.Create(definition.MethodName, definition.DisplayName, definition.ClassDisplayName));
 ```
 
-In `src/PUnit.Mtp/PUnitStepReporter.cs` line ~163, change:
+In `src/Raun.Mtp/RaunStepReporter.cs` line ~163, change:
 
 ```csharp
         testNode.Properties.Add(ScenarioTestIdentity.Create(definition.MethodName, definition.DisplayName, definition.ClassDisplayName));
@@ -324,7 +324,7 @@ In `src/PUnit.Mtp/PUnitStepReporter.cs` line ~163, change:
 
 - [ ] **Step 6: Run the test to verify it passes**
 
-Run: `dotnet test test\PUnit.Mtp.Test\PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~ScenarioTestIdentityTests"`
+Run: `dotnet test test\Raun.Mtp.Test\Raun.Mtp.Test.csproj --filter "FullyQualifiedName~ScenarioTestIdentityTests"`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -338,25 +338,25 @@ jj commit -m "feat(mtp): honor a scenario class display name in test identity"
 ## Task 3: Generator reads `[DisplayName]` into `ClassDisplayName` (and regenerate snapshots)
 
 **Files:**
-- Modify: `src/PUnit.Generator/Lowering/AttributeReader.cs`
-- Modify: `src/PUnit.Generator/Lowering/Ir.cs`
-- Modify: `src/PUnit.Generator/Lowering/ScenarioParser.cs`
-- Modify: `src/PUnit.Generator/Emit/ScenarioEmitter.cs`
-- Test: `test/PUnit.Generator.Test/ClassDisplayNameTests.cs` (create)
-- Modify (regenerate): `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Linear_scenario#PUnitScenarios.g.verified.cs`
-- Modify (regenerate): `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Tuple_scenario#PUnitScenarios.g.verified.cs`
-- Modify (regenerate): `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Array_scenario#PUnitScenarios.g.verified.cs`
-- Modify (regenerate): `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.PathBearing_scenario#PUnitScenarios.g.verified.cs`
+- Modify: `src/Raun.Generator/Lowering/AttributeReader.cs`
+- Modify: `src/Raun.Generator/Lowering/Ir.cs`
+- Modify: `src/Raun.Generator/Lowering/ScenarioParser.cs`
+- Modify: `src/Raun.Generator/Emit/ScenarioEmitter.cs`
+- Test: `test/Raun.Generator.Test/ClassDisplayNameTests.cs` (create)
+- Modify (regenerate): `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Linear_scenario#RaunScenarios.g.verified.cs`
+- Modify (regenerate): `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Tuple_scenario#RaunScenarios.g.verified.cs`
+- Modify (regenerate): `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Array_scenario#RaunScenarios.g.verified.cs`
+- Modify (regenerate): `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.PathBearing_scenario#RaunScenarios.g.verified.cs`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `test/PUnit.Generator.Test/ClassDisplayNameTests.cs`:
+Create `test/Raun.Generator.Test/ClassDisplayNameTests.cs`:
 
 ```csharp
-using PUnit.Model;
+using Raun.Model;
 using Xunit;
 
-namespace PUnit.Generator.Test;
+namespace Raun.Generator.Test;
 
 /// <summary>A [DisplayName] on the scenario's declaring class flows into
 /// ScenarioDefinition.ClassDisplayName; without it the value is null.</summary>
@@ -401,12 +401,12 @@ public class ClassDisplayNameTests
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~ClassDisplayNameTests"`
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~ClassDisplayNameTests"`
 Expected: FAIL — `ScenarioDefinition.ClassDisplayName` is always null (the generator never sets it), so `DisplayName_attribute_sets_ClassDisplayName` fails on the assertion.
 
 - [ ] **Step 3: Read the attribute off the declaring type**
 
-In `src/PUnit.Generator/Lowering/AttributeReader.cs`, add this method to the class:
+In `src/Raun.Generator/Lowering/AttributeReader.cs`, add this method to the class:
 
 ```csharp
     public static string? ClassDisplayName(INamedTypeSymbol type)
@@ -423,7 +423,7 @@ In `src/PUnit.Generator/Lowering/AttributeReader.cs`, add this method to the cla
 
 - [ ] **Step 4: Carry it on the IR**
 
-In `src/PUnit.Generator/Lowering/Ir.cs`, add a property to `ParsedScenario` (next to `DisplayName`):
+In `src/Raun.Generator/Lowering/Ir.cs`, add a property to `ParsedScenario` (next to `DisplayName`):
 
 ```csharp
     public string? ClassDisplayName { get; init; }
@@ -431,7 +431,7 @@ In `src/PUnit.Generator/Lowering/Ir.cs`, add a property to `ParsedScenario` (nex
 
 - [ ] **Step 5: Populate it in the parser**
 
-In `src/PUnit.Generator/Lowering/ScenarioParser.cs`, in the `return new ParsedScenario { ... }` object initializer inside `Parse()`, add after the `DisplayName = ...` line:
+In `src/Raun.Generator/Lowering/ScenarioParser.cs`, in the `return new ParsedScenario { ... }` object initializer inside `Parse()`, add after the `DisplayName = ...` line:
 
 ```csharp
             ClassDisplayName = AttributeReader.ClassDisplayName(_method.ContainingType),
@@ -439,7 +439,7 @@ In `src/PUnit.Generator/Lowering/ScenarioParser.cs`, in the `return new ParsedSc
 
 - [ ] **Step 6: Emit it into the definition**
 
-In `src/PUnit.Generator/Emit/ScenarioEmitter.cs`, in `BuildScenarioBuilder`'s `ScenarioDefinition` initializer list, add a line right after `Set("MethodName", Lit(scenario.MethodFullName)),`:
+In `src/Raun.Generator/Emit/ScenarioEmitter.cs`, in `BuildScenarioBuilder`'s `ScenarioDefinition` initializer list, add a line right after `Set("MethodName", Lit(scenario.MethodFullName)),`:
 
 ```csharp
                 Set("ClassDisplayName", Lit(scenario.ClassDisplayName)),
@@ -447,14 +447,14 @@ In `src/PUnit.Generator/Emit/ScenarioEmitter.cs`, in `BuildScenarioBuilder`'s `S
 
 - [ ] **Step 7: Run the unit test to verify it passes**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~ClassDisplayNameTests"`
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~ClassDisplayNameTests"`
 Expected: PASS.
 
 The emitter now also writes a `ClassDisplayName = null,` line into every `ScenarioDefinition` initializer, so the four lowering snapshots are stale. Regenerate them before committing so the commit stays green. (DiffEngine is disabled in `VerifyConfig`, so Verify writes `*.received.cs` next to the `*.verified.cs` on mismatch.)
 
 - [ ] **Step 8: Run the snapshot tests to see them fail**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~GeneratorSnapshotTests"`
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~GeneratorSnapshotTests"`
 Expected: FAIL for `Linear_scenario`, `Tuple_scenario`, `Array_scenario`, `PathBearing_scenario` (the `EntryPoint` snapshot still passes — it contains no `ScenarioDefinition`). Each failure writes a `*.received.cs` file.
 
 - [ ] **Step 9: Confirm the only diff is the new line**
@@ -469,7 +469,7 @@ jj diff --git
 
 - [ ] **Step 10: Accept the snapshots**
 
-Overwrite each `*.verified.cs` with its `*.received.cs` and remove the received files. In PowerShell, from `C:\dev\punit\test\PUnit.Generator.Test\Snapshots`:
+Overwrite each `*.verified.cs` with its `*.received.cs` and remove the received files. In PowerShell, from `C:\dev\raun\test\Raun.Generator.Test\Snapshots`:
 
 ```powershell
 Get-ChildItem -Filter '*.received.cs' | ForEach-Object {
@@ -480,7 +480,7 @@ Get-ChildItem -Filter '*.received.cs' | ForEach-Object {
 
 - [ ] **Step 11: Re-run the whole generator suite to verify green**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj`
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj`
 Expected: PASS (all snapshots accepted; unit tests green).
 
 - [ ] **Step 12: Commit**
@@ -491,37 +491,37 @@ jj commit -m "feat(generator): read [DisplayName] on a scenario class into Class
 
 ---
 
-## Task 4: PUNIT000 in the generator (parse + emit safety net)
+## Task 4: RAUN000 in the generator (parse + emit safety net)
 
 **Files:**
-- Modify: `src/PUnit.Generator/PUnit.Generator.csproj` (add `InternalsVisibleTo`)
-- Create: `src/PUnit.Generator/GeneratorSafety.cs`
-- Modify: `src/PUnit.Generator/Analysis/Descriptors.cs` (add PUNIT000)
-- Modify: `src/PUnit.Generator/AnalyzerReleases.Unshipped.md` (add PUNIT000 row)
-- Modify: `src/PUnit.Generator/ScenarioGenerator.cs` (wire safety helpers)
-- Test: `test/PUnit.Generator.Test/GeneratorSafetyTests.cs` (create)
+- Modify: `src/Raun.Generator/Raun.Generator.csproj` (add `InternalsVisibleTo`)
+- Create: `src/Raun.Generator/GeneratorSafety.cs`
+- Modify: `src/Raun.Generator/Analysis/Descriptors.cs` (add RAUN000)
+- Modify: `src/Raun.Generator/AnalyzerReleases.Unshipped.md` (add RAUN000 row)
+- Modify: `src/Raun.Generator/ScenarioGenerator.cs` (wire safety helpers)
+- Test: `test/Raun.Generator.Test/GeneratorSafetyTests.cs` (create)
 
 - [ ] **Step 1: Make generator internals visible to the test project**
 
-In `src/PUnit.Generator/PUnit.Generator.csproj`, add an `ItemGroup`:
+In `src/Raun.Generator/Raun.Generator.csproj`, add an `ItemGroup`:
 
 ```xml
   <ItemGroup>
-    <InternalsVisibleTo Include="PUnit.Generator.Test" />
+    <InternalsVisibleTo Include="Raun.Generator.Test" />
   </ItemGroup>
 ```
 
 - [ ] **Step 2: Write the failing test**
 
-Create `test/PUnit.Generator.Test/GeneratorSafetyTests.cs`:
+Create `test/Raun.Generator.Test/GeneratorSafetyTests.cs`:
 
 ```csharp
 using System;
-using PUnit.Generator;
-using PUnit.Generator.Lowering;
+using Raun.Generator;
+using Raun.Generator.Lowering;
 using Xunit;
 
-namespace PUnit.Generator.Test;
+namespace Raun.Generator.Test;
 
 /// <summary>The parse/emit safety helpers turn an unexpected throw into a reportable error instead
 /// of crashing the generator, and pass successful results through untouched.</summary>
@@ -573,26 +573,26 @@ public class GeneratorSafetyTests
 
 - [ ] **Step 3: Run the test to verify it fails**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~GeneratorSafetyTests"`
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~GeneratorSafetyTests"`
 Expected: FAIL to compile — `GeneratorSafety` does not exist yet.
 
 - [ ] **Step 4: Create the safety helpers**
 
-Create `src/PUnit.Generator/GeneratorSafety.cs`:
+Create `src/Raun.Generator/GeneratorSafety.cs`:
 
 ```csharp
 using System;
-using PUnit.Generator.Lowering;
+using Raun.Generator.Lowering;
 
-namespace PUnit.Generator;
+namespace Raun.Generator;
 
 /// <summary>The outcome of safely parsing one scenario: either the parsed <see cref="Scenario"/>, or
 /// an <see cref="Error"/> (exception text) plus the originating method's <see cref="File"/>/<see cref="Line"/>
-/// to report as PUNIT000.</summary>
+/// to report as RAUN000.</summary>
 internal readonly record struct ScenarioResult(ParsedScenario? Scenario, string? Error, string? File, int Line);
 
 /// <summary>
-/// Wraps the generator's parse and emit stages so an unexpected throw becomes a PUNIT000 diagnostic
+/// Wraps the generator's parse and emit stages so an unexpected throw becomes a RAUN000 diagnostic
 /// instead of crashing the generator (CS8785). Delegate-driven, so the wrapping behaviour is
 /// unit-testable without forcing the real parser/emitter to throw.
 /// </summary>
@@ -629,43 +629,43 @@ internal static class GeneratorSafety
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~GeneratorSafetyTests"`
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~GeneratorSafetyTests"`
 Expected: PASS.
 
-- [ ] **Step 6: Add the PUNIT000 descriptor**
+- [ ] **Step 6: Add the RAUN000 descriptor**
 
-In `src/PUnit.Generator/Analysis/Descriptors.cs`, add at the top of the descriptor list (before `MustBeAsyncTask`):
+In `src/Raun.Generator/Analysis/Descriptors.cs`, add at the top of the descriptor list (before `MustBeAsyncTask`):
 
 ```csharp
     public static readonly DiagnosticDescriptor UnhandledException = new(
-        "PUNIT000",
-        "Unhandled exception in PUnit generator",
-        "PUnit failed to process a scenario: {0}",
+        "RAUN000",
+        "Unhandled exception in Raun generator",
+        "Raun failed to process a scenario: {0}",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 ```
 
-- [ ] **Step 7: Register PUNIT000 in the analyzer release file**
+- [ ] **Step 7: Register RAUN000 in the analyzer release file**
 
-In `src/PUnit.Generator/AnalyzerReleases.Unshipped.md`, add a row at the top of the table (before PUNIT001):
+In `src/Raun.Generator/AnalyzerReleases.Unshipped.md`, add a row at the top of the table (before RAUN001):
 
 ```
-PUNIT000 | PUnit.Usage | Error | Unhandled exception in PUnit generator
+RAUN000 | Raun.Usage | Error | Unhandled exception in Raun generator
 ```
 
 - [ ] **Step 8: Wire the helpers into the generator pipeline**
 
-In `src/PUnit.Generator/ScenarioGenerator.cs`:
+In `src/Raun.Generator/ScenarioGenerator.cs`:
 
-(a) Add `using System.Collections.Generic;` and `using PUnit.Generator.Analysis;` to the using block.
+(a) Add `using System.Collections.Generic;` and `using Raun.Generator.Analysis;` to the using block.
 
 (b) Replace the `scenarios` provider + first `RegisterSourceOutput` (the manifest output) with:
 
 ```csharp
         var scenarios = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                "PUnit.ScenarioAttribute",
+                "Raun.ScenarioAttribute",
                 predicate: static (node, _) => node is MethodDeclarationSyntax,
                 transform: static (ctx, _) => Transform(ctx))
             .Where(static result => result is not null)
@@ -704,7 +704,7 @@ In `src/PUnit.Generator/ScenarioGenerator.cs`:
                 return;
             }
 
-            spc.AddSource("PUnitScenarios.g.cs", SourceText.From(source!, Encoding.UTF8));
+            spc.AddSource("RaunScenarios.g.cs", SourceText.From(source!, Encoding.UTF8));
         });
 ```
 
@@ -762,49 +762,49 @@ In `src/PUnit.Generator/ScenarioGenerator.cs`:
 
 - [ ] **Step 9: Build and run the generator suite (no regressions)**
 
-Run: `dotnet build src\PUnit.Generator\PUnit.Generator.csproj`
-Expected: succeeds with no RS2008 analyzer-release warnings (PUNIT000 is now tracked).
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj`
+Run: `dotnet build src\Raun.Generator\Raun.Generator.csproj`
+Expected: succeeds with no RS2008 analyzer-release warnings (RAUN000 is now tracked).
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj`
 Expected: all PASS (existing lowering/snapshot/analyzer tests unaffected; the pipeline still emits identical output for valid input).
 
 - [ ] **Step 10: Commit**
 
 ```bash
-jj commit -m "feat(generator): report PUNIT000 on unhandled parse/emit exceptions"
+jj commit -m "feat(generator): report RAUN000 on unhandled parse/emit exceptions"
 ```
 
 ---
 
-## Task 5: PUNIT000 in the analyzer
+## Task 5: RAUN000 in the analyzer
 
 **Files:**
-- Modify: `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs`
-- Test: `test/PUnit.Generator.Test/AnalyzerTests.cs`
+- Modify: `src/Raun.Generator/Analysis/ScenarioAnalyzer.cs`
+- Test: `test/Raun.Generator.Test/AnalyzerTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
-In `test/PUnit.Generator.Test/AnalyzerTests.cs`, add:
+In `test/Raun.Generator.Test/AnalyzerTests.cs`, add:
 
 ```csharp
     [Fact]
-    public void PUNIT000_is_a_supported_diagnostic()
+    public void RAUN000_is_a_supported_diagnostic()
     {
-        var analyzer = new PUnit.Generator.Analysis.ScenarioAnalyzer();
+        var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
 
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "PUNIT000");
+        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN000");
     }
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~AnalyzerTests.PUNIT000"`
-Expected: FAIL — `PUNIT000` is not in `SupportedDiagnostics`.
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~AnalyzerTests.RAUN000"`
+Expected: FAIL — `RAUN000` is not in `SupportedDiagnostics`.
 
-- [ ] **Step 3: Support PUNIT000 and wrap per-method analysis**
+- [ ] **Step 3: Support RAUN000 and wrap per-method analysis**
 
-In `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs`:
+In `src/Raun.Generator/Analysis/ScenarioAnalyzer.cs`:
 
-(a) Add `using System;` and `using PUnit.Generator;` to the using block.
+(a) Add `using System;` and `using Raun.Generator;` to the using block.
 
 (b) Add `Descriptors.UnhandledException,` as the first entry of the `SupportedDiagnostics` collection.
 
@@ -835,13 +835,13 @@ In `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs`:
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj --filter "FullyQualifiedName~AnalyzerTests"`
-Expected: PASS (the new fact plus all existing PUNIT00x facts — wrapping does not change their behavior).
+Run: `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj --filter "FullyQualifiedName~AnalyzerTests"`
+Expected: PASS (the new fact plus all existing RAUN00x facts — wrapping does not change their behavior).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-jj commit -m "feat(generator): guard analyzer per-method analysis with PUNIT000"
+jj commit -m "feat(generator): guard analyzer per-method analysis with RAUN000"
 ```
 
 ---
@@ -870,7 +870,7 @@ In `samples/AppointmentTests/AppointmentDsl.cs`, update the eight `[StepName]` t
 In `samples/AppointmentTests/Scenarios.cs`, add `using System.ComponentModel;` to the using block, and put `[DisplayName("Appointment booking")]` on the `Scenarios` class:
 
 ```csharp
-using PUnit;
+using Raun;
 using System.ComponentModel;
 
 namespace AppointmentTests;
@@ -914,8 +914,8 @@ jj commit -m "sample(appointments): phase words in step names + Appointment book
 
 - [ ] **Whole-repo build:** `dotnet build` → succeeds, no analyzer-release (RS2008) warnings.
 - [ ] **All test projects pass:**
-  - `dotnet test test\PUnit.Test\PUnit.Test.csproj`
-  - `dotnet test test\PUnit.Generator.Test\PUnit.Generator.Test.csproj`
-  - `dotnet test test\PUnit.Mtp.Test\PUnit.Mtp.Test.csproj`
+  - `dotnet test test\Raun.Test\Raun.Test.csproj`
+  - `dotnet test test\Raun.Generator.Test\Raun.Generator.Test.csproj`
+  - `dotnet test test\Raun.Mtp.Test\Raun.Mtp.Test.csproj`
   - `dotnet test samples\AppointmentTests\AppointmentTests.csproj`
 - [ ] **Spec coverage:** Feature 1 (Task 6), Feature 2 (Tasks 2–3, 6), Feature 3 (Task 1), Feature 4 (Tasks 4–5) all implemented.

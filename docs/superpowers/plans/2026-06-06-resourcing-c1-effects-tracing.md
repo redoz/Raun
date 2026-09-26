@@ -4,7 +4,7 @@
 
 **Goal:** Let a DSL step declare symbolic resource roles (`[Creates]`/`[Loads]`/`[Reads]`/`[Edits]`/`[Deletes]`) that the source generator lowers to an imperative `ctx.Resources.*` API, producing a per-step `ResourceEffect` trace stream that flows out through the existing `StepResult` / `IStepObserver` channel — with **no locking or scheduling changes** (those are C2).
 
-**Architecture:** A new runner-neutral resource subsystem under `src/PUnit/Resources/` provides typed identity (`IResource<TSelf>` CRTP, `IResourceIdentity`, a registered selector, and value-equality fallback — resolved by a 4-link `ResourceIdentityResolver`), an imperative `ResourceContext` hanging off `ScenarioContext.Resources` whose verbs record deduped `ResourceEffect`s, and a `StepResult.Effects` collection the scheduler fills from the context (exactly as it already does for `Logs`/`Attachments`). The generator reads per-parameter and per-return role attributes, raises **PUNIT009** when a resource-typed parameter/return has no role, and injects `await __ctx.Resources.<Verb>(…)` calls into the generated invoke lambda. The MTP reporter surfaces effects as standard output so the stream is visible end-to-end.
+**Architecture:** A new runner-neutral resource subsystem under `src/Raun/Resources/` provides typed identity (`IResource<TSelf>` CRTP, `IResourceIdentity`, a registered selector, and value-equality fallback — resolved by a 4-link `ResourceIdentityResolver`), an imperative `ResourceContext` hanging off `ScenarioContext.Resources` whose verbs record deduped `ResourceEffect`s, and a `StepResult.Effects` collection the scheduler fills from the context (exactly as it already does for `Logs`/`Attachments`). The generator reads per-parameter and per-return role attributes, raises **RAUN009** when a resource-typed parameter/return has no role, and injects `await __ctx.Resources.<Verb>(…)` calls into the generated invoke lambda. The MTP reporter surfaces effects as standard output so the stream is visible end-to-end.
 
 **Tech Stack:** C# (`net10.0`, `LangVersion=latest` — static-abstract interface members available), Roslyn incremental generator + analyzer (`Microsoft.CodeAnalysis` 5.3), xUnit v3 + Verify for tests, Jujutsu (`jj`) for commits. Repo builds with `TreatWarningsAsErrors=true`, `AnalysisLevel=latest-all`, `EnforceCodeStyleInBuild=true`.
 
@@ -20,77 +20,77 @@
   ```
   **No `Co-Authored-By` or tooling trailers** (memory `commit-style`) — subject + optional body only.
 - **Test commands** (xUnit projects, standard VSTest filter):
-  - Core: `dotnet test test/PUnit.Test/PUnit.Test.csproj`
-  - Generator/analyzer: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj`
+  - Core: `dotnet test test/Raun.Test/Raun.Test.csproj`
+  - Generator/analyzer: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj`
   - A single test: append `--filter "FullyQualifiedName~<ClassOrMethod>"`.
   - Whole build: `dotnet build` (0 warnings, 0 errors is the bar).
   - The `-- --filter-class/--filter-method` (MTP) syntax is **only** for running the `samples/AppointmentTests` app, not these xUnit test projects (Task 11).
 - **Warning-clean gotcha (`EnforceCodeStyleInBuild` + IDE0079):** do **not** pre-emptively add `#pragma warning disable` — an unnecessary suppression itself errors as IDE0079. Add a suppression *only after* a build proves the warning fires, with a one-line justification (the repo precedent is the CA1040 pragma on an empty marker interface). The most likely candidate here is **CA1000** on `IResource<TSelf>.KeyFor` (static member on a generic type) — handle it reactively in Task 2 if it appears.
-- **Namespaces** (folders are organizational; the repo does *not* align folder→namespace, e.g. `Attributes/StepNameAttribute.cs` is namespace `PUnit`):
-  - `PUnit.Model` — `ResourceKey`, `ResourceIdentity`, `LifecycleVerb`, `ResourceEffect` (data model, next to `StepResult`).
-  - `PUnit` — `IResource<TSelf>`, `IResourceIdentity`, `ResourceIdentityResolver`, `ResourceContext`, and the role attributes (author-facing, reached via `using PUnit;` like `[StepName]`).
+- **Namespaces** (folders are organizational; the repo does *not* align folder→namespace, e.g. `Attributes/StepNameAttribute.cs` is namespace `Raun`):
+  - `Raun.Model` — `ResourceKey`, `ResourceIdentity`, `LifecycleVerb`, `ResourceEffect` (data model, next to `StepResult`).
+  - `Raun` — `IResource<TSelf>`, `IResourceIdentity`, `ResourceIdentityResolver`, `ResourceContext`, and the role attributes (author-facing, reached via `using Raun;` like `[StepName]`).
 - **C2 is explicitly out of scope:** no locking, no `ScenarioLockScope`/`BeginScenarioScope`/`LockAsync`, no `Access`/`LockMode`, no wound-wait, no scheduler/session changes, no static claim catalog, and **no** `[Resource]`/`[ResourceKey]` key-projection codegen, `ISingletonResource<T>`, or `[Requires<T>]`. C1 identity is fully covered by `IResource<TSelf>` (CRTP), `IResourceIdentity`, a registered selector, and value-equality. Verbs are `async` (return `ValueTask`) now so the surface is stable when C2 makes acquisition genuinely await a lock.
 
 ---
 
 ## File Structure
 
-**New files (all under `src/PUnit/Resources/`):**
+**New files (all under `src/Raun/Resources/`):**
 
 | File | Namespace | Responsibility |
 |---|---|---|
-| `ResourceKey.cs` | `PUnit.Model` | Value-equality key wrapper; implicit from `string`; `FromValue(object)`. |
-| `ResourceIdentity.cs` | `PUnit.Model` | `(Type, ResourceKey)` identity; `ToString()` → `Type:Key`. |
-| `LifecycleVerb.cs` | `PUnit.Model` | `enum { Read, Load, Create, Edit, Delete }` — numeric order **is** strength. |
-| `ResourceEffect.cs` | `PUnit.Model` | One trace event: verb, identity, data snapshot, owning step, timestamp. |
-| `IResource.cs` | `PUnit` | `IResource<TSelf>` CRTP marker with `static abstract ResourceKey KeyFor(TSelf)`; `IResourceIdentity` (runtime key). |
-| `ResourceIdentityResolver.cs` | `PUnit` | 4-link identity chain + selector registration. |
-| `ResourceContext.cs` | `PUnit` | `ctx.Resources` — the imperative verbs; records deduped effects per step. |
-| `ResourceRoleAttributes.cs` | `PUnit` | `[Creates]`, `[Loads]`, `[Reads]`, `[Edits]`, `[Deletes]`. |
+| `ResourceKey.cs` | `Raun.Model` | Value-equality key wrapper; implicit from `string`; `FromValue(object)`. |
+| `ResourceIdentity.cs` | `Raun.Model` | `(Type, ResourceKey)` identity; `ToString()` → `Type:Key`. |
+| `LifecycleVerb.cs` | `Raun.Model` | `enum { Read, Load, Create, Edit, Delete }` — numeric order **is** strength. |
+| `ResourceEffect.cs` | `Raun.Model` | One trace event: verb, identity, data snapshot, owning step, timestamp. |
+| `IResource.cs` | `Raun` | `IResource<TSelf>` CRTP marker with `static abstract ResourceKey KeyFor(TSelf)`; `IResourceIdentity` (runtime key). |
+| `ResourceIdentityResolver.cs` | `Raun` | 4-link identity chain + selector registration. |
+| `ResourceContext.cs` | `Raun` | `ctx.Resources` — the imperative verbs; records deduped effects per step. |
+| `ResourceRoleAttributes.cs` | `Raun` | `[Creates]`, `[Loads]`, `[Reads]`, `[Edits]`, `[Deletes]`. |
 
 **Modified files:**
 
 | File | Change |
 |---|---|
-| `src/PUnit/ScenarioContext.cs` | Add lazy `Resources` property (resolver from `Services`, else empty). |
-| `src/PUnit/Model/StepResult.cs` | Add `IReadOnlyList<ResourceEffect> Effects`. |
-| `src/PUnit/Scheduling/ScenarioScheduler.cs` | Copy `context.Resources.Effects` into passed/failed `StepResult`s. |
-| `src/PUnit.Generator/Lowering/Ir.cs` | Add `ResourceClaim` record + `ResourceClaims` on `ParsedStep`. |
-| `src/PUnit.Generator/Lowering/AttributeReader.cs` | Add `ParameterRole` / `ReturnRole`. |
-| `src/PUnit.Generator/Lowering/ScenarioParser.cs` | Populate `ResourceClaims` in `BuildStep`. |
-| `src/PUnit.Generator/Emit/ScenarioEmitter.cs` | Inject `await __ctx.Resources.<Verb>(…)` into the invoke lambda. |
-| `src/PUnit.Generator/Analysis/Descriptors.cs` | Add `MissingResourceRole` (PUNIT009). |
-| `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs` | Register PUNIT009 + emit it for unannotated resource params/returns. |
-| `src/PUnit.Generator/AnalyzerReleases.Unshipped.md` | Add the PUNIT009 row. |
-| `src/PUnit.Mtp/PUnitStepReporter.cs` | Surface effects as standard output. |
+| `src/Raun/ScenarioContext.cs` | Add lazy `Resources` property (resolver from `Services`, else empty). |
+| `src/Raun/Model/StepResult.cs` | Add `IReadOnlyList<ResourceEffect> Effects`. |
+| `src/Raun/Scheduling/ScenarioScheduler.cs` | Copy `context.Resources.Effects` into passed/failed `StepResult`s. |
+| `src/Raun.Generator/Lowering/Ir.cs` | Add `ResourceClaim` record + `ResourceClaims` on `ParsedStep`. |
+| `src/Raun.Generator/Lowering/AttributeReader.cs` | Add `ParameterRole` / `ReturnRole`. |
+| `src/Raun.Generator/Lowering/ScenarioParser.cs` | Populate `ResourceClaims` in `BuildStep`. |
+| `src/Raun.Generator/Emit/ScenarioEmitter.cs` | Inject `await __ctx.Resources.<Verb>(…)` into the invoke lambda. |
+| `src/Raun.Generator/Analysis/Descriptors.cs` | Add `MissingResourceRole` (RAUN009). |
+| `src/Raun.Generator/Analysis/ScenarioAnalyzer.cs` | Register RAUN009 + emit it for unannotated resource params/returns. |
+| `src/Raun.Generator/AnalyzerReleases.Unshipped.md` | Add the RAUN009 row. |
+| `src/Raun.Mtp/RaunStepReporter.cs` | Surface effects as standard output. |
 | `samples/AppointmentTests/AppointmentDsl.cs` + `Scenarios.cs` | Exercise roles end-to-end. |
 
 **New test files / additions:**
 
-- `test/PUnit.Test/Resources/ResourceKeyTests.cs`, `ResourceIdentityResolverTests.cs`, `ResourceContextTests.cs`
-- additions to `test/PUnit.Test/ScenarioContextTests.cs`, `SchedulerTests.cs`
-- `test/PUnit.Generator.Test/ResourceLoweringTests.cs`, additions to `AnalyzerTests.cs`, `SampleSources.cs`, a new snapshot
-- additions to `test/PUnit.Mtp.Test/PUnitStepReporterTests.cs`
+- `test/Raun.Test/Resources/ResourceKeyTests.cs`, `ResourceIdentityResolverTests.cs`, `ResourceContextTests.cs`
+- additions to `test/Raun.Test/ScenarioContextTests.cs`, `SchedulerTests.cs`
+- `test/Raun.Generator.Test/ResourceLoweringTests.cs`, additions to `AnalyzerTests.cs`, `SampleSources.cs`, a new snapshot
+- additions to `test/Raun.Mtp.Test/RaunStepReporterTests.cs`
 
 ---
 
 ### Task 1: Resource value types (`ResourceKey`, `ResourceIdentity`, `LifecycleVerb`)
 
 **Files:**
-- Create: `src/PUnit/Resources/ResourceKey.cs`
-- Create: `src/PUnit/Resources/ResourceIdentity.cs`
-- Create: `src/PUnit/Resources/LifecycleVerb.cs`
-- Test: `test/PUnit.Test/Resources/ResourceKeyTests.cs`
+- Create: `src/Raun/Resources/ResourceKey.cs`
+- Create: `src/Raun/Resources/ResourceIdentity.cs`
+- Create: `src/Raun/Resources/LifecycleVerb.cs`
+- Test: `test/Raun.Test/Resources/ResourceKeyTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `test/PUnit.Test/Resources/ResourceKeyTests.cs`:
+Create `test/Raun.Test/Resources/ResourceKeyTests.cs`:
 
 ```csharp
-using PUnit.Model;
+using Raun.Model;
 using Xunit;
 
-namespace PUnit.Test.Resources;
+namespace Raun.Test.Resources;
 
 /// <summary>
 /// <see cref="ResourceKey"/> is a value-equality wrapper (string keys via implicit conversion, or any
@@ -145,15 +145,15 @@ public class ResourceKeyTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceKeyTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceKeyTests"`
 Expected: FAIL — `ResourceKey` / `ResourceIdentity` / `LifecycleVerb` do not exist (compile error).
 
 - [ ] **Step 3: Write the implementation**
 
-Create `src/PUnit/Resources/ResourceKey.cs`:
+Create `src/Raun/Resources/ResourceKey.cs`:
 
 ```csharp
-namespace PUnit.Model;
+namespace Raun.Model;
 
 /// <summary>
 /// A symbolic resource key. Compares by the wrapped value's own equality, so a <c>string</c> key
@@ -185,10 +185,10 @@ public readonly struct ResourceKey : IEquatable<ResourceKey>
 }
 ```
 
-Create `src/PUnit/Resources/ResourceIdentity.cs`:
+Create `src/Raun/Resources/ResourceIdentity.cs`:
 
 ```csharp
-namespace PUnit.Model;
+namespace Raun.Model;
 
 /// <summary>A symbolic resource identity: the domain type plus its <see cref="ResourceKey"/>.</summary>
 public readonly record struct ResourceIdentity(Type Type, ResourceKey Key)
@@ -197,10 +197,10 @@ public readonly record struct ResourceIdentity(Type Type, ResourceKey Key)
 }
 ```
 
-Create `src/PUnit/Resources/LifecycleVerb.cs`:
+Create `src/Raun/Resources/LifecycleVerb.cs`:
 
 ```csharp
-namespace PUnit.Model;
+namespace Raun.Model;
 
 /// <summary>
 /// What a step does to a resource. The declaration order encodes <b>strength</b> (Read weakest …
@@ -220,12 +220,12 @@ public enum LifecycleVerb
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceKeyTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceKeyTests"`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Build clean & commit**
 
-Run: `dotnet build src/PUnit/PUnit.csproj` → expect 0 warnings / 0 errors.
+Run: `dotnet build src/Raun/Raun.csproj` → expect 0 warnings / 0 errors.
 
 ```bash
 jj describe -m "feat(resources): ResourceKey, ResourceIdentity, LifecycleVerb value types"
@@ -237,18 +237,18 @@ jj new
 ### Task 2: Identity interfaces (`IResource<TSelf>`, `IResourceIdentity`)
 
 **Files:**
-- Create: `src/PUnit/Resources/IResource.cs`
+- Create: `src/Raun/Resources/IResource.cs`
 
 These have no behavior of their own; they are exercised by the resolver in Task 3. This task only adds them and proves the build stays green (and that `latest` accepts the static-abstract member).
 
 - [ ] **Step 1: Write the implementation**
 
-Create `src/PUnit/Resources/IResource.cs`:
+Create `src/Raun/Resources/IResource.cs`:
 
 ```csharp
-using PUnit.Model;
+using Raun.Model;
 
-namespace PUnit;
+namespace Raun;
 
 /// <summary>
 /// Marks a domain type as a resource whose identity key is computed at the <b>type</b> level (CRTP).
@@ -282,7 +282,7 @@ public interface IResourceIdentity
 
 - [ ] **Step 2: Build to verify it compiles clean**
 
-Run: `dotnet build src/PUnit/PUnit.csproj`
+Run: `dotnet build src/Raun/Raun.csproj`
 Expected: 0 errors. **If CA1000 fires** on `KeyFor` ("Do not declare static members on generic types"), wrap just the `IResource<TSelf>` declaration:
 
 ```csharp
@@ -309,21 +309,21 @@ jj new
 ### Task 3: `ResourceIdentityResolver` (4-link identity chain)
 
 **Files:**
-- Create: `src/PUnit/Resources/ResourceIdentityResolver.cs`
-- Test: `test/PUnit.Test/Resources/ResourceIdentityResolverTests.cs`
+- Create: `src/Raun/Resources/ResourceIdentityResolver.cs`
+- Test: `test/Raun.Test/Resources/ResourceIdentityResolverTests.cs`
 
 The chain, first match wins (matching the design's order): **(1)** a type-level `KeyFor` (the `IResource<TSelf>` CRTP impl, found by reflection so the resolver needs no generic constraint), **(2)** a registered selector, **(3)** `IResourceIdentity.GetResourceKey()`, **(4)** whole-value equality.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `test/PUnit.Test/Resources/ResourceIdentityResolverTests.cs`:
+Create `test/Raun.Test/Resources/ResourceIdentityResolverTests.cs`:
 
 ```csharp
-using PUnit;
-using PUnit.Model;
+using Raun;
+using Raun.Model;
 using Xunit;
 
-namespace PUnit.Test.Resources;
+namespace Raun.Test.Resources;
 
 /// <summary>
 /// The resolver maps a value to a <see cref="ResourceIdentity"/> through a 4-link chain
@@ -404,19 +404,19 @@ public class ResourceIdentityResolverTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceIdentityResolverTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceIdentityResolverTests"`
 Expected: FAIL — `ResourceIdentityResolver` does not exist.
 
 - [ ] **Step 3: Write the implementation**
 
-Create `src/PUnit/Resources/ResourceIdentityResolver.cs`:
+Create `src/Raun/Resources/ResourceIdentityResolver.cs`:
 
 ```csharp
 using System.Collections.Concurrent;
 using System.Reflection;
-using PUnit.Model;
+using Raun.Model;
 
-namespace PUnit;
+namespace Raun;
 
 /// <summary>
 /// Resolves a value's <see cref="ResourceIdentity"/> through a 4-link chain (first match wins):
@@ -495,12 +495,12 @@ public sealed class ResourceIdentityResolver
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceIdentityResolverTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceIdentityResolverTests"`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Build clean & commit**
 
-Run: `dotnet build src/PUnit/PUnit.csproj` → 0/0.
+Run: `dotnet build src/Raun/Raun.csproj` → 0/0.
 
 ```bash
 jj describe -m "feat(resources): ResourceIdentityResolver 4-link identity chain"
@@ -512,20 +512,20 @@ jj new
 ### Task 4: `ResourceEffect` trace model
 
 **Files:**
-- Create: `src/PUnit/Resources/ResourceEffect.cs`
-- Test: `test/PUnit.Test/Resources/ResourceContextTests.cs` (created here, first test only)
+- Create: `src/Raun/Resources/ResourceEffect.cs`
+- Test: `test/Raun.Test/Resources/ResourceContextTests.cs` (created here, first test only)
 
 `ResourceEffect` is a plain record; this task creates it and a single assertion via a placeholder test that will grow in Task 5. (Splitting the model out keeps Task 5 focused on behavior.)
 
 - [ ] **Step 1: Write the failing test**
 
-Create `test/PUnit.Test/Resources/ResourceContextTests.cs`:
+Create `test/Raun.Test/Resources/ResourceContextTests.cs`:
 
 ```csharp
-using PUnit.Model;
+using Raun.Model;
 using Xunit;
 
-namespace PUnit.Test.Resources;
+namespace Raun.Test.Resources;
 
 /// <summary>
 /// A <see cref="ResourceEffect"/> is one entry in a step's resource trace. <see cref="ResourceContext"/>
@@ -558,15 +558,15 @@ public partial class ResourceContextTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceContextTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceContextTests"`
 Expected: FAIL — `ResourceEffect` does not exist.
 
 - [ ] **Step 3: Write the implementation**
 
-Create `src/PUnit/Resources/ResourceEffect.cs`:
+Create `src/Raun/Resources/ResourceEffect.cs`:
 
 ```csharp
-namespace PUnit.Model;
+namespace Raun.Model;
 
 /// <summary>
 /// One symbolic resource event recorded while a step ran: what it did (<see cref="Verb"/>), to which
@@ -598,12 +598,12 @@ public sealed record ResourceEffect
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceContextTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceContextTests"`
 Expected: PASS (1 test).
 
 - [ ] **Step 5: Build clean & commit**
 
-Run: `dotnet build src/PUnit/PUnit.csproj` → 0/0.
+Run: `dotnet build src/Raun/Raun.csproj` → 0/0.
 
 ```bash
 jj describe -m "feat(resources): ResourceEffect trace model"
@@ -615,21 +615,21 @@ jj new
 ### Task 5: `ResourceContext` verbs + dedup, wired onto `ScenarioContext.Resources`
 
 **Files:**
-- Create: `src/PUnit/Resources/ResourceContext.cs`
-- Modify: `src/PUnit/ScenarioContext.cs`
-- Test: `test/PUnit.Test/Resources/ResourceContextTests.cs` (add second partial block)
+- Create: `src/Raun/Resources/ResourceContext.cs`
+- Modify: `src/Raun/ScenarioContext.cs`
+- Test: `test/Raun.Test/Resources/ResourceContextTests.cs` (add second partial block)
 
 `ResourceContext` is constructed by `ScenarioContext` (internal ctor) and reached publicly via `ctx.Resources`. The resolver comes from `ctx.Services` when registered, else a fresh empty resolver. We test the whole thing through the public `ScenarioContext.Resources` path (no `InternalsVisibleTo` needed), injecting a configured resolver via a stub provider — mirroring the existing `ScenarioContextTests.StubProvider`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `test/PUnit.Test/Resources/ResourceContextTests.cs`:
+Append to `test/Raun.Test/Resources/ResourceContextTests.cs`:
 
 ```csharp
-namespace PUnit.Test.Resources;
+namespace Raun.Test.Resources;
 
-using PUnit;
-using PUnit.Model;
+using Raun;
+using Raun.Model;
 using Xunit;
 
 public partial class ResourceContextTests
@@ -739,17 +739,17 @@ public partial class ResourceContextTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceContextTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceContextTests"`
 Expected: FAIL — `ScenarioContext.Resources` and `ResourceContext` do not exist.
 
 - [ ] **Step 3: Write `ResourceContext`**
 
-Create `src/PUnit/Resources/ResourceContext.cs`:
+Create `src/Raun/Resources/ResourceContext.cs`:
 
 ```csharp
-using PUnit.Model;
+using Raun.Model;
 
-namespace PUnit;
+namespace Raun;
 
 /// <summary>
 /// The imperative resource surface a step reaches through <see cref="ScenarioContext.Resources"/>.
@@ -835,14 +835,14 @@ public sealed class ResourceContext
 
 - [ ] **Step 4: Wire `ScenarioContext.Resources`**
 
-In `src/PUnit/ScenarioContext.cs`, add a backing field next to the existing ones (after line 14) and a lazy property (after the `Attachments` property, before the closing brace). The resolver is pulled from `Services` when registered, otherwise an empty one:
+In `src/Raun/ScenarioContext.cs`, add a backing field next to the existing ones (after line 14) and a lazy property (after the `Attachments` property, before the closing brace). The resolver is pulled from `Services` when registered, otherwise an empty one:
 
 ```csharp
     ResourceContext? _resources;
 
     /// <summary>
     /// The symbolic resource surface for this step (effects/tracing). Verbs record
-    /// <see cref="PUnit.Model.ResourceEffect"/>s that the scheduler copies onto the step result. The
+    /// <see cref="Raun.Model.ResourceEffect"/>s that the scheduler copies onto the step result. The
     /// identity resolver is taken from <see cref="Services"/> when one is registered, else a fresh one.
     /// </summary>
     public ResourceContext Resources => _resources ??= new ResourceContext(
@@ -852,16 +852,16 @@ In `src/PUnit/ScenarioContext.cs`, add a backing field next to the existing ones
             ?? new ResourceIdentityResolver());
 ```
 
-(`ScenarioContext` is in namespace `PUnit`, so `ResourceContext` and `ResourceIdentityResolver` need no qualification. `ResourceEffect` is in `PUnit.Model`, referenced only in the doc comment.)
+(`ScenarioContext` is in namespace `Raun`, so `ResourceContext` and `ResourceIdentityResolver` need no qualification. `ResourceEffect` is in `Raun.Model`, referenced only in the doc comment.)
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceContextTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceContextTests"`
 Expected: PASS (7 tests total — 1 from Task 4 + 6 here).
 
 - [ ] **Step 6: Build clean & commit**
 
-Run: `dotnet build src/PUnit/PUnit.csproj` → 0/0.
+Run: `dotnet build src/Raun/Raun.csproj` → 0/0.
 
 ```bash
 jj describe -m "feat(resources): ResourceContext verbs with per-step dedup; ScenarioContext.Resources"
@@ -873,15 +873,15 @@ jj new
 ### Task 6: `StepResult.Effects` + scheduler capture
 
 **Files:**
-- Modify: `src/PUnit/Model/StepResult.cs`
-- Modify: `src/PUnit/Scheduling/ScenarioScheduler.cs`
-- Test: `test/PUnit.Test/SchedulerTests.cs` (add one test)
+- Modify: `src/Raun/Model/StepResult.cs`
+- Modify: `src/Raun/Scheduling/ScenarioScheduler.cs`
+- Test: `test/Raun.Test/SchedulerTests.cs` (add one test)
 
 The scheduler already copies `context.Logs` / `context.Attachments` into the `StepResult` for passed and failed steps (lines 232–233 and 258–259). Add `Effects` the same way. Skipped steps get the default empty list.
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `test/PUnit.Test/SchedulerTests.cs` (match the file's existing namespace/usings; it already references `PUnit.Model`, `PUnit.Scheduling`, and builds `ScenarioDefinition`/`ScenarioNode` inline — mirror the nearest existing test's node-construction style):
+Add to `test/Raun.Test/SchedulerTests.cs` (match the file's existing namespace/usings; it already references `Raun.Model`, `Raun.Scheduling`, and builds `ScenarioDefinition`/`ScenarioNode` inline — mirror the nearest existing test's node-construction style):
 
 ```csharp
     [Fact]
@@ -912,19 +912,19 @@ Add to `test/PUnit.Test/SchedulerTests.cs` (match the file's existing namespace/
         var results = await new ScenarioScheduler().RunAsync(definition);
 
         var effect = Assert.Single(results[0].Effects);
-        Assert.Equal(PUnit.Model.LifecycleVerb.Create, effect.Verb);
+        Assert.Equal(Raun.Model.LifecycleVerb.Create, effect.Verb);
         Assert.Equal("s0", effect.StepId);
     }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~Step_resource_effects_surface_on_the_result"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~Step_resource_effects_surface_on_the_result"`
 Expected: FAIL — `StepResult` has no `Effects` member.
 
 - [ ] **Step 3: Add `Effects` to `StepResult`**
 
-In `src/PUnit/Model/StepResult.cs`, after the `Attachments` property (line 29), add:
+In `src/Raun/Model/StepResult.cs`, after the `Attachments` property (line 29), add:
 
 ```csharp
 
@@ -934,7 +934,7 @@ In `src/PUnit/Model/StepResult.cs`, after the `Attachments` property (line 29), 
 
 - [ ] **Step 4: Capture effects in the scheduler**
 
-In `src/PUnit/Scheduling/ScenarioScheduler.cs`, in `RunNodeAsync`, add `Effects = context.Resources.Effects,` to **both** `StepResult` initializers:
+In `src/Raun/Scheduling/ScenarioScheduler.cs`, in `RunNodeAsync`, add `Effects = context.Resources.Effects,` to **both** `StepResult` initializers:
 
 - the passed result (after `Attachments = context.Attachments,` at line 233):
 
@@ -956,7 +956,7 @@ Leave the skip-path `StepResult` (in `ApplySkipAsync`) untouched — a skipped s
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~SchedulerTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~SchedulerTests"`
 Expected: PASS (existing scheduler tests + the new one).
 
 - [ ] **Step 6: Build clean & commit**
@@ -973,22 +973,22 @@ jj new
 ### Task 7: Role attributes (`[Creates]`, `[Loads]`, `[Reads]`, `[Edits]`, `[Deletes]`)
 
 **Files:**
-- Create: `src/PUnit/Resources/ResourceRoleAttributes.cs`
-- Test: `test/PUnit.Test/Resources/ResourceRoleAttributeTests.cs`
+- Create: `src/Raun/Resources/ResourceRoleAttributes.cs`
+- Test: `test/Raun.Test/Resources/ResourceRoleAttributeTests.cs`
 
 Pure declarations consumed by the generator/analyzer. The `AttributeUsage` targets match the design's role menu (return roles: Creates/Loads/Edits; parameter roles: Reads/Edits/Deletes). `[Creates]`/`[Loads]`/`[Edits]` also allow `Method` as the single-resource "targets the return" shorthand.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `test/PUnit.Test/Resources/ResourceRoleAttributeTests.cs`:
+Create `test/Raun.Test/Resources/ResourceRoleAttributeTests.cs`:
 
 ```csharp
 using System;
 using System.Linq;
-using PUnit;
+using Raun;
 using Xunit;
 
-namespace PUnit.Test.Resources;
+namespace Raun.Test.Resources;
 
 /// <summary>The role attributes exist with the right usage targets (return/parameter/method shorthand).</summary>
 public class ResourceRoleAttributeTests
@@ -1024,15 +1024,15 @@ public class ResourceRoleAttributeTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceRoleAttributeTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceRoleAttributeTests"`
 Expected: FAIL — the attributes do not exist.
 
 - [ ] **Step 3: Write the implementation**
 
-Create `src/PUnit/Resources/ResourceRoleAttributes.cs`:
+Create `src/Raun/Resources/ResourceRoleAttributes.cs`:
 
 ```csharp
-namespace PUnit;
+namespace Raun;
 
 /// <summary>Return/method role: the step produces a <b>new</b> resource (exclusive in C2).</summary>
 [AttributeUsage(AttributeTargets.ReturnValue | AttributeTargets.Method)]
@@ -1059,12 +1059,12 @@ public sealed class DeletesAttribute : Attribute;
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~ResourceRoleAttributeTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~ResourceRoleAttributeTests"`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Build clean & commit**
 
-Run: `dotnet build src/PUnit/PUnit.csproj` → 0/0.
+Run: `dotnet build src/Raun/Raun.csproj` → 0/0.
 
 ```bash
 jj describe -m "feat(resources): role attributes Creates/Loads/Reads/Edits/Deletes"
@@ -1076,12 +1076,12 @@ jj new
 ### Task 8: Generator lowering — read roles, build claims, inject `ctx.Resources.*` calls
 
 **Files:**
-- Modify: `src/PUnit.Generator/Lowering/Ir.cs`
-- Modify: `src/PUnit.Generator/Lowering/AttributeReader.cs`
-- Modify: `src/PUnit.Generator/Lowering/ScenarioParser.cs`
-- Modify: `src/PUnit.Generator/Emit/ScenarioEmitter.cs`
-- Modify: `test/PUnit.Generator.Test/SampleSources.cs` (add a resource DSL + scenario — **do not touch the existing constants**, so the existing snapshots stay byte-identical)
-- Test: `test/PUnit.Generator.Test/ResourceLoweringTests.cs`
+- Modify: `src/Raun.Generator/Lowering/Ir.cs`
+- Modify: `src/Raun.Generator/Lowering/AttributeReader.cs`
+- Modify: `src/Raun.Generator/Lowering/ScenarioParser.cs`
+- Modify: `src/Raun.Generator/Emit/ScenarioEmitter.cs`
+- Modify: `test/Raun.Generator.Test/SampleSources.cs` (add a resource DSL + scenario — **do not touch the existing constants**, so the existing snapshots stay byte-identical)
+- Test: `test/Raun.Generator.Test/ResourceLoweringTests.cs`
 
 This is the one cohesive "make the lowering work" task. The single behavioral gate compiles a resource scenario and runs it through the real scheduler, asserting the effects appear on the `StepResult`s. The implementation spans four files; build it test-first.
 
@@ -1118,15 +1118,15 @@ At runtime, `Suspend`'s two `Edit`s dedup (same key) to one effect. A step with 
 
 - [ ] **Step 1: Write the failing test + sample sources**
 
-Add to `test/PUnit.Generator.Test/SampleSources.cs` (new constants only):
+Add to `test/Raun.Generator.Test/SampleSources.cs` (new constants only):
 
 ```csharp
     // A resource-aware DSL: User is a CRTP resource; roles drive the effect stream.
     public const string ResourceDsl =
         """
         using System.Threading.Tasks;
-        using PUnit;
-        using PUnit.Model;
+        using Raun;
+        using Raun.Model;
 
         namespace Demo;
 
@@ -1201,14 +1201,14 @@ Add to `test/PUnit.Generator.Test/SampleSources.cs` (new constants only):
         """;
 ```
 
-Create `test/PUnit.Generator.Test/ResourceLoweringTests.cs`:
+Create `test/Raun.Generator.Test/ResourceLoweringTests.cs`:
 
 ```csharp
 using System.Linq;
-using PUnit.Model;
+using Raun.Model;
 using Xunit;
 
-namespace PUnit.Generator.Test;
+namespace Raun.Generator.Test;
 
 /// <summary>
 /// Verifies the generator lowers resource role attributes (<c>[Creates]</c>/<c>[Reads]</c>/<c>[Edits]</c>
@@ -1268,12 +1268,12 @@ public class ResourceLoweringTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj --filter "FullyQualifiedName~ResourceLoweringTests"`
+Run: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj --filter "FullyQualifiedName~ResourceLoweringTests"`
 Expected: FAIL — the three effect tests fail (no effects recorded; `Assert.Single` finds 0). The `Role_free` test should already pass.
 
 - [ ] **Step 3: Add `ResourceClaim` to the IR**
 
-In `src/PUnit.Generator/Lowering/Ir.cs`, add the record (near `ParsedStep`) and a field on `ParsedStep`:
+In `src/Raun.Generator/Lowering/Ir.cs`, add the record (near `ParsedStep`) and a field on `ParsedStep`:
 
 ```csharp
 /// <summary>
@@ -1292,7 +1292,7 @@ Add to `ParsedStep` (alongside the other `IReadOnlyList<...>` members):
 
 - [ ] **Step 4: Add role readers to `AttributeReader`**
 
-In `src/PUnit.Generator/Lowering/AttributeReader.cs`, add (mirroring the existing name-based attribute matching):
+In `src/Raun.Generator/Lowering/AttributeReader.cs`, add (mirroring the existing name-based attribute matching):
 
 ```csharp
     /// <summary>The resource verb for a parameter's role attribute, or null if it has none.</summary>
@@ -1329,7 +1329,7 @@ In `src/PUnit.Generator/Lowering/AttributeReader.cs`, add (mirroring the existin
 
 - [ ] **Step 5: Build claims in `ScenarioParser.BuildStep`**
 
-In `src/PUnit.Generator/Lowering/ScenarioParser.cs`, inside `BuildStep`, after `var replacements = BuildReplacements();` (line 352), build the claim list and a per-argument rewriter, then set `ResourceClaims` on the step. Add this helper method and call it:
+In `src/Raun.Generator/Lowering/ScenarioParser.cs`, inside `BuildStep`, after `var replacements = BuildReplacements();` (line 352), build the claim list and a per-argument rewriter, then set `ResourceClaims` on the step. Add this helper method and call it:
 
 ```csharp
     // Add a call to this just before constructing the ParsedStep:
@@ -1407,7 +1407,7 @@ Then in the `new ParsedStep { … }` initializer, add `ResourceClaims = BuildRes
 
 - [ ] **Step 6: Inject the calls in `ScenarioEmitter.BuildInvokeLambda`**
 
-In `src/PUnit.Generator/Emit/ScenarioEmitter.cs`, change `BuildInvokeLambda` to insert the resource-call statements (all of them, parameter and return roles alike) **between** the step-call statement and the `return`. The call statement stays first and keeps its `LineMappedTrivia`; the inserted statements are hidden. When the claim list is empty the body is byte-identical to today. Replace `BuildInvokeLambda` and add `ResourceCallStatement`:
+In `src/Raun.Generator/Emit/ScenarioEmitter.cs`, change `BuildInvokeLambda` to insert the resource-call statements (all of them, parameter and return roles alike) **between** the step-call statement and the `return`. The call statement stays first and keeps its `LineMappedTrivia`; the inserted statements are hidden. When the claim list is empty the body is byte-identical to today. Replace `BuildInvokeLambda` and add `ResourceCallStatement`:
 
 ```csharp
     static ParenthesizedLambdaExpressionSyntax BuildInvokeLambda(ParsedStep step)
@@ -1467,7 +1467,7 @@ Because the line-mapped call statement is still the **first** body statement (ex
 
 - [ ] **Step 7: Run tests to verify they pass**
 
-Run: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj`
+Run: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj`
 Expected: PASS — `ResourceLoweringTests` (4) green, and the **full** generator suite green, including `LineMappingPdbTests`, `HarnessPdbTests`, and the four `GeneratorSnapshotTests` (unchanged because the existing sample DSL has no roles). If a snapshot test fails, inspect the `.received.cs` diff: it must be empty for the role-free scenarios — if it isn't, the role-free output path regressed; fix `BuildInvokeLambda` so an empty claim list reproduces the original statements exactly.
 
 - [ ] **Step 8: Build clean & commit**
@@ -1481,36 +1481,36 @@ jj new
 
 ---
 
-### Task 9: PUNIT009 — resource access must be declared
+### Task 9: RAUN009 — resource access must be declared
 
 **Files:**
-- Modify: `src/PUnit.Generator/Analysis/Descriptors.cs`
-- Modify: `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs`
-- Modify: `src/PUnit.Generator/AnalyzerReleases.Unshipped.md`
-- Test: `test/PUnit.Generator.Test/AnalyzerTests.cs` (add tests)
+- Modify: `src/Raun.Generator/Analysis/Descriptors.cs`
+- Modify: `src/Raun.Generator/Analysis/ScenarioAnalyzer.cs`
+- Modify: `src/Raun.Generator/AnalyzerReleases.Unshipped.md`
+- Test: `test/Raun.Generator.Test/AnalyzerTests.cs` (add tests)
 
-PUNIT009 fires on a **`[StepName]` method** whose resource-typed parameter or return value carries no role. "Resource-typed" = implements `IResource<>` or `IResourceIdentity` (the C1 markers). The check lives in the existing `[StepName]` analysis branch.
+RAUN009 fires on a **`[StepName]` method** whose resource-typed parameter or return value carries no role. "Resource-typed" = implements `IResource<>` or `IResourceIdentity` (the C1 markers). The check lives in the existing `[StepName]` analysis branch.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `test/PUnit.Generator.Test/AnalyzerTests.cs`:
+Add to `test/Raun.Generator.Test/AnalyzerTests.cs`:
 
 ```csharp
     [Fact]
-    public void PUNIT009_is_a_supported_diagnostic()
+    public void RAUN009_is_a_supported_diagnostic()
     {
-        var analyzer = new PUnit.Generator.Analysis.ScenarioAnalyzer();
-        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "PUNIT009");
+        var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
+        Assert.Contains(analyzer.SupportedDiagnostics, d => d.Id == "RAUN009");
     }
 
     [Fact]
-    public async Task PUNIT009_unannotated_resource_parameter()
+    public async Task RAUN009_unannotated_resource_parameter()
     {
         var source =
             """
             using System.Threading.Tasks;
-            using PUnit;
-            using PUnit.Model;
+            using Raun;
+            using Raun.Model;
             namespace Bad;
             public sealed record User(string Email) : IResource<User>
             {
@@ -1526,17 +1526,17 @@ Add to `test/PUnit.Generator.Test/AnalyzerTests.cs`:
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "PUNIT009");
+        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN009");
     }
 
     [Fact]
-    public async Task PUNIT009_unannotated_resource_return()
+    public async Task RAUN009_unannotated_resource_return()
     {
         var source =
             """
             using System.Threading.Tasks;
-            using PUnit;
-            using PUnit.Model;
+            using Raun;
+            using Raun.Model;
             namespace Bad;
             public sealed record User(string Email) : IResource<User>
             {
@@ -1552,40 +1552,40 @@ Add to `test/PUnit.Generator.Test/AnalyzerTests.cs`:
             }
             """;
 
-        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "PUNIT009");
+        AssertHas(await GeneratorHarness.AnalyzeAsync(source), "RAUN009");
     }
 
     [Fact]
-    public async Task PUNIT009_clean_when_roles_present()
+    public async Task RAUN009_clean_when_roles_present()
     {
-        // The resource DSL declares roles on every resource param/return — no PUNIT009.
+        // The resource DSL declares roles on every resource param/return — no RAUN009.
         var diagnostics = await GeneratorHarness.AnalyzeAsync(
             SampleSources.ResourceDsl + SampleSources.ResourceScenario);
 
-        Assert.DoesNotContain(diagnostics, d => d.Id == "PUNIT009");
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN009");
     }
 
     [Fact]
-    public async Task PUNIT009_does_not_fire_on_non_resource_types()
+    public async Task RAUN009_does_not_fire_on_non_resource_types()
     {
-        // The role-free appointment DSL uses plain records (no IResource) — no PUNIT009.
-        Assert.DoesNotContain(await Analyze(SampleSources.LinearScenario), d => d.Id == "PUNIT009");
+        // The role-free appointment DSL uses plain records (no IResource) — no RAUN009.
+        Assert.DoesNotContain(await Analyze(SampleSources.LinearScenario), d => d.Id == "RAUN009");
     }
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj --filter "FullyQualifiedName~PUNIT009"`
-Expected: FAIL — PUNIT009 is not defined / not raised.
+Run: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj --filter "FullyQualifiedName~RAUN009"`
+Expected: FAIL — RAUN009 is not defined / not raised.
 
 - [ ] **Step 3: Add the descriptor**
 
-In `src/PUnit.Generator/Analysis/Descriptors.cs`, after `UnboundPlaceholder` (line 80):
+In `src/Raun.Generator/Analysis/Descriptors.cs`, after `UnboundPlaceholder` (line 80):
 
 ```csharp
 
     public static readonly DiagnosticDescriptor MissingResourceRole = new(
-        "PUNIT009",
+        "RAUN009",
         "Resource access must be declared",
         "Resource-typed {0} '{1}' must declare its access: [Reads], [Edits], or [Deletes] on a parameter, "
             + "or [Creates], [Loads], or [Edits] on the return — there is no default",
@@ -1596,7 +1596,7 @@ In `src/PUnit.Generator/Analysis/Descriptors.cs`, after `UnboundPlaceholder` (li
 
 - [ ] **Step 4: Register and emit it in `ScenarioAnalyzer`**
 
-In `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs`:
+In `src/Raun.Generator/Analysis/ScenarioAnalyzer.cs`:
 
 (a) add to `SupportedDiagnostics` (after `Descriptors.UnboundPlaceholder,`):
 
@@ -1636,34 +1636,34 @@ In `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs`:
         }
     }
 
-    /// <summary>A type is a C1 resource if it implements PUnit's IResource&lt;T&gt; or IResourceIdentity.</summary>
+    /// <summary>A type is a C1 resource if it implements Raun's IResource&lt;T&gt; or IResourceIdentity.</summary>
     static bool IsResourceType(ITypeSymbol type)
         => type.AllInterfaces.Any(i =>
-            i.ContainingNamespace?.ToDisplayString(SymbolHelpers.NoGlobal) == "PUnit"
+            i.ContainingNamespace?.ToDisplayString(SymbolHelpers.NoGlobal) == "Raun"
             && ((i.Name == "IResource" && i.Arity == 1) || i.Name == "IResourceIdentity"));
 ```
 
-> A trailing `ScenarioContext` parameter is `PUnit.ScenarioContext`, which is not a resource type, so it is naturally skipped — no special-casing needed.
+> A trailing `ScenarioContext` parameter is `Raun.ScenarioContext`, which is not a resource type, so it is naturally skipped — no special-casing needed.
 
 - [ ] **Step 5: Record the new rule**
 
-In `src/PUnit.Generator/AnalyzerReleases.Unshipped.md`, add under `### New Rules`:
+In `src/Raun.Generator/AnalyzerReleases.Unshipped.md`, add under `### New Rules`:
 
 ```
-PUNIT009 | PUnit.Usage | Error | Resource access must be declared
+RAUN009 | Raun.Usage | Error | Resource access must be declared
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj --filter "FullyQualifiedName~AnalyzerTests"`
-Expected: PASS — all PUNIT009 tests plus the existing analyzer tests (verify `Valid_scenarios_produce_no_diagnostics` still passes — role-free plain records must not trip PUNIT009).
+Run: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj --filter "FullyQualifiedName~AnalyzerTests"`
+Expected: PASS — all RAUN009 tests plus the existing analyzer tests (verify `Valid_scenarios_produce_no_diagnostics` still passes — role-free plain records must not trip RAUN009).
 
 - [ ] **Step 7: Build clean & commit**
 
 Run: `dotnet build` → 0/0 (the `AnalyzerReleases` tracking analyzer (RS2008) errors if a shipped/unshipped row is missing — confirm it is satisfied).
 
 ```bash
-jj describe -m "feat(generator): PUNIT009 — resource access must be declared"
+jj describe -m "feat(generator): RAUN009 — resource access must be declared"
 jj new
 ```
 
@@ -1672,14 +1672,14 @@ jj new
 ### Task 10: Snapshot the resource lowering (review artifact)
 
 **Files:**
-- Modify: `test/PUnit.Generator.Test/GeneratorSnapshotTests.cs`
-- Create: `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Resource_scenario#PUnitScenarios.g.verified.cs` (via accept)
+- Modify: `test/Raun.Generator.Test/GeneratorSnapshotTests.cs`
+- Create: `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Resource_scenario#RaunScenarios.g.verified.cs` (via accept)
 
 A snapshot of the resource scenario's generated code is the human-reviewable record of the injected `ctx.Resources.*` calls (memory `working-style`: behavioral tests primary, Verify snapshots a secondary review artifact).
 
 - [ ] **Step 1: Add the snapshot test**
 
-Append to `test/PUnit.Generator.Test/GeneratorSnapshotTests.cs` (mirror the existing `Linear_scenario` test):
+Append to `test/Raun.Generator.Test/GeneratorSnapshotTests.cs` (mirror the existing `Linear_scenario` test):
 
 ```csharp
     [Fact]
@@ -1690,24 +1690,24 @@ Append to `test/PUnit.Generator.Test/GeneratorSnapshotTests.cs` (mirror the exis
 
 - [ ] **Step 2: Run to produce the received snapshot**
 
-Run: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj --filter "FullyQualifiedName~Resource_scenario"`
+Run: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj --filter "FullyQualifiedName~Resource_scenario"`
 Expected: FAIL — Verify reports a new/pending snapshot and writes
-`Snapshots/GeneratorSnapshotTests.Resource_scenario#PUnitScenarios.g.received.cs`.
+`Snapshots/GeneratorSnapshotTests.Resource_scenario#RaunScenarios.g.received.cs`.
 
 - [ ] **Step 3: Review and accept the snapshot**
 
 Open the `.received.cs` and confirm the generated invoke lambdas match the **Target generated shape** from Task 8: each step's `await CALL` statement comes first, then the `await __ctx.Resources.<Verb>(…)` lines — `Given.UserExists` adds `await __ctx.Resources.Create(__r);`; `When.Suspend` adds `await __ctx.Resources.Edit(__inputs.Get<global::Demo.User>(0));` then `await __ctx.Resources.Edit(__r);`; `Then.CannotSignIn` adds `await __ctx.Resources.Read(…);`. When correct, accept it (rename received → verified):
 
 ```bash
-mv "test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Resource_scenario#PUnitScenarios.g.received.cs" \
-   "test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Resource_scenario#PUnitScenarios.g.verified.cs"
+mv "test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Resource_scenario#RaunScenarios.g.received.cs" \
+   "test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Resource_scenario#RaunScenarios.g.verified.cs"
 ```
 
 (PowerShell: `Move-Item -Force <received> <verified>`.)
 
 - [ ] **Step 4: Re-run to confirm green**
 
-Run: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj --filter "FullyQualifiedName~GeneratorSnapshotTests"`
+Run: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj --filter "FullyQualifiedName~GeneratorSnapshotTests"`
 Expected: PASS (all snapshots, including the new one).
 
 - [ ] **Step 5: Commit**
@@ -1724,8 +1724,8 @@ jj new
 **Files:**
 - Modify: `samples/AppointmentTests/AppointmentDsl.cs`
 - Modify: `samples/AppointmentTests/Scenarios.cs` (only if needed to exercise an edited resource; inspect first)
-- Modify: `src/PUnit.Mtp/PUnitStepReporter.cs`
-- Test: `test/PUnit.Mtp.Test/PUnitStepReporterTests.cs` (add a test)
+- Modify: `src/Raun.Mtp/RaunStepReporter.cs`
+- Test: `test/Raun.Mtp.Test/RaunStepReporterTests.cs` (add a test)
 
 Make the sample exercise the effect stream, and surface effects through the observer (the C1 "stream through the observer" deliverable; the HTML report lifeline is feature B and out of scope). Surface effects as standard output, mirroring `AddOutput` for logs.
 
@@ -1757,9 +1757,9 @@ public sealed record User(string Name) : IResource<User>
 }
 ```
 
-(add `using PUnit.Model;` for `ResourceKey`.) Keep `ImportResult` a plain record (not a resource) so PUNIT009 doesn't require a role there.
+(add `using Raun.Model;` for `ResourceKey`.) Keep `ImportResult` a plain record (not a resource) so RAUN009 doesn't require a role there.
 
-- annotate every resource-typed parameter/return (PUNIT009 now enforces this or the sample won't build):
+- annotate every resource-typed parameter/return (RAUN009 now enforces this or the sample won't build):
 
 ```csharp
 [StepName("Given patient {name} exists")]
@@ -1787,22 +1787,22 @@ public static async Task<ImportResult> ImportUsers([Reads] User[] users)   // se
 public static Task AppointmentExists([Reads] Appointment appointment) { /* asserts */ return Task.CompletedTask; }
 ```
 
-> **`User[]` array parameter:** the analyzer's `IsResourceType` checks the parameter type itself — an *array* `User[]` does not implement `IResource<>`, so PUNIT009 does not require a role on it, and the generator's per-parameter claim builder will not emit a call for it (the element type is the resource, not the array). Annotating `[Reads]` on `User[]` is harmless but records nothing in C1 (the resolver is handed the array, whose identity falls to value-equality). Leave the array case unannotated for C1; element-wise array effects are a C2 refinement. If `DatabaseIsClean` / `ImportShouldContainUsers` take non-resource params, they need no roles.
+> **`User[]` array parameter:** the analyzer's `IsResourceType` checks the parameter type itself — an *array* `User[]` does not implement `IResource<>`, so RAUN009 does not require a role on it, and the generator's per-parameter claim builder will not emit a call for it (the element type is the resource, not the array). Annotating `[Reads]` on `User[]` is harmless but records nothing in C1 (the resolver is handed the array, whose identity falls to value-equality). Leave the array case unannotated for C1; element-wise array effects are a C2 refinement. If `DatabaseIsClean` / `ImportShouldContainUsers` take non-resource params, they need no roles.
 
-- [ ] **Step 2 (sample): build the sample to verify roles satisfy PUNIT009 and lowering compiles**
+- [ ] **Step 2 (sample): build the sample to verify roles satisfy RAUN009 and lowering compiles**
 
 Run: `dotnet build samples/AppointmentTests/AppointmentTests.csproj`
-Expected: 0 errors. If PUNIT009 fires, a resource-typed param/return is missing its role — add it. If a role is on a non-resource, no harm.
+Expected: 0 errors. If RAUN009 fires, a resource-typed param/return is missing its role — add it. If a role is on a non-resource, no harm.
 
 - [ ] **Step 3 (sample): run the sample and confirm steps still pass**
 
 Run: `dotnet run --project samples/AppointmentTests/AppointmentTests.csproj -- --filter-method "*"`
-(Per memory `punit-mtp-redesign`, the sample is an MTP app; use the MTP `-- --filter-*` syntax, not VSTest filters.)
+(Per memory `raun-mtp-redesign`, the sample is an MTP app; use the MTP `-- --filter-*` syntax, not VSTest filters.)
 Expected: all scenario step nodes pass (resource lowering must not change behavior — effects are recorded silently).
 
 - [ ] **Step 4 (reporter): write the failing test**
 
-Add to `test/PUnit.Mtp.Test/PUnitStepReporterTests.cs` — a near-copy of the existing `Logs_surface_as_standard_output_on_the_finished_update` test (its helpers `Definition`/`Node`/`NewReporter` and `using PUnit.Model;` are already in the file):
+Add to `test/Raun.Mtp.Test/RaunStepReporterTests.cs` — a near-copy of the existing `Logs_surface_as_standard_output_on_the_finished_update` test (its helpers `Definition`/`Node`/`NewReporter` and `using Raun.Model;` are already in the file):
 
 ```csharp
     [Fact]
@@ -1841,12 +1841,12 @@ Add to `test/PUnit.Mtp.Test/PUnitStepReporterTests.cs` — a near-copy of the ex
 
 - [ ] **Step 5: Run test to verify it fails**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~surfaces_resource_effects"`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj --filter "FullyQualifiedName~surfaces_resource_effects"`
 Expected: FAIL — effects are not surfaced yet.
 
 - [ ] **Step 6 (reporter): surface effects**
 
-In `src/PUnit.Mtp/PUnitStepReporter.cs`, extend the standard-output construction. The simplest non-disruptive change: include effect lines in the same `StandardOutputProperty` that `AddOutput` builds. Replace `AddOutput` so it appends effect lines after the logs (and emits output when there are logs **or** effects):
+In `src/Raun.Mtp/RaunStepReporter.cs`, extend the standard-output construction. The simplest non-disruptive change: include effect lines in the same `StandardOutputProperty` that `AddOutput` builds. Replace `AddOutput` so it appends effect lines after the logs (and emits output when there are logs **or** effects):
 
 ```csharp
     static void AddOutput(TestNode testNode, StepResult result)
@@ -1882,7 +1882,7 @@ In `src/PUnit.Mtp/PUnitStepReporter.cs`, extend the standard-output construction
 
 - [ ] **Step 7: Run tests to verify they pass**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj`
 Expected: PASS — the new test plus all existing reporter tests (confirm the logs-only test still passes; output now also fires when only effects exist).
 
 - [ ] **Step 8: Full suite + build green**
@@ -1902,7 +1902,7 @@ jj new
 ## Final verification (after Task 11)
 
 - [ ] `dotnet build` → 0 warnings, 0 errors.
-- [ ] `dotnet test` → all projects green (PUnit.Test, PUnit.Generator.Test, PUnit.Mtp.Test).
+- [ ] `dotnet test` → all projects green (Raun.Test, Raun.Generator.Test, Raun.Mtp.Test).
 - [ ] `dotnet run --project samples/AppointmentTests/AppointmentTests.csproj -- --list-tests` still lists the per-step nodes; a full run passes.
 - [ ] Spot-check the accepted resource snapshot one more time for the injected calls.
 - [ ] Confirm `git`/`jj` history is a clean sequence of green, single-purpose commits with no tooling trailers.
@@ -1919,7 +1919,7 @@ jj new
 | Effect stream through `StepResult` / `IStepObserver` | 6, 11 |
 | Explicit role attributes; no defaults | 7 |
 | Generator lowers roles (param + return) to `ctx.Resources.*` | 8 |
-| PUNIT009 in all three registration sites + fires on unannotated resource param/return | 9 |
+| RAUN009 in all three registration sites + fires on unannotated resource param/return | 9 |
 | Behavioral generator tests + Verify snapshot | 8, 10 |
 | End-to-end: roles in the sample, effects surfaced | 11 |
 

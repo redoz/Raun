@@ -4,17 +4,17 @@
 
 **Goal:** Skin every interactive tile of the per-scenario activity diagrams with one "sun" light — a directional per-tile fill/border/gloss driven by the local time of day, a cursor-tracked surface sheen + far-edge rim glint revealed on hover in the SVG the pointer is over, and uniform corner-bracket keyboard focus — across the report's N independent `<svg class="actdiag">` diagrams.
 
-**Architecture:** All work is in the single embedded template `src/PUnit.Mtp/HtmlReport/report-template.html`. Two decoupled paths (spec §3): a **slow global sun** (`applySun()` on a ~60s clock + at build time) re-aims every per-tile `userSpaceOnUse` gradient via `sunDir`; a **fast local cursor** (`requestAnimationFrame`, only while hovering) positions just the hovered SVG's 2 shared gradients (`#sheen-<id>`/`#edge-<id>`). Per-tile gradients follow **only** the sun (decision D2) so the fast path never rewrites more than 2 nodes/frame and rerender needs no per-tile registry (tiles are born sun-lit at build time, re-found from live DOM each clock tick). No C# changes.
+**Architecture:** All work is in the single embedded template `src/Raun.Mtp/HtmlReport/report-template.html`. Two decoupled paths (spec §3): a **slow global sun** (`applySun()` on a ~60s clock + at build time) re-aims every per-tile `userSpaceOnUse` gradient via `sunDir`; a **fast local cursor** (`requestAnimationFrame`, only while hovering) positions just the hovered SVG's 2 shared gradients (`#sheen-<id>`/`#edge-<id>`). Per-tile gradients follow **only** the sun (decision D2) so the fast path never rewrites more than 2 nodes/frame and rerender needs no per-tile registry (tiles are born sun-lit at build time, re-found from live DOM each clock tick). No C# changes.
 
-**Tech Stack:** Hand-authored SVG + vanilla JS inside one HTML file (`document.createElementNS` via `svgEl`); C#/xUnit tests (`PUnit.Mtp.Test`); .NET 10 build; `npx playwright` (chromium) for headless visual verification; `jj` for VCS.
+**Tech Stack:** Hand-authored SVG + vanilla JS inside one HTML file (`document.createElementNS` via `svgEl`); C#/xUnit tests (`Raun.Mtp.Test`); .NET 10 build; `npx playwright` (chromium) for headless visual verification; `jj` for VCS.
 
 ## Global Constraints
 
 Copied verbatim from the spec (`docs/superpowers/specs/2026-06-21-report-sun-lighting-design.md` §2 and `docs/superpowers/specs/2026-06-21-fork-graph-view-toggle-design.md` §6–§8) — every task implicitly includes these:
 
 - **Self-contained HTML, HARD rule:** inline `<style>`/`<script>` only — **zero** external URLs/CDNs/web-fonts/`@import`. The only allowed literal external string is the SVG namespace `http://www.w3.org/2000/svg`. Source Serif 4 stays base64-embedded. Time-of-day uses the **client's local clock** (`new Date()`) — no network.
-- **JSON token preserved:** exactly one `<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>`; don't break it.
-- **C# model + builder do NOT change.** `HtmlReportModelBuilderTests` (the `Verify(json)` snapshot) **must NOT change**. Keep `HtmlReportSinkTests` green. **0-warning build** (`dotnet build PUnit.slnx -warnaserror`).
+- **JSON token preserved:** exactly one `<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>`; don't break it.
+- **C# model + builder do NOT change.** `HtmlReportModelBuilderTests` (the `Verify(json)` snapshot) **must NOT change**. Keep `HtmlReportSinkTests` green. **0-warning build** (`dotnet build Raun.slnx -warnaserror`).
 - **Both themes:** define every new CSS var for both light blocks (`:root` default + `:root[data-theme="light"]`) and both dark blocks (`@media (prefers-color-scheme: dark) :root` + `:root[data-theme="dark"]`); verify both.
 - **NO decision/merge diamonds** (out of scope, unchanged).
 - **Locked visual authority:** `.git/sdd/mockup-hover-sheen.html`. Tune geometry/opacity against it; don't reinvent. Sun math/easing/gradient/focus detail = fork-graph spec §7.
@@ -31,19 +31,19 @@ Copied verbatim from the spec (`docs/superpowers/specs/2026-06-21-report-sun-lig
 `samples/AppointmentTests`' **"customer books with parallel arrange"** scenario is the fork case; the suite also has non-fork scenarios (the multi-SVG proof).
 
 ```bash
-# 1. emit a real report (rebuilds PUnit.Mtp -> re-embeds the template)
+# 1. emit a real report (rebuilds Raun.Mtp -> re-embeds the template)
 dotnet run --project samples/AppointmentTests -c Debug -- --report-html
-#    -> samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html
+#    -> samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html
 
 # 2. headless-render both themes (chromium is installed; the Playwright MCP defaults to Chrome which is NOT)
-R="samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html"
+R="samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html"
 npx playwright screenshot --browser=chromium --full-page --viewport-size=1180,1600 "file://$(pwd)/$R?theme=dark"  out-dark.png
 npx playwright screenshot --browser=chromium --full-page --viewport-size=1180,1600 "file://$(pwd)/$R?theme=light" out-light.png
 ```
 
 **Headless gotcha:** the Playwright CLI defaults to **light** — always pass `?theme=…` explicitly. The cursor-tracked sheen/glint and the which-SVG mapping need a Playwright **driver script** (Node `.cjs`, `getScreenCTM` mouse moves) — see Task 3. To exercise a specific time of day deterministically, the driver can stub the clock (see Task 3 Step 5). Root `*.png` / `*.cjs` scratch is gitignored.
 
-The full C# suite must stay green every task: `dotnet test PUnit.slnx -c Debug` (240/240 baseline; do **not** pass `--nologo` — PUnit is an MTP framework and rejects it) and `dotnet build PUnit.slnx -warnaserror` (0 warnings).
+The full C# suite must stay green every task: `dotnet test Raun.slnx -c Debug` (240/240 baseline; do **not** pass `--nologo` — Raun is an MTP framework and rejects it) and `dotnet build Raun.slnx -warnaserror` (0 warnings).
 
 ---
 
@@ -51,7 +51,7 @@ The full C# suite must stay green every task: `dotnet test PUnit.slnx -c Debug` 
 
 | File | Responsibility | Action |
 |---|---|---|
-| `src/PUnit.Mtp/HtmlReport/report-template.html` | The entire report shell + per-scenario activity-diagram renderer (inline CSS/JS). The **only** production file Phase 2 touches. | **Modify** |
+| `src/Raun.Mtp/HtmlReport/report-template.html` | The entire report shell + per-scenario activity-diagram renderer (inline CSS/JS). The **only** production file Phase 2 touches. | **Modify** |
 
 Touched regions inside the template (current line numbers, will drift as you edit):
 - CSS palettes: `:root` universal (~L17), light default `:root` (~L20–39), `@media dark :root` (~L42–61), `:root[data-theme="light"]` (~L64–82), `:root[data-theme="dark"]` (~L84–102).
@@ -66,7 +66,7 @@ Touched regions inside the template (current line numbers, will drift as you edi
 ## Task 1: Sun engine + lit action/branch nodes
 
 **Files:**
-- Modify: `src/PUnit.Mtp/HtmlReport/report-template.html` (CSS palettes ~L17–102; CSS block end ~L255; sun engine near consts ~L446; `buildActivityDiagram` defs ~L651 + node dispatch ~L723; `actionNode` ~L749; `buildForkGraph` branch-node rect ~L876–887)
+- Modify: `src/Raun.Mtp/HtmlReport/report-template.html` (CSS palettes ~L17–102; CSS block end ~L255; sun engine near consts ~L446; `buildActivityDiagram` defs ~L651 + node dispatch ~L723; `actionNode` ~L749; `buildForkGraph` branch-node rect ~L876–887)
 
 **Interfaces:**
 - Consumes (existing, unchanged): `svgEl(tag, attrs)`, `nodeLabel(step)`, `phaseColor(phase)`, `AD_W`, `NODE_H`, consts; `renderAll()`, `document.fonts.ready`.
@@ -314,7 +314,7 @@ with (sun set before first paint so tiles are born lit; slow clock only when mot
 
 - [ ] **Step 8: Re-emit and verify.** Run the fixture (both themes). Expected: action/assert nodes and the graph branch nodes now carry a **whisper-subtle** directional fill, a lit border (brighter on the light-facing side), and a faint top gloss — matching the resting look of `.git/sdd/mockup-hover-sheen.html` (open it side-by-side). Both themes correct; the diagram is otherwise unchanged (cards/bars still flat — those are Task 2); no console errors. (Hover sheen/glint not active yet — Task 3.)
 
-- [ ] **Step 9: Guard the C# surface** — `dotnet test PUnit.slnx -c Debug` (240/240; snapshot unchanged — model untouched) and `dotnet build PUnit.slnx -warnaserror` (0 warnings).
+- [ ] **Step 9: Guard the C# surface** — `dotnet test Raun.slnx -c Debug` (240/240; snapshot unchanged — model untouched) and `dotnet build Raun.slnx -warnaserror` (0 warnings).
 
 - [ ] **Step 10: Commit**
 
@@ -327,7 +327,7 @@ jj commit -m "report: sun engine + lit action/branch nodes (per-tile directional
 ## Task 2: Light cards, bars, the timeline cell, and the active pill segment
 
 **Files:**
-- Modify: `src/PUnit.Mtp/HtmlReport/report-template.html` (`cardEl` ~L1618; `buildForkGraph` fork/join bars ~L862–915; `buildForkCell` walls ~L1037–1068; `buildForkToggle` active segment ~L824–826; thread `sid` into `cardEl` from `buildObjectFlow`)
+- Modify: `src/Raun.Mtp/HtmlReport/report-template.html` (`cardEl` ~L1618; `buildForkGraph` fork/join bars ~L862–915; `buildForkCell` walls ~L1037–1068; `buildForkToggle` active segment ~L824–826; thread `sid` into `cardEl` from `buildObjectFlow`)
 
 **Interfaces:**
 - Consumes: `litTile`, `dirGrad`, `sunDir` (Task 1); existing `cardEl(card)`, `contrastInk`, `CARD_HEADER_H`, `AD_GRAPH_BAR_H`, `WALL`.
@@ -520,7 +520,7 @@ with (active segment gets a directional accent gradient so it shades under the s
 
 - [ ] **Step 7: Re-emit and verify** (both themes). Expected: entity cards now carry a lit body + lit border + faint hover affordance structure (sheen comes alive in Task 3); fork/join bars and the timeline cell walls (toggle a fork to timeline to check) read with a soft slate directional sheen; the active pill segment (hover a fork) shades directionally. Compare resting look against `.git/sdd/mockup-hover-sheen.html`. **Multi-SVG check:** a second scenario's nodes/cards are lit identically (one sun). No console errors; object-flow edges/cards still attach correctly (`.has-em` hover still dims off-path).
 
-- [ ] **Step 8: Guard the C# surface** — `dotnet test PUnit.slnx -c Debug` (240/240) + `dotnet build PUnit.slnx -warnaserror` (0 warnings).
+- [ ] **Step 8: Guard the C# surface** — `dotnet test Raun.slnx -c Debug` (240/240) + `dotnet build Raun.slnx -warnaserror` (0 warnings).
 
 - [ ] **Step 9: Commit**
 
@@ -533,7 +533,7 @@ jj commit -m "report: extend sun lighting to cards, fork/join bars, timeline cel
 ## Task 3: Cursor fast-path — hover sheen + rim glint (hovered SVG only)
 
 **Files:**
-- Modify: `src/PUnit.Mtp/HtmlReport/report-template.html` (sun-engine section ~after `applySun` — add the cursor state + rAF; `report` already in scope at module level ~L406)
+- Modify: `src/Raun.Mtp/HtmlReport/report-template.html` (sun-engine section ~after `applySun` — add the cursor state + rAF; `report` already in scope at module level ~L406)
 
 **Interfaces:**
 - Consumes: `report` (the `<main id="report">` element, module-level), `sunDir`, `AD_SCENE`, `reduceMotion`, the per-svg `radialGradient.ad-sheen` / `linearGradient.ad-edge` (Task 1), `.ad-lit` tiles (Tasks 1–2).
@@ -599,7 +599,7 @@ const { chromium } = require("playwright");
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 1180, height: 1600 } });
   const url = "file://" + process.cwd().replace(/\\/g, "/") +
-    "/samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html?theme=dark";
+    "/samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html?theme=dark";
   await p.goto(url);
   const node = p.locator(".ad-lit").first();
   const box = await node.boundingBox();
@@ -616,7 +616,7 @@ Run: `node drive-sheen.cjs`. Inspect `sheen-hover.png`: the hovered tile shows a
 
 - [ ] **Step 5: Verify time-of-day + reduced motion.** (a) Time: in a driver, override the clock before `goto` with `await p.addInitScript(() => { const F = Date; const fixed = new F('2026-06-21T12:00:00'); globalThis.Date = class extends F { constructor(...a){ return a.length ? new F(...a) : fixed; } static now(){ return fixed.getTime(); } }; });` then screenshot — at noon the light is near-overhead and brighter (`--sun ≈ 1.15`); repeat with `T19:00:00` (dusk, dimmer, low angle). Confirm the per-tile border directional read shifts. (b) Reduced motion: `const p = await b.newPage({ viewport:{width:1180,height:1600}, reducedMotion: "reduce" });` then `goto` + screenshot — tiles are statically lit (fixed angle), hovering shows **no** sheen/glint (suppressed), no errors.
 
-- [ ] **Step 6: Guard the C# surface** — `dotnet test PUnit.slnx -c Debug` (240/240) + `dotnet build PUnit.slnx -warnaserror` (0 warnings).
+- [ ] **Step 6: Guard the C# surface** — `dotnet test Raun.slnx -c Debug` (240/240) + `dotnet build Raun.slnx -warnaserror` (0 warnings).
 
 - [ ] **Step 7: Commit**
 
@@ -629,7 +629,7 @@ jj commit -m "report: cursor-tracked hover sheen + rim glint in the hovered scen
 ## Task 4: Uniform corner-bracket focus + keyboard parity (incl. the pill)
 
 **Files:**
-- Modify: `src/PUnit.Mtp/HtmlReport/report-template.html` (CSS pill rule ~L262; `buildForkToggle` segment ~L821; `buildScenarioCard` delegated listeners ~L1796–1805)
+- Modify: `src/Raun.Mtp/HtmlReport/report-template.html` (CSS pill rule ~L262; `buildForkToggle` segment ~L821; `buildScenarioCard` delegated listeners ~L1796–1805)
 
 **Interfaces:**
 - Consumes: `litTile` tiles already `tabindex=0 role=button` with brackets (Tasks 1–2); the delegated `click`/`keydown` listeners + `focusStep`/`onForkSet` in `buildScenarioCard` (Phase 1).
@@ -684,7 +684,7 @@ const { chromium } = require("playwright");
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 1180, height: 1600 } });
   const url = "file://" + process.cwd().replace(/\\/g, "/") +
-    "/samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html?theme=dark";
+    "/samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html?theme=dark";
   await p.goto(url);
   for (let i = 0; i < 6; i++){ await p.keyboard.press("Tab"); }
   await p.screenshot({ path: "focus-brackets.png" });          // expect a corner-bracket reticle on the focused tile
@@ -696,7 +696,7 @@ Run: `node drive-focus.cjs`. Inspect `focus-brackets.png` against the mock's foc
 
 - [ ] **Step 5: Full both-theme + reduced-motion regression.** Re-run the fixture screenshots (Task fixture, both themes) for a final whole-feature look; re-run the Task 3 reduced-motion driver to confirm static lighting + suppressed sheen + brackets still appear on focus (focus is not motion). Confirm a non-fork scenario and a second scenario light independently.
 
-- [ ] **Step 6: Guard the C# surface** — `dotnet test PUnit.slnx -c Debug` (240/240) + `dotnet build PUnit.slnx -warnaserror` (0 warnings).
+- [ ] **Step 6: Guard the C# surface** — `dotnet test Raun.slnx -c Debug` (240/240) + `dotnet build Raun.slnx -warnaserror` (0 warnings).
 
 - [ ] **Step 7: Commit**
 

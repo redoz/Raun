@@ -14,7 +14,7 @@
 
 ## 1. What & why
 
-PUnit lowers each `[Scenario]` method into a generated `PUnitScenarios.g.cs` (class `PUnit.Generated.PUnitGenerated`): one `Scenario_X()` builder per scenario, each building a `ScenarioNode[]` whose nodes carry a `static async (__inputs, __ctx) => { … }` `Invoke` lambda. The scheduler runs those lambdas.
+Raun lowers each `[Scenario]` method into a generated `RaunScenarios.g.cs` (class `Raun.Generated.RaunGenerated`): one `Scenario_X()` builder per scenario, each building a `ScenarioNode[]` whose nodes carry a `static async (__inputs, __ctx) => { … }` `Invoke` lambda. The scheduler runs those lambdas.
 
 Today, debugging a scenario steps through the *generated* file. **Goal:** emit `#line` directives so that, under a debugger, a breakpoint on a step's DSL call (`When.CreateAppointment(...)`) binds to the developer's **original source line**, and stepping never descends into generated plumbing.
 
@@ -66,18 +66,18 @@ The file-level baseline goes in the raw `Header` const either way (never passed 
 ## 3. Repo conventions for the executor
 
 - **Build gate is strict:** `TreatWarningsAsErrors`, `EnableNETAnalyzers`, `AnalysisLevel=latest-all`, `EnforceCodeStyleInBuild` (in `Directory.Build.props`). Every build must report **`0 Warning(s), 0 Error(s)`**.
-- **Tests:** `dotnet test PUnit.slnx --nologo`. **Baseline is 92** (18 AppointmentTests + 30 PUnit.Test + 19 PUnit.Xunit.Test + 25 PUnit.Generator.Test). This feature adds **2** facts to `PUnit.Generator.Test` (`PathBearing_scenario` + `PathBearing_scenario_compiles`), so the final green total is **94**.
+- **Tests:** `dotnet test Raun.slnx --nologo`. **Baseline is 92** (18 AppointmentTests + 30 Raun.Test + 19 Raun.Xunit.Test + 25 Raun.Generator.Test). This feature adds **2** facts to `Raun.Generator.Test` (`PathBearing_scenario` + `PathBearing_scenario_compiles`), so the final green total is **94**.
 - **Commits:** `jj commit -m "..."` (this repo uses jj). **No `Co-Authored-By` / tooling trailer** — the owner does not want attribution trailers.
 - **`using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;`** is already in `ScenarioEmitter.cs` (line 7), so `LineDirectiveTrivia`, `Trivia`, `Literal`, `Token`, `EndOfLine`, `TriviaList`, `ParseStatement`, `ParseLeadingTrivia` are unqualified there.
 - **Snapshot re-accept procedure:** run the snapshot test(s) → Verify writes `*.received.cs` next to each `*.verified.cs` on mismatch (DiffEngine is disabled in `VerifyConfig.cs`); diff `received` vs `verified` and confirm the change is exactly what's expected and nothing else; replace each `*.verified.cs` with its `*.received.cs`; delete the `*.received.cs`; re-run to confirm green. **Never** blind-accept.
 
 ### Edit-site map (verified against current code)
-- `src/PUnit.Generator/Emit/ScenarioEmitter.cs` — `Header` const (~L14), `Emit`/`NormalizeWhitespace` (~L23/L45/L47), `BuildInvokeLambda` (~L216–257). **Primary edit site.**
-- `src/PUnit.Generator/Lowering/Ir.cs` — `ParsedStep.SourceFile` (`string?`, ~L26), `SourceLine` (`int`, ~L27). Read-only.
-- `src/PUnit.Generator/Lowering/ScenarioParser.cs` — `Location(...)` helper (~L446) sets `SourceFile`=`span.Path` (empty when parsed pathless). Read-only.
-- `test/PUnit.Generator.Test/GeneratorHarness.cs` — `Run(...)` (~L34–64, compiles + `Emit`s), `RunDriver(...)` (~L67–81, pathless `ParseText`). Add path-bearing overloads here; align new code with the actual `GeneratorResult`/`References` member names in this file.
-- `test/PUnit.Generator.Test/GeneratorSnapshotTests.cs` — add 2 facts.
-- `test/PUnit.Generator.Test/Snapshots/` — 3 existing snapshots re-accepted + 1 new.
+- `src/Raun.Generator/Emit/ScenarioEmitter.cs` — `Header` const (~L14), `Emit`/`NormalizeWhitespace` (~L23/L45/L47), `BuildInvokeLambda` (~L216–257). **Primary edit site.**
+- `src/Raun.Generator/Lowering/Ir.cs` — `ParsedStep.SourceFile` (`string?`, ~L26), `SourceLine` (`int`, ~L27). Read-only.
+- `src/Raun.Generator/Lowering/ScenarioParser.cs` — `Location(...)` helper (~L446) sets `SourceFile`=`span.Path` (empty when parsed pathless). Read-only.
+- `test/Raun.Generator.Test/GeneratorHarness.cs` — `Run(...)` (~L34–64, compiles + `Emit`s), `RunDriver(...)` (~L67–81, pathless `ParseText`). Add path-bearing overloads here; align new code with the actual `GeneratorResult`/`References` member names in this file.
+- `test/Raun.Generator.Test/GeneratorSnapshotTests.cs` — add 2 facts.
+- `test/Raun.Generator.Test/Snapshots/` — 3 existing snapshots re-accepted + 1 new.
 
 ---
 
@@ -85,7 +85,7 @@ The file-level baseline goes in the raw `Header` const either way (never passed 
 
 ### Task 1 — SPIKE: decide Shape A vs Shape B (throwaway)
 
-Create `test/PUnit.Generator.Test/LineDirectiveSpikeTests.cs`. Its **intent**: build a one-statement method, attach a `#line N "file"` as leading trivia, `NormalizeWhitespace(eol:"\n").ToFullString()`, and assert:
+Create `test/Raun.Generator.Test/LineDirectiveSpikeTests.cs`. Its **intent**: build a one-statement method, attach a `#line N "file"` as leading trivia, `NormalizeWhitespace(eol:"\n").ToFullString()`, and assert:
 1. `#line 42 "X.cs"` appears on its own line immediately before the statement (`Assert.Contains("#line 42 \"X.cs\"\n", text)`), and the statement is **not** glued to the directive.
 2. `#line hidden` round-trips (`Assert.Contains("#line hidden\n", text)`).
 3. (Real bar) a full emitter output for a **path-bearing** scenario compiles — exercise this fully in Task 3; here just confirm the trivia renders.
@@ -95,13 +95,13 @@ Create `test/PUnit.Generator.Test/LineDirectiveSpikeTests.cs`. Its **intent**: b
 > - `LineDirectiveTrivia(Literal(n), isActive: true).WithFile(Literal("path"))`, and
 > - hidden: `LineDirectiveTrivia(Token(SyntaxKind.HiddenKeyword), isActive: true)`.
 
-Run `dotnet test PUnit.slnx --nologo --filter "FullyQualifiedName~LineDirectiveSpikeTests"`.
+Run `dotnet test Raun.slnx --nologo --filter "FullyQualifiedName~LineDirectiveSpikeTests"`.
 
 **DECISION (record in the Task 6 commit body):**
 - Both structured asserts PASS → **Shape A**.
 - Either FAILS (glued token / missing EOL / mid-line / not compiler-legal) → **Shape B**; note the symptom.
 
-Then **delete** the spike file and re-run `dotnet test PUnit.slnx --nologo` → back to **92**.
+Then **delete** the spike file and re-run `dotnet test Raun.slnx --nologo` → back to **92**.
 
 ### Task 2 — Emit the directives in `ScenarioEmitter`
 
@@ -209,7 +209,7 @@ static string LinePrefix(ParsedStep step)
 }
 ```
 
-**2.3** — `dotnet build PUnit.slnx --nologo` → `0 Warning(s), 0 Error(s)`. Fix any CA/IDE nit the new helpers raise (e.g. CA1859 concrete return types, expression-bodied preference).
+**2.3** — `dotnet build Raun.slnx --nologo` → `0 Warning(s), 0 Error(s)`. Fix any CA/IDE nit the new helpers raise (e.g. CA1859 concrete return types, expression-bodied preference).
 
 ### Task 3 — Path-bearing harness overloads + new snapshot + compile assertion
 
@@ -257,7 +257,7 @@ public void PathBearing_scenario_compiles()
 ```
 > Confirm `SampleSources.Dsl` / `SampleSources.LinearScenario` are the exact member names used by the existing snapshot facts; reuse whatever those facts use.
 
-**3.4 — Generate + accept the new snapshot.** Run the `PathBearing_scenario` fact → it fails and writes `…PathBearing_scenario#PUnitScenarios.g.received.cs`. **Inspect it:** each step shows `#line N "Scenario.cs"` (Linear lines 76/77/78/79) on its own line before the awaited statement, `#line hidden` before each `return`, and the baseline `#line hidden` after the pragma. Then promote received → verified, delete received, re-run → both new facts green.
+**3.4 — Generate + accept the new snapshot.** Run the `PathBearing_scenario` fact → it fails and writes `…PathBearing_scenario#RaunScenarios.g.received.cs`. **Inspect it:** each step shows `#line N "Scenario.cs"` (Linear lines 76/77/78/79) on its own line before the awaited statement, `#line hidden` before each `return`, and the baseline `#line hidden` after the pragma. Then promote received → verified, delete received, re-run → both new facts green.
 > `NormalizeWhitespace` may place `#line` at column 0 rather than block-indented — whatever it emits becomes the accepted snapshot, as long as the directive is on its own line and the next statement is intact.
 
 ### Task 4 — Re-accept the 3 existing snapshots
@@ -271,7 +271,7 @@ They change by **exactly**: (a) one `#line hidden` after `#pragma warning disabl
 
 ### Task 5 — Full-suite verification
 
-- `dotnet test PUnit.slnx --nologo` → **94 passing** (baseline 92 + the 2 new `PUnit.Generator.Test` facts: 25 → 27), build `0 Warning(s), 0 Error(s)`.
+- `dotnet test Raun.slnx --nologo` → **94 passing** (baseline 92 + the 2 new `Raun.Generator.Test` facts: 25 → 27), build `0 Warning(s), 0 Error(s)`.
 - Spot-check with Grep: the 3 existing verified snapshots contain **zero** `#line N "` matches (only `#line hidden`); the `PathBearing` verified snapshot contains `#line 78 "Scenario.cs"`.
 
 ### Task 6 — Commit
@@ -308,8 +308,8 @@ snapshots (baseline + per-return #line hidden only). Spike outcome: Shape <A|B>.
 ## 7. Manual debugger checklist (run once by a human; not automated)
 
 Against the sample `AppointmentTests` in an IDE:
-1. Breakpoint on a `When.CreateAppointment(...)` line in the original `*Tests.cs` → run the test → it binds and hits **on that original line** (not in `PUnitScenarios.g.cs`).
-2. Step Over / Step Into repeatedly → moves between original DSL call lines; never descends into `PUnitScenarios.g.cs` plumbing (`CreateAll`, `Scenario_X()`, module initializer, `FormatDisplayName`, the `__r`/cast/return boilerplate).
+1. Breakpoint on a `When.CreateAppointment(...)` line in the original `*Tests.cs` → run the test → it binds and hits **on that original line** (not in `RaunScenarios.g.cs`).
+2. Step Over / Step Into repeatedly → moves between original DSL call lines; never descends into `RaunScenarios.g.cs` plumbing (`CreateAll`, `Scenario_X()`, module initializer, `FormatDisplayName`, the `__r`/cast/return boilerplate).
 3. Breakpoint on a void step (`Then.AppointmentExists(...)`) → binds to the original line and hits.
 4. Locals showing `__r`/`__inputs` instead of the user's names is expected (accepted non-goal).
 

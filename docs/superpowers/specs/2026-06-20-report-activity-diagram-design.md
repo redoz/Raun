@@ -24,14 +24,14 @@ activity diagram** per scenario — the headline view of what a scenario did: it
 full-scenario timeline.
 
 ### Affected file
-`src/PUnit.Mtp/HtmlReport/report-template.html` — an `EmbeddedResource`; all HTML/CSS/JS inline, model injected as
+`src/Raun.Mtp/HtmlReport/report-template.html` — an `EmbeddedResource`; all HTML/CSS/JS inline, model injected as
 JSON. Rendered by `HtmlReportSink` (string-replaces the JSON token). **No C# model/builder changes.**
 
 ### REUSE / REPLACE / PRESERVE (current template, ~869 lines)
 
 | Bucket | What | Identifiers (approx. lines) |
 |---|---|---|
-| **PRESERVE** | Document shell, `<title>PUnit run report</title>`, the JSON token, app bar/brand, summary `id="chips"`, gen line, phase legend | head ~3–7; `#chips` ~338; token ~353 |
+| **PRESERVE** | Document shell, `<title>Raun run report</title>`, the JSON token, app bar/brand, summary `id="chips"`, gen line, phase legend | head ~3–7; `#chips` ~338; token ~353 |
 | **PRESERVE** | The model parser | `const model = JSON.parse(document.getElementById("model").textContent)` ~364 |
 | **PRESERVE** | Drill panel + focus | `.drill`/`.step-list`/`.step-entry` ~235–289; `buildScenarioDrill(sc)` ~824–866; `focusStep(stepId)` ~717 |
 | **REUSE** | Theme system | CSS vars on `:root`, `@media (prefers-color-scheme)`, `[data-theme]` overrides ~10–85; `?theme` parse ~358–361 |
@@ -271,8 +271,8 @@ No model changes. Everything needed exists in `HtmlReportModel`:
 - **`HtmlReportModelBuilderTests`** (incl. the `Verify(json)` snapshot): **must NOT change.** The C# model and
   builder are untouched. ✅ by construction.
 - **`HtmlReportSinkTests`**: substring asserts on the rendered HTML. Must keep passing — preserve: the JSON token
-  (`/*__PUNIT_REPORT_JSON__*/`) and its replacement, the indented JSON (`"scenarioId": "scn"`), the scenario name
-  text, `id="chips"`, the title text `PUnit run report`, and `data-theme` wiring. New markup is fine as long as
+  (`/*__RAUN_REPORT_JSON__*/`) and its replacement, the indented JSON (`"scenarioId": "scn"`), the scenario name
+  text, `id="chips"`, the title text `Raun run report`, and `data-theme` wiring. New markup is fine as long as
   these substrings remain. Add/adjust asserts only if we want to lock new structure (optional).
 - **Build**: **0 warnings**. Self-contained (no external URL) must hold — a CI/test check that the emitted HTML
   contains no `http://`/`https://`/`@import` for assets is desirable (the embedded font is base64, so this stays
@@ -283,7 +283,7 @@ No model changes. Everything needed exists in `HtmlReportModel`:
 ## 10. Constraints recap
 
 - Self-contained HTML: inline `<style>`/`<script>` only; Source Serif 4 base64-embedded; no CDN/web-font/`@import`.
-- Exactly one `<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>`; don't break it.
+- Exactly one `<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>`; don't break it.
 - Model field names are FIXED (camelCase serialized); model + builder unchanged.
 - Both themes: auto light/dark + `?theme=light|dark`; define the light palette (§5).
 - Keep `HtmlReportSinkTests` + `HtmlReportModelBuilderTests` green; 0-warning build.

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate the repo from Microsoft.Testing.Platform (MTP) 1.9.1 to 2.2.3, then add a self-contained `punit-report.html` run report (Gantt timeline + resource lane + click-to-drill detail), driven by a new runner-neutral run-event bus in PUnit core.
+**Goal:** Migrate the repo from Microsoft.Testing.Platform (MTP) 1.9.1 to 2.2.3, then add a self-contained `raun-report.html` run report (Gantt timeline + resource lane + click-to-drill detail), driven by a new runner-neutral run-event bus in Raun core.
 
-**Architecture:** A typed pub/sub bus (`PUnit.Reporting`) in core becomes the single event source for a run. The existing MTP reporter and the new HTML report are both *subscribers*. The scheduler stamps absolute `StartedAt` timestamps via an injected `TimeProvider`. The HTML sink accumulates a deterministic, snapshot-testable JSON model (lane-packed sink-side) and writes one self-contained HTML file at end of run, opt-in via `--report-html`.
+**Architecture:** A typed pub/sub bus (`Raun.Reporting`) in core becomes the single event source for a run. The existing MTP reporter and the new HTML report are both *subscribers*. The scheduler stamps absolute `StartedAt` timestamps via an injected `TimeProvider`. The HTML sink accumulates a deterministic, snapshot-testable JSON model (lane-packed sink-side) and writes one self-contained HTML file at end of run, opt-in via `--report-html`.
 
 **Tech Stack:** C# 14 / net10.0, Microsoft.Testing.Platform 2.2.3, xunit.v3 3.2.2 (via `xunit.v3.mtp-v2`), Verify.XunitV3 for JSON snapshots, vanilla JS/CSS embedded HTML template.
 
@@ -13,7 +13,7 @@
 **Pinned MTP 2.x facts (verified by reflecting `Microsoft.Testing.Platform` 2.2.1, API-identical to 2.2.3, and by a probe build/run of the whole solution):**
 
 - `xunit.v3.mtp-v2` **3.2.2** is the drop-in meta-package that targets MTP **v2** (the default `xunit.v3` package targets MTP v1). Both already in the local NuGet cache.
-- The **only** 1.x→2.x runtime break in the codebase: `Microsoft.Testing.Platform.TestHost.TestSessionContext` now has a single internal `.ctor(SessionUid sessionUid)` (1.9.1 had `.ctor(SessionUid, ClientInfo)`); `ClientInfo` now has internal `.ctor(string id, string version)`. `src/PUnit.Mtp` itself needs **no** changes.
+- The **only** 1.x→2.x runtime break in the codebase: `Microsoft.Testing.Platform.TestHost.TestSessionContext` now has a single internal `.ctor(SessionUid sessionUid)` (1.9.1 had `.ctor(SessionUid, ClientInfo)`); `ClientInfo` now has internal `.ctor(string id, string version)`. `src/Raun.Mtp` itself needs **no** changes.
 - Command-line option API for the report flag (namespaces in parens):
   - `ICommandLineOptionsProvider` (`Microsoft.Testing.Platform.Extensions.CommandLine`) **extends `IExtension`**. Members: `IReadOnlyCollection<CommandLineOption> GetCommandLineOptions()`, `Task<ValidationResult> ValidateCommandLineOptionsAsync(ICommandLineOptions)`, `Task<ValidationResult> ValidateOptionArgumentsAsync(CommandLineOption, string[])`.
   - `CommandLineOption` (`…Extensions.CommandLine`) ctor: `(string name, string description, ArgumentArity arity, bool isHidden)`.
@@ -22,61 +22,61 @@
   - `ICommandLineOptions` (`Microsoft.Testing.Platform.CommandLine`): `bool IsOptionSet(string optionName)`, `bool TryGetOptionArgumentList(string optionName, out string[] arguments)`. Option names are registered **without** the leading `--`.
   - Register a provider: `builder.CommandLine.AddProvider(() => new HtmlReportOptionsProvider())` (`ICommandLineManager.AddProvider(Func<ICommandLineOptionsProvider>)`, in `Microsoft.Testing.Platform.CommandLine`).
   - Read at runtime from the framework's `IServiceProvider` (`Microsoft.Testing.Platform.Services.ServiceProviderExtensions`): `serviceProvider.GetCommandLineOptions()` → `ICommandLineOptions`; `serviceProvider.GetConfiguration()` → `IConfiguration` whose indexer `config["platformOptions:resultDirectory"]` yields the resolved results directory (the constant `PlatformConfigurationConstants.PlatformResultDirectory` is internal — use the literal key).
-  - `RegisterTestFramework(Func<IServiceProvider, ITestFrameworkCapabilities>, Func<ITestFrameworkCapabilities, IServiceProvider, ITestFramework>)` — the framework factory's 2nd arg is the `IServiceProvider`, so `PUnitTestFramework` can be constructed with the resolved options.
+  - `RegisterTestFramework(Func<IServiceProvider, ITestFrameworkCapabilities>, Func<ITestFrameworkCapabilities, IServiceProvider, ITestFramework>)` — the framework factory's 2nd arg is the `IServiceProvider`, so `RaunTestFramework` can be constructed with the resolved options.
 
 ---
 
 ## File Structure
 
-**New (core — `src/PUnit/Reporting/`):**
+**New (core — `src/Raun/Reporting/`):**
 - `RunEvent.cs` — the `RunEvent` record hierarchy (`RunStarted`, `ScenarioStarted`, `StepStarted`, `StepFinished`, `ScenarioFinished`, `RunFinished`).
 - `IRunEventSink.cs` — `IRunEventSink { ValueTask PublishAsync(RunEvent) }`.
 - `RunEventSink.cs` — abstract base with virtual `On*Async` no-ops + sealed dispatch.
 - `RunEventBus.cs` — serial fan-out with per-sink failure isolation + `Failures`.
 
-**New (mtp — `src/PUnit.Mtp/HtmlReport/`):**
+**New (mtp — `src/Raun.Mtp/HtmlReport/`):**
 - `HtmlReportModel.cs` — the serializable model (`HtmlReportModel`/`ReportScenario`/`ReportStep`/`ReportEffect`/`ReportResource`/`ReportResourceEvent`/`ReportSummary`) + the pure builder that lane-packs and rolls up resources.
 - `HtmlReportSink.cs` — `RunEventSink` that accumulates the model and writes the file on `RunFinished`.
 - `HtmlReportOptionsProvider.cs` — `ICommandLineOptionsProvider` registering `--report-html` + `--report-html-filename`.
 - `report-template.html` — embedded resource; vanilla JS/CSS renderer with a single JSON `<script>` blob.
 
-**New (mtp — `src/PUnit.Mtp/`):**
-- `MtpReportSink.cs` — session-scoped `RunEventSink` replacing `PUnitStepReporter` (same emitted `TestNodeUpdateMessage`s).
+**New (mtp — `src/Raun.Mtp/`):**
+- `MtpReportSink.cs` — session-scoped `RunEventSink` replacing `RaunStepReporter` (same emitted `TestNodeUpdateMessage`s).
 
 **Changed (core):**
-- `src/PUnit/Model/StepResult.cs` — add `required DateTimeOffset StartedAt`.
-- `src/PUnit/Scheduling/ScenarioScheduler.cs` — ctor gains `TimeProvider`; stamp `StartedAt`; pass the clock into `ScenarioContext`.
+- `src/Raun/Model/StepResult.cs` — add `required DateTimeOffset StartedAt`.
+- `src/Raun/Scheduling/ScenarioScheduler.cs` — ctor gains `TimeProvider`; stamp `StartedAt`; pass the clock into `ScenarioContext`.
 
 **Changed (mtp):**
-- `src/PUnit.Mtp/PUnitRunLoop.cs` — emit `RunEvent`s to an `IRunEventSink` instead of publishing to `IMessageBus` directly.
-- `src/PUnit.Mtp/PUnitTestFramework.cs` — construct the sink list + bus, resolve the HTML path, log `bus.Failures`.
-- `src/PUnit.Mtp/PUnitTestApplication.cs` — register `HtmlReportOptionsProvider`; pass the `IServiceProvider` into the framework.
-- `src/PUnit.Mtp/PUnitStepReporter.cs` — **deleted** (logic moves to `MtpReportSink`).
+- `src/Raun.Mtp/RaunRunLoop.cs` — emit `RunEvent`s to an `IRunEventSink` instead of publishing to `IMessageBus` directly.
+- `src/Raun.Mtp/RaunTestFramework.cs` — construct the sink list + bus, resolve the HTML path, log `bus.Failures`.
+- `src/Raun.Mtp/RaunTestApplication.cs` — register `HtmlReportOptionsProvider`; pass the `IServiceProvider` into the framework.
+- `src/Raun.Mtp/RaunStepReporter.cs` — **deleted** (logic moves to `MtpReportSink`).
 
 **Changed (config):**
 - `Directory.Packages.props` — MTP `2.2.3`; add `xunit.v3.mtp-v2`; add `Verify.XunitV3` is already present only as a version — reuse; add `System.Text.Json` is in-box (net10) — no package.
-- `test/PUnit.Test/PUnit.Test.csproj`, `test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj`, `test/PUnit.Generator.Test/PUnit.Generator.Test.csproj` — swap `xunit.v3` → `xunit.v3.mtp-v2`.
-- `test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj` — add `Verify.XunitV3` for the JSON snapshot.
+- `test/Raun.Test/Raun.Test.csproj`, `test/Raun.Mtp.Test/Raun.Mtp.Test.csproj`, `test/Raun.Generator.Test/Raun.Generator.Test.csproj` — swap `xunit.v3` → `xunit.v3.mtp-v2`.
+- `test/Raun.Mtp.Test/Raun.Mtp.Test.csproj` — add `Verify.XunitV3` for the JSON snapshot.
 
 **Changed (tests):**
-- `test/PUnit.Mtp.Test/PUnitTestFrameworkTests.cs` — delete the reflective `RequestDispatch` tests + `MtpContextFactory` (Phase 0).
-- `test/PUnit.Mtp.Test/RunLoopTests.cs` — drive the loop via an `IRunEventSink` fake.
-- `test/PUnit.Mtp.Test/PUnitStepReporterTests.cs` → rename to `MtpReportSinkTests.cs` — drive the sink via `RunEvent`s.
-- New: `test/PUnit.Test/Reporting/RunEventBusTests.cs`, `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs`, `test/PUnit.Mtp.Test/HtmlReportOptionsProviderTests.cs`, plus scheduler-timestamp tests in `test/PUnit.Test/SchedulerTests.cs`.
+- `test/Raun.Mtp.Test/RaunTestFrameworkTests.cs` — delete the reflective `RequestDispatch` tests + `MtpContextFactory` (Phase 0).
+- `test/Raun.Mtp.Test/RunLoopTests.cs` — drive the loop via an `IRunEventSink` fake.
+- `test/Raun.Mtp.Test/RaunStepReporterTests.cs` → rename to `MtpReportSinkTests.cs` — drive the sink via `RunEvent`s.
+- New: `test/Raun.Test/Reporting/RunEventBusTests.cs`, `test/Raun.Mtp.Test/HtmlReportSinkTests.cs`, `test/Raun.Mtp.Test/HtmlReportOptionsProviderTests.cs`, plus scheduler-timestamp tests in `test/Raun.Test/SchedulerTests.cs`.
 
 ---
 
 ## Phase 0 — Migrate to MTP 2.x
 
-> Verified by a throwaway probe build+run of the entire solution: with these exact edits the solution builds with zero warnings/errors, all of `PUnit.Test`, `PUnit.Generator.Test`, and the `AppointmentTests` sample pass on the MTP v2 runner, and `PUnit.Mtp.Test` passes once the reflective dispatch tests are removed (Task 0.2).
+> Verified by a throwaway probe build+run of the entire solution: with these exact edits the solution builds with zero warnings/errors, all of `Raun.Test`, `Raun.Generator.Test`, and the `AppointmentTests` sample pass on the MTP v2 runner, and `Raun.Mtp.Test` passes once the reflective dispatch tests are removed (Task 0.2).
 
 ### Task 0.1: Swap MTP + xunit packages to the v2 line
 
 **Files:**
 - Modify: `Directory.Packages.props`
-- Modify: `test/PUnit.Test/PUnit.Test.csproj:15`
-- Modify: `test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj:23`
-- Modify: `test/PUnit.Generator.Test/PUnit.Generator.Test.csproj:14`
+- Modify: `test/Raun.Test/Raun.Test.csproj:15`
+- Modify: `test/Raun.Mtp.Test/Raun.Mtp.Test.csproj:23`
+- Modify: `test/Raun.Generator.Test/Raun.Generator.Test.csproj:14`
 
 - [ ] **Step 1: Bump the MTP pin and replace the stale comment** in `Directory.Packages.props`. Replace the comment block + version line (currently lines 13–20) with:
 
@@ -97,7 +97,7 @@
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
 ```
 
-- [ ] **Step 3: Switch each test project to the v2 runner package.** In all three of `test/PUnit.Test/PUnit.Test.csproj`, `test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj`, `test/PUnit.Generator.Test/PUnit.Generator.Test.csproj`, change the reference:
+- [ ] **Step 3: Switch each test project to the v2 runner package.** In all three of `test/Raun.Test/Raun.Test.csproj`, `test/Raun.Mtp.Test/Raun.Mtp.Test.csproj`, `test/Raun.Generator.Test/Raun.Generator.Test.csproj`, change the reference:
 
 ```xml
     <PackageReference Include="xunit.v3.mtp-v2" />
@@ -106,66 +106,66 @@
 
 - [ ] **Step 4: Restore + build.**
 
-Run: `dotnet build PUnit.slnx -c Debug`
+Run: `dotnet build Raun.slnx -c Debug`
 Expected: `Build succeeded.` with **0 Warning(s), 0 Error(s)**. (NuGet restores MTP 2.2.3 + `xunit.v3.mtp-v2` 3.2.2 on first build; requires network for 2.2.3.)
 
 - [ ] **Step 5: Run the suite to see the single expected failure cluster.**
 
-Run: `dotnet test PUnit.slnx -c Debug --no-build`
-Expected: `PUnit.Test`, `PUnit.Generator.Test`, and `AppointmentTests` **pass**; `PUnit.Mtp.Test` reports exactly 3 failures, all `System.MissingMethodException : Constructor on type 'Microsoft.Testing.Platform.TestHost.TestSessionContext' not found.` — all from the reflective `RequestDispatch` tests, removed in Task 0.2. Do **not** commit yet.
+Run: `dotnet test Raun.slnx -c Debug --no-build`
+Expected: `Raun.Test`, `Raun.Generator.Test`, and `AppointmentTests` **pass**; `Raun.Mtp.Test` reports exactly 3 failures, all `System.MissingMethodException : Constructor on type 'Microsoft.Testing.Platform.TestHost.TestSessionContext' not found.` — all from the reflective `RequestDispatch` tests, removed in Task 0.2. Do **not** commit yet.
 
 ### Task 0.2: Delete the reflective request-dispatch tests
 
 The 3 `RequestDispatch` tests are the only code that constructs MTP's host-internal `TestSessionContext` (now an internal `.ctor(SessionUid)` — the request types it feeds have no public construction path). Rather than carry that reflection forward, delete them: the `ExecuteRequestAsync` routing they cover is a trivial type-switch already exercised end-to-end by the **real MTP host** when the `AppointmentTests` sample runs under `dotnet test` (the host issues genuine discover + run requests), and its `OnDiscoverAsync`/`OnExecuteAsync` targets are unit-tested directly via the `SessionUid`-keyed worker seam the framework was explicitly designed to expose.
 
 **Files:**
-- Modify: `test/PUnit.Mtp.Test/PUnitTestFrameworkTests.cs`
+- Modify: `test/Raun.Mtp.Test/RaunTestFrameworkTests.cs`
 
-- [ ] **Step 1: Delete the reflective pieces.** Remove three things from `PUnitTestFrameworkTests.cs`:
+- [ ] **Step 1: Delete the reflective pieces.** Remove three things from `RaunTestFrameworkTests.cs`:
   - the nested `public class RequestDispatch { … }` (the 3 tests, lines ~111–172);
-  - the `private sealed class RecordingTestFramework : PUnitTestFramework { … }` (lines ~178–209) — used only by `RequestDispatch`;
+  - the `private sealed class RecordingTestFramework : RaunTestFramework { … }` (lines ~178–209) — used only by `RequestDispatch`;
   - the `private static class MtpContextFactory { … }` (lines ~229–273) — the reflection helper itself.
 
   **Keep** the `public class SessionManagement { … }` and the `private sealed class SpyMessageBus : IMessageBus` (the unknown-session `SessionManagement` tests still use it).
 
-- [ ] **Step 2: Remove the now-unused usings the build flags.** `IDE0005` (unnecessary using) is a build error in this repo, so the compiler names them precisely. After Step 1 these become unused: `using System.Reflection;`, `using Microsoft.Testing.Platform.Requests;`, and `using Microsoft.Testing.Platform.Extensions.TestFramework;`. Keep `Microsoft.Testing.Platform.Extensions.Messages`, `Microsoft.Testing.Platform.Messages`, `Microsoft.Testing.Platform.TestHost`, `PUnit.Mtp`, and `Xunit` (still used by `SessionManagement`/`SpyMessageBus`).
+- [ ] **Step 2: Remove the now-unused usings the build flags.** `IDE0005` (unnecessary using) is a build error in this repo, so the compiler names them precisely. After Step 1 these become unused: `using System.Reflection;`, `using Microsoft.Testing.Platform.Requests;`, and `using Microsoft.Testing.Platform.Extensions.TestFramework;`. Keep `Microsoft.Testing.Platform.Extensions.Messages`, `Microsoft.Testing.Platform.Messages`, `Microsoft.Testing.Platform.TestHost`, `Raun.Mtp`, and `Xunit` (still used by `SessionManagement`/`SpyMessageBus`).
 
-Run: `dotnet build test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj -c Debug`
+Run: `dotnet build test/Raun.Mtp.Test/Raun.Mtp.Test.csproj -c Debug`
 Expected: `Build succeeded.` 0 warnings, 0 errors. (If the build flags a using I didn't list, remove exactly what it names — do not add `#pragma` suppressions.)
 
 - [ ] **Step 3: Run the full suite — everything green.**
 
-Run: `dotnet test PUnit.slnx -c Debug`
-Expected: all four test projects + sample pass; `Test run summary: Passed!`. (`PUnitTestFrameworkTests` now contains only `SessionManagement`.)
+Run: `dotnet test Raun.slnx -c Debug`
+Expected: all four test projects + sample pass; `Test run summary: Passed!`. (`RaunTestFrameworkTests` now contains only `SessionManagement`.)
 
 - [ ] **Step 4: Commit.**
 
 ```bash
-git add Directory.Packages.props test/PUnit.Test/PUnit.Test.csproj test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj test/PUnit.Generator.Test/PUnit.Generator.Test.csproj test/PUnit.Mtp.Test/PUnitTestFrameworkTests.cs
+git add Directory.Packages.props test/Raun.Test/Raun.Test.csproj test/Raun.Mtp.Test/Raun.Mtp.Test.csproj test/Raun.Generator.Test/Raun.Generator.Test.csproj test/Raun.Mtp.Test/RaunTestFrameworkTests.cs
 git commit -m "build: migrate to Microsoft.Testing.Platform 2.2.3 (xunit.v3.mtp-v2 runner)"
 ```
 
 ---
 
-## Phase 1 — Run-event bus in core (`PUnit.Reporting`)
+## Phase 1 — Run-event bus in core (`Raun.Reporting`)
 
-Realizes design §3.A. Pure core types, no MTP/runner dependency. Tested in `PUnit.Test`.
+Realizes design §3.A. Pure core types, no MTP/runner dependency. Tested in `Raun.Test`.
 
 ### Task 1.1: Event records + sink interface + ergonomic base
 
 **Files:**
-- Create: `src/PUnit/Reporting/RunEvent.cs`
-- Create: `src/PUnit/Reporting/IRunEventSink.cs`
-- Create: `src/PUnit/Reporting/RunEventSink.cs`
-- Test: `test/PUnit.Test/Reporting/RunEventBusTests.cs` (added in Task 1.2)
+- Create: `src/Raun/Reporting/RunEvent.cs`
+- Create: `src/Raun/Reporting/IRunEventSink.cs`
+- Create: `src/Raun/Reporting/RunEventSink.cs`
+- Test: `test/Raun.Test/Reporting/RunEventBusTests.cs` (added in Task 1.2)
 
-- [ ] **Step 1: Create the event records** in `src/PUnit/Reporting/RunEvent.cs`:
+- [ ] **Step 1: Create the event records** in `src/Raun/Reporting/RunEvent.cs`:
 
 ```csharp
-using PUnit.Model;
-using PUnit.Scheduling;
+using Raun.Model;
+using Raun.Scheduling;
 
-namespace PUnit.Reporting;
+namespace Raun.Reporting;
 
 /// <summary>Base type for the runner-neutral run-event stream (design §3.A).</summary>
 public abstract record RunEvent;
@@ -192,10 +192,10 @@ public sealed record ScenarioFinished(
 public sealed record RunFinished : RunEvent;
 ```
 
-- [ ] **Step 2: Create the sink interface** in `src/PUnit/Reporting/IRunEventSink.cs`:
+- [ ] **Step 2: Create the sink interface** in `src/Raun/Reporting/IRunEventSink.cs`:
 
 ```csharp
-namespace PUnit.Reporting;
+namespace Raun.Reporting;
 
 /// <summary>A subscriber to the run-event stream. The bus awaits each call serially.</summary>
 public interface IRunEventSink
@@ -205,10 +205,10 @@ public interface IRunEventSink
 }
 ```
 
-- [ ] **Step 3: Create the ergonomic base** in `src/PUnit/Reporting/RunEventSink.cs`:
+- [ ] **Step 3: Create the ergonomic base** in `src/Raun/Reporting/RunEventSink.cs`:
 
 ```csharp
-namespace PUnit.Reporting;
+namespace Raun.Reporting;
 
 /// <summary>
 /// Base sink with virtual no-op handlers and sealed pattern-match dispatch, so a concrete sink
@@ -242,22 +242,22 @@ public abstract class RunEventSink : IRunEventSink
 
 - [ ] **Step 4: Build core.**
 
-Run: `dotnet build src/PUnit/PUnit.csproj -c Debug`
+Run: `dotnet build src/Raun/Raun.csproj -c Debug`
 Expected: `Build succeeded.` 0 warnings, 0 errors.
 
 ### Task 1.2: `RunEventBus` — serial fan-out with failure isolation
 
 **Files:**
-- Create: `src/PUnit/Reporting/RunEventBus.cs`
-- Test: `test/PUnit.Test/Reporting/RunEventBusTests.cs`
+- Create: `src/Raun/Reporting/RunEventBus.cs`
+- Test: `test/Raun.Test/Reporting/RunEventBusTests.cs`
 
-- [ ] **Step 1: Write the failing tests** in `test/PUnit.Test/Reporting/RunEventBusTests.cs`:
+- [ ] **Step 1: Write the failing tests** in `test/Raun.Test/Reporting/RunEventBusTests.cs`:
 
 ```csharp
-using PUnit.Reporting;
+using Raun.Reporting;
 using Xunit;
 
-namespace PUnit.Test.Reporting;
+namespace Raun.Test.Reporting;
 
 public class RunEventBusTests
 {
@@ -323,13 +323,13 @@ public class RunEventBusTests
 
 - [ ] **Step 2: Run to verify it fails.**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~RunEventBusTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~RunEventBusTests"`
 Expected: FAIL — `RunEventBus` does not exist (compile error).
 
-- [ ] **Step 3: Implement the bus** in `src/PUnit/Reporting/RunEventBus.cs`:
+- [ ] **Step 3: Implement the bus** in `src/Raun/Reporting/RunEventBus.cs`:
 
 ```csharp
-namespace PUnit.Reporting;
+namespace Raun.Reporting;
 
 /// <summary>
 /// Fans a <see cref="RunEvent"/> out to child sinks serially, in registration order, awaiting each.
@@ -377,13 +377,13 @@ public sealed class RunEventBus : IRunEventSink
 
 - [ ] **Step 4: Run tests — green.**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~RunEventBusTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~RunEventBusTests"`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit.**
 
 ```bash
-git add src/PUnit/Reporting test/PUnit.Test/Reporting
+git add src/Raun/Reporting test/Raun.Test/Reporting
 git commit -m "feat(reporting): runner-neutral run-event bus with failure isolation"
 ```
 
@@ -391,15 +391,15 @@ git commit -m "feat(reporting): runner-neutral run-event bus with failure isolat
 
 ## Phase 2 — Scheduler timestamps (`StartedAt` + injected clock)
 
-Realizes design §3.B. Tested in `PUnit.Test`.
+Realizes design §3.B. Tested in `Raun.Test`.
 
 ### Task 2.1: Add `StartedAt` to `StepResult`
 
 **Files:**
-- Modify: `src/PUnit/Model/StepResult.cs`
-- Modify: `src/PUnit/Scheduling/ScenarioScheduler.cs`
+- Modify: `src/Raun/Model/StepResult.cs`
+- Modify: `src/Raun/Scheduling/ScenarioScheduler.cs`
 
-- [ ] **Step 1: Add the property** to `src/PUnit/Model/StepResult.cs`, immediately after the `Status` property (line 13):
+- [ ] **Step 1: Add the property** to `src/Raun/Model/StepResult.cs`, immediately after the `Status` property (line 13):
 
 ```csharp
     /// <summary>Absolute wall-clock instant the step began (stamped scheduler-side via an injected
@@ -410,10 +410,10 @@ Realizes design §3.B. Tested in `PUnit.Test`.
 
 - [ ] **Step 2: Build core to surface every construction site that must now set `StartedAt`.**
 
-Run: `dotnet build src/PUnit/PUnit.csproj -c Debug`
+Run: `dotnet build src/Raun/Raun.csproj -c Debug`
 Expected: FAIL — `error CS9035: Required member 'StepResult.StartedAt' must be set` at the three `new StepResult { … }` sites in `ScenarioScheduler.cs` (the Passed result ~line 226, the `Outcome` local ~line 251, and `ApplySkipAsync` ~line 166). This compile error is the checklist for Step 3.
 
-- [ ] **Step 3: Stamp `StartedAt` at every scheduler construction site.** Edits in `src/PUnit/Scheduling/ScenarioScheduler.cs`:
+- [ ] **Step 3: Stamp `StartedAt` at every scheduler construction site.** Edits in `src/Raun/Scheduling/ScenarioScheduler.cs`:
 
 (a) Field + ctor — add a `TimeProvider` (design §3.B). Replace the field/ctor (lines 16–22) with:
 
@@ -451,19 +451,19 @@ Expected: FAIL — `error CS9035: Required member 'StepResult.StartedAt' must be
 
 - [ ] **Step 4: Build core — clean.**
 
-Run: `dotnet build src/PUnit/PUnit.csproj -c Debug`
+Run: `dotnet build src/Raun/Raun.csproj -c Debug`
 Expected: `Build succeeded.` 0 warnings, 0 errors.
 
 ### Task 2.2: Behavioral tests for the stamped clock
 
 **Files:**
-- Modify: `test/PUnit.Test/SchedulerTests.cs`
-- Create: `test/PUnit.Test/TestTimeProvider.cs`
+- Modify: `test/Raun.Test/SchedulerTests.cs`
+- Create: `test/Raun.Test/TestTimeProvider.cs`
 
-- [ ] **Step 1: Add a controllable clock** in `test/PUnit.Test/TestTimeProvider.cs` (dependency-free; no `Microsoft.Extensions.TimeProvider.Testing` package):
+- [ ] **Step 1: Add a controllable clock** in `test/Raun.Test/TestTimeProvider.cs` (dependency-free; no `Microsoft.Extensions.TimeProvider.Testing` package):
 
 ```csharp
-namespace PUnit.Test;
+namespace Raun.Test;
 
 /// <summary>A deterministic <see cref="TimeProvider"/> for tests: returns a fixed base instant,
 /// advanced by a fixed step on every <see cref="GetUtcNow"/> call so concurrently-stamped steps get
@@ -482,7 +482,7 @@ internal sealed class TestTimeProvider(DateTimeOffset start, TimeSpan? perCall =
 }
 ```
 
-- [ ] **Step 2: Add the failing tests** to `test/PUnit.Test/SchedulerTests.cs` (before the closing brace / `RecordingObserver`). They use the existing `Def`/`Node`/`Pass`/`WithTimeout` helpers:
+- [ ] **Step 2: Add the failing tests** to `test/Raun.Test/SchedulerTests.cs` (before the closing brace / `RecordingObserver`). They use the existing `Def`/`Node`/`Pass`/`WithTimeout` helpers:
 
 ```csharp
     [Fact]
@@ -530,13 +530,13 @@ internal sealed class TestTimeProvider(DateTimeOffset start, TimeSpan? perCall =
 
 - [ ] **Step 3: Run — green.**
 
-Run: `dotnet test test/PUnit.Test/PUnit.Test.csproj --filter "FullyQualifiedName~SchedulerTests"`
+Run: `dotnet test test/Raun.Test/Raun.Test.csproj --filter "FullyQualifiedName~SchedulerTests"`
 Expected: PASS (existing scheduler tests + 3 new). Existing tests are unaffected — they never read `StartedAt` and the default `TimeProvider.System` keeps real behavior.
 
 - [ ] **Step 4: Commit.**
 
 ```bash
-git add src/PUnit/Model/StepResult.cs src/PUnit/Scheduling/ScenarioScheduler.cs test/PUnit.Test/SchedulerTests.cs test/PUnit.Test/TestTimeProvider.cs
+git add src/Raun/Model/StepResult.cs src/Raun/Scheduling/ScenarioScheduler.cs test/Raun.Test/SchedulerTests.cs test/Raun.Test/TestTimeProvider.cs
 git commit -m "feat(scheduler): stamp absolute StartedAt via injected TimeProvider"
 ```
 
@@ -546,14 +546,14 @@ git commit -m "feat(scheduler): stamp absolute StartedAt via injected TimeProvid
 
 Realizes design §3.C/§3.E (the bus wiring; the HTML sink itself lands in Phase 4–6). After this phase the MTP messages are unchanged (state/output/attachments identical; the timing window becomes `StartedAt`-anchored, an accuracy improvement that existing assertions — which check only `Duration` — still satisfy).
 
-### Task 3.1: `MtpReportSink` (session-scoped) replacing `PUnitStepReporter`
+### Task 3.1: `MtpReportSink` (session-scoped) replacing `RaunStepReporter`
 
 **Files:**
-- Create: `src/PUnit.Mtp/MtpReportSink.cs`
-- Delete: `src/PUnit.Mtp/PUnitStepReporter.cs`
-- Rename + rewrite: `test/PUnit.Mtp.Test/PUnitStepReporterTests.cs` → `test/PUnit.Mtp.Test/MtpReportSinkTests.cs`
+- Create: `src/Raun.Mtp/MtpReportSink.cs`
+- Delete: `src/Raun.Mtp/RaunStepReporter.cs`
+- Rename + rewrite: `test/Raun.Mtp.Test/RaunStepReporterTests.cs` → `test/Raun.Mtp.Test/MtpReportSinkTests.cs`
 
-- [ ] **Step 1: Create `MtpReportSink`** in `src/PUnit.Mtp/MtpReportSink.cs`. It is the old `PUnitStepReporter` body, lifted onto `RunEventSink`: it caches per-scenario labels on `ScenarioStarted` and reads the scenario `definition` off each event instead of from a ctor field. Copy `MapState`/`MapFailure`/`IsAssertionException`/`AddOutput`/`AddAttachments`/`CreateAttachmentDirectory`/`SanitizeFileName` **verbatim** from `PUnitStepReporter.cs` (lines 100–251) into this class; only the node-building seams change:
+- [ ] **Step 1: Create `MtpReportSink`** in `src/Raun.Mtp/MtpReportSink.cs`. It is the old `RaunStepReporter` body, lifted onto `RunEventSink`: it caches per-scenario labels on `ScenarioStarted` and reads the scenario `definition` off each event instead of from a ctor field. Copy `MapState`/`MapFailure`/`IsAssertionException`/`AddOutput`/`AddAttachments`/`CreateAttachmentDirectory`/`SanitizeFileName` **verbatim** from `RaunStepReporter.cs` (lines 100–251) into this class; only the node-building seams change:
 
 ```csharp
 using System.Collections.Concurrent;
@@ -562,15 +562,15 @@ using System.Text;
 using Microsoft.Testing.Platform.Extensions.Messages;
 using Microsoft.Testing.Platform.Messages;
 using Microsoft.Testing.Platform.TestHost;
-using PUnit.Model;
-using PUnit.Reporting;
+using Raun.Model;
+using Raun.Reporting;
 
-namespace PUnit.Mtp;
+namespace Raun.Mtp;
 
 /// <summary>
 /// Session-scoped sink that bridges the run-event stream onto the Microsoft.Testing.Platform message
 /// bus: one <see cref="TestNodeUpdateMessage"/> per step lifecycle event, so each scenario step is a
-/// first-class MTP node. Replaces the per-scenario <c>PUnitStepReporter</c>; identical messages, but
+/// first-class MTP node. Replaces the per-scenario <c>RaunStepReporter</c>; identical messages, but
 /// keyed off the <see cref="ScenarioDefinition"/> carried on each event so one instance serves the
 /// whole run. The step-numbering labels are computed once per scenario (on <see cref="ScenarioStarted"/>)
 /// and cached by <see cref="ScenarioDefinition.ScenarioId"/>.
@@ -629,7 +629,7 @@ internal sealed class MtpReportSink : RunEventSink
 
         var testNode = new TestNode
         {
-            Uid = PUnitDiscoverer.MakeUid(definition.ScenarioId, node.StepId),
+            Uid = RaunDiscoverer.MakeUid(definition.ScenarioId, node.StepId),
             DisplayName = ScenarioStepNumbering.Format(labels, node, displayName),
         };
 
@@ -646,22 +646,22 @@ internal sealed class MtpReportSink : RunEventSink
         return testNode;
     }
 
-    // --- copied verbatim from PUnitStepReporter (MapState, MapFailure, IsAssertionException, AddOutput,
+    // --- copied verbatim from RaunStepReporter (MapState, MapFailure, IsAssertionException, AddOutput,
     //     SanitizeFileName) — UNCHANGED. Two methods take `definition` instead of a field: ---
 
-    private static void AddOutput(TestNode testNode, StepResult result) { /* verbatim from PUnitStepReporter.AddOutput */ }
+    private static void AddOutput(TestNode testNode, StepResult result) { /* verbatim from RaunStepReporter.AddOutput */ }
 
     private void AddAttachments(TestNode testNode, ScenarioDefinition definition, StepResult result)
     {
-        // verbatim from PUnitStepReporter.AddAttachments, except CreateAttachmentDirectory(definition, result)
+        // verbatim from RaunStepReporter.AddAttachments, except CreateAttachmentDirectory(definition, result)
     }
 
     private static string CreateAttachmentDirectory(ScenarioDefinition definition, StepResult result)
     {
         var path = Path.Combine(
             Path.GetTempPath(),
-            "punit-mtp",
-            SanitizeFileName(PUnitDiscoverer.MakeUid(definition.ScenarioId, result.Node.StepId)));
+            "raun-mtp",
+            SanitizeFileName(RaunDiscoverer.MakeUid(definition.ScenarioId, result.Node.StepId)));
         Directory.CreateDirectory(path);
         return path;
     }
@@ -674,11 +674,11 @@ internal sealed class MtpReportSink : RunEventSink
 }
 ```
 
-> Implementation note: copy the bodies of `MapState`, `MapFailure`, `IsAssertionException`, `AddOutput`, and `SanitizeFileName` exactly from `PUnitStepReporter.cs` (no behavior change). `StandardOutputProperty` is **stable** in MTP 2.x — do **not** wrap it in `#pragma warning disable TPEXP` (that suppression is now unnecessary and `IDE0079` would fail the build).
+> Implementation note: copy the bodies of `MapState`, `MapFailure`, `IsAssertionException`, `AddOutput`, and `SanitizeFileName` exactly from `RaunStepReporter.cs` (no behavior change). `StandardOutputProperty` is **stable** in MTP 2.x — do **not** wrap it in `#pragma warning disable TPEXP` (that suppression is now unnecessary and `IDE0079` would fail the build).
 
-- [ ] **Step 2: Delete `src/PUnit.Mtp/PUnitStepReporter.cs`.**
+- [ ] **Step 2: Delete `src/Raun.Mtp/RaunStepReporter.cs`.**
 
-- [ ] **Step 3: Rewrite the reporter tests as sink tests.** `git mv test/PUnit.Mtp.Test/PUnitStepReporterTests.cs test/PUnit.Mtp.Test/MtpReportSinkTests.cs`, rename the class to `MtpReportSinkTests`, and apply this mechanical transform to **every** existing test (the assertions on the produced `TestNode` are unchanged):
+- [ ] **Step 3: Rewrite the reporter tests as sink tests.** `git mv test/Raun.Mtp.Test/RaunStepReporterTests.cs test/Raun.Mtp.Test/MtpReportSinkTests.cs`, rename the class to `MtpReportSinkTests`, and apply this mechanical transform to **every** existing test (the assertions on the produced `TestNode` are unchanged):
   - Construct the sink once: `var sink = new MtpReportSink(new SessionUid("sess"), bus, producer);`
   - Before driving a step, prime the scenario: `await sink.PublishAsync(new ScenarioStarted(def));`
   - Replace `reporter.OnStepStartingAsync(new StepContext { Node = n, DisplayName = d })` with `sink.PublishAsync(new StepStarted(def, new StepContext { Node = n, DisplayName = d }))`.
@@ -721,19 +721,19 @@ internal sealed class MtpReportSink : RunEventSink
 
 - [ ] **Step 4: Build (run-loop/framework still reference the deleted reporter — expected to fail here; fixed in 3.2/3.3).**
 
-Run: `dotnet build src/PUnit.Mtp/PUnit.Mtp.csproj -c Debug`
-Expected: FAIL — `PUnitRunLoop.cs` references `PUnitStepReporter`. Proceed to Task 3.2 (do not commit mid-refactor).
+Run: `dotnet build src/Raun.Mtp/Raun.Mtp.csproj -c Debug`
+Expected: FAIL — `RaunRunLoop.cs` references `RaunStepReporter`. Proceed to Task 3.2 (do not commit mid-refactor).
 
-### Task 3.2: `PUnitRunLoop` emits `RunEvent`s to an `IRunEventSink`
+### Task 3.2: `RaunRunLoop` emits `RunEvent`s to an `IRunEventSink`
 
 **Files:**
-- Modify: `src/PUnit.Mtp/PUnitRunLoop.cs`
-- Rewrite: `test/PUnit.Mtp.Test/RunLoopTests.cs`
+- Modify: `src/Raun.Mtp/RaunRunLoop.cs`
+- Rewrite: `test/Raun.Mtp.Test/RunLoopTests.cs`
 
-- [ ] **Step 1: Rewrite `RunAsync` + `RunSelectedAsync` + `RunOneAsync`** in `src/PUnit.Mtp/PUnitRunLoop.cs` to take an `IRunEventSink bus` instead of `(sessionUid, messageBus, producer)`, emit the event envelope, and let an internal observer adapter republish step events tagged with the scenario. `SelectScenarios` and the cancellation logic are unchanged. Replace lines 30–160 (the class body below the doc-comment) with:
+- [ ] **Step 1: Rewrite `RunAsync` + `RunSelectedAsync` + `RunOneAsync`** in `src/Raun.Mtp/RaunRunLoop.cs` to take an `IRunEventSink bus` instead of `(sessionUid, messageBus, producer)`, emit the event envelope, and let an internal observer adapter republish step events tagged with the scenario. `SelectScenarios` and the cancellation logic are unchanged. Replace lines 30–160 (the class body below the doc-comment) with:
 
 ```csharp
-internal sealed class PUnitRunLoop
+internal sealed class RaunRunLoop
 {
     /// <summary>Runs one scenario to completion and returns its step results. Tests substitute this
     /// to observe how many runs the loop issues; the default drives a real <see cref="ScenarioScheduler"/>.</summary>
@@ -745,7 +745,7 @@ internal sealed class PUnitRunLoop
     private readonly Func<IEnumerable<ScenarioDefinition>> scenarioSource;
     private readonly RunScenario runScenario;
 
-    public PUnitRunLoop(
+    public RaunRunLoop(
         Func<IEnumerable<ScenarioDefinition>> scenarioSource,
         RunScenario? runScenario = null)
     {
@@ -768,7 +768,7 @@ internal sealed class PUnitRunLoop
         {
             foreach (var step in definition.Nodes)
             {
-                if (uids.Contains(PUnitDiscoverer.MakeUid(definition.ScenarioId, step.StepId)))
+                if (uids.Contains(RaunDiscoverer.MakeUid(definition.ScenarioId, step.StepId)))
                 {
                     selected.Add(definition);
                     break;
@@ -834,17 +834,17 @@ internal sealed class PUnitRunLoop
 }
 ```
 
-Update the `using` block at the top of the file to: `using PUnit.Model; using PUnit.Reporting; using PUnit.Scheduling;` (drop the MTP message/`TestHost` usings — the loop no longer touches them).
+Update the `using` block at the top of the file to: `using Raun.Model; using Raun.Reporting; using Raun.Scheduling;` (drop the MTP message/`TestHost` usings — the loop no longer touches them).
 
 - [ ] **Step 2: Rewrite `RunLoopTests.cs`** to drive the loop through an `IRunEventSink` fake instead of `IMessageBus`. Replace the `RecordingBus : IMessageBus`/`StubProducer` helpers with a recording sink, and update the end-to-end tests to assert on emitted events:
 
 ```csharp
-using PUnit.Model;
-using PUnit.Reporting;
-using PUnit.Scheduling;
+using Raun.Model;
+using Raun.Reporting;
+using Raun.Scheduling;
 using Xunit;
 
-namespace PUnit.Mtp.Test;
+namespace Raun.Mtp.Test;
 
 public class RunLoopTests
 {
@@ -869,7 +869,7 @@ public class RunLoopTests
 
   Mechanical transform for the end-to-end tests:
   - `await loop.RunAsync(new SessionUid("s"), uids, bus, new StubProducer(), ct)` → `await loop.RunAsync(uids, sink, ct)`.
-  - `bus.PassedUids` assertions become assertions over `sink.Events.OfType<StepFinished>()`: a step "passed" when `e.Result.Status == StepStatus.Passed`, and its uid is `PUnitDiscoverer.MakeUid(e.Definition.ScenarioId, e.Result.Node.StepId)`. Add a sink helper `PassedUids` that maps each `StepFinished` to that uid (use `e.Definition.ScenarioId`, not a placeholder).
+  - `bus.PassedUids` assertions become assertions over `sink.Events.OfType<StepFinished>()`: a step "passed" when `e.Result.Status == StepStatus.Passed`, and its uid is `RaunDiscoverer.MakeUid(e.Definition.ScenarioId, e.Result.Node.StepId)`. Add a sink helper `PassedUids` that maps each `StepFinished` to that uid (use `e.Definition.ScenarioId`, not a placeholder).
   - `bus.SkippedUids` / `bus.Nodes` likewise map off `StepFinished` events (`Status == StepStatus.Skipped`) and `ScenarioStarted`/`StepStarted` events.
   - The `RunScenario` stub now returns results: `runScenario: (_, _, _) => Task.FromResult<IReadOnlyList<StepResult>>([])`.
   - `Through_the_framework_run_request_executes_the_registered_scenario` moves to Task 3.3 (it exercises `OnExecute`, which now builds the bus internally).
@@ -878,21 +878,21 @@ public class RunLoopTests
 
 ```csharp
     private static string PassedUid(StepFinished e) =>
-        PUnitDiscoverer.MakeUid(e.Definition.ScenarioId, e.Result.Node.StepId);
+        RaunDiscoverer.MakeUid(e.Definition.ScenarioId, e.Result.Node.StepId);
 ```
   and a test asserts e.g. `Assert.Contains(Uid("chain", "z"), sink.Events.OfType<StepFinished>().Where(e => e.Result.Status == StepStatus.Passed).Select(PassedUid));`
 
-- [ ] **Step 3: Do not build yet** — the framework (`PUnitTestFramework.OnExecuteAsync`) still calls the old `RunAsync` signature. Fixed in Task 3.3.
+- [ ] **Step 3: Do not build yet** — the framework (`RaunTestFramework.OnExecuteAsync`) still calls the old `RunAsync` signature. Fixed in Task 3.3.
 
-### Task 3.3: `PUnitTestFramework` builds the sink list + bus; `PUnitTestApplication` passes the service provider
+### Task 3.3: `RaunTestFramework` builds the sink list + bus; `RaunTestApplication` passes the service provider
 
 **Files:**
-- Modify: `src/PUnit.Mtp/PUnitTestFramework.cs`
-- Modify: `src/PUnit.Mtp/PUnitTestApplication.cs`
-- Modify: `test/PUnit.Mtp.Test/RunLoopTests.cs` (re-home the framework end-to-end test)
-- Modify: `test/PUnit.Mtp.Test/PUnitTestFrameworkTests.cs`
+- Modify: `src/Raun.Mtp/RaunTestFramework.cs`
+- Modify: `src/Raun.Mtp/RaunTestApplication.cs`
+- Modify: `test/Raun.Mtp.Test/RunLoopTests.cs` (re-home the framework end-to-end test)
+- Modify: `test/Raun.Mtp.Test/RaunTestFrameworkTests.cs`
 
-- [ ] **Step 1: Give the framework an optional `IServiceProvider`** and build the bus in `OnExecuteAsync`. In `src/PUnit.Mtp/PUnitTestFramework.cs`:
+- [ ] **Step 1: Give the framework an optional `IServiceProvider`** and build the bus in `OnExecuteAsync`. In `src/Raun.Mtp/RaunTestFramework.cs`:
 
 (a) Add a field + constructors near the top of the class (after the `sessions` field, line 47):
 
@@ -900,11 +900,11 @@ public class RunLoopTests
     private readonly IServiceProvider? _services;
 
     /// <summary>Parameterless ctor for tests and the default registration path.</summary>
-    public PUnitTestFramework() { }
+    public RaunTestFramework() { }
 
     /// <summary>Production ctor: the MTP <see cref="IServiceProvider"/> supplies command-line options
     /// (the <c>--report-html</c> flag) and the resolved results directory.</summary>
-    public PUnitTestFramework(IServiceProvider services) => _services = services;
+    public RaunTestFramework(IServiceProvider services) => _services = services;
 ```
 
 (b) Replace `OnExecuteAsync` (lines 214–227) with the bus-building version:
@@ -926,7 +926,7 @@ public class RunLoopTests
         }
 
         var bus = new RunEventBus(sinks);
-        var loop = new PUnitRunLoop(EnumerateRegisteredScenarios);
+        var loop = new RaunRunLoop(EnumerateRegisteredScenarios);
         await loop.RunAsync(uids, bus, cancellationToken).ConfigureAwait(false);
 
         foreach (var failure in bus.Failures)
@@ -938,14 +938,14 @@ public class RunLoopTests
     }
 ```
 
-> `HtmlReportPath.Resolve` and `HtmlReportSink` are added in Phases 4–6; until then this references types that don't exist. To keep Phase 3 building independently, in this task add a **temporary stub** `internal static class HtmlReportPath { public static string? Resolve(IServiceProvider? services) => null; }` in `PUnitTestFramework.cs` and the `if (... is { } reportPath)` block referencing `HtmlReportSink` is added later — for Phase 3, write only `var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this) };` (no HTML branch). Phase 6 replaces this with the real resolver + branch.
+> `HtmlReportPath.Resolve` and `HtmlReportSink` are added in Phases 4–6; until then this references types that don't exist. To keep Phase 3 building independently, in this task add a **temporary stub** `internal static class HtmlReportPath { public static string? Resolve(IServiceProvider? services) => null; }` in `RaunTestFramework.cs` and the `if (... is { } reportPath)` block referencing `HtmlReportSink` is added later — for Phase 3, write only `var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this) };` (no HTML branch). Phase 6 replaces this with the real resolver + branch.
 
   **Phase 3 form (no HTML yet):**
 
 ```csharp
         var uids = ReadUidFilter(filter);
         var bus = new RunEventBus([new MtpReportSink(sessionUid, messageBus, this)]);
-        var loop = new PUnitRunLoop(EnumerateRegisteredScenarios);
+        var loop = new RaunRunLoop(EnumerateRegisteredScenarios);
         await loop.RunAsync(uids, bus, cancellationToken).ConfigureAwait(false);
 
         foreach (var failure in bus.Failures)
@@ -956,9 +956,9 @@ public class RunLoopTests
         operationComplete();
 ```
 
-(c) Add `using PUnit.Reporting;` to the file's usings.
+(c) Add `using Raun.Reporting;` to the file's usings.
 
-- [ ] **Step 2: Confirm `NodeDiagnostics.Log` has a `(string, string)` overload;** if not, add one in `src/PUnit.Mtp/NodeDiagnostics.cs` (read the file first):
+- [ ] **Step 2: Confirm `NodeDiagnostics.Log` has a `(string, string)` overload;** if not, add one in `src/Raun.Mtp/NodeDiagnostics.cs` (read the file first):
 
 ```csharp
     public static void Log(string phase, string message)
@@ -968,12 +968,12 @@ public class RunLoopTests
 ```
   (Match the existing logging mechanism in that file; this is best-effort diagnostics only.)
 
-- [ ] **Step 3: Register the framework with the service provider** in `src/PUnit.Mtp/PUnitTestApplication.cs`. Replace the `RegisterTestFramework` call (lines 39–41) with:
+- [ ] **Step 3: Register the framework with the service provider** in `src/Raun.Mtp/RaunTestApplication.cs`. Replace the `RegisterTestFramework` call (lines 39–41) with:
 
 ```csharp
         builder.RegisterTestFramework(
             _ => new TestFrameworkCapabilities(),
-            (_, serviceProvider) => new PUnitTestFramework(serviceProvider));
+            (_, serviceProvider) => new RaunTestFramework(serviceProvider));
 ```
 
 - [ ] **Step 4: Re-home the framework end-to-end test.** Add to `RunLoopTests.cs` (it used `OnExecute`, which now builds the bus internally and still publishes via the MTP message bus). It needs a real `IMessageBus` recorder — reuse a minimal `RecordingMessageBus` (copy from `MtpReportSinkTests`), since `OnExecute` → `MtpReportSink` → message bus:
@@ -982,11 +982,11 @@ public class RunLoopTests
     [Fact]
     public async Task Through_the_framework_run_request_executes_the_registered_scenario()
     {
-        var method = $"PUnit.Mtp.Test.RunLoop.{Guid.NewGuid():N}";
+        var method = $"Raun.Mtp.Test.RunLoop.{Guid.NewGuid():N}";
         ScenarioRegistry.Register(method, () => Definition("fw-scn", "fw scenario",
             Node(0, "a", "a"), Node(1, "b", "b", dependsOn: [0])));
 
-        var framework = new PUnitTestFramework();
+        var framework = new RaunTestFramework();
         var uid = new SessionUid("fw-run");
         await framework.CreateTestSession(uid);
 
@@ -1005,19 +1005,19 @@ public class RunLoopTests
 
 - [ ] **Step 5: Build + run the whole MTP test project.**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj -c Debug`
-Expected: PASS — `MtpReportSinkTests`, `RunLoopTests`, `PUnitTestFrameworkTests`, discovery tests all green. 0 build warnings.
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj -c Debug`
+Expected: PASS — `MtpReportSinkTests`, `RunLoopTests`, `RaunTestFrameworkTests`, discovery tests all green. 0 build warnings.
 
 - [ ] **Step 6: Full solution green.**
 
-Run: `dotnet test PUnit.slnx -c Debug`
+Run: `dotnet test Raun.slnx -c Debug`
 Expected: `Test run summary: Passed!`.
 
 - [ ] **Step 7: Commit.**
 
 ```bash
-git add src/PUnit.Mtp test/PUnit.Mtp.Test
-git rm src/PUnit.Mtp/PUnitStepReporter.cs
+git add src/Raun.Mtp test/Raun.Mtp.Test
+git rm src/Raun.Mtp/RaunStepReporter.cs
 git commit -m "refactor(mtp): reporter -> session-scoped MtpReportSink driven by the run-event bus"
 ```
 
@@ -1030,21 +1030,21 @@ Realizes design §3.D (model) + §4. The model and its builder are pure and dete
 ### Task 4.1: Add Verify to the MTP test project
 
 **Files:**
-- Modify: `test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj`
-- Create: `test/PUnit.Mtp.Test/VerifyConfig.cs`
+- Modify: `test/Raun.Mtp.Test/Raun.Mtp.Test.csproj`
+- Create: `test/Raun.Mtp.Test/VerifyConfig.cs`
 
-- [ ] **Step 1: Add the Verify reference** to `test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj` (the version `31.19.0` is already pinned centrally):
+- [ ] **Step 1: Add the Verify reference** to `test/Raun.Mtp.Test/Raun.Mtp.Test.csproj` (the version `31.19.0` is already pinned centrally):
 
 ```xml
     <PackageReference Include="Verify.XunitV3" />
 ```
 
-- [ ] **Step 2: Add the Verify module initializer** in `test/PUnit.Mtp.Test/VerifyConfig.cs`:
+- [ ] **Step 2: Add the Verify module initializer** in `test/Raun.Mtp.Test/VerifyConfig.cs`:
 
 ```csharp
 using System.Runtime.CompilerServices;
 
-namespace PUnit.Mtp.Test;
+namespace Raun.Mtp.Test;
 
 public static class VerifyConfig
 {
@@ -1055,18 +1055,18 @@ public static class VerifyConfig
 
 - [ ] **Step 3: Build the test project.**
 
-Run: `dotnet build test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj -c Debug`
+Run: `dotnet build test/Raun.Mtp.Test/Raun.Mtp.Test.csproj -c Debug`
 Expected: `Build succeeded.`
 
 ### Task 4.2: The report model types
 
 **Files:**
-- Create: `src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs`
+- Create: `src/Raun.Mtp/HtmlReport/HtmlReportModel.cs`
 
-- [ ] **Step 1: Define the serializable model** in `src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs` (shapes mirror design §4; `System.Text.Json` is in-box on net10):
+- [ ] **Step 1: Define the serializable model** in `src/Raun.Mtp/HtmlReport/HtmlReportModel.cs` (shapes mirror design §4; `System.Text.Json` is in-box on net10):
 
 ```csharp
-namespace PUnit.Mtp.HtmlReport;
+namespace Raun.Mtp.HtmlReport;
 
 /// <summary>The full, self-contained report payload embedded into the HTML (design §4). All times are
 /// pre-reduced to millisecond offsets from each scenario's start so the renderer does no clock math.</summary>
@@ -1143,27 +1143,27 @@ public sealed record ReportResourceEvent
 
 - [ ] **Step 2: Build.**
 
-Run: `dotnet build src/PUnit.Mtp/PUnit.Mtp.csproj -c Debug`
+Run: `dotnet build src/Raun.Mtp/Raun.Mtp.csproj -c Debug`
 Expected: `Build succeeded.`
 
 ### Task 4.3: The model builder — lane packing + resource rollup
 
 **Files:**
-- Create: `src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs`
-- Test: `test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs`
+- Create: `src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs`
+- Test: `test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs`
 
-- [ ] **Step 1: Write the failing tests** in `test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs`. They synthesize `ScenarioStarted` + `StepFinished` events (fake clock, fixed durations) and Verify-snapshot the JSON model, plus assert lane packing directly:
+- [ ] **Step 1: Write the failing tests** in `test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs`. They synthesize `ScenarioStarted` + `StepFinished` events (fake clock, fixed durations) and Verify-snapshot the JSON model, plus assert lane packing directly:
 
 ```csharp
 using System.Text.Json;
-using PUnit;
-using PUnit.Model;
-using PUnit.Reporting;
-using PUnit.Scheduling;
+using Raun;
+using Raun.Model;
+using Raun.Reporting;
+using Raun.Scheduling;
 using VerifyXunit;
 using Xunit;
 
-namespace PUnit.Mtp.Test;
+namespace Raun.Mtp.Test;
 
 public class HtmlReportModelBuilderTests
 {
@@ -1277,16 +1277,16 @@ public class HtmlReportModelBuilderTests
 
 - [ ] **Step 2: Run to verify failure.**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportModelBuilderTests"`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportModelBuilderTests"`
 Expected: FAIL — `HtmlReportModelBuilder` does not exist.
 
-- [ ] **Step 3: Implement the builder** in `src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs`. It accumulates per-scenario state, computes `scenarioStart = min(StartedAt)`, reduces every time to a ms offset, lane-packs steps by their `[offset, offset+duration)` intervals, and rolls effects up by `Type:Key`:
+- [ ] **Step 3: Implement the builder** in `src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs`. It accumulates per-scenario state, computes `scenarioStart = min(StartedAt)`, reduces every time to a ms offset, lane-packs steps by their `[offset, offset+duration)` intervals, and rolls effects up by `Type:Key`:
 
 ```csharp
 using System.Globalization;
-using PUnit.Model;
+using Raun.Model;
 
-namespace PUnit.Mtp.HtmlReport;
+namespace Raun.Mtp.HtmlReport;
 
 /// <summary>
 /// Builds the deterministic <see cref="HtmlReportModel"/> from the run-event stream. All layout
@@ -1454,18 +1454,18 @@ internal sealed class HtmlReportModelBuilder
 
 - [ ] **Step 4: Run — the snapshot test fails the first time (no `.verified.` file).**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportModelBuilderTests"`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportModelBuilderTests"`
 Expected: the 3 lane/resource asserts PASS; `Builds_the_expected_json_model` FAILS producing a `.received.` file (Verify's first-run behavior).
 
 - [ ] **Step 5: Accept the snapshot** after eyeballing the `.received.` JSON for correctness (offsets relative to `T0`, lane 1 on the concurrent slot step, one `String:Jane` resource lifeline):
 
-Run: `Move-Item -Force test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.received.txt test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.verified.txt`
+Run: `Move-Item -Force test/Raun.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.received.txt test/Raun.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.verified.txt`
 Then re-run the filter; Expected: PASS (4 tests).
 
 - [ ] **Step 6: Commit.**
 
 ```bash
-git add src/PUnit.Mtp/HtmlReport test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs test/PUnit.Mtp.Test/*.verified.txt test/PUnit.Mtp.Test/VerifyConfig.cs test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj
+git add src/Raun.Mtp/HtmlReport test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs test/Raun.Mtp.Test/*.verified.txt test/Raun.Mtp.Test/VerifyConfig.cs test/Raun.Mtp.Test/Raun.Mtp.Test.csproj
 git commit -m "feat(report): deterministic HTML report model with lane packing + resource rollup"
 ```
 
@@ -1478,17 +1478,17 @@ Realizes design §3.D (renderer) + the file-write half of the sink.
 ### Task 5.1: Embedded HTML template
 
 **Files:**
-- Create: `src/PUnit.Mtp/HtmlReport/report-template.html`
-- Modify: `src/PUnit.Mtp/PUnit.Mtp.csproj` (embed it)
+- Create: `src/Raun.Mtp/HtmlReport/report-template.html`
+- Modify: `src/Raun.Mtp/Raun.Mtp.csproj` (embed it)
 
-- [ ] **Step 1: Create the template** `src/PUnit.Mtp/HtmlReport/report-template.html` — self-contained, vanilla JS/CSS, with a placeholder token the sink replaces with the JSON blob. Keep it minimal but functional (summary header, one Gantt section per scenario with lane rows + a resource lane, click-to-drill detail panel):
+- [ ] **Step 1: Create the template** `src/Raun.Mtp/HtmlReport/report-template.html` — self-contained, vanilla JS/CSS, with a placeholder token the sink replaces with the JSON blob. Keep it minimal but functional (summary header, one Gantt section per scenario with lane rows + a resource lane, click-to-drill detail panel):
 
 ```html
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>PUnit run report</title>
+<title>Raun run report</title>
 <style>
   :root { --pass:#2e7d32; --fail:#c62828; --skip:#9e9e9e; --bg:#fafafa; --ink:#222; }
   body { font:14px/1.4 system-ui, sans-serif; color:var(--ink); margin:0; background:var(--bg); }
@@ -1513,7 +1513,7 @@ Realizes design §3.D (renderer) + the file-write half of the sink.
 <body>
 <header><div class="summary" id="summary"></div></header>
 <main id="report"></main>
-<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>
+<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>
 <script>
   const model = JSON.parse(document.getElementById('model').textContent);
   const PX_PER_MS = 4, MIN_W = 24;
@@ -1570,7 +1570,7 @@ Realizes design §3.D (renderer) + the file-write half of the sink.
 </html>
 ```
 
-- [ ] **Step 2: Embed the template** by adding to `src/PUnit.Mtp/PUnit.Mtp.csproj` (new `ItemGroup`):
+- [ ] **Step 2: Embed the template** by adding to `src/Raun.Mtp/Raun.Mtp.csproj` (new `ItemGroup`):
 
 ```xml
   <ItemGroup>
@@ -1580,29 +1580,29 @@ Realizes design §3.D (renderer) + the file-write half of the sink.
 
 - [ ] **Step 3: Build.**
 
-Run: `dotnet build src/PUnit.Mtp/PUnit.Mtp.csproj -c Debug`
-Expected: `Build succeeded.` (The resource logical name defaults to `PUnit.Mtp.HtmlReport.report-template.html`.)
+Run: `dotnet build src/Raun.Mtp/Raun.Mtp.csproj -c Debug`
+Expected: `Build succeeded.` (The resource logical name defaults to `Raun.Mtp.HtmlReport.report-template.html`.)
 
 ### Task 5.2: `HtmlReportSink` — accumulate + render + write
 
 **Files:**
-- Create: `src/PUnit.Mtp/HtmlReport/HtmlReportSink.cs`
-- Test: `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs`
+- Create: `src/Raun.Mtp/HtmlReport/HtmlReportSink.cs`
+- Test: `test/Raun.Mtp.Test/HtmlReportSinkTests.cs`
 
-- [ ] **Step 1: Write the failing tests** in `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs`. They drive the sink through the event stream and assert: a file is written at the resolved path on `RunFinished`; it contains one Gantt section per scenario and the embedded JSON; and **no file is written if `RunFinished` never carries any scenario** (empty run still writes a valid, empty report). Use a temp dir:
+- [ ] **Step 1: Write the failing tests** in `test/Raun.Mtp.Test/HtmlReportSinkTests.cs`. They drive the sink through the event stream and assert: a file is written at the resolved path on `RunFinished`; it contains one Gantt section per scenario and the embedded JSON; and **no file is written if `RunFinished` never carries any scenario** (empty run still writes a valid, empty report). Use a temp dir:
 
 ```csharp
-using PUnit;
-using PUnit.Model;
-using PUnit.Reporting;
+using Raun;
+using Raun.Model;
+using Raun.Reporting;
 using Xunit;
 
-namespace PUnit.Mtp.Test;
+namespace Raun.Mtp.Test;
 
 public class HtmlReportSinkTests : IDisposable
 {
     private static readonly DateTimeOffset T0 = new(2026, 6, 9, 12, 0, 0, TimeSpan.Zero);
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "punit-report-test-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "raun-report-test-" + Guid.NewGuid().ToString("N"));
 
     public HtmlReportSinkTests() => Directory.CreateDirectory(_dir);
     public void Dispose() { try { Directory.Delete(_dir, recursive: true); } catch (IOException) { } }
@@ -1628,7 +1628,7 @@ public class HtmlReportSinkTests : IDisposable
     [Fact]
     public async Task Writes_a_self_contained_html_file_on_run_finished()
     {
-        var path = Path.Combine(_dir, "punit-report.html");
+        var path = Path.Combine(_dir, "raun-report.html");
         var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
         var def = Def();
 
@@ -1645,13 +1645,13 @@ public class HtmlReportSinkTests : IDisposable
         var html = await File.ReadAllTextAsync(path);
         Assert.Contains("customer".Length >= 0 ? "books" : "", html, StringComparison.Ordinal); // scenario name present
         Assert.Contains("\"scenarioId\": \"scn\"", html.Replace(" ", ""), StringComparison.Ordinal) ;
-        Assert.DoesNotContain("__PUNIT_REPORT_JSON__", html, StringComparison.Ordinal); // token replaced
+        Assert.DoesNotContain("__RAUN_REPORT_JSON__", html, StringComparison.Ordinal); // token replaced
     }
 
     [Fact]
     public async Task Empty_run_still_writes_a_valid_report()
     {
-        var path = Path.Combine(_dir, "punit-report.html");
+        var path = Path.Combine(_dir, "raun-report.html");
         var sink = new HtmlReport.HtmlReportSink(path, new TestTimeProviderUtc(T0));
 
         await sink.PublishAsync(new RunStarted(0));
@@ -1684,18 +1684,18 @@ public class HtmlReportSinkTests : IDisposable
 
 - [ ] **Step 2: Run — fails (sink absent).**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportSinkTests"`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportSinkTests"`
 Expected: FAIL — `HtmlReportSink` does not exist.
 
-- [ ] **Step 3: Implement the sink** in `src/PUnit.Mtp/HtmlReport/HtmlReportSink.cs`:
+- [ ] **Step 3: Implement the sink** in `src/Raun.Mtp/HtmlReport/HtmlReportSink.cs`:
 
 ```csharp
 using System.Reflection;
 using System.Text.Json;
-using PUnit.Model;
-using PUnit.Reporting;
+using Raun.Model;
+using Raun.Reporting;
 
-namespace PUnit.Mtp.HtmlReport;
+namespace Raun.Mtp.HtmlReport;
 
 /// <summary>
 /// Subscribes to the run-event stream, accumulates the <see cref="HtmlReportModel"/>, and on
@@ -1706,8 +1706,8 @@ namespace PUnit.Mtp.HtmlReport;
 /// </summary>
 internal sealed class HtmlReportSink : RunEventSink
 {
-    private const string JsonToken = "/*__PUNIT_REPORT_JSON__*/";
-    private const string ResourceName = "PUnit.Mtp.HtmlReport.report-template.html";
+    private const string JsonToken = "/*__RAUN_REPORT_JSON__*/";
+    private const string ResourceName = "Raun.Mtp.HtmlReport.report-template.html";
 
     private readonly string _path;
     private readonly TimeProvider _timeProvider;
@@ -1791,13 +1791,13 @@ internal sealed class HtmlReportSink : RunEventSink
 
 - [ ] **Step 5: Run — green.**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportSinkTests"`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportSinkTests"`
 Expected: PASS (3 tests).
 
 - [ ] **Step 6: Commit.**
 
 ```bash
-git add src/PUnit.Mtp/HtmlReport test/PUnit.Mtp.Test/HtmlReportSinkTests.cs src/PUnit.Mtp/PUnit.Mtp.csproj
+git add src/Raun.Mtp/HtmlReport test/Raun.Mtp.Test/HtmlReportSinkTests.cs src/Raun.Mtp/Raun.Mtp.csproj
 git commit -m "feat(report): embedded HTML renderer + best-effort report file sink"
 ```
 
@@ -1810,16 +1810,16 @@ Realizes design §3.E. After this phase the report is produced end-to-end when t
 ### Task 6.1: `HtmlReportOptionsProvider`
 
 **Files:**
-- Create: `src/PUnit.Mtp/HtmlReport/HtmlReportOptionsProvider.cs`
-- Test: `test/PUnit.Mtp.Test/HtmlReportOptionsProviderTests.cs`
+- Create: `src/Raun.Mtp/HtmlReport/HtmlReportOptionsProvider.cs`
+- Test: `test/Raun.Mtp.Test/HtmlReportOptionsProviderTests.cs`
 
-- [ ] **Step 1: Write the failing tests** in `test/PUnit.Mtp.Test/HtmlReportOptionsProviderTests.cs`:
+- [ ] **Step 1: Write the failing tests** in `test/Raun.Mtp.Test/HtmlReportOptionsProviderTests.cs`:
 
 ```csharp
 using Microsoft.Testing.Platform.Extensions.CommandLine;
 using Xunit;
 
-namespace PUnit.Mtp.Test;
+namespace Raun.Mtp.Test;
 
 public class HtmlReportOptionsProviderTests
 {
@@ -1860,34 +1860,34 @@ public class HtmlReportOptionsProviderTests
 
 - [ ] **Step 2: Run — fails (provider absent).**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportOptionsProviderTests"`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportOptionsProviderTests"`
 Expected: FAIL — type does not exist.
 
-- [ ] **Step 3: Implement the provider** in `src/PUnit.Mtp/HtmlReport/HtmlReportOptionsProvider.cs`:
+- [ ] **Step 3: Implement the provider** in `src/Raun.Mtp/HtmlReport/HtmlReportOptionsProvider.cs`:
 
 ```csharp
 using Microsoft.Testing.Platform.CommandLine;
 using Microsoft.Testing.Platform.Extensions;
 using Microsoft.Testing.Platform.Extensions.CommandLine;
 
-namespace PUnit.Mtp.HtmlReport;
+namespace Raun.Mtp.HtmlReport;
 
 /// <summary>
-/// Registers PUnit's HTML-report command-line options with Microsoft.Testing.Platform:
+/// Registers Raun's HTML-report command-line options with Microsoft.Testing.Platform:
 /// <c>--report-html</c> (a flag) and <c>--report-html-filename &lt;name&gt;</c> (default
-/// <c>punit-report.html</c>). The report is written under MTP's <c>--results-directory</c>
-/// (design §3.E). Generic names — PUnit owns its loaded extension set, so collision risk is low.
+/// <c>raun-report.html</c>). The report is written under MTP's <c>--results-directory</c>
+/// (design §3.E). Generic names — Raun owns its loaded extension set, so collision risk is low.
 /// </summary>
 internal sealed class HtmlReportOptionsProvider : ICommandLineOptionsProvider
 {
     internal const string EnableOption = "report-html";
     internal const string FilenameOption = "report-html-filename";
-    internal const string DefaultFilename = "punit-report.html";
+    internal const string DefaultFilename = "raun-report.html";
 
-    public string Uid => "punit.mtp.htmlreport";
+    public string Uid => "raun.mtp.htmlreport";
     public string Version => "1.0.0";
-    public string DisplayName => "PUnit HTML report";
-    public string Description => "Writes a self-contained punit-report.html (Gantt timeline + resource lane).";
+    public string DisplayName => "Raun HTML report";
+    public string Description => "Writes a self-contained raun-report.html (Gantt timeline + resource lane).";
 
     public Task<bool> IsEnabledAsync() => Task.FromResult(true);
 
@@ -1919,23 +1919,23 @@ internal sealed class HtmlReportOptionsProvider : ICommandLineOptionsProvider
 
 - [ ] **Step 4: Run — green.**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportOptionsProviderTests"`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportOptionsProviderTests"`
 Expected: PASS (3 tests).
 
 ### Task 6.2: Resolve the report path and wire the sink into the framework
 
 **Files:**
-- Create: `src/PUnit.Mtp/HtmlReport/HtmlReportPath.cs`
-- Modify: `src/PUnit.Mtp/PUnitTestFramework.cs`
-- Modify: `src/PUnit.Mtp/PUnitTestApplication.cs`
-- Test: `test/PUnit.Mtp.Test/HtmlReportPathTests.cs`
+- Create: `src/Raun.Mtp/HtmlReport/HtmlReportPath.cs`
+- Modify: `src/Raun.Mtp/RaunTestFramework.cs`
+- Modify: `src/Raun.Mtp/RaunTestApplication.cs`
+- Test: `test/Raun.Mtp.Test/HtmlReportPathTests.cs`
 
-- [ ] **Step 1: Write failing tests** for path resolution in `test/PUnit.Mtp.Test/HtmlReportPathTests.cs`. Resolution is pure over two inputs (is-the-flag-set, filename-or-null, results-dir), so test it directly without MTP plumbing:
+- [ ] **Step 1: Write failing tests** for path resolution in `test/Raun.Mtp.Test/HtmlReportPathTests.cs`. Resolution is pure over two inputs (is-the-flag-set, filename-or-null, results-dir), so test it directly without MTP plumbing:
 
 ```csharp
 using Xunit;
 
-namespace PUnit.Mtp.Test;
+namespace Raun.Mtp.Test;
 
 public class HtmlReportPathTests
 {
@@ -1947,7 +1947,7 @@ public class HtmlReportPathTests
     public void Defaults_the_filename_under_the_results_directory()
     {
         var path = HtmlReport.HtmlReportPath.Resolve(enabled: true, filename: null, resultsDirectory: @"C:\r");
-        Assert.Equal(Path.Combine(@"C:\r", "punit-report.html"), path);
+        Assert.Equal(Path.Combine(@"C:\r", "raun-report.html"), path);
     }
 
     [Fact]
@@ -1961,24 +1961,24 @@ public class HtmlReportPathTests
     public void Falls_back_to_current_directory_when_results_directory_is_unknown()
     {
         var path = HtmlReport.HtmlReportPath.Resolve(enabled: true, filename: null, resultsDirectory: null);
-        Assert.Equal(Path.Combine(Directory.GetCurrentDirectory(), "punit-report.html"), path);
+        Assert.Equal(Path.Combine(Directory.GetCurrentDirectory(), "raun-report.html"), path);
     }
 }
 ```
 
 - [ ] **Step 2: Run — fails.**
 
-Run: `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportPathTests"`
+Run: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj --filter "FullyQualifiedName~HtmlReportPathTests"`
 Expected: FAIL — type absent.
 
-- [ ] **Step 3: Implement path resolution** in `src/PUnit.Mtp/HtmlReport/HtmlReportPath.cs` with a pure core + an `IServiceProvider` adapter:
+- [ ] **Step 3: Implement path resolution** in `src/Raun.Mtp/HtmlReport/HtmlReportPath.cs` with a pure core + an `IServiceProvider` adapter:
 
 ```csharp
 using Microsoft.Testing.Platform.CommandLine;
 using Microsoft.Testing.Platform.Configurations;
 using Microsoft.Testing.Platform.Services;
 
-namespace PUnit.Mtp.HtmlReport;
+namespace Raun.Mtp.HtmlReport;
 
 /// <summary>Resolves the absolute HTML report path from MTP's command-line options + configuration,
 /// or returns <see langword="null"/> when <c>--report-html</c> is absent (design §3.E).</summary>
@@ -2026,7 +2026,7 @@ internal static class HtmlReportPath
 }
 ```
 
-- [ ] **Step 4: Wire the HTML branch into `OnExecuteAsync`.** In `src/PUnit.Mtp/PUnitTestFramework.cs`, change the Phase-3 sink-list construction to add the HTML sink when the path resolves:
+- [ ] **Step 4: Wire the HTML branch into `OnExecuteAsync`.** In `src/Raun.Mtp/RaunTestFramework.cs`, change the Phase-3 sink-list construction to add the HTML sink when the path resolves:
 
 ```csharp
         var uids = ReadUidFilter(filter);
@@ -2038,7 +2038,7 @@ internal static class HtmlReportPath
         }
 
         var bus = new RunEventBus(sinks);
-        var loop = new PUnitRunLoop(EnumerateRegisteredScenarios);
+        var loop = new RaunRunLoop(EnumerateRegisteredScenarios);
         await loop.RunAsync(uids, bus, cancellationToken).ConfigureAwait(false);
 
         foreach (var failure in bus.Failures)
@@ -2049,7 +2049,7 @@ internal static class HtmlReportPath
         operationComplete();
 ```
 
-- [ ] **Step 5: Register the option provider** in `src/PUnit.Mtp/PUnitTestApplication.cs`, before `RegisterTestFramework` (after `configure?.Invoke(builder);`, line 37):
+- [ ] **Step 5: Register the option provider** in `src/Raun.Mtp/RaunTestApplication.cs`, before `RegisterTestFramework` (after `configure?.Invoke(builder);`, line 37):
 
 ```csharp
         builder.CommandLine.AddProvider(() => new HtmlReport.HtmlReportOptionsProvider());
@@ -2057,13 +2057,13 @@ internal static class HtmlReportPath
 
 - [ ] **Step 6: Full solution green.**
 
-Run: `dotnet test PUnit.slnx -c Debug`
+Run: `dotnet test Raun.slnx -c Debug`
 Expected: `Test run summary: Passed!` — all projects, including the new option/path/sink/model tests.
 
 - [ ] **Step 7: Commit.**
 
 ```bash
-git add src/PUnit.Mtp test/PUnit.Mtp.Test/HtmlReportOptionsProviderTests.cs test/PUnit.Mtp.Test/HtmlReportPathTests.cs
+git add src/Raun.Mtp test/Raun.Mtp.Test/HtmlReportOptionsProviderTests.cs test/Raun.Mtp.Test/HtmlReportPathTests.cs
 git commit -m "feat(report): --report-html option provider + framework wiring"
 ```
 
@@ -2080,23 +2080,23 @@ Realizes design §5 "Sample" + §6.
 - [ ] **Step 1: Run the sample with the flag.**
 
 Run: `dotnet run --project samples/AppointmentTests -c Debug -- --report-html`
-Expected: the run passes; an MTP results directory (default `samples/AppointmentTests/bin/Debug/net10.0/TestResults` or the platform default) contains `punit-report.html`.
+Expected: the run passes; an MTP results directory (default `samples/AppointmentTests/bin/Debug/net10.0/TestResults` or the platform default) contains `raun-report.html`.
 
 - [ ] **Step 2: Locate the file.**
 
-Run: `Get-ChildItem -Recurse -Filter punit-report.html samples/AppointmentTests | Select-Object FullName`
+Run: `Get-ChildItem -Recurse -Filter raun-report.html samples/AppointmentTests | Select-Object FullName`
 Expected: one path printed.
 
 - [ ] **Step 3: Open it and confirm visually** (or assert structurally): the `customer books with parallel arrange` scenario shows `PatientExists` and `AvailableSlot` on **two lanes** (overlapping bars), each step bar drills into its logs/effects, and the resource lane shows `Patient:Jane` / `Slot:1` create markers. Sub-ms `Task.Yield` bars will be tiny — that's expected (design §7); the layout is validated by the synthetic-duration unit tests.
 
 - [ ] **Step 4: Confirm the flag is off by default.**
 
-Run: `dotnet run --project samples/AppointmentTests -c Debug` then `Get-ChildItem -Recurse -Filter punit-report.html samples/AppointmentTests`
-Expected: no new `punit-report.html` written by this run (the sink only attaches when `--report-html` is present).
+Run: `dotnet run --project samples/AppointmentTests -c Debug` then `Get-ChildItem -Recurse -Filter raun-report.html samples/AppointmentTests`
+Expected: no new `raun-report.html` written by this run (the sink only attaches when `--report-html` is present).
 
 - [ ] **Step 5: Final full verification.**
 
-Run: `dotnet test PUnit.slnx -c Debug`
+Run: `dotnet test Raun.slnx -c Debug`
 Expected: `Test run summary: Passed!`.
 
 - [ ] **Step 6: Commit any sample/doc tweaks** (only if Step 3 required a sample change to surface effects; otherwise skip). Then update the design doc status:

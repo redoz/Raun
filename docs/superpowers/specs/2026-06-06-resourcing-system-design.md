@@ -2,8 +2,8 @@
 
 - **Date:** 2026-06-06
 - **Status:** Design — awaiting review
-- **Scope:** `src/PUnit` (core model, scheduler, a new `Resources` subsystem), `src/PUnit.Generator`
-  (attribute lowering), `src/PUnit.Mtp` (session-level lock manager + scenario priority), plus the
+- **Scope:** `src/Raun` (core model, scheduler, a new `Resources` subsystem), `src/Raun.Generator`
+  (attribute lowering), `src/Raun.Mtp` (session-level lock manager + scenario priority), plus the
   HTML report (feature B of the roadmap) as a consumer.
 - **Origin:** Feature C of `docs/superpowers/plans/2026-06-06-roadmap-aspire-report-resources.md`.
 
@@ -104,7 +104,7 @@ public static async Task SuspendedUserCannotSignIn()
 
 Each resource-typed parameter and return value is an independent claim, and its **role must be stated
 explicitly**. There are **no defaults**: if a step's parameter or return is a resource type and
-carries no role, the analyzer raises **PUNIT009** and the build fails. This is deliberate — whether
+carries no role, the analyzer raises **RAUN009** and the build fails. This is deliberate — whether
 `Task<User> Foo(...)` *creates* a new user or *loads* an existing one, and whether a `User` parameter
 is *read* or *mutated*, changes both the lock mode and the trace, and must never be guessed.
 
@@ -143,7 +143,7 @@ public static async Task<User> Suspend([Edits] User user)   // exclusive on the 
 
 A resource-typed parameter or return with **no** role is a hard error:
 
-> **PUNIT009** — *Resource access must be declared.* "Parameter/return '{0}' is the resource type
+> **RAUN009** — *Resource access must be declared.* "Parameter/return '{0}' is the resource type
 > '{1}'; declare its access with `[Reads]`, `[Edits]`, or `[Deletes]` (parameter) or `[Creates]`,
 > `[Loads]`, or `[Edits]` (return) — there is no default."
 
@@ -276,7 +276,7 @@ diagnostic naming the contended resources — so a pathological resource design 
 - `IResourceLockManager` is **session-scoped** (shared across all concurrently-running scenarios) and
   injected via the scheduler's existing `IServiceProvider`.
 - Per-identity **async reader/writer gate**: a queue of `TaskCompletionSource` waiters, readers share,
-  a writer excludes. The BCL has no async RW-lock; PUnit core deliberately carries minimal
+  a writer excludes. The BCL has no async RW-lock; Raun core deliberately carries minimal
   dependencies, so we build a small internal one (decision recorded here; revisit only if it proves
   fiddly).
 - Nothing blocks: steps already run as `Task`s in the scheduler's `running` set, so an awaited lock
@@ -293,7 +293,7 @@ diagnostic naming the contended resources — so a pathological resource design 
 ### Cross-scenario execution
 
 This feature presumes — and enables — scenarios running **concurrently** with a shared lock manager.
-Today each scenario runs an independent `ScenarioScheduler`; the session layer (`PUnit.Mtp`) must own
+Today each scenario runs an independent `ScenarioScheduler`; the session layer (`Raun.Mtp`) must own
 the lock manager, assign scenario priorities, and run scenarios concurrently against it. (See Open
 questions.)
 
@@ -314,7 +314,7 @@ The effect stream is valuable **without** locking, which is why the work phases 
 
 ## Components & boundaries
 
-New subsystem under `src/PUnit/Resources/` (core, runner-neutral), plus generator and session wiring.
+New subsystem under `src/Raun/Resources/` (core, runner-neutral), plus generator and session wiring.
 
 | Unit | Responsibility | Depends on |
 |---|---|---|
@@ -328,8 +328,8 @@ New subsystem under `src/PUnit/Resources/` (core, runner-neutral), plus generato
 | `ScenarioLockScope` | `IAsyncDisposable` bag of a scenario's held tokens; releases on dispose. | lock manager |
 | Attributes: `[Resource]`, `[ResourceKey]`, `[Creates]`, `[Loads]`, `[Reads]`, `[Edits]`, `[Deletes]`, `[Requires<T>]` | Declarative surface. | — |
 | Scheduler integration (`ScenarioScheduler`) | Pre-acquire static claims; hold via scope; wound = cancel. | lock manager |
-| Session integration (`PUnit.Mtp`) | Own the lock manager; assign priorities; run scenarios concurrently. | core |
-| Generator + analyzer (`PUnit.Generator`) | Read resource roles (incl. param/return); raise **PUNIT009** when a resource-typed param/return has no role; emit identity half + catalog; lower effects to `ctx.Resources.*`. | Roslyn |
+| Session integration (`Raun.Mtp`) | Own the lock manager; assign priorities; run scenarios concurrently. | core |
+| Generator + analyzer (`Raun.Generator`) | Read resource roles (incl. param/return); raise **RAUN009** when a resource-typed param/return has no role; emit identity half + catalog; lower effects to `ctx.Resources.*`. | Roslyn |
 
 Each unit is independently testable: the lock manager and gate with no scheduler; the resolver with no
 runtime; the generator lowering via the existing `GeneratorHarness`.
@@ -346,7 +346,7 @@ runtime; the generator lowering via the existing `GeneratorHarness`.
   `await using` early-release shortens it.
 - **Identity resolver:** each chain link wins in order; value-equality fallback; `with`-edited record
   keeps its key.
-- **Roles & PUNIT009:** a resource-typed param/return with **no** role errors (`PUNIT009`); with a
+- **Roles & RAUN009:** a resource-typed param/return with **no** role errors (`RAUN009`); with a
   role, lowers to the right claim/mode (`[Creates]`/`[Loads]`/`[Reads]`/`[Edits]`/`[Deletes]`); static
   keys produce a catalog claim, runtime keys don't. (Via `GeneratorHarness`, behavioral.)
 - **End-to-end:** two scenarios contending an exclusive resource serialize and both pass; a forced
@@ -359,7 +359,7 @@ runtime; the generator lowering via the existing `GeneratorHarness`.
 1. **Cross-scenario execution model.** The biggest unknown: today scenarios run independent
    schedulers. Realizing real cross-scenario locks needs a session-level coordinator that runs
    scenarios concurrently and shares the lock manager + assigns priorities. This likely touches how
-   `PUnit.Mtp` drives execution and may be the largest implementation slice.
+   `Raun.Mtp` drives execution and may be the largest implementation slice.
 2. **Re-run idempotency.** Symbolic resources mean the framework rolls nothing back; a re-run repeats
    the step's real side effects. We document the "steps must be safe to repeat" contract; do we also
    want an optional `onRollback` escape hatch later (non-breaking to add)?

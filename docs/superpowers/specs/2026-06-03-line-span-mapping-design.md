@@ -9,7 +9,7 @@
 
 ## 1. Goal & fidelity bar
 
-PUnit lowers each `[Scenario]` method into `PUnitScenarios.g.cs` (`PUnit.Generated.PUnitGenerated`): one `Scenario_X()` builder per scenario, each step carrying a `static async (__inputs, __ctx) => { … }` `Invoke` lambda that re-invokes the DSL call. The scheduler runs those lambdas, so **the code that actually executes under the debugger is the generated lambda, not the user's original method body.**
+Raun lowers each `[Scenario]` method into `RaunScenarios.g.cs` (`Raun.Generated.RaunGenerated`): one `Scenario_X()` builder per scenario, each step carrying a `static async (__inputs, __ctx) => { … }` `Invoke` lambda that re-invokes the DSL call. The scheduler runs those lambdas, so **the code that actually executes under the debugger is the generated lambda, not the user's original method body.**
 
 **Goal:** under a debugger, a breakpoint on a step's DSL call (`When.CreateAppointment(patient, slot)`) binds to the developer's **original source span**, the current-statement highlight covers that exact original call, and stepping never descends into generated plumbing.
 
@@ -102,7 +102,7 @@ Everything not explicitly annotated (node construction, `CreateAll`, module init
 
 ## 5. Spike: validate `charOffset` and rendering (throwaway)
 
-A throwaway test (`test/PUnit.Generator.Test/LineSpanSpikeTests.cs`, deleted before the final commit) that builds a one-statement lambda body with a `LineSpanDirectiveTrivia` attached, runs `NormalizeWhitespace(eol:"\n").ToFullString()`, and confirms:
+A throwaway test (`test/Raun.Generator.Test/LineSpanSpikeTests.cs`, deleted before the final commit) that builds a one-statement lambda body with a `LineSpanDirectiveTrivia` attached, runs `NormalizeWhitespace(eol:"\n").ToFullString()`, and confirms:
 
 1. The directive renders on its **own line**, compiler-legal, statement intact and not glued to it.
 2. The **actual generated column** of the call token equals our computed `indentColumn + prefixLength`.
@@ -142,8 +142,8 @@ Then delete the spike and return the suite to its prior green count.
 ## 8. Manual debugger checklist (human, once)
 
 Against the sample `AppointmentTests` in an IDE:
-1. Breakpoint on a `When.CreateAppointment(...)` line in the original `*Tests.cs` → run → binds and hits **on that original call** (not in `PUnitScenarios.g.cs`); highlight covers the call span.
-2. Step Over / Step Into repeatedly → moves between original DSL call sites; never descends into `PUnitScenarios.g.cs` plumbing.
+1. Breakpoint on a `When.CreateAppointment(...)` line in the original `*Tests.cs` → run → binds and hits **on that original call** (not in `RaunScenarios.g.cs`); highlight covers the call span.
+2. Step Over / Step Into repeatedly → moves between original DSL call sites; never descends into `RaunScenarios.g.cs` plumbing.
 3. Breakpoint on a void step (`Then.AppointmentExists(...)`) → binds to the original call and hits.
 4. Locals showing `__r`/`__inputs` instead of the user's names is expected (accepted non-goal).
 
@@ -152,15 +152,15 @@ Against the sample `AppointmentTests` in an IDE:
 ## 9. Repo conventions for the executor
 
 - **Build gate is strict:** `TreatWarningsAsErrors`, `EnableNETAnalyzers`, `AnalysisLevel=latest-all`, `EnforceCodeStyleInBuild`. Every build must report **`0 Warning(s), 0 Error(s)`**. Fix any CA/IDE nit the new helpers raise.
-- **Tests:** `dotnet test PUnit.slnx --nologo`. The handoff baseline is **92**; this feature adds the path-bearing snapshot + compile-success + PDB sequence-point facts (final count set by the plan). The spike is throwaway and must be gone from the final count.
+- **Tests:** `dotnet test Raun.slnx --nologo`. The handoff baseline is **92**; this feature adds the path-bearing snapshot + compile-success + PDB sequence-point facts (final count set by the plan). The spike is throwaway and must be gone from the final count.
 - **`using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;`** is already imported in `ScenarioEmitter.cs:7`, so `LineSpanDirectiveTrivia`, `LineDirectiveTrivia`, `LineDirectivePosition`, `Trivia`, `Literal`, `Token`, `EndOfLine`, `TriviaList` are unqualified there.
 - **Commits:** `jj commit -m "..."` (this repo uses jj). **No `Co-Authored-By` / tooling trailer.**
 - **Snapshot re-accept:** Verify writes `*.received.cs` on mismatch (DiffEngine disabled in `VerifyConfig.cs`); diff `received` vs `verified`, confirm the change is exactly expected and nothing else, replace `verified` with `received`, delete `received`, re-run to confirm green. **Never blind-accept.**
 
 ### Edit-site map (verified against current code)
-- `src/PUnit.Generator/Emit/ScenarioEmitter.cs` — `Header` const (L14), `Emit`/`NormalizeWhitespace` (L23/L45/L47), `BuildInvokeLambda` (L216–257). **Primary edit site.**
-- `src/PUnit.Generator/Lowering/Ir.cs` — add `SourceSpan` struct + `ParsedStep.CallSpan` (near L20–49).
-- `src/PUnit.Generator/Lowering/ScenarioParser.cs` — add `SpanOf` near `Location` (L446); populate `CallSpan` at step construction (L357–373). Leave `Location`/`SourceLine` as-is.
-- `test/PUnit.Generator.Test/GeneratorHarness.cs` — `Run` (~L34–64), `RunDriver` (~L67–81). Add path-bearing `RunDriver(source, path)` + `RunWithPath(source, path)` + a PDB-emitting runner. Align with the real `GeneratorResult`/`References` member names.
-- `test/PUnit.Generator.Test/GeneratorSnapshotTests.cs` — add path-bearing snapshot + compile-success + PDB facts.
-- `test/PUnit.Generator.Test/Snapshots/` — 3 existing re-accepted + 1 new path-bearing.
+- `src/Raun.Generator/Emit/ScenarioEmitter.cs` — `Header` const (L14), `Emit`/`NormalizeWhitespace` (L23/L45/L47), `BuildInvokeLambda` (L216–257). **Primary edit site.**
+- `src/Raun.Generator/Lowering/Ir.cs` — add `SourceSpan` struct + `ParsedStep.CallSpan` (near L20–49).
+- `src/Raun.Generator/Lowering/ScenarioParser.cs` — add `SpanOf` near `Location` (L446); populate `CallSpan` at step construction (L357–373). Leave `Location`/`SourceLine` as-is.
+- `test/Raun.Generator.Test/GeneratorHarness.cs` — `Run` (~L34–64), `RunDriver` (~L67–81). Add path-bearing `RunDriver(source, path)` + `RunWithPath(source, path)` + a PDB-emitting runner. Align with the real `GeneratorResult`/`References` member names.
+- `test/Raun.Generator.Test/GeneratorSnapshotTests.cs` — add path-bearing snapshot + compile-success + PDB facts.
+- `test/Raun.Generator.Test/Snapshots/` — 3 existing re-accepted + 1 new path-bearing.

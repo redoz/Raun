@@ -7,7 +7,7 @@
 
 ## 1. Summary
 
-The PUnit HTML report renders **one `<svg class="actdiag">` per scenario** (`buildActivityDiagram`), each with
+The Raun HTML report renders **one `<svg class="actdiag">` per scenario** (`buildActivityDiagram`), each with
 its own `viewBox`/coordinate space and its own `<defs>`. Phase 2 adds a report-wide **single-light "sun"
 lighting language** to every interactive tile (action/assert nodes, branch nodes, entity cards, fork/join bars,
 the fork block, the Phase-1 toggle pill): a per-tile directional fill/border/gloss shaded by one light, a
@@ -29,12 +29,12 @@ per-scenario SVGs. The five open multi-SVG concerns (from the Phase-1 plan's "Ph
 ## 2. Binding constraints (unchanged)
 
 - **VCS = `jj` only** (colocated repo; read-only `git` ok). No `Co-Authored-By` / tooling trailers.
-- Single self-contained template `src/PUnit.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model
-  injected at the one `<script id="model" .../*__PUNIT_REPORT_JSON__*/>` token). **No external
+- Single self-contained template `src/Raun.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model
+  injected at the one `<script id="model" .../*__RAUN_REPORT_JSON__*/>` token). **No external
   URL/CDN/web-font/`@import`** — only the SVG-ns literal `http://www.w3.org/2000/svg`. Source Serif 4 stays
   base64-embedded. Time-of-day uses the **client's local clock** (`new Date()`) — no network.
 - **C# `HtmlReportModel` + builder UNCHANGED**; `HtmlReportModelBuilderTests` snapshot unchanged; keep
-  `HtmlReportSinkTests` green; `dotnet build PUnit.slnx -warnaserror` is **0 warnings** (240-test baseline).
+  `HtmlReportSinkTests` green; `dotnet build Raun.slnx -warnaserror` is **0 warnings** (240-test baseline).
 - Define **both palettes** (`--ad-*` / `--ph-*` + the new lighting vars) for light + dark.
 - **NO decision/merge diamonds** (model is a step-DAG; out of scope).
 
@@ -168,10 +168,10 @@ opacity stops are new. White sheen on white tiles (light theme) is intentionally
 - **C# unchanged** → `HtmlReportModelBuilderTests` `Verify(json)` snapshot unchanged; `HtmlReportSinkTests`
   green. Whole feature is template-side (HTML/CSS/JS); no JS test runner is added (none exists — same as the
   shipped diagram + Phase 1).
-- **0-warning build** (`dotnet build PUnit.slnx -warnaserror`); full suite green (`dotnet test PUnit.slnx -c
-  Debug`, 240 baseline; do **not** pass `--nologo` — PUnit is an MTP framework and rejects it).
-- **Verify loop:** `dotnet run --project samples/AppointmentTests -c Debug -- --report-html` (rebuilds PUnit.Mtp
-  → re-embeds the template) → `samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html`.
+- **0-warning build** (`dotnet build Raun.slnx -warnaserror`); full suite green (`dotnet test Raun.slnx -c
+  Debug`, 240 baseline; do **not** pass `--nologo` — Raun is an MTP framework and rejects it).
+- **Verify loop:** `dotnet run --project samples/AppointmentTests -c Debug -- --report-html` (rebuilds Raun.Mtp
+  → re-embeds the template) → `samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html`.
   Headless: `npx playwright screenshot --browser=chromium --full-page` (chromium installed; the Playwright MCP
   defaults to Chrome which is NOT). **Force theme via `?theme=dark|light`** (the CLI defaults to light). For the
   cursor-tracked sheen/glint + which-SVG mapping + time-of-day, drive with a Node Playwright script

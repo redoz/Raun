@@ -1,7 +1,7 @@
 # Handoff: Raun — after the 2026-09-05/06 session (rename, packaging, tracing); pick the next item
 
 ## Goal
-Raun (formerly Freista, formerly PUnit) is feature-complete for v1 and published as previews to
+Raun is feature-complete for v1 and published as previews to
 GitHub Packages. Success next = a first real version tag and one of the remaining product items.
 
 ## State
@@ -10,7 +10,7 @@ Shipped this session, each its own commit on main: dead C2 scaffolding deleted; 
 detection (RAUN013 analyzer + per-scenario ResourceLedger, pre-call claim emission); lifecycle sample
 scenarios; teardown context overloads + RAUN014; not-taken branches reported as skipped; step filter
 runs only the selected closure; Apache-2.0 + MinVer tag-driven versioning + CI/release workflows
-publishing to GitHub Packages; Freista→Raun rename incl. GitHub repo; AGENTS.md replaces CLAUDE.md;
+publishing to GitHub Packages; Raun→Raun rename incl. GitHub repo; AGENTS.md replaces CLAUDE.md;
 WaitsFor ordering edge (post-if statement waits for arm tails); timer-stamped log entries with resource
 events in the stream; OpenTelemetry-ready tracing; README rewrite; LINQ names at discovery;
 attachments in the HTML report.
@@ -27,7 +27,6 @@ docs/RELEASING.md — tag-driven release checklist incl. moving RAUN rules from 
 docs/superpowers/specs/2026-09-05-resource-conflict-detection-design.md — why locks were rejected; Tier 3 deferred; race opt-out open item.
 docs/superpowers/specs/2026-09-06-tracing-design.md — span tree, attributes, Aspire wiring, dashboard follow-up.
 docs/superpowers/specs/2026-09-03-scenario-conditionals-design.md (Amendment 2026-09-05) — WaitsFor.
-docs/superpowers/specs/2026-09-05-rename-freista-to-raun-design.md — why Raun; alternatives vetted.
 src/Raun/Scheduling/ScenarioScheduler.cs — DAG loop, targets closure, ledger, spans, ScenarioStart holder.
 src/Raun/Resources/ResourceLedger.cs — structural conflict detection over ScenarioGraph.Predecessors.
 src/Raun/Model/ScenarioGraph.cs — the one definition of ordering edges (DependsOn ∪ MergeSources ∪ WaitsFor ∪ Guards).

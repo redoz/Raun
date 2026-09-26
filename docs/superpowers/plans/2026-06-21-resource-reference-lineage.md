@@ -16,26 +16,26 @@
 - **`[Consumes]`/`[References]` are `Shared` (no scheduling weight) in C1.** The exclusivity `[Consumes]` implies is C2 — documented in comments only, enforced nowhere. There is no scheduler/lock change in this plan.
 - **Edges are derived, never stored.** No `ResourceReference` runtime type; no new `StepResult` field.
 - **Single-subject limitation** must be stated in the `[References]`/`[Consumes]` XML doc-comments (IntelliSense): the edge attaches to the step's single created/edited resource; a step that creates/edits more than one resource forms no edge.
-- Build: `dotnet build PUnit.slnx`. Test: `dotnet test` (whole solution) or `dotnet test test/<Project>`. Source-gen changes take effect on the next build.
+- Build: `dotnet build Raun.slnx`. Test: `dotnet test` (whole solution) or `dotnet test test/<Project>`. Source-gen changes take effect on the next build.
 
 ## File Structure
 
 **Production (modified):**
-- `src/PUnit/Resources/LifecycleVerb.cs` — add `Reference`, `Consume` enum values; extend `ToLockMode` (Shared) and `Precedence`.
-- `src/PUnit/Resources/ResourceContext.cs` — add `Reference<T>` / `Consume<T>` tracer methods.
-- `src/PUnit/Resources/ResourceRoleAttributes.cs` — add `ReferencesAttribute`, `ConsumesAttribute`.
-- `src/PUnit.Generator/Lowering/AttributeReader.cs` — map the two new attributes to verb strings.
-- `src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs` — add `ReportReference` record; add `References` to `ReportScenario`.
-- `src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs` — derive `ReportReference` edges per step.
+- `src/Raun/Resources/LifecycleVerb.cs` — add `Reference`, `Consume` enum values; extend `ToLockMode` (Shared) and `Precedence`.
+- `src/Raun/Resources/ResourceContext.cs` — add `Reference<T>` / `Consume<T>` tracer methods.
+- `src/Raun/Resources/ResourceRoleAttributes.cs` — add `ReferencesAttribute`, `ConsumesAttribute`.
+- `src/Raun.Generator/Lowering/AttributeReader.cs` — map the two new attributes to verb strings.
+- `src/Raun.Mtp/HtmlReport/HtmlReportModel.cs` — add `ReportReference` record; add `References` to `ReportScenario`.
+- `src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs` — derive `ReportReference` edges per step.
 - `samples/AppointmentTests/AppointmentDsl.cs` — upgrade `CreateAppointment` to the new roles (living demo).
 
 **Tests (modified):**
-- `test/PUnit.Test/Resources/ResourceContextTests.cs` — tracer + dedup tests.
-- `test/PUnit.Generator.Test/SampleSources.cs` — add a lineage DSL step + scenario.
-- `test/PUnit.Generator.Test/ResourceLoweringTests.cs` — end-to-end lowering test.
-- `test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs` — edge-derivation tests; re-accept the JSON snapshot.
+- `test/Raun.Test/Resources/ResourceContextTests.cs` — tracer + dedup tests.
+- `test/Raun.Generator.Test/SampleSources.cs` — add a lineage DSL step + scenario.
+- `test/Raun.Generator.Test/ResourceLoweringTests.cs` — end-to-end lowering test.
+- `test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs` — edge-derivation tests; re-accept the JSON snapshot.
 
-**Handoff (do NOT touch — owned by the report agent):** `src/PUnit.Mtp/HtmlReport/report-template.html`. The contract is the camelCase-serialized `references` array on each scenario (via `HtmlReportSink`'s existing `JsonNamingPolicy.CamelCase`).
+**Handoff (do NOT touch — owned by the report agent):** `src/Raun.Mtp/HtmlReport/report-template.html`. The contract is the camelCase-serialized `references` array on each scenario (via `HtmlReportSink`'s existing `JsonNamingPolicy.CamelCase`).
 
 ---
 
@@ -44,16 +44,16 @@
 Runtime can record `Reference`/`Consume` as shared effects, with correct dedup precedence.
 
 **Files:**
-- Modify: `src/PUnit/Resources/LifecycleVerb.cs`
-- Modify: `src/PUnit/Resources/ResourceContext.cs:69-82`
-- Test: `test/PUnit.Test/Resources/ResourceContextTests.cs`
+- Modify: `src/Raun/Resources/LifecycleVerb.cs`
+- Modify: `src/Raun/Resources/ResourceContext.cs:69-82`
+- Test: `test/Raun.Test/Resources/ResourceContextTests.cs`
 
 **Interfaces:**
 - Produces: `LifecycleVerb.Reference`, `LifecycleVerb.Consume` (both `ToLockMode() == LockMode.Shared`; `Precedence()` above `Read`). `ResourceContext.Reference<T>(T)` and `Consume<T>(T)` returning `ValueTask`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add these three tests to `test/PUnit.Test/Resources/ResourceContextTests.cs` (before the `FixedTimeProvider` nested class):
+Add these three tests to `test/Raun.Test/Resources/ResourceContextTests.cs` (before the `FixedTimeProvider` nested class):
 
 ```csharp
 [Fact]
@@ -99,12 +99,12 @@ public async Task Consume_outranks_read_in_dedup()
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `dotnet test test/PUnit.Test --filter "Name~Reference_records|Name~Consume_records|Name~Consume_outranks"`
+Run: `dotnet test test/Raun.Test --filter "Name~Reference_records|Name~Consume_records|Name~Consume_outranks"`
 Expected: FAIL — `ResourceContext` has no `Reference`/`Consume` method; `LifecycleVerb.Reference`/`.Consume` do not exist (compile error).
 
 - [ ] **Step 3: Add the enum values + lock/precedence**
 
-In `src/PUnit/Resources/LifecycleVerb.cs`, append two members to the enum (after `Delete,` — appending keeps existing numeric values stable):
+In `src/Raun/Resources/LifecycleVerb.cs`, append two members to the enum (after `Delete,` — appending keeps existing numeric values stable):
 
 ```csharp
     /// <summary>Removes a resource (exclusive).</summary>
@@ -154,7 +154,7 @@ Replace `Precedence` so the usage verbs sit just above `Read` (and update the do
 
 - [ ] **Step 4: Add the tracer methods**
 
-In `src/PUnit/Resources/ResourceContext.cs`, after the `Read<T>` method (line 72), add:
+In `src/Raun/Resources/ResourceContext.cs`, after the `Read<T>` method (line 72), add:
 
 ```csharp
     /// <summary>Records the produced resource keeping a durable reference to <paramref name="resource"/> (shared).</summary>
@@ -170,13 +170,13 @@ In `src/PUnit/Resources/ResourceContext.cs`, after the `Read<T>` method (line 72
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `dotnet test test/PUnit.Test --filter "Name~Reference_records|Name~Consume_records|Name~Consume_outranks"`
+Run: `dotnet test test/Raun.Test --filter "Name~Reference_records|Name~Consume_records|Name~Consume_outranks"`
 Expected: PASS (3 tests).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-jj commit src/PUnit/Resources/LifecycleVerb.cs src/PUnit/Resources/ResourceContext.cs test/PUnit.Test/Resources/ResourceContextTests.cs -m "feat: Reference/Consume lifecycle verbs (shared) + tracer methods"
+jj commit src/Raun/Resources/LifecycleVerb.cs src/Raun/Resources/ResourceContext.cs test/Raun.Test/Resources/ResourceContextTests.cs -m "feat: Reference/Consume lifecycle verbs (shared) + tracer methods"
 ```
 
 ---
@@ -186,10 +186,10 @@ jj commit src/PUnit/Resources/LifecycleVerb.cs src/PUnit/Resources/ResourceConte
 `[References]`/`[Consumes]` on a parameter lower into `await __ctx.Resources.Reference/Consume(arg)`, producing shared effects in declaration order.
 
 **Files:**
-- Modify: `src/PUnit/Resources/ResourceRoleAttributes.cs`
-- Modify: `src/PUnit.Generator/Lowering/AttributeReader.cs:76-97`
-- Test: `test/PUnit.Generator.Test/SampleSources.cs`
-- Test: `test/PUnit.Generator.Test/ResourceLoweringTests.cs`
+- Modify: `src/Raun/Resources/ResourceRoleAttributes.cs`
+- Modify: `src/Raun.Generator/Lowering/AttributeReader.cs:76-97`
+- Test: `test/Raun.Generator.Test/SampleSources.cs`
+- Test: `test/Raun.Generator.Test/ResourceLoweringTests.cs`
 
 **Interfaces:**
 - Consumes: `LifecycleVerb.Reference`/`.Consume`, `ResourceContext.Reference`/`.Consume` (Task A).
@@ -197,7 +197,7 @@ jj commit src/PUnit/Resources/LifecycleVerb.cs src/PUnit/Resources/ResourceConte
 
 - [ ] **Step 1: Add the lineage DSL step + scenario to the test sources**
 
-In `test/PUnit.Generator.Test/SampleSources.cs`, inside the `ResourceDsl` const's `extension(When)` block, add a step after `Book` (note: do NOT modify `Book` — existing tests assert on it):
+In `test/Raun.Generator.Test/SampleSources.cs`, inside the `ResourceDsl` const's `extension(When)` block, add a step after `Book` (note: do NOT modify `Book` — existing tests assert on it):
 
 ```csharp
                 [StepName("booking with lineage")]
@@ -232,7 +232,7 @@ Then add a new scenario const after `BookingScenario`:
 
 - [ ] **Step 2: Write the failing test**
 
-In `test/PUnit.Generator.Test/ResourceLoweringTests.cs`, add (after `Multi_param_roles_emit_in_param_then_return_order`):
+In `test/Raun.Generator.Test/ResourceLoweringTests.cs`, add (after `Multi_param_roles_emit_in_param_then_return_order`):
 
 ```csharp
 [Fact]
@@ -262,12 +262,12 @@ public async Task Reference_and_consume_params_lower_to_shared_lineage_effects()
 
 - [ ] **Step 3: Run the test to verify it fails**
 
-Run: `dotnet test test/PUnit.Generator.Test --filter "Name~Reference_and_consume_params"`
+Run: `dotnet test test/Raun.Generator.Test --filter "Name~Reference_and_consume_params"`
 Expected: FAIL — the source string won't compile (no `[References]`/`[Consumes]` attributes), so `AssertCompiles` fails.
 
 - [ ] **Step 4: Add the attributes**
 
-In `src/PUnit/Resources/ResourceRoleAttributes.cs`, after `ReadsAttribute` (line 13), add:
+In `src/Raun/Resources/ResourceRoleAttributes.cs`, after `ReadsAttribute` (line 13), add:
 
 ```csharp
 /// <summary>
@@ -293,7 +293,7 @@ public sealed class ConsumesAttribute : Attribute;
 
 - [ ] **Step 5: Map the attributes to verbs**
 
-In `src/PUnit.Generator/Lowering/AttributeReader.cs`, add two cases to the `RoleVerb` switch (inside the `foreach`, alongside `"ReadsAttribute"`):
+In `src/Raun.Generator/Lowering/AttributeReader.cs`, add two cases to the `RoleVerb` switch (inside the `foreach`, alongside `"ReadsAttribute"`):
 
 ```csharp
             var verb = attr.AttributeClass?.Name switch
@@ -311,18 +311,18 @@ In `src/PUnit.Generator/Lowering/AttributeReader.cs`, add two cases to the `Role
 
 - [ ] **Step 6: Run the test to verify it passes**
 
-Run: `dotnet test test/PUnit.Generator.Test --filter "Name~Reference_and_consume_params"`
-Expected: PASS. (If the generator change seems not to take effect, force a rebuild: `dotnet build PUnit.slnx` then re-run.)
+Run: `dotnet test test/Raun.Generator.Test --filter "Name~Reference_and_consume_params"`
+Expected: PASS. (If the generator change seems not to take effect, force a rebuild: `dotnet build Raun.slnx` then re-run.)
 
 - [ ] **Step 7: Run the full generator suite (no regressions)**
 
-Run: `dotnet test test/PUnit.Generator.Test`
+Run: `dotnet test test/Raun.Generator.Test`
 Expected: PASS — existing snapshots unchanged (the new DSL step is unused by existing scenarios; the generator only emits `[Scenario]` methods).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-jj commit src/PUnit/Resources/ResourceRoleAttributes.cs src/PUnit.Generator/Lowering/AttributeReader.cs test/PUnit.Generator.Test/SampleSources.cs test/PUnit.Generator.Test/ResourceLoweringTests.cs -m "feat: [References]/[Consumes] parameter roles lower to lineage effects"
+jj commit src/Raun/Resources/ResourceRoleAttributes.cs src/Raun.Generator/Lowering/AttributeReader.cs test/Raun.Generator.Test/SampleSources.cs test/Raun.Generator.Test/ResourceLoweringTests.cs -m "feat: [References]/[Consumes] parameter roles lower to lineage effects"
 ```
 
 ---
@@ -332,9 +332,9 @@ jj commit src/PUnit/Resources/ResourceRoleAttributes.cs src/PUnit.Generator/Lowe
 `HtmlReportModelBuilder` produces a `ReportReference` adjacency per scenario by pairing each step's Create/Edit subject with its Reference/Consume effects.
 
 **Files:**
-- Modify: `src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs`
-- Modify: `src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs:113-131`
-- Test: `test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs`
+- Modify: `src/Raun.Mtp/HtmlReport/HtmlReportModel.cs`
+- Modify: `src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs:113-131`
+- Test: `test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs`
 
 **Interfaces:**
 - Consumes: `LifecycleVerb.Reference`/`.Consume`/`.Create`/`.Edit` (Task A), `ResourceEffect.Identity`/`.Verb`.
@@ -342,7 +342,7 @@ jj commit src/PUnit/Resources/ResourceRoleAttributes.cs src/PUnit.Generator/Lowe
 
 - [ ] **Step 1: Write the failing tests**
 
-In `test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs`, add `using System.Linq;` to the top usings, then add these two tests:
+In `test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs`, add `using System.Linq;` to the top usings, then add these two tests:
 
 ```csharp
 [Fact]
@@ -399,12 +399,12 @@ public void A_reference_effect_without_a_subject_yields_no_edge()
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `dotnet test test/PUnit.Mtp.Test --filter "Name~derive_lineage_edges|Name~without_a_subject"`
+Run: `dotnet test test/Raun.Mtp.Test --filter "Name~derive_lineage_edges|Name~without_a_subject"`
 Expected: FAIL — `ReportScenario` has no `References` property (compile error).
 
 - [ ] **Step 3: Add the model types**
 
-In `src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs`, add a `References` property to `ReportScenario` (after `Resources`):
+In `src/Raun.Mtp/HtmlReport/HtmlReportModel.cs`, add a `References` property to `ReportScenario` (after `Resources`):
 
 ```csharp
     public required IReadOnlyList<ReportResource> Resources { get; init; }
@@ -429,7 +429,7 @@ public sealed record ReportReference
 
 - [ ] **Step 4: Derive the edges in the builder**
 
-In `src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs`, inside `ScenarioAccumulator.Build()`, after the `resources` block (ends line 111) and before the `status` line, insert:
+In `src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs`, inside `ScenarioAccumulator.Build()`, after the `resources` block (ends line 111) and before the `status` line, insert:
 
 ```csharp
             // Lineage edges (2026-06-21 spec): per step, the Create/Edit effect is the subject; each
@@ -485,29 +485,29 @@ Then add `References = references,` to the `new ReportScenario { ... }` initiali
 
 - [ ] **Step 5: Run the new tests to verify they pass**
 
-Run: `dotnet test test/PUnit.Mtp.Test --filter "Name~derive_lineage_edges|Name~without_a_subject"`
+Run: `dotnet test test/Raun.Mtp.Test --filter "Name~derive_lineage_edges|Name~without_a_subject"`
 Expected: PASS (2 tests).
 
 - [ ] **Step 6: Re-accept the JSON snapshot (additive `references` field)**
 
 The `Builds_the_expected_json_model` snapshot now gains a `"References": []` array on its scenario. Run:
 
-`dotnet test test/PUnit.Mtp.Test --filter "Name~Builds_the_expected_json_model"`
-Expected: FAIL — Verify reports a diff. A `*.received.txt` appears next to `test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.verified.txt`.
+`dotnet test test/Raun.Mtp.Test --filter "Name~Builds_the_expected_json_model"`
+Expected: FAIL — Verify reports a diff. A `*.received.txt` appears next to `test/Raun.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.verified.txt`.
 
 Read the `.received.txt` and confirm the ONLY change is the added `"References": []` (no other field changed). Then accept by overwriting the verified file:
 
 ```bash
-mv "test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.received.txt" \
-   "test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.verified.txt"
+mv "test/Raun.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.received.txt" \
+   "test/Raun.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.verified.txt"
 ```
 
-Re-run to confirm: `dotnet test test/PUnit.Mtp.Test` → PASS (whole project).
+Re-run to confirm: `dotnet test test/Raun.Mtp.Test` → PASS (whole project).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-jj commit src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs src/PUnit.Mtp/HtmlReport/HtmlReportModelBuilder.cs test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.cs "test/PUnit.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.verified.txt" -m "feat: derive ReportReference lineage edges in the report model"
+jj commit src/Raun.Mtp/HtmlReport/HtmlReportModel.cs src/Raun.Mtp/HtmlReport/HtmlReportModelBuilder.cs test/Raun.Mtp.Test/HtmlReportModelBuilderTests.cs "test/Raun.Mtp.Test/HtmlReportModelBuilderTests.Builds_the_expected_json_model.verified.txt" -m "feat: derive ReportReference lineage edges in the report model"
 ```
 
 ---

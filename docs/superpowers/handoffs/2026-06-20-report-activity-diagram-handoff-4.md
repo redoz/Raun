@@ -177,7 +177,7 @@ bundle is **click-to-expand one tier**; the drill panel always lists the full se
 keeps a tab open. If the server is down, restart with the **same `--project-dir`** (reuses the port; the tab
 auto-reconnects). On Windows run in background:
 ```
-bash "/c/Users/redoz/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.0/skills/brainstorming/scripts/start-server.sh" --project-dir "/c/dev/punit" --open
+bash "/c/Users/redoz/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.0/skills/brainstorming/scripts/start-server.sh" --project-dir "/c/dev/raun" --open
 ```
 then read `.superpowers/brainstorm/9542-1781954515/state/server-info` for the URL. **Push a screen** by writing a
 fragment HTML into `…/content/` (server serves the newest file). Current newest = `v17-gap-crossings.html`.
@@ -207,15 +207,15 @@ record. Nothing was `jj commit`ed this session — do that if you want the v17 m
 
 ## 7. Fixed constraints the implementer MUST respect (unchanged across all handoffs)
 
-- **File:** `src/PUnit.Mtp/HtmlReport/report-template.html` (an `EmbeddedResource`); inline HTML/CSS/JS, model
+- **File:** `src/Raun.Mtp/HtmlReport/report-template.html` (an `EmbeddedResource`); inline HTML/CSS/JS, model
   injected as JSON. The activity diagram **replaces** the current Gantt-timeline + object-flow SVG overlay
   (`.flow-svg`/`.conn`/`.dock`/`.flow-label`) the user found clunky.
 - **Self-contained, HARD rule:** inline `<style>`/`<script>` only — **zero external URLs/CDNs/web-fonts/@import**.
   Source Serif 4 → **base64 woff2 embedded**. (The companion mocks link Google Fonts only because the companion
   isn't bound by this rule.)
-- **JSON token:** exactly one `<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>`;
+- **JSON token:** exactly one `<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>`;
   `HtmlReportSink` string-replaces it. Don't break it.
-- **Model field names are FIXED** (`src/PUnit.Mtp/HtmlReport/HtmlReportModel.cs`, camelCase serialized) — model &
+- **Model field names are FIXED** (`src/Raun.Mtp/HtmlReport/HtmlReportModel.cs`, camelCase serialized) — model &
   builder are NOT changing. Everything the renderer needs is already there:
   - `scenarios[].steps[]`: `stepId, index, label, phase` (Given/When/Then), `displayName, status, offsetMs,
     durationMs, lane, dependsOn[]` (**control flow / DAG edges**), `groupId, logs[],
@@ -226,7 +226,7 @@ record. Nothing was `jj commit`ed this session — do that if you want the v17 m
     `offsetMs`/`durationMs`; forks = steps sharing `dependsOn`/`groupId` that overlap on different `lane`s.
 - **Both themes:** auto light/dark + `?theme=light|dark`. The mocks are **dark-only** — the spec MUST define the
   **light** palette for the new diagram too.
-- **0-warning build. Keep tests green:** `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs` (substring asserts — may
+- **0-warning build. Keep tests green:** `test/Raun.Mtp.Test/HtmlReportSinkTests.cs` (substring asserts — may
   need updating for new markup) and `HtmlReportModelBuilderTests.cs` (**model snapshot — must NOT change**).
 - **Rendering-tech choice (flag in the spec):** the mocks are pure SVG. **Content-sized boxes** need a
   text-measure pass (`getBBox`/char-width estimate); **line-label placement** (§3) likewise needs measured text +
@@ -249,5 +249,5 @@ record. Nothing was `jj commit`ed this session — do that if you want the v17 m
 4. Self-review the spec → user review → `writing-plans` → implement (**TDD**; keep the model snapshot + sink
    substring tests green; preserve the JSON token + the self-contained rule).
 
-(Naming thread from session 1 — rename **PUnit**, candidates **Junction / Tracery / Cascade** — remains a
+(Naming thread from session 1 — rename **Raun**, candidates **Junction / Tracery / Cascade** — remains a
 separate, untouched thread.)

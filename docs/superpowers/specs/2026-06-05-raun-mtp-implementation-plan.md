@@ -1,23 +1,23 @@
-# Implementation plan: PUnit.Mtp (own MTP test framework, v1)
+# Implementation plan: Raun.Mtp (own MTP test framework, v1)
 
-**Design spec (read first):** `docs/superpowers/specs/2026-06-05-punit-mtp-test-framework-design.md`
+**Design spec (read first):** `docs/superpowers/specs/2026-06-05-raun-mtp-test-framework-design.md`
 **Evidence/handoff:** `docs/superpowers/handoffs/2026-06-05-mtp-step-discovery-handoff.md`
 **xUnit reference source (the closest analog to what we build):** `C:\dev\vendor\xunit\src\common\MicrosoftTestingPlatform\` (esp. `TestPlatformTestFramework.cs`, `TestPlatformExecutionMessageSink.cs`, `TestPlatformDiscoveryMessageSink.cs`, `TestNodeExtensions.cs`) at tag `v3-3.2.2`.
-**Patterns being replaced:** `src/PUnit.Xunit/` (`ScenarioDiscoverer.cs`, `ScenarioStepReporter.cs`, `ScenarioTestCase.cs`, `PUnit.Xunit.csproj` packaging).
+**Patterns being replaced:** `src/Raun.Xunit/` (`ScenarioDiscoverer.cs`, `ScenarioStepReporter.cs`, `ScenarioTestCase.cs`, `Raun.Xunit.csproj` packaging).
 
 This plan is executed by an autonomous overnight workflow. Each phase is one focused agent. **Every agent must:** work TDD (failing test first), leave the **entire solution building with all tests green**, fix anything a prior phase left broken, then commit. Do not move scope between phases.
 
 ## Conventions (all phases)
-- **Repo root:** `C:\dev\punit`. **Branch:** `feat/punit-mtp` (already created; commit onto it).
+- **Repo root:** `C:\dev\raun`. **Branch:** `feat/raun-mtp` (already created; commit onto it).
 - **Build:** `dotnet build` at repo root. **Test:** `dotnet test` (existing test projects use the in-repo runner). Verify both are green before finishing.
 - **Commit** per phase when green: `git add -A && git commit -m "<concise message>"`. **No `Co-Authored-By` or tooling trailers** (project rule). One commit per phase, present-tense subject.
-- **Do not touch** `src/PUnit/` (engine) or `src/PUnit.Generator/` core logic except where a phase explicitly says so (Phase 6 only). Leave `src/PUnit.Xunit/` in place (retirement is out of scope).
+- **Do not touch** `src/Raun/` (engine) or `src/Raun.Generator/` core logic except where a phase explicitly says so (Phase 6 only). Leave `src/Raun.Xunit/` in place (retirement is out of scope).
 - **MTP package version:** determine the correct `Microsoft.Testing.Platform` package + version by inspecting what `xunit.v3` references transitively and/or the vendor source's package refs / `Directory.Packages.props`. Prefer the repo's central package management if present.
 - If genuinely blocked (e.g. a package cannot restore), record the blocker in the structured result rather than thrashing; still leave the build green if possible by isolating the unfinished piece.
 
-## Phase 1 — Scaffold `PUnit.Mtp` + test project
-- Create `src/PUnit.Mtp/PUnit.Mtp.csproj` (`net10.0`, library): references `PUnit` core + `Microsoft.Testing.Platform`; packages `PUnit.Generator` as an analyzer (mirror `src/PUnit.Xunit/PUnit.Xunit.csproj` packaging targets); `InternalsVisibleTo PUnit.Mtp.Test`.
-- Create `test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj` mirroring `test/PUnit.Xunit.Test` (same runner setup the other test projects use).
+## Phase 1 — Scaffold `Raun.Mtp` + test project
+- Create `src/Raun.Mtp/Raun.Mtp.csproj` (`net10.0`, library): references `Raun` core + `Microsoft.Testing.Platform`; packages `Raun.Generator` as an analyzer (mirror `src/Raun.Xunit/Raun.Xunit.csproj` packaging targets); `InternalsVisibleTo Raun.Mtp.Test`.
+- Create `test/Raun.Mtp.Test/Raun.Mtp.Test.csproj` mirroring `test/Raun.Xunit.Test` (same runner setup the other test projects use).
 - Add both to the solution (`*.sln`/`*.slnx`).
 - **Acceptance:** solution builds; new (empty) test project runs green. Commit.
 
@@ -32,7 +32,7 @@ This plan is executed by an autonomous overnight workflow. Each phase is one foc
 - **Acceptance:** tests assert N nodes per scenario with correct uids, display names, and file-location properties (use a registered test scenario fixture). Green. Commit.
 
 ## Phase 4 — Reporter (`IStepObserver` → `TestNodeUpdateMessage`)
-- New reporter implementing `PUnit.Scheduling.IStepObserver`. Map per the spec §6 table: start→InProgress; Passed→Passed; Failed→Failed/Timeout/Error (by exception kind: `TimeoutException`→Timeout, assertion→Failed, else Error); Skipped→Skipped(reason). Attach `TimingProperty`, file location, and `ScenarioContext.Logs`/`Attachments`. Update node `DisplayName` to the runtime-formatted name on start/finish.
+- New reporter implementing `Raun.Scheduling.IStepObserver`. Map per the spec §6 table: start→InProgress; Passed→Passed; Failed→Failed/Timeout/Error (by exception kind: `TimeoutException`→Timeout, assertion→Failed, else Error); Skipped→Skipped(reason). Attach `TimingProperty`, file location, and `ScenarioContext.Logs`/`Attachments`. Update node `DisplayName` to the runtime-formatted name on start/finish.
 - **Acceptance:** tests drive each `StepStatus` and assert the emitted node state + timing + location. Green. Commit.
 
 ## Phase 5 — Run loop + "light up all"
@@ -40,14 +40,14 @@ This plan is executed by an autonomous overnight workflow. Each phase is one foc
 - **Acceptance:** tests prove (a) a multi-step filter for one scenario ⇒ exactly one scheduler run, (b) a single-step filter ⇒ all executed siblings published, (c) one step's cancellation does not kill the shared run for siblings. Green. Commit.
 
 ## Phase 6 — Generator emits `Program.cs` + escape hatch
-- Extend `src/PUnit.Generator` to emit a `Program.cs` whose `Main` calls `PUnit.Mtp` `RunAsync(args)`. Gate emission on MSBuild property `PUnitGenerateProgram` (default `true`); when `false`, emit nothing (user supplies their own).
+- Extend `src/Raun.Generator` to emit a `Program.cs` whose `Main` calls `Raun.Mtp` `RunAsync(args)`. Gate emission on MSBuild property `RaunGenerateProgram` (default `true`); when `false`, emit nothing (user supplies their own).
 - Wire the property through the generator (analyzer config / `CompilerVisibleProperty`).
 - **Acceptance:** generator tests assert the entry point is emitted by default and suppressed when the property is `false`. Build + generator tests green. Commit.
 
 ## Phase 7 — Sample migration + end-to-end
-- Migrate `samples/AppointmentTests`: reference `PUnit.Mtp` (drop `PUnit.Xunit`) + `xunit.v3.assert`; drop `Microsoft.NET.Test.Sdk` + `xunit.runner.visualstudio` + `xunit.v3`; add repo `global.json` `{ "test": { "runner": "Microsoft.Testing.Platform" } }` if not already present.
+- Migrate `samples/AppointmentTests`: reference `Raun.Mtp` (drop `Raun.Xunit`) + `xunit.v3.assert`; drop `Microsoft.NET.Test.Sdk` + `xunit.runner.visualstudio` + `xunit.v3`; add repo `global.json` `{ "test": { "runner": "Microsoft.Testing.Platform" } }` if not already present.
 - Run the sample under `dotnet test`. **Acceptance:** the run shows the per-step nodes (≈18 across the sample's scenarios), and a single-step filtered run lights up that scenario's siblings. Capture the observed node list into the structured result. Green. Commit.
 
 ## Phase 8 — Review + harden
-- Adversarially review the whole `PUnit.Mtp` implementation against the spec (correctness, the §7 obligations: server-mode vs `dotnet test`, `--list-tests`, cancellation/CTS ownership, attachments). Fix real findings. Run the **entire** solution test suite; ensure 0 warnings.
+- Adversarially review the whole `Raun.Mtp` implementation against the spec (correctness, the §7 obligations: server-mode vs `dotnet test`, `--list-tests`, cancellation/CTS ownership, attachments). Fix real findings. Run the **entire** solution test suite; ensure 0 warnings.
 - **Acceptance:** full suite green, 0 warnings; a short written summary of what was built, what's verified, and any residual gaps. Final commit.

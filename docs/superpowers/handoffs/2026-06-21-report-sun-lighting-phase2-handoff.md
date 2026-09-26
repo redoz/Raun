@@ -1,4 +1,4 @@
-# Handoff — Phase 2: sun-driven lighting for the PUnit HTML report
+# Handoff — Phase 2: sun-driven lighting for the Raun HTML report
 
 > Paste the KICKOFF block below into a fresh context window to continue. **Phase 1 (fork graph view +
 > per-fork toggle) is DONE and landed on `main`** (`e9f30a4d`). Phase 2 = the report-wide "sun-driven
@@ -7,7 +7,7 @@
 
 ## ▶ PASTE-READY KICKOFF (copy this into the new chat)
 
-> Continue the **PUnit HTML-report** work: implement **Phase 2 — "sun-driven lighting"** (a report-wide
+> Continue the **Raun HTML-report** work: implement **Phase 2 — "sun-driven lighting"** (a report-wide
 > single-light shading/sheen/glint language). Phase 1 (fork graph view + per-fork toggle) already shipped to
 > `main`. **Read first, in order:** (1) this handoff
 > `docs/superpowers/handoffs/2026-06-21-report-sun-lighting-phase2-handoff.md` in full; (2) the spec §6–§8
@@ -15,7 +15,7 @@
 > plan `docs/superpowers/plans/2026-06-21-fork-graph-view-toggle.md` (it lists the 5 open concerns + the
 > anticipated task shape); (4) the **locked mock** `.git/sdd/mockup-hover-sheen.html` — open it in a browser
 > (`Start-Process`) and headless-render it; it is the visual authority; (5) memory
-> `punit-report-activity-diagram`; (6) the progress ledger `.git/sdd/fgv-progress.md`. Then: **the first job
+> `raun-report-activity-diagram`; (6) the progress ledger `.git/sdd/fgv-progress.md`. Then: **the first job
 > is to RESOLVE the 5 open multi-SVG concerns** (see this handoff) — they're genuine design decisions the
 > single-SVG mock doesn't cover, so use `superpowers:brainstorming` with me to lock the approach (especially
 > per-SVG gradient instances vs. light-only-the-hovered-SVG). Then `superpowers:writing-plans` →
@@ -90,7 +90,7 @@ tiles + keydown parity.
 
 ## Template integration points (anchor on function NAMES — line numbers have drifted post-Phase-1)
 
-All in `src/PUnit.Mtp/HtmlReport/report-template.html` (grep for these):
+All in `src/Raun.Mtp/HtmlReport/report-template.html` (grep for these):
 - **Tiles to light:** `actionNode` (spine nodes); `buildForkGraph` (the Phase-1 branch nodes + fork/join bars);
   `buildForkCell` (timeline fork/join bars + lane bars); `cardEl` / `stackCardEl` / `greyCardEl` (entity cards).
 - **Per-scenario SVG + defs:** `buildActivityDiagram` builds each `<svg class="actdiag">` and its `<defs>`
@@ -110,26 +110,26 @@ All in `src/PUnit.Mtp/HtmlReport/report-template.html` (grep for these):
 
 - **VCS = `jj` only**, never `git` mutations (colocated repo; read-only `git/jj` status/log/diff ok). No
   `Co-Authored-By`/tooling trailers. Don't move the `main` bookmark without user consent.
-- **Single self-contained template** `src/PUnit.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model
-  injected at the one `<script id="model" .../*__PUNIT_REPORT_JSON__*/>` token). **No external
+- **Single self-contained template** `src/Raun.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model
+  injected at the one `<script id="model" .../*__RAUN_REPORT_JSON__*/>` token). **No external
   URL/CDN/web-font/`@import`** — only the SVG-ns literal `http://www.w3.org/2000/svg`. Source Serif 4 stays
   base64-embedded. Time-of-day uses `new Date()` (local clock) — no network.
 - **C# model + builder UNCHANGED**; `HtmlReportModelBuilderTests` `Verify(json)` snapshot must NOT change; keep
-  `HtmlReportSinkTests` green; **0-warning build** (`dotnet build PUnit.slnx -warnaserror`).
+  `HtmlReportSinkTests` green; **0-warning build** (`dotnet build Raun.slnx -warnaserror`).
 - **Both palettes** (`--ad-*` / `--ph-*` + the new lighting vars `--bright`, `--sheen`/`--sheen-peak`,
   `--edge`/`--edge-peak`, `--sun`, `--ring`) defined for light + dark. White sheen reads stronger on light —
   tune per theme (mock has the values).
 
 ## Verify loop (impl phase)
 
-`dotnet run --project samples/AppointmentTests -c Debug -- --report-html` (rebuilds PUnit.Mtp → re-embeds the
-template) → `samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html`. Headless: `npx
+`dotnet run --project samples/AppointmentTests -c Debug -- --report-html` (rebuilds Raun.Mtp → re-embeds the
+template) → `samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html`. Headless: `npx
 playwright screenshot --browser=chromium --full-page` (chromium IS installed; the Playwright MCP defaults to
 Chrome which is NOT — use the CLI). **Force theme via `?theme=dark|light`** (the CLI defaults to light — a
 no-param "dark" capture silently renders light). For the cursor-tracked sheen / glint side / time-of-day, drive
 with a Node Playwright script (hover + `getScreenCTM` mouse moves; set/stub the local clock). Verify the
-`prefers-reduced-motion` path renders static. Full C# suite: `dotnet test PUnit.slnx -c Debug` (240 baseline;
-do NOT pass `--nologo` — PUnit is a Microsoft.Testing.Platform framework and rejects it). Root `*.png`/`*.cjs`
+`prefers-reduced-motion` path renders static. Full C# suite: `dotnet test Raun.slnx -c Debug` (240 baseline;
+do NOT pass `--nologo` — Raun is a Microsoft.Testing.Platform framework and rejects it). Root `*.png`/`*.cjs`
 scratch is gitignored.
 
 ## Process

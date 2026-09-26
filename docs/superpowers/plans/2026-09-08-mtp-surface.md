@@ -19,7 +19,7 @@
 - Run whole test projects: `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj`. **Never pass `--nologo` or `--filter` to `dotnet test`.**
 - Read the tail of `dotnet build Raun.slnx 2>&1 | tail -3` for `0 Warning(s)` and `0 Error(s)`; a pipe through grep hides failures.
 - Verify snapshots are accepted only by `mv` of a received file over its verified file, after reading the diff. No `*.received.*` may remain at commit time.
-- Use the Edit/Write tools for file changes; a shell hook mangles heredocs. Work from `C:\dev\punit`.
+- Use the Edit/Write tools for file changes; a shell hook mangles heredocs. Work from `C:\dev\raun`.
 
 ---
 

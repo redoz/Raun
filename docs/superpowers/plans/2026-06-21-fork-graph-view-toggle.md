@@ -4,17 +4,17 @@
 
 **Goal:** Render a fork as a standard UML **graph view** (fork bar → content-sized branch nodes → join bar) by default, keep the existing inline-Gantt **timeline cell** as an opt-in alternate, and add a per-fork, hover-revealed **toggle** that swaps a single fork between the two views in place.
 
-**Architecture:** All work is in the single embedded template `src/PUnit.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model injected as JSON at one token). The fork renderer gains a second function `buildForkGraph(it, sc)` that emits the **same `it.ports` contract** as the existing `buildForkCell(it, sc)`, so the object-flow pass (`buildObjectFlow`) stays view-agnostic. A module-scope `adForkView` map (mirroring the existing `adExpansion`) holds the per-fork view choice; `layoutScenario` resolves it onto `it.view` and sizes the fork slot accordingly; `buildActivityDiagram` dispatches on it; the existing per-scenario `rerender()` re-lays-out on toggle. No C# changes.
+**Architecture:** All work is in the single embedded template `src/Raun.Mtp/HtmlReport/report-template.html` (inline HTML/CSS/JS; model injected as JSON at one token). The fork renderer gains a second function `buildForkGraph(it, sc)` that emits the **same `it.ports` contract** as the existing `buildForkCell(it, sc)`, so the object-flow pass (`buildObjectFlow`) stays view-agnostic. A module-scope `adForkView` map (mirroring the existing `adExpansion`) holds the per-fork view choice; `layoutScenario` resolves it onto `it.view` and sizes the fork slot accordingly; `buildActivityDiagram` dispatches on it; the existing per-scenario `rerender()` re-lays-out on toggle. No C# changes.
 
-**Tech Stack:** Hand-authored SVG + vanilla JS inside one HTML file (built with `document.createElementNS` via the `svgEl(tag, attrs)` helper); C#/xUnit tests (`PUnit.Mtp.Test`); .NET 10 build; `npx playwright` (chromium) for headless visual verification; `jj` for VCS.
+**Tech Stack:** Hand-authored SVG + vanilla JS inside one HTML file (built with `document.createElementNS` via the `svgEl(tag, attrs)` helper); C#/xUnit tests (`Raun.Mtp.Test`); .NET 10 build; `npx playwright` (chromium) for headless visual verification; `jj` for VCS.
 
 ## Global Constraints
 
 Copied verbatim from the spec (`docs/superpowers/specs/2026-06-21-fork-graph-view-toggle-design.md`, §2) — every task implicitly includes these:
 
 - **Self-contained HTML, HARD rule:** inline `<style>`/`<script>` only — **zero** external URLs/CDNs/web-fonts/`@import`. The only allowed literal external string is the SVG namespace `http://www.w3.org/2000/svg`. Source Serif 4 stays base64-embedded.
-- **JSON token preserved:** exactly one `<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>`; `HtmlReportSink` string-replaces it. Don't break it.
-- **C# model + builder do NOT change.** `HtmlReportModel` field names are fixed (camelCase serialized). `HtmlReportModelBuilderTests` (the `Verify(json)` snapshot) **must NOT change**. Keep `HtmlReportSinkTests` green. **0-warning build** (`dotnet build PUnit.slnx -warnaserror`).
+- **JSON token preserved:** exactly one `<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>`; `HtmlReportSink` string-replaces it. Don't break it.
+- **C# model + builder do NOT change.** `HtmlReportModel` field names are fixed (camelCase serialized). `HtmlReportModelBuilderTests` (the `Verify(json)` snapshot) **must NOT change**. Keep `HtmlReportSinkTests` green. **0-warning build** (`dotnet build Raun.slnx -warnaserror`).
 - **Both themes:** define every new CSS var for both `:root` (dark) and `:root[data-theme=light]` (light); verify both.
 - **NO decision/merge diamonds** (model is a step-DAG; out of scope, unchanged).
 - **VCS: `jj` only** — never `git` mutations. Commit with `jj commit -m "..."`. **No `Co-Authored-By` / tooling trailers** in messages.
@@ -30,19 +30,19 @@ Copied verbatim from the spec (`docs/superpowers/specs/2026-06-21-fork-graph-vie
 `samples/AppointmentTests`' **"customer books with parallel arrange"** scenario is the fork case (Database-clean → Patient & Slot created on parallel lanes → CreateAppointment reads both + creates Appointment → Then reads Appointment).
 
 ```bash
-# 1. emit a real report from the sample suite (rebuilds PUnit.Mtp -> re-embeds the template)
+# 1. emit a real report from the sample suite (rebuilds Raun.Mtp -> re-embeds the template)
 dotnet run --project samples/AppointmentTests -c Debug -- --report-html
-#    -> samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html
+#    -> samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html
 
 # 2. headless-render both themes (chromium is installed; the Playwright MCP defaults to Chrome which is NOT)
-R="samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html"
+R="samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html"
 npx playwright screenshot --browser=chromium --full-page --viewport-size=1180,1500 "file://$(pwd)/$R?theme=dark"  out-dark.png
 npx playwright screenshot --browser=chromium --full-page --viewport-size=1180,1500 "file://$(pwd)/$R?theme=light" out-light.png
 ```
 
 Inspect `out-dark.png` / `out-light.png`; compare the fork scenario against the mock. **Headless gotcha:** the Playwright CLI defaults to **light** — always pass `?theme=…` explicitly (a no-param "dark" capture silently renders light). Interaction (hover/click/keyboard) is verified with a short Playwright **driver script** (Node, `.cjs`) — see Task 2. Root `*.png` / `*.cjs` scratch is gitignored.
 
-The full C# suite must stay green every task: `dotnet test` (240/240 baseline) and `dotnet build PUnit.slnx -warnaserror` (0 warnings).
+The full C# suite must stay green every task: `dotnet test` (240/240 baseline) and `dotnet build Raun.slnx -warnaserror` (0 warnings).
 
 ---
 
@@ -50,7 +50,7 @@ The full C# suite must stay green every task: `dotnet test` (240/240 baseline) a
 
 | File | Responsibility | Action |
 |---|---|---|
-| `src/PUnit.Mtp/HtmlReport/report-template.html` | The entire report shell + per-scenario activity-diagram renderer (inline CSS/JS). The **only** production file Phase 1 touches. | **Modify** |
+| `src/Raun.Mtp/HtmlReport/report-template.html` | The entire report shell + per-scenario activity-diagram renderer (inline CSS/JS). The **only** production file Phase 1 touches. | **Modify** |
 
 Touched regions inside the template (current line numbers, will drift as you edit):
 - CSS: the `/* ACTIVITY DIAGRAM */` block (~L241–255) — add `.ad-fork*` rules.
@@ -69,7 +69,7 @@ Touched regions inside the template (current line numbers, will drift as you edi
 ### Task 1: Graph-view renderer + shared `it.ports` contract (graph becomes the default)
 
 **Files:**
-- Modify: `src/PUnit.Mtp/HtmlReport/report-template.html` (consts ~L416; state ~L402; `layoutScenario` ~L516–525; `buildActivityDiagram` dispatch ~L692–693; new `buildForkGraph` near L751)
+- Modify: `src/Raun.Mtp/HtmlReport/report-template.html` (consts ~L416; state ~L402; `layoutScenario` ~L516–525; `buildActivityDiagram` dispatch ~L692–693; new `buildForkGraph` near L751)
 
 **Interfaces:**
 - Consumes (existing, unchanged): `nodeBox(label)`, `nodeLabel(step)`, `phaseColor(phase)`, `producedResourceType(step, sc)`, `typeColor(type)`, `svgEl(tag, attrs)`, consts `NODE_H`, `AD_W`, `AD_MARGIN`, `AD_BAND_W`, `HALO_R`, `DISC_R`. The existing `buildObjectFlow` reads `it.ports = [{x, y, color, resourceType, stepId}]` and `f.prodItem.kind === "fork"` — **do not change it**.
@@ -228,7 +228,7 @@ Run the fixture (both themes). Expected in the fork scenario:
 - **object flow intact (the contract proof):** each branch's producer disc → an entity card below the fork → consumer edges into `creating an appointment`; the produce-edge verb label (`create`) renders via the unchanged `placeVerbLabels` (no change needed — it labels edges, not views).
 - both themes correct; no console errors.
 
-- [ ] **Step 7: Guard the C# surface** — `dotnet test` (240/240 green; `HtmlReportModelBuilderTests` snapshot unchanged because the model is untouched) and `dotnet build PUnit.slnx -warnaserror` (0 warnings).
+- [ ] **Step 7: Guard the C# surface** — `dotnet test` (240/240 green; `HtmlReportModelBuilderTests` snapshot unchanged because the model is untouched) and `dotnet build Raun.slnx -warnaserror` (0 warnings).
 
 - [ ] **Step 8: Commit**
 
@@ -241,7 +241,7 @@ jj commit -m "report: fork graph view (fork bar -> branch nodes -> join bar) as 
 ### Task 2: Per-fork toggle — hover highlight + segmented pill + rerender wiring
 
 **Files:**
-- Modify: `src/PUnit.Mtp/HtmlReport/report-template.html` (CSS ~L255; `buildActivityDiagram` fork append ~L692; new `buildForkToggle` near `buildForkGraph`; `buildScenarioCard` click listener ~L1591–1598)
+- Modify: `src/Raun.Mtp/HtmlReport/report-template.html` (CSS ~L255; `buildActivityDiagram` fork append ~L692; new `buildForkToggle` near `buildForkGraph`; `buildScenarioCard` click listener ~L1591–1598)
 
 **Interfaces:**
 - Consumes: `forkViewFor(scenarioId)`, `forkKeyOf(steps)`, `it.view` (Task 1); `measureText(str, px, weight)`; the per-scenario `rerender` closure (passed into `buildActivityDiagram` → reachable in `buildScenarioCard`); `AD_W`.
@@ -373,7 +373,7 @@ const { chromium } = require("playwright");
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1180, height: 1500 } });
   const url = "file://" + process.cwd().replace(/\\/g, "/") +
-    "/samples/AppointmentTests/bin/Debug/net10.0/TestResults/punit-report.html?theme=dark";
+    "/samples/AppointmentTests/bin/Debug/net10.0/TestResults/raun-report.html?theme=dark";
   await p.goto(url);
   const fork = p.locator(".ad-fork").first();
   await fork.hover();                              await p.screenshot({ path: "tg-hover.png" });
@@ -386,7 +386,7 @@ const { chromium } = require("playwright");
 ```
 Run: `node drive.cjs`. Inspect `tg-hover.png` / `tg-timeline.png` / `tg-graph.png` against `.git/sdd/mockup-toggle.html`. Tune pill geometry (Step 2) if it crowds the fork bar. Re-run both themes.
 
-- [ ] **Step 7: Regression guard** — `dotnet test` (240/240) + `dotnet build PUnit.slnx -warnaserror` (0 warnings). Confirm a non-fork scenario is unaffected and (if any) a second fork toggles independently of the first (per-fork key).
+- [ ] **Step 7: Regression guard** — `dotnet test` (240/240) + `dotnet build Raun.slnx -warnaserror` (0 warnings). Confirm a non-fork scenario is unaffected and (if any) a second fork toggles independently of the first (per-fork key).
 
 - [ ] **Step 8: Commit**
 

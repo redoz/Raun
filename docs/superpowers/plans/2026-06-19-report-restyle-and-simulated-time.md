@@ -28,31 +28,31 @@
   only `system-ui` / `ui-monospace` font stacks.
 
 **Build/test commands:**
-- Build: `dotnet build PUnit.slnx -c Debug`
-- Full suite: `dotnet test PUnit.slnx -c Debug`
-- Scoped: `dotnet test test/PUnit.Test/PUnit.Test.csproj -c Debug --filter "FullyQualifiedName~<Class>"`
+- Build: `dotnet build Raun.slnx -c Debug`
+- Full suite: `dotnet test Raun.slnx -c Debug`
+- Scoped: `dotnet test test/Raun.Test/Raun.Test.csproj -c Debug --filter "FullyQualifiedName~<Class>"`
 
 **Grounding facts (verified against the tree):**
-- `ScenarioContext` (`src/PUnit/ScenarioContext.cs`) has a 4-arg ctor delegating to a 6-arg ctor
+- `ScenarioContext` (`src/Raun/ScenarioContext.cs`) has a 4-arg ctor delegating to a 6-arg ctor
   `(stepId, displayName, services, resolver, timeProvider, cancellationToken)`; the 6-arg ctor forwards
   `timeProvider ?? TimeProvider.System` to `ResourceContext`, which stamps each effect with
-  `_timeProvider.GetUtcNow()` (`src/PUnit/Resources/ResourceContext.cs:107`).
-- `ScenarioScheduler` (`src/PUnit/Scheduling/ScenarioScheduler.cs`) already takes
+  `_timeProvider.GetUtcNow()` (`src/Raun/Resources/ResourceContext.cs:107`).
+- `ScenarioScheduler` (`src/Raun/Scheduling/ScenarioScheduler.cs`) already takes
   `(int maxParallelism = 0, TimeProvider? timeProvider = null)`; `RunNodeAsync` is an instance method that
   builds the `ScenarioContext` with `_timeProvider` and stamps `StartedAt`/`Duration`; `ApplySkipAsync` stamps
   `StartedAt = _timeProvider.GetUtcNow()`, `Duration` defaults `0`.
-- `StepResult` (`src/PUnit/Model/StepResult.cs`) has `required DateTimeOffset StartedAt` and `TimeSpan Duration`.
-- Wiring chain: `PUnitTestApplication.RunAsync(args, configure)` → `(_, sp) => new PUnitTestFramework(sp)` →
-  `OnExecuteAsync` builds `new PUnitRunLoop(EnumerateRegisteredScenarios)` → `DefaultRunScenario` builds
-  `new ScenarioScheduler()`. `PUnitTestFramework` already has `()` and `(IServiceProvider)` ctors.
+- `StepResult` (`src/Raun/Model/StepResult.cs`) has `required DateTimeOffset StartedAt` and `TimeSpan Duration`.
+- Wiring chain: `RaunTestApplication.RunAsync(args, configure)` → `(_, sp) => new RaunTestFramework(sp)` →
+  `OnExecuteAsync` builds `new RaunRunLoop(EnumerateRegisteredScenarios)` → `DefaultRunScenario` builds
+  `new ScenarioScheduler()`. `RaunTestFramework` already has `()` and `(IServiceProvider)` ctors.
 - Generator: `SymbolHelpers.WantsContext(method, suppliedArgCount)` is true when the last param type is
-  `PUnit.ScenarioContext` and the call site supplies all *other* params; `ScenarioParser.BuildCallText` then
+  `Raun.ScenarioContext` and the call site supplies all *other* params; `ScenarioParser.BuildCallText` then
   appends `__ctx`. The trailing `ScenarioContext` is excluded from resource-claim binding. **Capability exists;
   it has no dedicated test — Task 5 adds one and is the go/no-go gate for the sample.**
 - Sample: `samples/AppointmentTests/Scenarios.cs` has 4 scenarios (`Booking`, `BookingWithParallelArrange`,
   `ImportUsers`, `ImportUsersViaLinq`); `AppointmentDsl.cs` steps are `await Task.Yield()` bodies.
-- Existing helpers reused: `test/PUnit.Test/SchedulerTests.cs` (`Node`/`Def`/`Pass`/`WithTimeout`),
-  `test/PUnit.Test/TestTimeProvider.cs` (advancing clock), `HtmlReportSinkTests` `TestTimeProviderUtc`
+- Existing helpers reused: `test/Raun.Test/SchedulerTests.cs` (`Node`/`Def`/`Pass`/`WithTimeout`),
+  `test/Raun.Test/TestTimeProvider.cs` (advancing clock), `HtmlReportSinkTests` `TestTimeProviderUtc`
   (fixed clock).
 
 ---
@@ -64,11 +64,11 @@ Realizes spec §2.3. New thread-safe `TimeProvider` whose timestamp path is cons
 ### Task 1.1: `SimulatedClock : TimeProvider` (test-first)
 
 **Files:**
-- Create test: `test/PUnit.Test/SimulatedClockTests.cs`
-- Create: `src/PUnit/Scheduling/SimulatedClock.cs`
+- Create test: `test/Raun.Test/SimulatedClockTests.cs`
+- Create: `src/Raun/Scheduling/SimulatedClock.cs`
 
-- [ ] **Step 1: Write the failing tests** in `test/PUnit.Test/SimulatedClockTests.cs` (namespace `PUnit.Test`,
-  `using PUnit.Scheduling;`). Cover the spec §6 SimulatedClock cases:
+- [ ] **Step 1: Write the failing tests** in `test/Raun.Test/SimulatedClockTests.cs` (namespace `Raun.Test`,
+  `using Raun.Scheduling;`). Cover the spec §6 SimulatedClock cases:
   1. `GetUtcNow` returns `base` before any advance; `base + 50ms` after `Advance(50ms)`; accumulates across two
      advances (`base + 90ms` after +50, +40).
   2. Timestamp consistency: `GetElapsedTime(t0, t1)` where `t0 = GetTimestamp()` before and `t1 = GetTimestamp()`
@@ -79,9 +79,9 @@ Realizes spec §2.3. New thread-safe `TimeProvider` whose timestamp path is cons
   5. Negative delta throws `ArgumentOutOfRangeException` (`Assert.Throws`).
 
 - [ ] **Step 2: Run — red (compile failure, `SimulatedClock` missing).**
-  `dotnet test test/PUnit.Test/PUnit.Test.csproj -c Debug --filter "FullyQualifiedName~SimulatedClockTests"`
+  `dotnet test test/Raun.Test/Raun.Test.csproj -c Debug --filter "FullyQualifiedName~SimulatedClockTests"`
 
-- [ ] **Step 3: Implement** `src/PUnit/Scheduling/SimulatedClock.cs`, `namespace PUnit.Scheduling`,
+- [ ] **Step 3: Implement** `src/Raun/Scheduling/SimulatedClock.cs`, `namespace Raun.Scheduling`,
   `public sealed class SimulatedClock : TimeProvider`. Per spec §2.3:
   - ctor `SimulatedClock(DateTimeOffset baseInstant)` stores `_base`; pick a fixed `_baseTimestamp` origin (e.g. `0`).
   - `private long _advancedTicks;` mutated only via `Interlocked.Add`.
@@ -97,8 +97,8 @@ Realizes spec §2.3. New thread-safe `TimeProvider` whose timestamp path is cons
 - [ ] **Step 4: Run — green.** Same filter as Step 2 (5 tests pass).
 
 - [ ] **Step 5: Build 0-warning + commit.**
-  `dotnet build src/PUnit/PUnit.csproj -c Debug` (0/0), then
-  `git add src/PUnit/Scheduling/SimulatedClock.cs test/PUnit.Test/SimulatedClockTests.cs`
+  `dotnet build src/Raun/Raun.csproj -c Debug` (0/0), then
+  `git add src/Raun/Scheduling/SimulatedClock.cs test/Raun.Test/SimulatedClockTests.cs`
   `git commit -m "feat(scheduling): thread-safe SimulatedClock TimeProvider"`
 
 ---
@@ -110,10 +110,10 @@ Realizes spec §2.4. Store the effective `TimeProvider`; advance it only when it
 ### Task 2.1: `SimulateElapsed` (test-first)
 
 **Files:**
-- Modify test: `test/PUnit.Test/ScenarioContextTests.cs`
-- Modify: `src/PUnit/ScenarioContext.cs`
+- Modify test: `test/Raun.Test/ScenarioContextTests.cs`
+- Modify: `src/Raun/ScenarioContext.cs`
 
-- [ ] **Step 1: Add failing tests** to `ScenarioContextTests.cs` (`using PUnit.Scheduling;`):
+- [ ] **Step 1: Add failing tests** to `ScenarioContextTests.cs` (`using Raun.Scheduling;`):
   1. `SimulateElapsed_advances_a_SimulatedClock`: construct the 6-arg ctor with
      `timeProvider: new SimulatedClock(T0)`; call `ctx.SimulateElapsed(TimeSpan.FromMilliseconds(50))`; observe
      the advance via a recorded effect timestamp — `await ctx.Resources.Read(new PlainWidget("w"))` then assert
@@ -125,7 +125,7 @@ Realizes spec §2.4. Store the effective `TimeProvider`; advance it only when it
 - [ ] **Step 2: Run — red** (`SimulateElapsed` missing).
   `--filter "FullyQualifiedName~ScenarioContextTests"`
 
-- [ ] **Step 3: Implement** in `src/PUnit/ScenarioContext.cs` per spec §2.4:
+- [ ] **Step 3: Implement** in `src/Raun/ScenarioContext.cs` per spec §2.4:
   - In the 6-arg ctor, after computing the effective provider, store it on a `private readonly TimeProvider
     _timeProvider;` field — **the same instance** passed to `ResourceContext` (so step timing and effect stamps
     share one clock). Use `timeProvider ?? TimeProvider.System` once; pass the field into `ResourceContext`.
@@ -138,8 +138,8 @@ Realizes spec §2.4. Store the effective `TimeProvider`; advance it only when it
 - [ ] **Step 4: Run — green** (existing `ScenarioContextTests` + 2 new pass).
 
 - [ ] **Step 5: Build 0-warning + commit.**
-  `dotnet build src/PUnit/PUnit.csproj -c Debug` (0/0), then
-  `git add src/PUnit/ScenarioContext.cs test/PUnit.Test/ScenarioContextTests.cs`
+  `dotnet build src/Raun/Raun.csproj -c Debug` (0/0), then
+  `git add src/Raun/ScenarioContext.cs test/Raun.Test/ScenarioContextTests.cs`
   `git commit -m "feat(context): SimulateElapsed advances a per-step SimulatedClock"`
 
 ---
@@ -152,12 +152,12 @@ The headline anti-regression: **join = max(dep finishes), never the sum.**
 ### Task 3.1: Sim-mode scheduler (test-first; case 9 is the red→green centerpiece)
 
 **Files:**
-- Modify test: `test/PUnit.Test/SchedulerTests.cs`
+- Modify test: `test/Raun.Test/SchedulerTests.cs`
 - Create test helper (if needed): a fixed-base provider for sim tests (the existing `TestTimeProvider` advances per
   call; sim mode captures base once, so a non-advancing fixed provider keeps assertions clean — add a tiny local
   `FixedClock : TimeProvider` in `SchedulerTests.cs`, or reuse `new SimulatedClock(base)` as the injected base
   provider).
-- Modify: `src/PUnit/Scheduling/ScenarioScheduler.cs`
+- Modify: `src/Raun/Scheduling/ScenarioScheduler.cs`
 
 - [ ] **Step 1: Add failing sim-mode tests** to `SchedulerTests.cs`. Build nodes whose bodies call
   `ctx.SimulateElapsed(...)`; construct schedulers with `new ScenarioScheduler(simulatedTime: true,
@@ -211,8 +211,8 @@ The headline anti-regression: **join = max(dep finishes), never the sum.**
   `--filter "FullyQualifiedName~SchedulerTests"`
 
 - [ ] **Step 5: Build 0-warning + commit.**
-  `dotnet build src/PUnit/PUnit.csproj -c Debug` (0/0), then
-  `git add src/PUnit/Scheduling/ScenarioScheduler.cs test/PUnit.Test/SchedulerTests.cs`
+  `dotnet build src/Raun/Raun.csproj -c Debug` (0/0), then
+  `git add src/Raun/Scheduling/ScenarioScheduler.cs test/Raun.Test/SchedulerTests.cs`
   `git commit -m "feat(scheduler): simulated-time mode with per-step clock and max-join offsets"`
 
 ---
@@ -225,11 +225,11 @@ unaffected; only the sample's own `Program.cs` opts in.
 ### Task 4.1: Run-loop carries the flag (test-first)
 
 **Files:**
-- Modify test: `test/PUnit.Mtp.Test/RunLoopTests.cs`
-- Modify: `src/PUnit.Mtp/PUnitRunLoop.cs`
+- Modify test: `test/Raun.Mtp.Test/RunLoopTests.cs`
+- Modify: `src/Raun.Mtp/RaunRunLoop.cs`
 
 - [ ] **Step 1: Write the failing run-loop test.** Drive a scenario whose step body calls
-  `ctx.SimulateElapsed(60ms)` through `new PUnitRunLoop(scenarioSource, runScenario: null /* default */,
+  `ctx.SimulateElapsed(60ms)` through `new RaunRunLoop(scenarioSource, runScenario: null /* default */,
   simulateTime: true)` (default-scheduler path) and assert the emitted `StepFinished` result has
   `Duration == 60ms` (proof the loop built a `ScenarioScheduler(simulatedTime: true)`). Add a companion assertion
   (or a second test) that with `simulateTime: false` the same body yields `Duration < 60ms` (real path). Use the
@@ -239,9 +239,9 @@ unaffected; only the sample's own `Program.cs` opts in.
   > (pass `null`) so the flag actually reaches `DefaultRunScenario`.
 
 - [ ] **Step 2: Run — red** (`simulateTime` ctor param missing).
-  `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj -c Debug --filter "FullyQualifiedName~RunLoopTests"`
+  `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj -c Debug --filter "FullyQualifiedName~RunLoopTests"`
 
-- [ ] **Step 3: Implement** in `PUnitRunLoop.cs`: add a `bool simulateTime = false` ctor param (after
+- [ ] **Step 3: Implement** in `RaunRunLoop.cs`: add a `bool simulateTime = false` ctor param (after
   `runScenario`), store it, and in `DefaultRunScenario` build `new ScenarioScheduler(simulatedTime: simulateTime)`.
   Because `DefaultRunScenario` is currently `static`, make it an instance method (it must read the field) — mirror
   how the scheduler made `RunNodeAsync` an instance method. Leave the injected-`runScenario` seam untouched.
@@ -251,12 +251,12 @@ unaffected; only the sample's own `Program.cs` opts in.
 ### Task 4.2: Framework + Application thread the flag
 
 **Files:**
-- Modify: `src/PUnit.Mtp/PUnitTestFramework.cs`
-- Modify: `src/PUnit.Mtp/PUnitTestApplication.cs`
-- Modify test: `test/PUnit.Mtp.Test/PUnitTestFrameworkTests.cs` (or `RunLoopTests.cs`) — one wiring assertion
+- Modify: `src/Raun.Mtp/RaunTestFramework.cs`
+- Modify: `src/Raun.Mtp/RaunTestApplication.cs`
+- Modify test: `test/Raun.Mtp.Test/RaunTestFrameworkTests.cs` (or `RunLoopTests.cs`) — one wiring assertion
 
 - [ ] **Step 1: Add a framework wiring test.** Assert the new ctor overload exists and the flag flows: construct
-  `new PUnitTestFramework(services: null!, simulateTime: true)` is awkward (services may be needed), so instead add
+  `new RaunTestFramework(services: null!, simulateTime: true)` is awkward (services may be needed), so instead add
   a focused test that registers a scenario whose body calls `SimulateElapsed(80ms)`, drives `OnExecute` on a
   framework built with the simulate-true overload against a `RecordingMessageBus`, and asserts the published
   passed node's `TimingProperty` duration is `80ms`. (Reuse the `Through_the_framework_run_request_…` pattern and
@@ -266,25 +266,25 @@ unaffected; only the sample's own `Program.cs` opts in.
 - [ ] **Step 2: Run — red** (no `(IServiceProvider, bool)` ctor).
 
 - [ ] **Step 3: Implement** per spec §2.7:
-  - `PUnitTestFramework`: add `private readonly bool _simulateTime;` and a ctor
-    `public PUnitTestFramework(IServiceProvider services, bool simulateTime) : this(services) => _simulateTime =
+  - `RaunTestFramework`: add `private readonly bool _simulateTime;` and a ctor
+    `public RaunTestFramework(IServiceProvider services, bool simulateTime) : this(services) => _simulateTime =
     simulateTime;` (keep `()` and `(IServiceProvider)` ctors). In `OnExecuteAsync`, build
-    `new PUnitRunLoop(EnumerateRegisteredScenarios, simulateTime: _simulateTime)` (named arg; the `runScenario`
+    `new RaunRunLoop(EnumerateRegisteredScenarios, simulateTime: _simulateTime)` (named arg; the `runScenario`
     positional stays default).
-  - `PUnitTestApplication.RunAsync`: add a trailing parameter
+  - `RaunTestApplication.RunAsync`: add a trailing parameter
     `RunAsync(string[] args, Action<ITestApplicationBuilder>? configure = null, bool simulateTime = false)`;
     capture `simulateTime` in the factory closure:
-    `(_, serviceProvider) => new PUnitTestFramework(serviceProvider, simulateTime)`. Update the XML `<param>` doc
+    `(_, serviceProvider) => new RaunTestFramework(serviceProvider, simulateTime)`. Update the XML `<param>` doc
     and the `<see cref="RunAsync(...)"/>` reference in the `<remarks>` (the generated `Program` calls the 2-arg
     form ⇒ default `false` ⇒ production unchanged).
 
 - [ ] **Step 4: Run — green** for the MTP test project; then **full suite** to prove production paths unchanged.
-  `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj -c Debug` then `dotnet test PUnit.slnx -c Debug`
+  `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj -c Debug` then `dotnet test Raun.slnx -c Debug`
   (`Passed!`, all 222+ green).
 
 - [ ] **Step 5: Build 0-warning + commit.**
-  `dotnet build PUnit.slnx -c Debug` (0/0), then
-  `git add src/PUnit.Mtp/PUnitRunLoop.cs src/PUnit.Mtp/PUnitTestFramework.cs src/PUnit.Mtp/PUnitTestApplication.cs test/PUnit.Mtp.Test`
+  `dotnet build Raun.slnx -c Debug` (0/0), then
+  `git add src/Raun.Mtp/RaunRunLoop.cs src/Raun.Mtp/RaunTestFramework.cs src/Raun.Mtp/RaunTestApplication.cs test/Raun.Mtp.Test`
   `git commit -m "feat(mtp): thread opt-in simulateTime through application, framework, run loop"`
 
 ---
@@ -297,12 +297,12 @@ sample. If the capability is absent, STOP and report the exact gap (do not hack 
 ### Task 5.1: Generator test — trailing `ScenarioContext` emits `__ctx` (gate)
 
 **Files:**
-- Modify test: add a fact to `test/PUnit.Generator.Test/ResourceLoweringTests.cs` (or a new
-  `ScenarioContextParameterTests.cs`); extend `test/PUnit.Generator.Test/SampleSources.cs` with a DSL whose step
-  declares a trailing `PUnit.ScenarioContext`.
+- Modify test: add a fact to `test/Raun.Generator.Test/ResourceLoweringTests.cs` (or a new
+  `ScenarioContextParameterTests.cs`); extend `test/Raun.Generator.Test/SampleSources.cs` with a DSL whose step
+  declares a trailing `Raun.ScenarioContext`.
 
 - [ ] **Step 1: Write the failing test.** Add a small DSL source where a step is e.g.
-  `public static Task NotesSomething(string what, PUnit.ScenarioContext ctx) { ctx.Log(what); return
+  `public static Task NotesSomething(string what, Raun.ScenarioContext ctx) { ctx.Log(what); return
   Task.CompletedTask; }` plus a `[Scenario]` calling `Given.NotesSomething("hi")` (call site supplies only
   `"hi"`). Use `GeneratorHarness.Run(...)`; `result.AssertCompiles()`; assert:
   - the generated source contains the call passing `__ctx` as the trailing argument
@@ -314,7 +314,7 @@ sample. If the capability is absent, STOP and report the exact gap (do not hack 
   > This is the explicit lock the spec §2.8 calls for (existing snapshots' `__ctx` is the lambda param, not a
   > declared trailing `ScenarioContext`).
 
-- [ ] **Step 2: Run.** `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj -c Debug --filter
+- [ ] **Step 2: Run.** `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj -c Debug --filter
   "FullyQualifiedName~<NewTest>"`.
   - **If it PASSES** (expected — capability verified): the generator already supports it; this test simply locks
     it. Proceed to Task 5.2.
@@ -322,7 +322,7 @@ sample. If the capability is absent, STOP and report the exact gap (do not hack 
     (`WantsContext` / `BuildCallText` / `BuildResourceClaims`) is missing. Do not work around it.
 
 - [ ] **Step 3: Commit the gate.**
-  `git add test/PUnit.Generator.Test`
+  `git add test/Raun.Generator.Test`
   `git commit -m "test(generator): lock trailing ScenarioContext parameter emits __ctx"`
 
 ### Task 5.2: Sample owns Main + simulated durations
@@ -333,13 +333,13 @@ sample. If the capability is absent, STOP and report the exact gap (do not hack 
 - Modify: `samples/AppointmentTests/AppointmentDsl.cs`
 
 - [ ] **Step 1: csproj — stop generating the entry point.** Add
-  `<PUnitGenerateProgram>false</PUnitGenerateProgram>` to the first `<PropertyGroup>` in
+  `<RaunGenerateProgram>false</RaunGenerateProgram>` to the first `<PropertyGroup>` in
   `AppointmentTests.csproj` (alongside the existing `GenerateProgramFile`/`GenerateTestingPlatformEntryPoint`
-  false). This suppresses `PUnitProgram.g.cs` so the sample owns `Main`.
+  false). This suppresses `RaunProgram.g.cs` so the sample owns `Main`.
 
 - [ ] **Step 2: Create `samples/AppointmentTests/Program.cs`** with a single top-level statement:
   ```csharp
-  return await PUnit.Mtp.PUnitTestApplication.RunAsync(args, simulateTime: true);
+  return await Raun.Mtp.RaunTestApplication.RunAsync(args, simulateTime: true);
   ```
   (Or an explicit `internal static class Program { static Task<int> Main(string[] args) => …; }` returning the
   `int`.) This is the only opt-in to simulated time.
@@ -370,14 +370,14 @@ sample. If the capability is absent, STOP and report the exact gap (do not hack 
 
 - [ ] **Step 5: Smoke-run the sample and inspect the report.** Run the sample under MTP with `--report-html`
   (e.g. `dotnet run --project samples/AppointmentTests/AppointmentTests.csproj -c Debug -- --report-html`) and
-  open the written `punit-report.html` (path printed/under the results dir). Verify in the embedded JSON:
+  open the written `raun-report.html` (path printed/under the results dir). Verify in the embedded JSON:
   - ≥1 scenario `durationMs` > ~1000 (the two booking scenarios ≈ 1.07s / 1.13s ⇒ seconds ruler),
   - the import scenarios ≈ 490ms (ms ruler),
   - parallel arrange steps share an `offsetMs` and overlap; the join's `offsetMs == max(dep finishes)`.
   This is a manual check, not an automated test (no new assertion required).
 
 - [ ] **Step 6: Full suite green** (the sample runs under `dotnet test`; asserts still pass under sim time).
-  `dotnet test PUnit.slnx -c Debug` (`Passed!`).
+  `dotnet test Raun.slnx -c Debug` (`Passed!`).
 
 - [ ] **Step 7: Commit.**
   `git add samples/AppointmentTests`
@@ -393,19 +393,19 @@ names; apply the three deviations.
 ### Task 6.1: Port the mockup into `report-template.html`
 
 **Files:**
-- Replace: `src/PUnit.Mtp/HtmlReport/report-template.html`
-- Modify test: `test/PUnit.Mtp.Test/HtmlReportSinkTests.cs`
+- Replace: `src/Raun.Mtp/HtmlReport/report-template.html`
+- Modify test: `test/Raun.Mtp.Test/HtmlReportSinkTests.cs`
 
 - [ ] **Step 1: Re-read the contract before editing.** The current template
-  (`src/PUnit.Mtp/HtmlReport/report-template.html`) carries exactly one
-  `<script id="model" type="application/json">/*__PUNIT_REPORT_JSON__*/</script>`; `HtmlReportSink` string-replaces
+  (`src/Raun.Mtp/HtmlReport/report-template.html`) carries exactly one
+  `<script id="model" type="application/json">/*__RAUN_REPORT_JSON__*/</script>`; `HtmlReportSink` string-replaces
   that single token (`JsonToken`) with the serialized camelCase, indented model. The new template MUST keep
   exactly one such element whose body is **only** the token.
 
 - [ ] **Step 2: Replace `report-template.html`** by porting `.git/sdd/mockup/report-mockup.html` verbatim, with
   these required edits (spec §3.1–§3.3):
   - **Model element = token only.** Replace the mockup's `<script id="model">…inline sample JSON…</script>` body
-    with exactly `/*__PUNIT_REPORT_JSON__*/` (drop the canned JSON). This is the JSON-injection contract.
+    with exactly `/*__RAUN_REPORT_JSON__*/` (drop the canned JSON). This is the JSON-injection contract.
   - **Drop the screenshot-only pre-expand.** Remove the mockup's
     `const pre = openers.find(o => o.scenarioId === "sc-4"); if (pre) pre.open("s4-3");` block — drill panels start
     closed (real runs have arbitrary ids).
@@ -428,33 +428,33 @@ names; apply the three deviations.
     title. Keep.
   - `Assert.Contains("\"scenarioId\": \"scn\"", html)` — the indented camelCase JSON blob (serialization
     unchanged). Keep.
-  - `Assert.DoesNotContain("__PUNIT_REPORT_JSON__", html)` — exactly one token, replaced by the sink. Keep.
+  - `Assert.DoesNotContain("__RAUN_REPORT_JSON__", html)` — exactly one token, replaced by the sink. Keep.
   `Empty_run_still_writes_a_valid_report` and `A_write_failure_is_recorded_on_the_bus_not_thrown` are
   template-shape-agnostic and stay as-is.
 
 - [ ] **Step 4: Run the sink tests — green.**
-  `dotnet test test/PUnit.Mtp.Test/PUnit.Mtp.Test.csproj -c Debug --filter "FullyQualifiedName~HtmlReportSinkTests"`
+  `dotnet test test/Raun.Mtp.Test/Raun.Mtp.Test.csproj -c Debug --filter "FullyQualifiedName~HtmlReportSinkTests"`
 
 - [ ] **Step 5: Confirm the model snapshot is untouched.** `HtmlReportModelBuilderTests` (the Verify snapshot on
   the model, not HTML) must stay green **without** accepting any `.received.` file.
   `--filter "FullyQualifiedName~HtmlReportModelBuilderTests"` (all pass, no pending snapshot).
 
-- [ ] **Step 6: Optional visual check.** Open the sample's restyled `punit-report.html` (from Phase 5 Step 5) in a
+- [ ] **Step 6: Optional visual check.** Open the sample's restyled `raun-report.html` (from Phase 5 Step 5) in a
   browser; confirm auto light/dark, the seconds ruler on a >1s scenario and ms ruler on a sub-second one,
   overlapping parallel bars, grey skip bar, the resource lane + legend, and click-to-expand drill. Try
   `?theme=light` / `?theme=dark`.
 
 - [ ] **Step 7: Full suite green + 0-warning build + commit.**
-  `dotnet build PUnit.slnx -c Debug` (0/0), `dotnet test PUnit.slnx -c Debug` (`Passed!`), then
-  `git add src/PUnit.Mtp/HtmlReport/report-template.html test/PUnit.Mtp.Test/HtmlReportSinkTests.cs`
+  `dotnet build Raun.slnx -c Debug` (0/0), `dotnet test Raun.slnx -c Debug` (`Passed!`), then
+  `git add src/Raun.Mtp/HtmlReport/report-template.html test/Raun.Mtp.Test/HtmlReportSinkTests.cs`
   `git commit -m "feat(report): restyle HTML template with auto light/dark and auto-scaling ruler"`
 
 ---
 
 ## Final verification
 
-- [ ] `dotnet build PUnit.slnx -c Debug` → **0 Warning(s), 0 Error(s)**.
-- [ ] `dotnet test PUnit.slnx -c Debug` → `Test run summary: Passed!` (222 existing + the new SimulatedClock,
+- [ ] `dotnet build Raun.slnx -c Debug` → **0 Warning(s), 0 Error(s)**.
+- [ ] `dotnet test Raun.slnx -c Debug` → `Test run summary: Passed!` (222 existing + the new SimulatedClock,
   ScenarioContext, scheduler sim-mode, run-loop/framework wiring, and generator tests).
-- [ ] Sample `punit-report.html` shows a realistic, overlapping, max-joined timeline with ≥1 scenario > ~1s and
+- [ ] Sample `raun-report.html` shows a realistic, overlapping, max-joined timeline with ≥1 scenario > ~1s and
   the restyled look; model Verify snapshot unchanged; real-run timing path byte-for-byte unchanged.

@@ -1,8 +1,8 @@
-# PUnit DSL display names, pluggable phases, and a generator safety net
+# Raun DSL display names, pluggable phases, and a generator safety net
 
 - **Date:** 2026-06-05
 - **Status:** Design — awaiting review
-- **Scope:** `PUnit`, `PUnit.Generator`, `PUnit.Mtp`, `samples/AppointmentTests`
+- **Scope:** `Raun`, `Raun.Generator`, `Raun.Mtp`, `samples/AppointmentTests`
 
 ## Summary
 
@@ -14,9 +14,9 @@ in the test runner:
 2. **`[DisplayName]` on a scenario class** — rename the class node (today the raw type
    name `Scenarios`) to something friendly, reusing the BCL
    `System.ComponentModel.DisplayNameAttribute`.
-3. **Pluggable phase markers** — recognise any type implementing a new `PUnit.IPhase`
+3. **Pluggable phase markers** — recognise any type implementing a new `Raun.IPhase`
    marker interface as a phase, not just the built-in `Given`/`When`/`Then`.
-4. **PUNIT000 "Unhandled exception"** — turn an unexpected throw in the generator or
+4. **RAUN000 "Unhandled exception"** — turn an unexpected throw in the generator or
    analyzer into a clean diagnostic instead of a cryptic `CS8785` / `AD0001`.
 
 ## Goals
@@ -25,7 +25,7 @@ in the test runner:
   class node be named.
 - Authors can define their own phase vocabulary (e.g. `Arrange`/`Act`/`Assert`, or
   domain phases) by implementing one marker interface, in any namespace.
-- Internal PUnit failures surface as actionable `PUNIT000` diagnostics.
+- Internal Raun failures surface as actionable `RAUN000` diagnostics.
 
 ## Non-goals
 
@@ -87,8 +87,8 @@ Reuse `System.ComponentModel.DisplayNameAttribute`, matched by simple name the s
 5. `ScenarioTestIdentity.Create(string methodFullName, string scenarioDisplayName, string? classDisplayName)`
    — when `classDisplayName` is non-null/non-empty, use it as `typeName`; otherwise keep the
    current FQN-split behavior. Update both call sites:
-   - `src/PUnit.Mtp/PUnitDiscoverer.cs:57`
-   - `src/PUnit.Mtp/PUnitStepReporter.cs:163`
+   - `src/Raun.Mtp/RaunDiscoverer.cs:57`
+   - `src/Raun.Mtp/RaunStepReporter.cs:163`
 6. Sample: add `using System.ComponentModel;` and `[DisplayName("Appointment booking")]` to
    `samples/AppointmentTests/Scenarios.cs`'s `Scenarios` class.
 
@@ -99,44 +99,44 @@ Reuse `System.ComponentModel.DisplayNameAttribute`, matched by simple name the s
 
 ## Feature 3 — Pluggable phase markers via `IPhase`
 
-- New empty marker in `src/PUnit/Phases.cs`: `public interface IPhase { }`.
+- New empty marker in `src/Raun/Phases.cs`: `public interface IPhase { }`.
 - `Given`/`When`/`Then` change from `static class` to
   `public sealed class X : IPhase { private X() { } }`. They remain non-instantiable;
   call sites (`Given.X()`, `extension(Given)`) are unchanged.
-- `SymbolHelpers.PhaseOf` — recognise any receiver whose type implements `PUnit.IPhase`
+- `SymbolHelpers.PhaseOf` — recognise any receiver whose type implements `Raun.IPhase`
   (scan `type.AllInterfaces` for `Name == "IPhase"` &&
-  `ContainingNamespace.ToDisplayString(NoGlobal) == "PUnit"`), returning `type.Name` as the
+  `ContainingNamespace.ToDisplayString(NoGlobal) == "Raun"`), returning `type.Name` as the
   phase. Built-ins keep working; `public sealed class Arrange : IPhase { }` in any namespace
   is accepted with phase `"Arrange"`.
 - The `ScenarioNode.Phase` string stays metadata only (set by parser, emitted into the node,
   never read by scheduler/reporter/display) — so custom phase names cannot affect behavior.
-- Analyzer wording: update `Descriptors` PUNIT002/004/006 from "Given/When/Then" to
-  "a phase marker (a type implementing `PUnit.IPhase`)". Logic already routes through
+- Analyzer wording: update `Descriptors` RAUN002/004/006 from "Given/When/Then" to
+  "a phase marker (a type implementing `Raun.IPhase`)". Logic already routes through
   `PhaseOf`, so no analyzer control-flow change. Update the matching Notes in
   `AnalyzerReleases.Unshipped.md`.
 
 ---
 
-## Feature 4 — PUNIT000 "Unhandled exception"
+## Feature 4 — RAUN000 "Unhandled exception"
 
 Only for genuine exceptions — distinct from `TryParse` returning `null` for unsupported
-constructs (those already produce the specific PUNIT00x).
+constructs (those already produce the specific RAUN00x).
 
-- `Descriptors.UnhandledException` = **PUNIT000**, `Category = PUnit.Usage`, `Error`,
-  title "Unhandled exception in PUnit generator",
-  message `"PUnit failed to process a scenario: {0}"` (`{0}` = exception text).
+- `Descriptors.UnhandledException` = **RAUN000**, `Category = Raun.Usage`, `Error`,
+  title "Unhandled exception in Raun generator",
+  message `"Raun failed to process a scenario: {0}"` (`{0}` = exception text).
 - **Generator** (`ScenarioGenerator`):
   - `Transform` wraps `ScenarioParser.TryParse` in try/catch; on throw, returns an
     error-carrying result (exception text + the method's file/line) rather than a
     `ParsedScenario`. Introduce a small equatable result type carrying either the parsed
     scenario or the error (file path + line + message) so the incremental pipeline stays
     cache-friendly.
-  - `RegisterSourceOutput` reports PUNIT000 for each error result, and wraps
-    `ScenarioEmitter.Emit` / entry-point emission in try/catch → PUNIT000 at `Location.None`.
+  - `RegisterSourceOutput` reports RAUN000 for each error result, and wraps
+    `ScenarioEmitter.Emit` / entry-point emission in try/catch → RAUN000 at `Location.None`.
 - **Analyzer** (`ScenarioAnalyzer`):
-  - Wrap the body of `AnalyzeMethod` in try/catch → report PUNIT000.
+  - Wrap the body of `AnalyzeMethod` in try/catch → report RAUN000.
   - Add `Descriptors.UnhandledException` to `SupportedDiagnostics`.
-- Add a PUNIT000 row to `AnalyzerReleases.Unshipped.md`.
+- Add a RAUN000 row to `AnalyzerReleases.Unshipped.md`.
 
 ---
 
@@ -144,20 +144,20 @@ constructs (those already produce the specific PUNIT00x).
 
 - **Feature 2 — generator:** a scenario class with `[DisplayName("X")]` lowers to
   `ScenarioDefinition.ClassDisplayName == "X"`; absent → `null`
-  (`PUnit.Generator.Test`).
+  (`Raun.Generator.Test`).
 - **Feature 2 — identity:** `ScenarioTestIdentityTests` — `Create(fqn, scenario, "X")`
   yields `TypeName == "X"`; `Create(fqn, scenario, null)` keeps the FQN-split type.
 - **Feature 2 — snapshots:** regenerate the three
-  `GeneratorSnapshotTests.*#PUnitScenarios.g.verified.cs` (the `ScenarioDefinition`
+  `GeneratorSnapshotTests.*#RaunScenarios.g.verified.cs` (the `ScenarioDefinition`
   initializer gains a `ClassDisplayName` line).
 - **Feature 3 — generator:** a scenario over a custom `sealed class Foo : IPhase { }`
   lowers with `Phase == "Foo"`; existing Given/When/Then lowering stays green.
 - **Feature 3 — analyzer:** a receiver type that does **not** implement `IPhase` →
-  `PUNIT004` (`AnalyzerTests`).
-- **Feature 4 — analyzer:** an `AnalyzeMethod` that throws is reported as `PUNIT000` (inject
-  a throwing path via a targeted test seam or a crafted input); PUNIT000 appears in
+  `RAUN004` (`AnalyzerTests`).
+- **Feature 4 — analyzer:** an `AnalyzeMethod` that throws is reported as `RAUN000` (inject
+  a throwing path via a targeted test seam or a crafted input); RAUN000 appears in
   `SupportedDiagnostics`.
-- **Feature 4 — generator:** an emit/parse throw surfaces as a PUNIT000 diagnostic rather
+- **Feature 4 — generator:** an emit/parse throw surfaces as a RAUN000 diagnostic rather
   than an unhandled generator exception.
 - **Whole build:** `dotnet build` + full test run green; the `AppointmentTests` sample
   discovers and runs with the new tree (`Appointment booking` class node, `Given …` leaves).
@@ -168,28 +168,28 @@ constructs (those already produce the specific PUNIT00x).
 |---|---|
 | `samples/AppointmentTests/AppointmentDsl.cs` | Phase words in `[StepName]`s (F1) |
 | `samples/AppointmentTests/Scenarios.cs` | `[DisplayName]` on `Scenarios` (F2) |
-| `src/PUnit/Phases.cs` | `IPhase`; `Given/When/Then` → sealed `: IPhase` (F3) |
-| `src/PUnit/Model/ScenarioDefinition.cs` | `ClassDisplayName` (F2) |
-| `src/PUnit.Generator/Lowering/AttributeReader.cs` | `ClassDisplayName(...)` (F2) |
-| `src/PUnit.Generator/Lowering/Ir.cs` | `ParsedScenario.ClassDisplayName` (F2) |
-| `src/PUnit.Generator/Lowering/ScenarioParser.cs` | read class display name (F2) |
-| `src/PUnit.Generator/Lowering/SymbolHelpers.cs` | `PhaseOf` via `IPhase` (F3) |
-| `src/PUnit.Generator/Emit/ScenarioEmitter.cs` | emit `ClassDisplayName` (F2) |
-| `src/PUnit.Generator/ScenarioGenerator.cs` | parse/emit try/catch → PUNIT000 (F4) |
-| `src/PUnit.Generator/Analysis/Descriptors.cs` | PUNIT000; reword 002/004/006 (F3,F4) |
-| `src/PUnit.Generator/Analysis/ScenarioAnalyzer.cs` | wrap `AnalyzeMethod`; register PUNIT000 (F4) |
-| `src/PUnit.Generator/AnalyzerReleases.Unshipped.md` | PUNIT000 row; reword notes (F3,F4) |
-| `src/PUnit.Mtp/ScenarioTestIdentity.cs` | `Create` takes class display name (F2) |
-| `src/PUnit.Mtp/PUnitDiscoverer.cs` | pass `ClassDisplayName` (F2) |
-| `src/PUnit.Mtp/PUnitStepReporter.cs` | pass `ClassDisplayName` (F2) |
-| Tests across `PUnit.Generator.Test`, `PUnit.Mtp.Test` | per strategy above |
+| `src/Raun/Phases.cs` | `IPhase`; `Given/When/Then` → sealed `: IPhase` (F3) |
+| `src/Raun/Model/ScenarioDefinition.cs` | `ClassDisplayName` (F2) |
+| `src/Raun.Generator/Lowering/AttributeReader.cs` | `ClassDisplayName(...)` (F2) |
+| `src/Raun.Generator/Lowering/Ir.cs` | `ParsedScenario.ClassDisplayName` (F2) |
+| `src/Raun.Generator/Lowering/ScenarioParser.cs` | read class display name (F2) |
+| `src/Raun.Generator/Lowering/SymbolHelpers.cs` | `PhaseOf` via `IPhase` (F3) |
+| `src/Raun.Generator/Emit/ScenarioEmitter.cs` | emit `ClassDisplayName` (F2) |
+| `src/Raun.Generator/ScenarioGenerator.cs` | parse/emit try/catch → RAUN000 (F4) |
+| `src/Raun.Generator/Analysis/Descriptors.cs` | RAUN000; reword 002/004/006 (F3,F4) |
+| `src/Raun.Generator/Analysis/ScenarioAnalyzer.cs` | wrap `AnalyzeMethod`; register RAUN000 (F4) |
+| `src/Raun.Generator/AnalyzerReleases.Unshipped.md` | RAUN000 row; reword notes (F3,F4) |
+| `src/Raun.Mtp/ScenarioTestIdentity.cs` | `Create` takes class display name (F2) |
+| `src/Raun.Mtp/RaunDiscoverer.cs` | pass `ClassDisplayName` (F2) |
+| `src/Raun.Mtp/RaunStepReporter.cs` | pass `ClassDisplayName` (F2) |
+| Tests across `Raun.Generator.Test`, `Raun.Mtp.Test` | per strategy above |
 
 ## Risks
 
-- **Feature 3 shape change** is binary-breaking for `Given/When/Then` (static → sealed). PUnit
+- **Feature 3 shape change** is binary-breaking for `Given/When/Then` (static → sealed). Raun
   is the new MTP-redesign framework (pre-release), so acceptable; call-site source is
   unaffected (verified).
 - **Snapshot churn** (Feature 2): expected and regenerated as part of the work.
-- **PUNIT000 equatability**: the error result type must be value-equatable to keep the
+- **RAUN000 equatability**: the error result type must be value-equatable to keep the
   incremental generator cache healthy; carry primitive fields (file/line/message), not a
   `Location`.

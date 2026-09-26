@@ -1,8 +1,8 @@
-# Spec — Step numbering + scenario-name grouping (PUnit.Mtp)
+# Spec — Step numbering + scenario-name grouping (Raun.Mtp)
 
 **Date:** 2026-06-05
 **Status:** Draft (awaiting user review)
-**Area:** `src/PUnit.Mtp` (display/reporting layer only)
+**Area:** `src/Raun.Mtp` (display/reporting layer only)
 
 ## Problem
 
@@ -61,13 +61,13 @@ than the human scenario name (`customer books an appointment`).
   display concerns only and never affect identity, so single-step run filters still resolve to the
   same node discovery emitted.
 
-- **R7 — Discovery and execution agree.** Both the discovery path (`PUnitDiscoverer`) and the
-  live/finished path (`PUnitStepReporter`) compute the label from the **same** numbering source so
+- **R7 — Discovery and execution agree.** Both the discovery path (`RaunDiscoverer`) and the
+  live/finished path (`RaunStepReporter`) compute the label from the **same** numbering source so
   the discovered tree and the running tree show identical leaf text.
 
 ## Design
 
-### Component 1 — `ScenarioStepNumbering` (new, `src/PUnit.Mtp`)
+### Component 1 — `ScenarioStepNumbering` (new, `src/Raun.Mtp`)
 
 A pure, unit-testable helper mirroring the existing `ScenarioTestIdentity` precedent.
 
@@ -92,7 +92,7 @@ or padded `"02.01"` for large scenarios). The caller appends the `.`/space and s
 `Create(string methodFullName, string scenarioDisplayName)`: derive `Namespace`/`TypeName` from
 `methodFullName` as today, but set `MethodName = scenarioDisplayName` (R5).
 
-### Component 3 — display composition (`PUnitDiscoverer.BuildNode`, `PUnitStepReporter.BuildNode`)
+### Component 3 — display composition (`RaunDiscoverer.BuildNode`, `RaunStepReporter.BuildNode`)
 
 Both build the numbering map once per definition and, for each step, compose the leaf name per R3
 (standalone `"{label}. {step}"`, group member `"{label} {step}"`), dropping the scenario prefix.
@@ -128,7 +128,7 @@ bulk user import                         bulk user import via LINQ
   into logical order.
 - **`ScenarioTestIdentityTests`:** updated — `MethodName` equals the scenario display name;
   namespace/type still derived from the FQN.
-- **`PUnitDiscovererTests` / `PUnitStepReporterTests`:** leaf display is the numbered form with no
+- **`RaunDiscovererTests` / `RaunStepReporterTests`:** leaf display is the numbered form with no
   scenario prefix; identity method equals the scenario name; uid unchanged.
 
 ## Out of scope / follow-ups
@@ -144,10 +144,10 @@ bulk user import                         bulk user import via LINQ
 
 ## Files touched
 
-- `src/PUnit.Mtp/ScenarioStepNumbering.cs` (new)
-- `src/PUnit.Mtp/ScenarioTestIdentity.cs` (signature + method = scenario name)
-- `src/PUnit.Mtp/PUnitDiscoverer.cs` (compose numbered display)
-- `src/PUnit.Mtp/PUnitStepReporter.cs` (compose numbered display)
-- `test/PUnit.Mtp.Test/ScenarioStepNumberingTests.cs` (new)
-- `test/PUnit.Mtp.Test/ScenarioTestIdentityTests.cs`, `PUnitDiscovererTests.cs`, `PUnitStepReporterTests.cs`
+- `src/Raun.Mtp/ScenarioStepNumbering.cs` (new)
+- `src/Raun.Mtp/ScenarioTestIdentity.cs` (signature + method = scenario name)
+- `src/Raun.Mtp/RaunDiscoverer.cs` (compose numbered display)
+- `src/Raun.Mtp/RaunStepReporter.cs` (compose numbered display)
+- `test/Raun.Mtp.Test/ScenarioStepNumberingTests.cs` (new)
+- `test/Raun.Mtp.Test/ScenarioTestIdentityTests.cs`, `RaunDiscovererTests.cs`, `RaunStepReporterTests.cs`
 - `samples/AppointmentTests/AppointmentDsl.cs` (revert debug delay)

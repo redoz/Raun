@@ -1,7 +1,7 @@
 # xUnit.net v3 (3.2.2) Extensibility API Reference — Scenario Graph Extension
 
 > Reflection-verified against the installed 3.2.2 assemblies (and source @ commit
-> `728c1dce012cd82193035dddfeaba184baaa88c6`). Used to build the `PUnit.Xunit` adapter (Phase 4).
+> `728c1dce012cd82193035dddfeaba184baaa88c6`). Used to build the `Raun.Xunit` adapter (Phase 4).
 > Items flagged "double-check" must be confirmed against the live runner during Phase 4.
 
 ## Critical namespace facts
@@ -86,7 +86,7 @@ round-trip. Use the generic extension helpers in `Xunit.Sdk.XunitSerializationIn
 
 Multiple visible tests per case: either override `CreateTests()` to return N `IXunitTest` (runner
 then invokes the method once per test), OR — for pre-computed step results — implement
-`ISelfExecutingXunitTestCase` and emit a per-test message quartet per step inside `Run`. PUnit uses
+`ISelfExecutingXunitTestCase` and emit a per-test message quartet per step inside `Run`. Raun uses
 the self-executing path.
 
 `XunitTest` (constructable, `Xunit.v3`) — use the `testIndex` ctor for a derived per-test UniqueID:

@@ -4,8 +4,8 @@
 - **Status:** Roadmap / ideas — **not** an executable plan yet. Each feature below gets its own
   `brainstorming` → spec (`docs/superpowers/specs/`) → plan (`docs/superpowers/plans/`) when it's
   actually picked up. This doc is a shared sketch + open-questions list so we don't lose the intent.
-- **Scope (future):** `samples/`, `src/PUnit` (scheduler/context/model), `src/PUnit.Mtp` (reporter),
-  `src/PUnit.Generator` (attribute lowering).
+- **Scope (future):** `samples/`, `src/Raun` (scheduler/context/model), `src/Raun.Mtp` (reporter),
+  `src/Raun.Generator` (attribute lowering).
 
 ## Why these three belong together
 
@@ -15,20 +15,20 @@ They reinforce each other, so designing them with awareness of each other pays o
   that is exactly the material the **HTML report** (B) wants for a resource timeline and for
   debugging ("which step deleted user 123?").
 - The **Aspire example** (A) is the natural showcase for both: Aspire resources (a Postgres
-  container, a queue, the AppHost itself) map cleanly onto PUnit resources, and a distributed run is
+  container, a queue, the AppHost itself) map cleanly onto Raun resources, and a distributed run is
   where a beautiful timing/artifact report earns its keep.
 
 What we already have to build on (so none of this starts from zero):
 
-- `ScenarioScheduler` (`src/PUnit/Scheduling/ScenarioScheduler.cs`) runs each scenario as a bounded-
+- `ScenarioScheduler` (`src/Raun/Scheduling/ScenarioScheduler.cs`) runs each scenario as a bounded-
   parallel DAG and is **runner-neutral**, surfacing progress through `IStepObserver`
   (`OnStepStartingAsync`/`OnStepFinishedAsync`). It already threads an `IServiceProvider? services`
   down to each step.
-- `ScenarioContext` (`src/PUnit/ScenarioContext.cs`) already collects per-step `Log(...)` lines and
+- `ScenarioContext` (`src/Raun/ScenarioContext.cs`) already collects per-step `Log(...)` lines and
   `AddAttachment(name, value)` artifacts, and exposes `Services`.
-- `StepResult` (`src/PUnit/Model/StepResult.cs`) already carries `Duration`, `Logs`, `Attachments`,
+- `StepResult` (`src/Raun/Model/StepResult.cs`) already carries `Duration`, `Logs`, `Attachments`,
   `Status`, `Exception`, and `SkipReason`.
-- `PUnitStepReporter` / `PUnitDiscoverer` (`src/PUnit.Mtp`) already bridge step nodes to
+- `RaunStepReporter` / `RaunDiscoverer` (`src/Raun.Mtp`) already bridge step nodes to
   Microsoft.Testing.Platform.
 
 The upshot: **B is mostly a new consumer of data that already exists**, and **C plugs into the same
@@ -39,16 +39,16 @@ The upshot: **B is mostly a new consumer of data that already exists**, and **C 
 ## A. Aspire example + code coverage across the AppHost's child processes
 
 **Intent.** Ship a `samples/` project that drives a real .NET Aspire app (an AppHost orchestrating a
-couple of services) with PUnit scenarios, and — the hard requirement — collect code coverage that
+couple of services) with Raun scenarios, and — the hard requirement — collect code coverage that
 includes the **service processes the AppHost launches**, not just the test process.
 
 **Sketch.**
 - New sample, e.g. `samples/AspireAppointments/` with `AspireAppointments.AppHost`, one or two service
   projects, and `AspireAppointments.Tests` hosting scenarios via
   `Aspire.Hosting.Testing.DistributedApplicationTestingBuilder` (the standard way to stand up an
-  AppHost in-test). The PUnit DSL phases (`Given`/`When`/`Then`, or custom phases now that `IPhase` is
+  AppHost in-test). The Raun DSL phases (`Given`/`When`/`Then`, or custom phases now that `IPhase` is
   pluggable) wrap "resource X is healthy", "call endpoint", "assert projection".
-- Coverage: PUnit is already an MTP framework, so the `--coverage` MTP extension
+- Coverage: Raun is already an MTP framework, so the `--coverage` MTP extension
   (`Microsoft.Testing.Extensions.CodeCoverage`) covers the **test/host** process out of the box. The
   open problem is the **child processes** Aspire spawns.
 
@@ -59,10 +59,10 @@ includes the **service processes the AppHost launches**, not just the test proce
   (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`, `CORECLR_PROFILER_PATH`, `MicrosoftInstrumentationEngine_*`)
   to each Aspire resource via `WithEnvironment(...)`, then merging the per-process outputs;
   (b) Coverlet collector — generally weaker for multi-process;
-  (c) a thin PUnit helper that, when a coverage session is active, injects those env vars into every
+  (c) a thin Raun helper that, when a coverage session is active, injects those env vars into every
   Aspire child resource automatically.
 - Merge + report format (`.cobertura`/`.coverage`) and how it surfaces in CI.
-- Does this need anything in `src/PUnit.Mtp`, or is it purely sample + MSBuild/runsettings wiring?
+- Does this need anything in `src/Raun.Mtp`, or is it purely sample + MSBuild/runsettings wiring?
   (Prefer the latter; only promote to the framework if every Aspire user would re-implement it.)
 
 **Rough effort.** Medium. Mostly an integration/investigation spike (the coverage-across-children
@@ -77,8 +77,8 @@ showing the DAG's parallelism and each step's `Duration`), drill-down into each 
 attachments, failures with exception/skip reasons, and (once C lands) a resource timeline.
 
 **Sketch.**
-- A new MTP extension in `src/PUnit.Mtp` (sibling to `PUnitStepReporter`) that subscribes to the run's
-  step results and writes `TestResults/punit-report.html`. It can consume the same `StepResult` data
+- A new MTP extension in `src/Raun.Mtp` (sibling to `RaunStepReporter`) that subscribes to the run's
+  step results and writes `TestResults/raun-report.html`. It can consume the same `StepResult` data
   the reporter already produces — `Duration`, `Logs`, `Attachments`, `Status`, `Exception`,
   `SkipReason` — plus node identity (`Phase`, numbering, `GroupId`, `DependsOn`) for the timeline.
 - Self-contained: embed a JSON blob + a small vanilla-JS/CSS renderer in one file, zero runtime deps,
@@ -142,7 +142,7 @@ or to "the system", or to "the reporting api"; others can share **read** access.
   order, or use wait-die / try-acquire-with-backoff. Define this before building.
 - **Scope & today's model.** Each scenario currently runs its own `ScenarioScheduler`. Cross-scenario
   locks (e.g. exclusive "the system") require the lock manager to be **shared across all running
-  scenarios** — i.e. owned at the MTP session level (`PUnitTestApplication`), not per scenario.
+  scenarios** — i.e. owned at the MTP session level (`RaunTestApplication`), not per scenario.
 - **Interaction with the existing DAG.** Resource locks are an *orthogonal* constraint layered on the
   dependency edges; make sure a lock wait can't masquerade as a dependency stall (the scheduler throws
   on an unexplained stall today).

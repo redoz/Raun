@@ -16,10 +16,10 @@
 
 ## File Structure
 
-- Modify: `src/PUnit.Generator/Emit/ScenarioEmitter.cs` — full rewrite, same namespace/type/`Emit` signature.
-- Re-accept: `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Linear_scenario#PUnitScenarios.g.verified.cs`
-- Re-accept: `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Tuple_scenario#PUnitScenarios.g.verified.cs`
-- Re-accept: `test/PUnit.Generator.Test/Snapshots/GeneratorSnapshotTests.Array_scenario#PUnitScenarios.g.verified.cs`
+- Modify: `src/Raun.Generator/Emit/ScenarioEmitter.cs` — full rewrite, same namespace/type/`Emit` signature.
+- Re-accept: `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Linear_scenario#RaunScenarios.g.verified.cs`
+- Re-accept: `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Tuple_scenario#RaunScenarios.g.verified.cs`
+- Re-accept: `test/Raun.Generator.Test/Snapshots/GeneratorSnapshotTests.Array_scenario#RaunScenarios.g.verified.cs`
 
 No other files change. `ParsedScenario`/`ParsedStep` (`Ir.cs`) are read-only inputs.
 
@@ -28,11 +28,11 @@ No other files change. `ParsedScenario`/`ParsedStep` (`Ir.cs`) are read-only inp
 ## Task 1: Rewrite ScenarioEmitter as an AST builder
 
 **Files:**
-- Modify (full rewrite): `src/PUnit.Generator/Emit/ScenarioEmitter.cs`
+- Modify (full rewrite): `src/Raun.Generator/Emit/ScenarioEmitter.cs`
 
 - [ ] **Step 1: Replace the file with the AST-based implementation**
 
-Write `src/PUnit.Generator/Emit/ScenarioEmitter.cs` exactly as below. It preserves the existing output structure (same class `PUnit.Generated.PUnitGenerated`, same members, same order, same literals); only the construction mechanism changes.
+Write `src/Raun.Generator/Emit/ScenarioEmitter.cs` exactly as below. It preserves the existing output structure (same class `Raun.Generated.RaunGenerated`, same members, same order, same literals); only the construction mechanism changes.
 
 ```csharp
 using System.Collections.Generic;
@@ -41,10 +41,10 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using PUnit.Generator.Lowering;
+using Raun.Generator.Lowering;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace PUnit.Generator.Emit;
+namespace Raun.Generator.Emit;
 
 /// <summary>Emits the generated C# source for a set of lowered scenarios as a Roslyn syntax tree.</summary>
 internal static class ScenarioEmitter
@@ -53,7 +53,7 @@ internal static class ScenarioEmitter
 
     static readonly string[] RequiredUsings =
     [
-        "using PUnit;",
+        "using Raun;",
         "using System.Linq;",
         "using System.Threading.Tasks;",
     ];
@@ -67,11 +67,11 @@ internal static class ScenarioEmitter
         };
         members.AddRange(scenarios.Select(BuildScenarioBuilder));
 
-        var classDecl = ClassDeclaration("PUnitGenerated")
+        var classDecl = ClassDeclaration("RaunGenerated")
             .AddModifiers(Token(SyntaxKind.InternalKeyword), Token(SyntaxKind.StaticKeyword))
             .WithMembers(List(members));
 
-        var nsDecl = NamespaceDeclaration(ParseName("PUnit.Generated")).AddMembers(classDecl);
+        var nsDecl = NamespaceDeclaration(ParseName("Raun.Generated")).AddMembers(classDecl);
 
         // CollectUsings yields full "using X;" lines (incl. static/aliased forms); parse them as a
         // unit so every using-directive shape is handled correctly.
@@ -111,13 +111,13 @@ internal static class ScenarioEmitter
     static MemberDeclarationSyntax BuildCreateAll(IReadOnlyList<ParsedScenario> scenarios)
     {
         var body = scenarios.Count == 0
-            ? "global::System.Array.Empty<global::PUnit.Model.ScenarioDefinition>()"
-            : "new global::PUnit.Model.ScenarioDefinition[] { "
+            ? "global::System.Array.Empty<global::Raun.Model.ScenarioDefinition>()"
+            : "new global::Raun.Model.ScenarioDefinition[] { "
               + string.Join(", ", scenarios.Select(s => $"Scenario_{s.SafeName}()"))
               + " }";
 
         return MethodDeclaration(
-                ParseTypeName("global::System.Collections.Generic.IReadOnlyList<global::PUnit.Model.ScenarioDefinition>"),
+                ParseTypeName("global::System.Collections.Generic.IReadOnlyList<global::Raun.Model.ScenarioDefinition>"),
                 "CreateAll")
             .AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword))
             .WithExpressionBody(ArrowExpressionClause(ParseExpression(body)))
@@ -127,7 +127,7 @@ internal static class ScenarioEmitter
     static MemberDeclarationSyntax BuildModuleInitializer(IReadOnlyList<ParsedScenario> scenarios)
     {
         var statements = scenarios.Select(s => ParseStatement(
-            $"global::PUnit.ScenarioRegistry.Register({LiteralText(s.MethodFullName)}, Scenario_{s.SafeName});"));
+            $"global::Raun.ScenarioRegistry.Register({LiteralText(s.MethodFullName)}, Scenario_{s.SafeName});"));
 
         return MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), "Initialize")
             .AddAttributeLists(AttributeList(SingletonSeparatedList(
@@ -140,7 +140,7 @@ internal static class ScenarioEmitter
     {
         var statements = new List<StatementSyntax>
         {
-            ParseStatement($"var nodes = new global::PUnit.Model.ScenarioNode[{scenario.Steps.Count}];"),
+            ParseStatement($"var nodes = new global::Raun.Model.ScenarioNode[{scenario.Steps.Count}];"),
         };
 
         foreach (var step in scenario.Steps)
@@ -153,7 +153,7 @@ internal static class ScenarioEmitter
             statements.Add(ExpressionStatement(assignment));
         }
 
-        var definition = ObjectCreationExpression(ParseTypeName("global::PUnit.Model.ScenarioDefinition"))
+        var definition = ObjectCreationExpression(ParseTypeName("global::Raun.Model.ScenarioDefinition"))
             .WithInitializer(InitializerExpression(SyntaxKind.ObjectInitializerExpression, SeparatedList<ExpressionSyntax>(
             [
                 Set("ScenarioId", Lit(scenario.ScenarioId)),
@@ -168,7 +168,7 @@ internal static class ScenarioEmitter
         statements.Add(ReturnStatement(definition));
 
         return MethodDeclaration(
-                ParseTypeName("global::PUnit.Model.ScenarioDefinition"),
+                ParseTypeName("global::Raun.Model.ScenarioDefinition"),
                 $"Scenario_{scenario.SafeName}")
             .AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword))
             .WithBody(Block(statements));
@@ -196,7 +196,7 @@ internal static class ScenarioEmitter
             members.Add(Set("FormatDisplayName", ParseExpression($"static __inputs => {step.FormatExpression}")));
         }
 
-        return ObjectCreationExpression(ParseTypeName("global::PUnit.Model.ScenarioNode"))
+        return ObjectCreationExpression(ParseTypeName("global::Raun.Model.ScenarioNode"))
             .WithInitializer(InitializerExpression(SyntaxKind.ObjectInitializerExpression, SeparatedList(members)));
     }
 
@@ -227,12 +227,12 @@ internal static class ScenarioEmitter
 
 - [ ] **Step 2: Build the generator project and fix any compile/analyzer errors**
 
-Run: `dotnet build src/PUnit.Generator/PUnit.Generator.csproj --nologo`
+Run: `dotnet build src/Raun.Generator/Raun.Generator.csproj --nologo`
 Expected: `0 Error(s)`. The strict analyzer gate is on — resolve any CA/IDE diagnostic the new code raises (e.g. add `CultureInfo.InvariantCulture` to any flagged interpolation/`ToString`; remove any unused helper — IDE0051 is an error). Iterate until clean.
 
 - [ ] **Step 3: Build the whole solution**
 
-Run: `dotnet build PUnit.slnx --nologo`
+Run: `dotnet build Raun.slnx --nologo`
 Expected: `0 Warning(s)`, `0 Error(s)`. (The generator-harness test project compiles the emitted output as part of building, so a structural mistake surfaces here.)
 
 ---
@@ -244,8 +244,8 @@ Expected: `0 Warning(s)`, `0 Error(s)`. (The generator-harness test project comp
 
 - [ ] **Step 1: Run the snapshot tests to produce `.received.cs`**
 
-Run: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj --nologo --filter "FullyQualifiedName~GeneratorSnapshotTests"`
-Expected: the 3 snapshot tests FAIL (formatting changed); Verify writes a `*.received.cs` next to each `*.verified.cs`. (Read `test/PUnit.Generator.Test/VerifyConfig.cs` first to confirm how this repo runs Verify / whether a diff tool is disabled.)
+Run: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj --nologo --filter "FullyQualifiedName~GeneratorSnapshotTests"`
+Expected: the 3 snapshot tests FAIL (formatting changed); Verify writes a `*.received.cs` next to each `*.verified.cs`. (Read `test/Raun.Generator.Test/VerifyConfig.cs` first to confirm how this repo runs Verify / whether a diff tool is disabled.)
 
 - [ ] **Step 2: Diff each received vs verified and confirm semantic equivalence**
 
@@ -257,7 +257,7 @@ For each snapshot, replace the `*.verified.cs` content with its `*.received.cs` 
 
 - [ ] **Step 4: Re-run the snapshot tests to verify they pass**
 
-Run: `dotnet test test/PUnit.Generator.Test/PUnit.Generator.Test.csproj --nologo --filter "FullyQualifiedName~GeneratorSnapshotTests"`
+Run: `dotnet test test/Raun.Generator.Test/Raun.Generator.Test.csproj --nologo --filter "FullyQualifiedName~GeneratorSnapshotTests"`
 Expected: PASS, and no `*.received.cs` files remain.
 
 ---
@@ -268,8 +268,8 @@ Expected: PASS, and no `*.received.cs` files remain.
 
 - [ ] **Step 1: Run the entire suite**
 
-Run: `dotnet test PUnit.slnx --nologo`
-Expected: `Failed: 0` across all four test assemblies (PUnit.Test 30, AppointmentTests 18, PUnit.Xunit.Test 19, PUnit.Generator.Test 25) — 92 total. This confirms the generated code still compiles and behaves identically (the harness + xUnit acceptance tests are the behavior gate).
+Run: `dotnet test Raun.slnx --nologo`
+Expected: `Failed: 0` across all four test assemblies (Raun.Test 30, AppointmentTests 18, Raun.Xunit.Test 19, Raun.Generator.Test 25) — 92 total. This confirms the generated code still compiles and behaves identically (the harness + xUnit acceptance tests are the behavior gate).
 
 - [ ] **Step 2: Confirm no stray received-snapshot files**
 
@@ -280,7 +280,7 @@ Expected: only `ScenarioEmitter.cs` and the 3 `*.verified.cs` files show as modi
 
 Run:
 ```
-jj commit src/PUnit.Generator/Emit/ScenarioEmitter.cs test/PUnit.Generator.Test/Snapshots -m "refactor: emit generated source via Roslyn syntax tree
+jj commit src/Raun.Generator/Emit/ScenarioEmitter.cs test/Raun.Generator.Test/Snapshots -m "refactor: emit generated source via Roslyn syntax tree
 
 Rebuild ScenarioEmitter on SyntaxFactory + NormalizeWhitespace instead of
 StringBuilder: structure and object-initializers are real nodes; only leaf

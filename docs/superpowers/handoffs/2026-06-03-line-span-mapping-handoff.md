@@ -13,7 +13,7 @@
 
 ## 1. What & why (one paragraph)
 
-PUnit lowers each `[Scenario]` method into `PUnitScenarios.g.cs`, where each step's DSL call becomes a `static async (__inputs, __ctx) => { var __r = await When.CreateAppointment(...); return (object?)__r; }` lambda that the scheduler runs. Today, debugging steps through that generated file. **Goal:** emit C# 10 **span-form** `#line` directives so a breakpoint on a step's DSL call binds to the developer's **exact original call span** (column-accurate), the current-statement highlight covers that original call, and stepping never descends into generated plumbing. The generated file defaults to `#line hidden`; only the awaited call statement in each `Invoke` lambda is bracketed with a `#line (sl,sc)-(el,ec) charOffset "file"` directive mapped to the original invocation; returns stay hidden.
+Raun lowers each `[Scenario]` method into `RaunScenarios.g.cs`, where each step's DSL call becomes a `static async (__inputs, __ctx) => { var __r = await When.CreateAppointment(...); return (object?)__r; }` lambda that the scheduler runs. Today, debugging steps through that generated file. **Goal:** emit C# 10 **span-form** `#line` directives so a breakpoint on a step's DSL call binds to the developer's **exact original call span** (column-accurate), the current-statement highlight covers that original call, and stepping never descends into generated plumbing. The generated file defaults to `#line hidden`; only the awaited call statement in each `Invoke` lambda is bracketed with a `#line (sl,sc)-(el,ec) charOffset "file"` directive mapped to the original invocation; returns stay hidden.
 
 ---
 
@@ -41,8 +41,8 @@ Invoke **superpowers:subagent-driven-development** and execute the plan's tasks 
 - **Snapshots:** never blind-accept. Diff `*.received.cs` vs `*.verified.cs`, confirm the change is exactly what the plan predicts, then promote.
 
 ### Standing gates for every subagent
-- Build: `dotnet build PUnit.slnx --nologo` → **`0 Warning(s), 0 Error(s)`** (warnings-as-errors, full analyzers; fix CA/IDE nits).
-- Tests: `dotnet test PUnit.slnx --nologo`. Baseline **92**; walks 92 → 93 (Task 2) → 95 (Task 4) → 96 (Task 5).
+- Build: `dotnet build Raun.slnx --nologo` → **`0 Warning(s), 0 Error(s)`** (warnings-as-errors, full analyzers; fix CA/IDE nits).
+- Tests: `dotnet test Raun.slnx --nologo`. Baseline **92**; walks 92 → 93 (Task 2) → 95 (Task 4) → 96 (Task 5).
 - Commits: `jj commit -m "..."`. **No `Co-Authored-By` / tooling trailer.** One commit per task (Task 1 commits nothing).
 
 ---
@@ -69,7 +69,7 @@ Working copy is otherwise empty — **no production code or tests have been writ
 
 ## 6. Definition of done
 
-- `dotnet test PUnit.slnx --nologo` → **96 passing**; `dotnet build PUnit.slnx --nologo` → `0 Warning(s), 0 Error(s)`.
+- `dotnet test Raun.slnx --nologo` → **96 passing**; `dotnet build Raun.slnx --nologo` → `0 Warning(s), 0 Error(s)`.
 - 3 pathless snapshots contain only `#line hidden` (no `#line (`); the path-bearing snapshot contains the 4 span directives.
 - PDB fidelity test green (call maps column-accurately to the original span; nothing visible in the generated file); compile-success test green.
 - Spike deleted; spike outcome + calibrated `charOffset` recorded in the Task 4 commit body.
