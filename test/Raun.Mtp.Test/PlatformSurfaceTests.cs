@@ -22,8 +22,9 @@ public class PlatformSurfaceTests
     private const string FilteredScenario = "customer books an appointment";
     private const int FilteredScenarioStepCount = 5;
 
-    // The sample's full step count across every scenario, confirmed by `--list-tests`.
-    private const int UnfilteredTotalCount = 52;
+    // The sample's full step count across every scenario, confirmed by `--list-tests`. The two
+    // step-class scenarios (CancellationScenarios.cs) report their Setup node as a test too.
+    private const int UnfilteredTotalCount = 71;
 
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(3);
 

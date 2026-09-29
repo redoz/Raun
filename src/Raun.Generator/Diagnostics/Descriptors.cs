@@ -155,12 +155,37 @@ internal static class Descriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor UnfollowableStepReceiver = new(
+        "RAUN018",
+        "Step receiver cannot be followed",
+        "Raun cannot follow '{0}' to the step class this call runs on: {1}",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ScenarioClassShape = new(
+        "RAUN019",
+        "Scenario does not fit its class",
+        "Scenario '{0}' {1}",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor WorldMismatch = new(
+        "RAUN020",
+        "Step class belongs to another world",
+        "'{0}' is a step class of '{1}', but this scenario's world is '{2}'",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
         UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
+        UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,
         StepContextInCleanup, ContendedResourceKind, InertContendedResourceUse, ScenarioNotGenerated,
     }.ToDictionary(d => d.Id);

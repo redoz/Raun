@@ -70,6 +70,13 @@ public sealed class ScenarioNode
     public bool IsTeardown { get; init; }
 
     /// <summary>
+    /// True for the Setup node of a scenario with a world: the first node, which creates the world and
+    /// on which every step depends, so a failed Setup skips them all. Discovered and reported like an
+    /// ordinary step, but unnumbered, so adding a world does not renumber a scenario's steps.
+    /// </summary>
+    public bool IsSetup { get; init; }
+
+    /// <summary>
     /// For a condition node, coerces this step's (boxed) output to the branch value. The generator
     /// emits <c>static o =&gt; ((T)o!) ? true : false</c> so Roslyn selects <c>bool</c>, an implicit
     /// conversion, or <c>operator true</c> at compile time — the scheduler never reflects. Null for a

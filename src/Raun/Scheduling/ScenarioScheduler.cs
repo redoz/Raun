@@ -473,6 +473,7 @@ public sealed class ScenarioScheduler
             // as a conflict with the step that created the thing.
             var teardownContext = new ScenarioContext(
                 node.StepId, name, services, resolver: null, _timeProvider, CancellationToken.None);
+            teardownContext.AttachScenario(definition.Info);
             teardownContext.AttachScenarioStart(scenarioStartRef.Of(startedAt));
             using var teardownActivity = StartStepActivity(definition, node, name);
             teardownContext.AttachActivity(teardownActivity);
@@ -806,6 +807,7 @@ public sealed class ScenarioScheduler
         var context = new ScenarioContext(
             node.StepId, displayName, services, resolver: null, stepTimeProvider, stepCts.Token);
 
+        context.AttachScenario(definition.Info);
         context.AttachTeardown(teardownLog, node.Index);
         context.AttachLedger(ledger, node.Index);
         context.AttachScenarioStart(scenarioStartRef.Of(startedAt));

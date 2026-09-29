@@ -70,6 +70,11 @@ internal sealed class ScenarioParser
     private int _nextIndex;
     private string _scenarioId = "";
 
+    // The scenario's world when its class derives from Raun.Scenarios<TWorld>, else null; and the
+    // index of the Setup node that creates it (every step depends on it), -1 when there is none.
+    private ITypeSymbol? _world;
+    private int _setupIndex = -1;
+
     private readonly List<ParsedStep> _steps = [];
 
     private ScenarioParser(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax)
@@ -127,6 +132,15 @@ internal sealed class ScenarioParser
         LoweredCall Lowering,
         LoopElement? Loop)
     {
+        /// <summary>For a step of a step class, the receiver the generated code calls it on — the
+        /// scenario's instance of that class, reached through the Setup node's scope. Null for a
+        /// phase-marker call, which is emitted with its receiver as written.</summary>
+        public ExpressionSyntax? Receiver { get; init; }
+
+        /// <summary>The group path in front of the operation in the step's identity: <c>Patients.</c>
+        /// for <c>Given.Patients.Exists(…)</c>, empty for a call on a phase itself.</summary>
+        public string KeyPrefix { get; init; } = "";
+
         public string Operation => Member.Name.Identifier.Text;
 
         public List<ParallelAccess> Accesses()
@@ -162,6 +176,21 @@ internal sealed class ScenarioParser
 
         var methodFullName = MethodFullName;
         _scenarioId = GenStableId.ForScenario(methodFullName);
+
+        _world = SymbolHelpers.WorldOfScenarios(_method.ContainingType);
+        if (_world is not null)
+        {
+            if (_method.IsStatic)
+            {
+                Report(
+                    Descriptors.ScenarioClassShape,
+                    _syntax.Identifier.GetLocation(),
+                    methodFullName,
+                    "is static, but its class derives from Scenarios<" + _world.Name + ">; make it an instance method so it can use the class's phases");
+            }
+
+            AddSetup(_world);
+        }
 
         foreach (var statement in _syntax.Body.Statements)
         {
@@ -222,6 +251,8 @@ internal sealed class ScenarioParser
             ClassDisplayName = AttributeReader.ClassDisplayName(_method.ContainingType),
             TimeoutMs = AttributeReader.ScenarioTimeout(_method),
             TeardownPolicy = AttributeReader.TeardownPolicy(_method),
+            DeclaringType = _world is null ? null : TypeSyntaxFactory.From(_method.ContainingType),
+            MethodName = _method.Name,
             SourceFile = Location(_syntax.Identifier, out var line),
             SourceLine = line,
             Steps = [.. _steps],
@@ -930,18 +961,41 @@ internal sealed class ScenarioParser
     /// </summary>
     private StepCall? ResolveCall(InvocationExpressionSyntax invocation, DiagnosticDescriptor notDsl, LoopElement? loop = null)
     {
-        if (invocation.Expression is not MemberAccessExpressionSyntax member
-            || SymbolHelpers.PhaseOf(member.Expression, _model) is not { } phase)
+        ExpressionSyntax? receiver = null;
+        var keyPrefix = "";
+        string phase;
+        IMethodSymbol? method;
+
+        if (invocation.Expression is MemberAccessExpressionSyntax stepMember
+            && _model.GetSymbolInfo(invocation).Symbol is IMethodSymbol { IsStatic: false } stepMethod
+            && SymbolHelpers.WorldOfStepClass(stepMethod.ContainingType) is { } stepWorld)
+        {
+            if (ResolveStepClassReceiver(invocation, stepMember, stepMethod, stepWorld) is not { } resolved)
+            {
+                return null;
+            }
+
+            (receiver, keyPrefix, phase) = resolved;
+            method = stepMethod;
+        }
+        else if (invocation.Expression is not MemberAccessExpressionSyntax markerMember
+            || SymbolHelpers.PhaseOf(markerMember.Expression, _model) is not { } markerPhase)
         {
             Report(notDsl, invocation);
             return null;
         }
-
-        if (_model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method)
+        else
         {
-            Refuse(invocation, "The call does not resolve to one method");
-            return null;
+            phase = markerPhase;
+            method = _model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+            if (method is null)
+            {
+                Refuse(invocation, "The call does not resolve to one method");
+                return null;
+            }
         }
+
+        var member = (MemberAccessExpressionSyntax)invocation.Expression;
 
         ExpressionSyntax? StepValue(ISymbol symbol) => symbol switch
         {
@@ -966,7 +1020,238 @@ internal sealed class ScenarioParser
             ok = false;
         }
 
-        return ok ? new StepCall(invocation, member, phase, method, resultType, lowering, loop) : null;
+        return ok
+            ? new StepCall(invocation, member, phase, method, resultType, lowering, loop) { Receiver = receiver, KeyPrefix = keyPrefix }
+            : null;
+    }
+
+    /// <summary>
+    /// The Setup node of a scenario with a world: node 0, which awaits the world's creation and hands
+    /// every step its scope. It is emitted first and every step depends on it, so a failed Setup skips
+    /// the whole scenario through the ordinary dependency cascade, and a run filter keeps it.
+    /// </summary>
+    private void AddSetup(ITypeSymbol world)
+    {
+        var worldType = TypeSyntaxFactory.From(world);
+        _setupIndex = _nextIndex++;
+        _steps.Add(new ParsedStep
+        {
+            Index = _setupIndex,
+            StepId = GenStableId.ForStep(_scenarioId, "setup"),
+            Phase = "Setup",
+            OperationName = "Setup",
+            HasResult = true,
+            ResultType = ScopeType(worldType),
+            InvokeCall = InvocationExpression(
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        Names.Global("Raun", "ScenarioScope"),
+                        GenericName(Identifier("SetupAsync"))
+                            .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList(worldType)))))
+                .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(IdentifierName("__ctx"))))),
+            DisplayNameTemplate = "Setup",
+            IsSetup = true,
+            DependsOn = [],
+        });
+    }
+
+    /// <summary><c>global::Raun.ScenarioScope&lt;TWorld&gt;</c>.</summary>
+    private static NameSyntax ScopeType(TypeSyntax world)
+        => Names.Generic(Names.Global("Raun"), "ScenarioScope", world);
+
+    /// <summary>
+    /// A call to a step of a step class, <c>Given.Patients.Exists("Jane")</c>. The receiver is checked
+    /// (RAUN018) but never evaluated: Raun binds a step class by its type, so the generated call is
+    /// <c>__inputs.Get&lt;ScenarioScope&lt;W&gt;&gt;(setup).Steps&lt;PatientSteps&gt;().Exists("Jane")</c>
+    /// whatever the properties on the way would have returned. Returns the receiver to emit and the
+    /// group path for the step's identity, or null after reporting why the call cannot be lowered.
+    /// </summary>
+    private (ExpressionSyntax Receiver, string KeyPrefix, string Phase)? ResolveStepClassReceiver(
+        InvocationExpressionSyntax invocation,
+        MemberAccessExpressionSyntax member,
+        IMethodSymbol method,
+        ITypeSymbol stepWorld)
+    {
+        var receiverType = _model.GetTypeInfo(member.Expression).Type ?? method.ContainingType;
+        var receiverText = member.Expression.WithoutTrivia().ToString();
+
+        if (_world is null || _setupIndex < 0)
+        {
+            Report(
+                Descriptors.UnfollowableStepReceiver,
+                member.Expression,
+                receiverText,
+                "'" + receiverType.Name + "' is a step class, and step classes are reached through the phases of a class deriving from Scenarios<" + stepWorld.Name + ">; this scenario's class does not derive from Scenarios<>");
+            return null;
+        }
+
+        if (!SymbolEqualityComparer.Default.Equals(stepWorld, _world))
+        {
+            Report(Descriptors.WorldMismatch, member.Expression, receiverType.Name, stepWorld.Name, _world.Name);
+            return null;
+        }
+
+        var path = new List<string>();
+        if (!FollowReceiver(member.Expression, path))
+        {
+            return null;
+        }
+
+        if (SymbolHelpers.PhaseNameOf(receiverType) is not { } phase)
+        {
+            Report(
+                Descriptors.UnfollowableStepReceiver,
+                member.Expression,
+                receiverText,
+                "'" + receiverType.Name + "' derives from Phase<" + stepWorld.Name + "> but no class in its base chain carries [PhaseName]; derive from Given<>, When<> or Then<>, or name the phase");
+            return null;
+        }
+
+        // Scope.Steps<T>() on the Setup node's output.
+        var receiver = InvocationExpression(
+                MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    InputsGet(ScopeType(TypeSyntaxFactory.From(_world)), _setupIndex),
+                    GenericName(Identifier("Steps"))
+                        .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList(
+                            TypeSyntaxFactory.From(receiverType))))))
+            .WithArgumentList(ArgumentList());
+
+        // The first link is the phase itself (Given); what follows it is the group path.
+        var keyPrefix = string.Concat(path.Skip(1).Select(name => name + "."));
+        return (receiver, keyPrefix, phase);
+    }
+
+    /// <summary>
+    /// RAUN018: a receiver is a chain of phase and group properties from the scenario — <c>Given</c>,
+    /// <c>this.Given</c>, <c>Given.Patients</c> — and each property returns <c>Steps&lt;T&gt;()</c> of its
+    /// own type. That is the whole binding contract: it is what lets Raun bind by type without ever
+    /// running a property, and still call exactly the instance the property names.
+    /// </summary>
+    private bool FollowReceiver(ExpressionSyntax receiver, List<string> path)
+    {
+        switch (receiver)
+        {
+            case IdentifierNameSyntax identifier:
+                return FollowLink(identifier, identifier, onScenario: true, path);
+
+            case MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } thisAccess:
+                return FollowLink(thisAccess, thisAccess.Name, onScenario: true, path);
+
+            case MemberAccessExpressionSyntax access when access.IsKind(SyntaxKind.SimpleMemberAccessExpression):
+                return FollowReceiver(access.Expression, path)
+                    && FollowLink(access, access.Name, onScenario: false, path);
+
+            case ParenthesizedExpressionSyntax parenthesized:
+                return FollowReceiver(parenthesized.Expression, path);
+
+            default:
+                Report(
+                    Descriptors.UnfollowableStepReceiver,
+                    receiver,
+                    receiver.WithoutTrivia().ToString(),
+                    receiver is InvocationExpressionSyntax
+                        ? "it is a method call; reach a step class through a phase or group property"
+                        : "it is not a phase or group property; reach a step class through one");
+                return false;
+        }
+    }
+
+    /// <summary>One link of a receiver: a property of the scenario class (the phase) or of a step class
+    /// (a group), whose getter returns <c>Steps&lt;T&gt;()</c> of its own type.</summary>
+    private bool FollowLink(ExpressionSyntax link, SimpleNameSyntax name, bool onScenario, List<string> path)
+    {
+        var text = link.WithoutTrivia().ToString();
+        var symbol = _model.GetSymbolInfo(name).Symbol;
+
+        if (symbol is not IPropertySymbol property)
+        {
+            var what = symbol switch
+            {
+                ILocalSymbol => "a local",
+                IParameterSymbol => "a parameter",
+                IFieldSymbol => "a field",
+                IMethodSymbol => "a method",
+                null => "a name that does not resolve",
+                _ => "not a property",
+            };
+            Report(
+                Descriptors.UnfollowableStepReceiver,
+                link,
+                text,
+                "it is " + what + "; a step class is reached only through phase and group properties that return Steps<T>()");
+            return false;
+        }
+
+        if (property.IsStatic || property.IsIndexer)
+        {
+            Report(Descriptors.UnfollowableStepReceiver, link, text, "a phase or group property is a non-static, non-indexed property");
+            return false;
+        }
+
+        var owner = onScenario
+            ? SymbolHelpers.WorldOfScenarios(property.ContainingType)
+            : SymbolHelpers.WorldOfStepClass(property.ContainingType);
+        if (owner is null)
+        {
+            Report(
+                Descriptors.UnfollowableStepReceiver,
+                link,
+                text,
+                onScenario
+                    ? "'" + property.Name + "' is not declared on a class deriving from Scenarios<>"
+                    : "'" + property.Name + "' is not declared on a step class");
+            return false;
+        }
+
+        if (!ReturnsStepsOfItsType(property, out var why))
+        {
+            Report(Descriptors.UnfollowableStepReceiver, link, text, why);
+            return false;
+        }
+
+        path.Add(property.Name);
+        return true;
+    }
+
+    /// <summary>
+    /// True when every declaration of <paramref name="property"/> in source is
+    /// <c>=&gt; Steps&lt;T&gt;()</c> (or a getter returning it) with <c>T</c> the property's type. A
+    /// property from a referenced assembly has no source to read and is taken at its type.
+    /// </summary>
+    private bool ReturnsStepsOfItsType(IPropertySymbol property, out string why)
+    {
+        why = "";
+        foreach (var reference in property.DeclaringSyntaxReferences)
+        {
+            if (reference.GetSyntax() is not PropertyDeclarationSyntax declaration)
+            {
+                continue;
+            }
+
+            var returned = declaration.ExpressionBody?.Expression
+                ?? declaration.AccessorList?.Accessors
+                    .Where(a => a.IsKind(SyntaxKind.GetAccessorDeclaration))
+                    .Select(a => a.ExpressionBody?.Expression
+                        ?? (a.Body is { Statements.Count: 1 } body && body.Statements[0] is ReturnStatementSyntax { Expression: { } value }
+                            ? value
+                            : null))
+                    .FirstOrDefault();
+
+            var model = _model.Compilation.GetSemanticModel(declaration.SyntaxTree);
+            if (returned is InvocationExpressionSyntax { ArgumentList.Arguments.Count: 0 } call
+                && model.GetSymbolInfo(call).Symbol is IMethodSymbol accessor
+                && SymbolHelpers.IsStepsAccessor(accessor)
+                && SymbolEqualityComparer.Default.Equals(accessor.TypeArguments[0], property.Type))
+            {
+                continue;
+            }
+
+            why = "'" + property.Name + "' must be declared '=> Steps<" + property.Type.Name + ">()'. Raun binds a step class by its type and never runs the property, so a property that returns anything else would not be what runs";
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>Adds a resolved call to the graph as a step, joined on <paramref name="sourceOrderDeps"/>
@@ -985,6 +1270,11 @@ internal sealed class ScenarioParser
         var operation = call.Operation;
 
         var deps = new SortedSet<int>(sourceOrderDeps);
+        if (_setupIndex >= 0)
+        {
+            deps.Add(_setupIndex);
+        }
+
         foreach (var read in lowering.Reads)
         {
             deps.UnionWith(_vars[read.Local].Producers);
@@ -993,7 +1283,12 @@ internal sealed class ScenarioParser
         var written = invocation.ArgumentList.Arguments;
         var lowered = lowering.Arguments.Select(a => a.Node).ToList();
         var wantsCtx = SymbolHelpers.WantsContext(method, written.Count);
-        var invokeCall = BuildCall(invocation, member, lowering.TypeArguments?.Node, lowered, wantsCtx);
+        var invokeCall = BuildCall(
+            invocation,
+            call.Receiver is { } receiver ? member.WithExpression(receiver) : member,
+            lowering.TypeArguments?.Node,
+            lowered,
+            wantsCtx);
         var resourceClaims = BuildResourceClaims(written, method, resultType is not null, lowered);
         AddUses(method.GetAttributes());
 
@@ -1002,7 +1297,7 @@ internal sealed class ScenarioParser
         var step = new ParsedStep
         {
             Index = index,
-            StepId = GenStableId.ForStep(_scenarioId, StepKey(operation, invocation, loop)),
+            StepId = GenStableId.ForStep(_scenarioId, StepKey(call.KeyPrefix + operation, invocation, loop)),
             Phase = phase,
             OperationName = operation,
             HasResult = resultType is not null,

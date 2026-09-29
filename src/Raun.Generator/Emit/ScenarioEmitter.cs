@@ -25,6 +25,10 @@ internal static class ScenarioEmitter
     /// <summary>The hint name prefix of a per-scenario file; the rest is the scenario's safe name.</summary>
     public const string ScenarioHintPrefix = "RaunScenario.";
 
+    /// <summary>The <c>BindingFlags</c> a scenario's method is looked up with: whatever its accessibility,
+    /// declared on its own class.</summary>
+    private static readonly string[] MethodLookupFlags = ["Instance", "Static", "Public", "NonPublic", "DeclaredOnly"];
+
     /// <summary>The hint name of the registry file.</summary>
     public const string RegistryHintName = "RaunScenarios.g.cs";
 
@@ -204,6 +208,28 @@ internal static class ScenarioEmitter
             Set("Nodes", IdentifierName("nodes")),
         };
 
+        // A world reads per-scenario settings from the scenario method's attributes:
+        // typeof(C).GetMethod("M", Instance | Static | Public | NonPublic | DeclaredOnly).
+        if (scenario.DeclaringType is { } declaringType)
+        {
+            var flags = MethodLookupFlags
+                .Select(flag => (ExpressionSyntax)MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    Names.Global("System", "Reflection", "BindingFlags"),
+                    IdentifierName(flag)))
+                .Aggregate((left, right) => BinaryExpression(SyntaxKind.BitwiseOrExpression, left, right));
+            members.Add(Set("Method", InvocationExpression(
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        TypeOfExpression(declaringType),
+                        IdentifierName("GetMethod")))
+                .WithArgumentList(ArgumentList(SeparatedList(new[]
+                {
+                    Argument(Lit(scenario.MethodName)),
+                    Argument(flags),
+                })))));
+        }
+
         // Only when declared, so use-free scenarios emit exactly what they did before.
         if (scenario.Uses.Count > 0)
         {
@@ -275,6 +301,11 @@ internal static class ScenarioEmitter
         if (step.IsTeardown)
         {
             members.Add(Set("IsTeardown", LiteralExpression(SyntaxKind.TrueLiteralExpression)));
+        }
+
+        if (step.IsSetup)
+        {
+            members.Add(Set("IsSetup", LiteralExpression(SyntaxKind.TrueLiteralExpression)));
         }
 
         if (step.ConditionCoercionType is { } coercionType)

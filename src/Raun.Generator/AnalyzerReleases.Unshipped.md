@@ -22,3 +22,6 @@ RAUN014 | Raun.Usage | Error | Cleanup uses the registering step's context
 RAUN015 | Raun.Usage | Error | Contended resource must declare exactly one kind
 RAUN016 | Raun.Usage | Warning | Contended resource use never constrains anything
 RAUN017 | Raun.Usage | Error | Scenario was not generated
+RAUN018 | Raun.Usage | Error | Step receiver cannot be followed
+RAUN019 | Raun.Usage | Error | Scenario does not fit its class
+RAUN020 | Raun.Usage | Error | Step class belongs to another world

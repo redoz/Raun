@@ -30,6 +30,57 @@ internal static class SymbolHelpers
         return isPhase ? type.Name : null;
     }
 
+    /// <summary>The world of a scenario class: <c>TWorld</c> when <paramref name="type"/> derives from
+    /// <c>Raun.Scenarios&lt;TWorld&gt;</c>, else null.</summary>
+    public static ITypeSymbol? WorldOfScenarios(ITypeSymbol? type) => GenericBaseArgument(type, "Scenarios");
+
+    /// <summary>The world of a step class: <c>TWorld</c> when <paramref name="type"/> derives from
+    /// <c>Raun.Phase&lt;TWorld&gt;</c>, else null.</summary>
+    public static ITypeSymbol? WorldOfStepClass(ITypeSymbol? type) => GenericBaseArgument(type, "Phase");
+
+    /// <summary>The phase label of a step class: the name in the nearest <c>[Raun.PhaseName]</c> of its
+    /// base chain, the built-in <c>Given&lt;&gt;</c>/<c>When&lt;&gt;</c>/<c>Then&lt;&gt;</c> included.</summary>
+    public static string? PhaseNameOf(ITypeSymbol? type)
+    {
+        for (var t = type as INamedTypeSymbol; t is not null; t = t.BaseType)
+        {
+            foreach (var attribute in t.GetAttributes())
+            {
+                if (attribute.AttributeClass is { Name: "PhaseNameAttribute" } attributeClass
+                    && attributeClass.ContainingNamespace?.ToDisplayString(NoGlobal) == "Raun"
+                    && attribute.ConstructorArguments.Length == 1
+                    && attribute.ConstructorArguments[0].Value is string name
+                    && name.Length > 0)
+                {
+                    return name;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>True for Raun's own <c>Steps&lt;T&gt;()</c>, on <c>Phase&lt;&gt;</c> or <c>Scenarios&lt;&gt;</c>.</summary>
+    public static bool IsStepsAccessor(IMethodSymbol method)
+        => method is { Name: "Steps", Arity: 1, Parameters.Length: 0 }
+            && method.ContainingType.OriginalDefinition is { Arity: 1, Name: "Phase" or "Scenarios" } owner
+            && owner.ContainingNamespace?.ToDisplayString(NoGlobal) == "Raun";
+
+    private static ITypeSymbol? GenericBaseArgument(ITypeSymbol? type, string name)
+    {
+        for (var t = type as INamedTypeSymbol; t is not null; t = t.BaseType)
+        {
+            if (t.OriginalDefinition is { Arity: 1 } definition
+                && definition.Name == name
+                && definition.ContainingNamespace?.ToDisplayString(NoGlobal) == "Raun")
+            {
+                return t.TypeArguments[0];
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Unwraps Task/ValueTask return types; out result type is null when there is none.</summary>
     public static bool TryUnwrapReturn(ITypeSymbol returnType, out ITypeSymbol? resultType)
     {
