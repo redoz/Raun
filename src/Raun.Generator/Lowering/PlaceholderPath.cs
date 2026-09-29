@@ -13,16 +13,19 @@ internal readonly record struct PathMember(string Name, bool NullConditional);
 
 /// <summary>
 /// A <c>[StepName]</c> placeholder bound by symbol: a parameter, optionally followed by a path of
-/// readable instance members — <c>{specification.Outcome}</c>, <c>{specification.Employee.Name}</c>.
+/// readable instance members — <c>{specification.Outcome}</c>, <c>{specification.Employee.Name}</c> —
+/// and optionally a format after the first colon, for a value that is <c>IFormattable</c>:
+/// <c>{booking.When:yyyy-MM-dd}</c>, <c>{booking.When:HH:mm}</c>.
 /// The generator and the analyzer both bind through <see cref="TryBind"/>, so a placeholder the
 /// analyzer accepts is exactly one the generator renders.
 /// </summary>
 internal sealed class PlaceholderPath
 {
-    private PlaceholderPath(IParameterSymbol parameter, IReadOnlyList<PathMember> members)
+    private PlaceholderPath(IParameterSymbol parameter, IReadOnlyList<PathMember> members, string? format)
     {
         Parameter = parameter;
         Members = members;
+        Format = format;
     }
 
     /// <summary>The parameter the path starts at.</summary>
@@ -31,6 +34,9 @@ internal sealed class PlaceholderPath
     /// <summary>The members after the parameter; empty for a bare <c>{parameter}</c>.</summary>
     public IReadOnlyList<PathMember> Members { get; }
 
+    /// <summary>The format after the first colon, or null for none.</summary>
+    public string? Format { get; }
+
     /// <summary>
     /// Binds <paramref name="placeholder"/> against <paramref name="method"/>'s parameters. On failure
     /// <paramref name="reason"/> says which segment did not resolve and why.
@@ -38,6 +44,19 @@ internal sealed class PlaceholderPath
     public static bool TryBind(IMethodSymbol method, string placeholder, out PlaceholderPath? path, out string reason)
     {
         path = null;
+        string? format = null;
+        var colon = placeholder.IndexOf(':');
+        if (colon >= 0)
+        {
+            format = placeholder.Substring(colon + 1);
+            placeholder = placeholder.Substring(0, colon).TrimEnd();
+            if (format.Length == 0)
+            {
+                reason = "the format after ':' is empty";
+                return false;
+            }
+        }
+
         var segments = placeholder.Split('.');
 
         var parameter = method.Parameters.FirstOrDefault(p => p.Name == segments[0]);
@@ -80,16 +99,62 @@ internal sealed class PlaceholderPath
             };
         }
 
-        path = new PlaceholderPath(parameter, members);
+        if (format is not null && !IsFormattable(UnderlyingIfNullable(type)))
+        {
+            reason = "'" + UnderlyingIfNullable(type).Name + "' does not implement IFormattable, so it takes no format";
+            return false;
+        }
+
+        path = new PlaceholderPath(parameter, members, format);
         reason = "";
         return true;
     }
 
     /// <summary>
-    /// <paramref name="argument"/> followed by the path: <c>(argument)?.Employee?.Name</c>, with
-    /// <c>.</c> wherever the receiver is a non-nullable value type.
+    /// <paramref name="argument"/> followed by the path — <c>(argument)?.Employee?.Name</c>, with
+    /// <c>.</c> wherever the receiver is a non-nullable value type — and, with a format,
+    /// <c>((IFormattable?)(…))?.ToString("format", CultureInfo.InvariantCulture)</c>: the invariant
+    /// culture, so a step's name is the same on every machine.
     /// </summary>
     public ExpressionSyntax Apply(ExpressionSyntax argument)
+    {
+        var value = Walk(argument);
+        if (Format is null)
+        {
+            return value;
+        }
+
+        var formattable = ParenthesizedExpression(CastExpression(
+            NullableType(QualifiedName(AliasQualifiedName(IdentifierName(Token(SyntaxKind.GlobalKeyword)), IdentifierName("System")), IdentifierName("IFormattable"))),
+            ParenthesizedExpression(value)));
+        return ConditionalAccessExpression(
+            formattable,
+            InvocationExpression(MemberBindingExpression(IdentifierName("ToString")))
+                .WithArgumentList(ArgumentList(SeparatedList(new[]
+                {
+                    Argument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(Format))),
+                    Argument(InvariantCulture),
+                }))));
+    }
+
+    /// <summary>Formats a compile-time constant exactly as <see cref="Apply"/> formats it at run time,
+    /// or returns null when the constant cannot take the format.</summary>
+    public string? FormatConstant(object? value)
+        => Format is null
+            ? value?.ToString()
+            : value is System.IFormattable formattable
+                ? formattable.ToString(Format, System.Globalization.CultureInfo.InvariantCulture)
+                : null;
+
+    private static MemberAccessExpressionSyntax InvariantCulture
+        => MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+            QualifiedName(
+                QualifiedName(AliasQualifiedName(IdentifierName(Token(SyntaxKind.GlobalKeyword)), IdentifierName("System")), IdentifierName("Globalization")),
+                IdentifierName("CultureInfo")),
+            IdentifierName("InvariantCulture"));
+
+    private ExpressionSyntax Walk(ExpressionSyntax argument)
     {
         ExpressionSyntax head = ParenthesizedExpression(argument);
         var first = 0;
@@ -117,6 +182,10 @@ internal sealed class PlaceholderPath
 
     private static MemberAccessExpressionSyntax Access(ExpressionSyntax receiver, string name)
         => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, receiver, IdentifierName(name));
+
+    private static bool IsFormattable(ITypeSymbol type)
+        => type.AllInterfaces.Any(i => i.Name == "IFormattable" && i.ContainingNamespace?.ToDisplayString() == "System")
+            || (type.Name == "IFormattable" && type.ContainingNamespace?.ToDisplayString() == "System");
 
     private static bool CanBeNull(ITypeSymbol type)
         => !type.IsValueType || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;

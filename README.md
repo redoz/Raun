@@ -307,8 +307,11 @@ that runs. Loading scenarios from a referenced library is not supported today.
 - `[StepName]` placeholders name a parameter, `{name}`, or a path of readable members on one,
   `{specification.Outcome}` or `{specification.Employee.Name}`. A constant argument is folded into
   the name at compile time; anything else — a member path always — is rendered from the running value
-  when the step starts, and a null along a path renders as empty. A placeholder that does not bind is a
-  warning (`RAUN008`) saying which part did not resolve.
+  when the step starts, and a null along a path renders as empty. A format goes after the first colon —
+  `{booking.When:yyyy-MM-dd}`, `{booking.When:HH:mm}`, `{fee:0.00}` — for any `IFormattable` value, and
+  is applied with the invariant culture, so a step's name is the same on every machine. A placeholder
+  that does not bind, or a format on a value that is not `IFormattable`, is a warning (`RAUN008`)
+  saying which part did not resolve.
 - `if`/`else` shapes the graph when the condition is an awaited step call whose
   result is usable as a C# condition (`bool`, an implicit conversion to `bool`, or `operator true`).
   The condition is an ordinary step — discovered, timed, and reported like any other. Exactly one arm

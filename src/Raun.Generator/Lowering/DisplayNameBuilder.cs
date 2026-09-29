@@ -77,22 +77,27 @@ internal static class DisplayNameBuilder
                 continue;
             }
 
-            // A constant folds into the name. So does a lowered argument made only of literals: a LINQ
-            // unroll binds its loop variable to a literal, and `$"user-{i}"` becomes "user-1" — each
-            // unrolled step then lists under its own name at discovery time, not three "{name}" entries.
+            // A constant folds into the name, formatted as the run time would format it. So does a
+            // lowered argument made only of literals when there is no format: a LINQ unroll binds its
+            // loop variable to a literal, and `$"user-{i}"` becomes "user-1" — each unrolled step then
+            // lists under its own name at discovery time, not three "{name}" entries.
             var constValue = model.GetConstantValue(written[index].Expression);
             string? folded = null;
-            if (constValue.HasValue || TryFoldLiterals(argument, out folded))
+            if (constValue.HasValue && path.FormatConstant(constValue.Value) is var formatted && (formatted is not null || path.Format is null))
             {
-                var text = constValue.HasValue ? constValue.Value?.ToString() ?? "" : folded!;
-                constant.Append(text);
-                format.Append(text);
+                constant.Append(formatted ?? "");
+                format.Append(formatted ?? "");
+            }
+            else if (path.Format is null && TryFoldLiterals(argument, out folded))
+            {
+                constant.Append(folded!);
+                format.Append(folded!);
             }
             else
             {
                 constant.Append('{').Append(token.Text).Append('}');
-                // Parenthesize so the hole binds tighter than the surrounding `+`, whatever it is.
-                format.Append(ParenthesizedExpression(argument));
+                // Parenthesized so the hole binds tighter than the surrounding `+`, whatever it is.
+                format.Append(path.Format is null ? ParenthesizedExpression(argument) : path.Apply(argument));
             }
         }
 
