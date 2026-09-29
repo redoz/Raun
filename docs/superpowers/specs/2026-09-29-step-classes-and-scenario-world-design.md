@@ -1,8 +1,8 @@
 # Step classes and the scenario world — Design
 
 - **Date:** 2026-09-29
-- **Status:** Revised after review. A spike implements the core additively, beside the extension-member
-  DSL (see [The spike](#the-spike)); the cutover is not done.
+- **Status:** Implemented. A spike proved the core on the reviewer's cancellation scenario; the
+  cutover followed: step classes are now the only authoring model (see [Implementation](#implementation)).
 - **Scope:** `src/Raun` (phase and scenario base types, the world, the Setup node), `src/Raun.Generator`
   (step recognition, receiver binding, diagnostics), `src/Raun.Mtp` (reporting Setup), both samples, and
   all three test projects.
@@ -199,12 +199,14 @@ public sealed class NoWorld : IScenarioWorld<NoWorld>;   // for suites with no s
 `ScenarioContext` gains `Scenario` (a `ScenarioInfo`). `ScenarioScope<TWorld>` is public, because
 generated code calls it, but it is hidden from IntelliSense and is not for user code.
 
-After the cutover these replace:
+These replace, and the cutover removed:
 
 - `IPhase` and the sealed `Given`/`When`/`Then` markers;
 - static extension-member DSLs;
-- the `ScenarioContext? ctx = null` parameter;
+- the `ScenarioContext? ctx = null` parameter (the generator no longer supplies a trailing context);
 - static `[Scenario]` methods.
+
+A suite with no state derives its scenarios from `Scenarios<NoWorld>`; every scenario has a world.
 
 ## Review resolutions
 
@@ -246,7 +248,7 @@ Node 0 is Setup, and its output is the scenario's scope. `Steps<T>()` returns th
 instance of `T`, created on first use and bound to its world.
 
 For that to be honest, every property on the way must say the same thing. The contract, checked by
-RAUN018 at the offending link, is:
+RAUN019 at the offending link, is:
 
 - the receiver is a chain of properties starting at the scenario: `Given`, `this.Given`,
   `Given.Customers`, and so on;
@@ -310,9 +312,9 @@ says so. It never returns null.
 
 A side effect is that `Context` read *inside* a cleanup lambda is the Teardown node's context, because
 the scheduler makes that one current while cleanups run. So `Context.Log(…)` in a cleanup lands on
-Teardown, which is what RAUN014 exists to enforce for today's captured `ctx`. Capturing it first
-(`var ctx = Context;`) still gets the registering step's context. RAUN014 is not yet taught about that
-case.
+Teardown, which is what RAUN014 exists to enforce. Capturing it first (`var ctx = Context;`) still gets
+the registering step's context — and RAUN014 already flags that: it looks for any `ScenarioContext`
+local or parameter captured from outside the cleanup, and `Context` itself is a property, not a capture.
 
 ### Lifetime
 
@@ -334,23 +336,28 @@ case.
 - **Recognising a step.** A call is a step of a step class when the invoked method is an instance
   method declared on a class deriving from `Phase<>`. Its phase label comes from the nearest
   `[PhaseName]` in the class's base chain, so built-in and custom phases take exactly the same path.
-  Calls on the old phase markers are unchanged.
-- **Setup and dependencies.** A scenario whose class derives from `Scenarios<TWorld>` gets the Setup
-  node, and every step depends on it.
+  Nothing else is a step: any other awaited call is RAUN004, as before.
+- **Setup and dependencies.** Every scenario's class derives from `Scenarios<TWorld>`, so every
+  scenario gets the Setup node, and every step depends on it.
 - **Step identity.** It includes the group path: `Customers.Exists("Jane")`, not `Exists("Jane")`. Two
   groups with a same-named step therefore get different ids.
-- **The method.** `ScenarioDefinition.Method` is emitted only for scenarios with a world, so every
-  other scenario's generated source is byte-identical to before.
+- **The method.** `ScenarioDefinition.Method` is emitted for every scenario, so a world can read
+  the scenario method's attributes.
+- **CA1822.** A step that reads neither `World` nor `Context` would draw "mark members as static" in a
+  suite that runs the .NET analyzers, and a static step cannot be called through a phase property.
+  Raun ships a `DiagnosticSuppressor` that suppresses CA1822 on public instance methods of step classes,
+  and only there.
 
 ### Diagnostics
 
-Each new rule is listed in `AnalyzerReleases.Unshipped.md`.
+Each new rule is listed in `AnalyzerReleases.Unshipped.md`. The numbering skips RAUN018, which is the
+MSBuild error `Raun.props` raises for an SDK below the floor.
 
 | Rule | When | Reported at |
 |---|---|---|
-| **RAUN018** Step receiver cannot be followed | Any break in the binding contract above: a local, a cast, a method call, a field, a static or indexed property, a property on the wrong kind of class, a property not declared `=> Steps<T>()`, a step class with no `[PhaseName]` in its chain, or a step class used from a class that is not a `Scenarios<>`. It replaces RAUN004 for grouped calls. | the offending link |
-| **RAUN019** Scenario does not fit its class | A static `[Scenario]` method in a `Scenarios<>` class. | the method name |
-| **RAUN020** Step class belongs to another world | A step class of `WorldA` reached from a `Scenarios<WorldB>`. | the receiver |
+| **RAUN019** Step receiver cannot be followed | Any break in the binding contract above: a local, a cast, a method call, a field, a static or indexed property, a property on the wrong kind of class, a property not declared `=> Steps<T>()`, or a step class with no `[PhaseName]` in its chain. It replaces RAUN004 for grouped calls. | the offending link |
+| **RAUN020** Scenario does not fit its class | A `[Scenario]` method whose class does not derive from `Scenarios<TWorld>` (reported once, instead of once per step), or a static one. | the method name |
+| **RAUN021** Step class belongs to another world | A step class of `WorldA` reached from a `Scenarios<WorldB>`. | the receiver |
 
 A step-class call nested inside another step's argument is refused by RAUN007, as a phase-marker call
 already is.
@@ -370,9 +377,9 @@ already is.
 | Requirement | Met by |
 |---|---|
 | Groups for Given/When/Then and custom phases | A group is a property on a step class. Recognition goes by `Phase<>`, and custom phases take the same path. |
-| A specific diagnostic | RAUN018 names the link it could not follow and the reason. |
+| A specific diagnostic | RAUN019 names the link it could not follow and the reason. |
 | Useful IntelliSense | A step class's public surface is its steps plus its groups. `World`, `Context` and `Steps<T>()` are protected. A test asserts that `Phase<TWorld>` adds no public member. |
-| Execution tests | See [The spike](#the-spike). |
+| Execution tests | See [Implementation](#implementation). |
 | One typed state object per scenario | `IScenarioWorld<TSelf>`, created per scenario in Setup. |
 | Step results stay explicit | Unchanged. The world is ready before any step, so it adds no step-to-step edges and hides none. |
 | A non-null context | `CreateAsync(ScenarioContext)` receives it. Steps read `this.Context`, which is never null inside a step. |
@@ -381,23 +388,30 @@ already is.
 | The seed | Scenario metadata through `context.Scenario.Method` (review resolution 1). |
 | Group binding | Bound by type through the Setup node's scope; properties must return `Steps<T>()` (review resolution 2). |
 
-## The spike
+## Implementation
 
-The spike is on branch `claude/jolly-johnson-yo85m9`. It is **additive**: the extension-member DSL
-still works, and every existing test passes unchanged.
+Built in two passes on branch `claude/jolly-johnson-yo85m9` ([redoz/Raun#3](https://github.com/redoz/Raun/pull/3)):
+first a spike beside the extension-member DSL, on the reviewer's cancellation scenario, then the
+cutover.
 
 - **Runtime** (`src/Raun/Steps/`): `IScenarioWorld<TSelf>`, `NoWorld`, `Phase<TWorld>`,
   `Given/When/Then<TWorld>`, `PhaseNameAttribute`, `Scenarios<TWorld>`, `ScenarioScope`, `ScenarioInfo`.
   It also adds `ScenarioContext.Scenario`, `ScenarioDefinition.Method` and `ScenarioNode.IsSetup`, and
-  Setup is unnumbered in `StepNumbering`.
-- **Generator:** the Setup node, step-class recognition, type-bound receivers, RAUN018–020, and
-  step-class calls refused inside arguments.
-- **Sample:** `samples/AppointmentTests/CancellationScenarios.cs` has two cancellation scenarios with a
-  seeded isolation (`[IsolationSeed(2102)]`, and a derived seed), grouped calls under Given, When and
-  Then, a custom `Eventually` phase, and parallel stub steps on the shared world. It runs through the
-  real MTP host and the HTML report.
-- **Tests** (`test/Raun.Generator.Test/StepClassTests.cs`) compile the generated code, run it through
-  the real scheduler, and assert:
+  Setup is unnumbered in `StepNumbering`. `Phases.cs` (`IPhase` and the markers) is gone.
+- **Generator:** the Setup node, step-class recognition, type-bound receivers, RAUN019–021, step-class
+  calls refused inside arguments, and the CA1822 suppressor. The phase-marker path and the trailing
+  `ScenarioContext` injection are gone.
+- **Samples:** all three suites are step classes.
+  - `samples/AppointmentTests` booking and lifecycle scenarios use `NoWorld`, partial step classes
+    split across two files, and a custom `Eventually` phase.
+  - `CancellationScenarios.cs` in the same sample has the reviewer's shape: a seeded isolation
+    (`[IsolationSeed(2102)]`, and a derived seed), groups under Given, When and Then, and parallel
+    stub steps on the shared world.
+  - `samples/AspireAppointments` holds the API client in its world, resolved once per scenario from
+    the services `Program.cs` registers, instead of every step fetching it from `ctx.Services`.
+- **Tests.** Every generator test source is migrated; scenario bodies did not change, and step ids
+  did not move, only the classes around them. `test/Raun.Generator.Test/StepClassTests.cs` compiles the
+  generated code, runs it through the real scheduler, and asserts:
   - step order, prior-result arguments, display names and phases, custom phase included;
   - Setup is node 0, every step depends on it, and it is unnumbered;
   - the seed read from the scenario method;
@@ -410,27 +424,26 @@ still works, and every existing test passes unchanged.
   - a single-step filter keeps Setup;
   - grouped steps get distinct ids;
   - `Phase<TWorld>` adds no public member;
-  - RAUN018 (local, cast, a property not returning `Steps<T>()`, use outside a `Scenarios<>`),
-    RAUN019 and RAUN020.
+  - RAUN019 (local, cast, a property not returning `Steps<T>()`), RAUN020 (outside a `Scenarios<>`,
+    static) and RAUN021.
 
-  A snapshot (`GeneratorSnapshotTests.StepClass_scenario`) pins the emitted code.
+  `StepMethodSuppressorTests` covers the suppressor, and a snapshot
+  (`GeneratorSnapshotTests.StepClass_scenario`) pins the emitted code.
 
-**Not in the spike:**
+**Not done:**
 
-- the cutover (migrating both samples, removing the markers and `IPhase`, the README);
-- step arguments that read the world (`When.Book(World.Isolation.DefaultClinic)` is still refused by
-  RAUN007, as any instance member is);
-- RAUN014 for a captured `Context`;
 - an analyzer rule for mutable step-class fields;
-- the Aspire sample.
+- step arguments that read the world (open question 2).
 
 ## Open questions
 
 1. **The name "World".** It is the Cucumber/Reqnroll term, so many readers will know it. `State` or
    `Fixture` are the alternatives.
-2. **Can step arguments read the world?** For example `When.Book(World.Isolation.DefaultClinic, slot)`.
-   Recommendation: yes, read-only. The world is ready before step 1, so it would need only the Setup
-   edge every step already has.
+2. **Can a scenario pass a world value to a step?** For example
+   `When.Book(World.Isolation.DefaultClinic, slot)`. Not today: `Scenarios<TWorld>` exposes no `World`,
+   and an argument naming an instance member is RAUN007. Nothing needs it yet — a step already has
+   `World`, so `When.Book(slot)` reads the clinic itself. It would matter only when a scenario has to
+   choose *which* world value a step acts on; then it needs just the Setup edge every step already has.
 3. **Steps shared across worlds.** A generic step class
    (`class AuditThen<TWorld> : Then<TWorld> where TWorld : class, IScenarioWorld<TWorld>, IHasIsolation`)
    should work with no special support. It is untested.
