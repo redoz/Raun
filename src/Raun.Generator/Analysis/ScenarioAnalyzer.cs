@@ -512,14 +512,13 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var parameters = method.Parameters.Select(p => p.Name).ToImmutableHashSet();
         foreach (var token in TemplateTokenizer.Tokenize(template))
         {
-            if (token.IsPlaceholder && !parameters.Contains(token.Text))
+            if (token.IsPlaceholder && !PlaceholderPath.TryBind(method, token.Text, out _, out var reason))
             {
                 var location = method.Locations.FirstOrDefault() ?? Location.None;
                 context.ReportDiagnostic(Diagnostic.Create(
-                    Descriptors.UnboundPlaceholder, location, token.Text, method.Name));
+                    Descriptors.UnboundPlaceholder, location, token.Text, method.Name, reason));
             }
         }
     }

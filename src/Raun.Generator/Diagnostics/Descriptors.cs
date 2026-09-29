@@ -79,8 +79,8 @@ internal static class Descriptors
 
     public static readonly DiagnosticDescriptor UnboundPlaceholder = new(
         "RAUN008",
-        "Display-name placeholder does not bind to a parameter",
-        "Display-name placeholder '{0}' does not match any parameter of '{1}'",
+        "Display-name placeholder does not bind",
+        "Display-name placeholder '{0}' of '{1}' does not bind: {2}",
         Category,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);

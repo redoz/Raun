@@ -13,8 +13,9 @@ internal readonly record struct LoweredDisplayName(string Template, ExpressionSy
 
 /// <summary>
 /// Builds a step's display name from its <c>[StepName]</c> template: constant placeholders are
-/// folded into a literal, and runtime ones become a string concatenation (in terms of
-/// <c>__inputs</c>). The format expression is null when the name is fully constant.
+/// folded into a literal, and runtime ones — a member path such as <c>{specification.Outcome}</c>
+/// always is — become a string concatenation (in terms of <c>__inputs</c>). The format expression is
+/// null when the name is fully constant.
 /// </summary>
 /// <remarks>
 /// The runtime form is a <c>+</c> chain rather than an interpolated string: Roslyn has no factory
@@ -50,7 +51,14 @@ internal static class DisplayNameBuilder
                 continue;
             }
 
-            var index = ArgumentIndexFor(method, written, token.Text);
+            var index = -1;
+            PlaceholderPath? path = null;
+            if (PlaceholderPath.TryBind(method, token.Text, out path, out _))
+            {
+                var ordinal = method.Parameters.IndexOf(path!.Parameter);
+                index = CallArguments.IndexOf(written, path.Parameter.Name, ordinal);
+            }
+
             if (index < 0)
             {
                 // No argument resolves the placeholder: it stays as written, in both forms.
@@ -59,11 +67,20 @@ internal static class DisplayNameBuilder
                 continue;
             }
 
+            var argument = lowered[index].Expression.WithoutTrivia();
+            if (path!.Members.Count > 0)
+            {
+                // A member path is always read at run time, null-safely: the value it projects is not
+                // a compile-time constant even when the argument is.
+                constant.Append('{').Append(token.Text).Append('}');
+                format.Append(path.Apply(argument));
+                continue;
+            }
+
             // A constant folds into the name. So does a lowered argument made only of literals: a LINQ
             // unroll binds its loop variable to a literal, and `$"user-{i}"` becomes "user-1" — each
             // unrolled step then lists under its own name at discovery time, not three "{name}" entries.
             var constValue = model.GetConstantValue(written[index].Expression);
-            var argument = lowered[index].Expression;
             string? folded = null;
             if (constValue.HasValue || TryFoldLiterals(argument, out folded))
             {
@@ -75,7 +92,7 @@ internal static class DisplayNameBuilder
             {
                 constant.Append('{').Append(token.Text).Append('}');
                 // Parenthesize so the hole binds tighter than the surrounding `+`, whatever it is.
-                format.Append(ParenthesizedExpression(argument.WithoutTrivia()));
+                format.Append(ParenthesizedExpression(argument));
             }
         }
 
@@ -137,23 +154,6 @@ internal static class DisplayNameBuilder
 
         private static LiteralExpressionSyntax Literal(string text)
             => LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(text));
-    }
-
-    /// <summary>The index of the argument bound to the parameter a placeholder names, or -1.</summary>
-    private static int ArgumentIndexFor(
-        IMethodSymbol method,
-        SeparatedSyntaxList<ArgumentSyntax> arguments,
-        string parameterName)
-    {
-        for (var i = 0; i < method.Parameters.Length; i++)
-        {
-            if (method.Parameters[i].Name == parameterName)
-            {
-                return CallArguments.IndexOf(arguments, parameterName, i);
-            }
-        }
-
-        return -1;
     }
 
     /// <summary>Folds an expression made only of literals: a literal itself, a parenthesized one, or

@@ -13,7 +13,7 @@ RAUN004 | Raun.Usage | Error | Scenario step must be a step call
 RAUN005 | Raun.Usage | Error | DSL method has an unsupported return type
 RAUN006 | Raun.Usage | Error | Parallel group element must be a step call
 RAUN007 | Raun.Usage | Error | Scenario step argument is not lowerable
-RAUN008 | Raun.Usage | Warning | Display-name placeholder does not bind to a parameter
+RAUN008 | Raun.Usage | Warning | Display-name placeholder does not bind
 RAUN009 | Raun.Usage | Error | Resource access must be declared
 RAUN010 | Raun.Usage | Error | Lineage subject must name a step subject
 RAUN011 | Raun.Usage | Error | Scenario condition must be an awaited step call
