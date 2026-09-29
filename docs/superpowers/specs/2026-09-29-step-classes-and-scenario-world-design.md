@@ -1,10 +1,11 @@
 # Step classes and the scenario world — Design
 
 - **Date:** 2026-09-29
-- **Status:** Draft for review. Nothing here is implemented.
-- **Scope:** `src/Raun` (phase and scenario base types, the world lifetime, the Setup node),
-  `src/Raun.Generator` (step recognition, receiver lowering, diagnostics), `src/Raun.Mtp` (reporting
-  Setup), both samples, and all three test projects.
+- **Status:** Revised after review. A spike implements the core additively, beside the extension-member
+  DSL (see [The spike](#the-spike)); the cutover is not done.
+- **Scope:** `src/Raun` (phase and scenario base types, the world, the Setup node), `src/Raun.Generator`
+  (step recognition, receiver binding, diagnostics), `src/Raun.Mtp` (reporting Setup), both samples, and
+  all three test projects.
 - **Out of scope:** union-typed step outcomes and pattern-matching conditions (a separate spec), and
   "pure local values" (still deferred from the step-arguments design).
 
@@ -44,6 +45,10 @@ their own isolation. They asked for four things instead:
 A last constraint came from the maintainer: **use more standard C# and fewer tricks.** Someone reading a
 scenario should be able to press F12 on every name and land on ordinary code.
 
+The same reviewer then read the first draft of this design. They agreed with its direction and asked
+for three things to be settled before implementing it, plus a spike on a real cancellation scenario.
+The [review](#review-resolutions) section records how each is settled.
+
 ## Principle
 
 A scenario body is ordinary C# against ordinary objects:
@@ -53,8 +58,7 @@ A scenario body is ordinary C# against ordinary objects:
 - `Exists` is an instance method on a class you wrote.
 
 The generator still reads the body instead of running it, because that is how Raun builds the graph.
-But it emits each call exactly as it was written, on a real instance. Its only job is deciding *when*
-each call runs.
+Each call becomes a call to the same method, on the instance Raun holds for that scenario.
 
 Two kinds of state are kept apart:
 
@@ -65,96 +69,98 @@ Nothing of yours goes into `ScenarioContext`, and nothing of Raun's goes into yo
 
 ## Surface
 
+The code below is `samples/AppointmentTests/CancellationScenarios.cs`, shortened.
+
 ### 1. The world: your per-scenario state
 
 ```csharp
-public sealed class AppointmentWorld(IConfiguration config) : IScenarioWorld, IAsyncDisposable
+public sealed class ClinicWorld : IScenarioWorld<ClinicWorld>
 {
-    public TestIsolation Isolation { get; private set; } = null!;
+    private ClinicWorld(TestIsolation isolation) => Isolation = isolation;
 
-    // Awaited before the first step. `context` is the Setup node's context and is never null.
-    public async ValueTask InitializeAsync(ScenarioContext context)
-        => Isolation = await TestIsolation.CreateAsync(config, context.CancellationToken);
+    public TestIsolation Isolation { get; }
 
-    // Runs after teardown, whether or not a step failed.
-    public ValueTask DisposeAsync() => Isolation.DisposeAsync();
+    public static async ValueTask<ClinicWorld> CreateAsync(ScenarioContext context)
+    {
+        // Scenario metadata: [IsolationSeed(2102)] on the scenario, else a seed from its stable id.
+        var seed = context.Scenario.Method?.GetCustomAttribute<IsolationSeedAttribute>()?.Seed
+            ?? StableSeed(context.Scenario.Id);
+
+        var isolation = await TestIsolation.CreateAsync(seed, context.CancellationToken);
+        context.OnTeardown(Cleanup.Required, _ => isolation.ReleaseAsync());   // registered the moment it exists
+        return new ClinicWorld(isolation);
+    }
 }
 ```
 
-- The world is constructed from the scenario's DI scope, so constructor injection works and nothing
-  needs registering.
-- `InitializeAsync` is a default interface method, so a world with nothing asynchronous to do leaves
-  it out.
-- Disposal is plain `IAsyncDisposable` (or `IDisposable`).
+- The world is created by a **static factory**, not by a constructor plus an init method. A world that
+  exists has therefore finished initializing: its members need no `= null!`. If creation fails part
+  way, there is no half-built object to dispose. Whatever was made before the failure is released by
+  the cleanup registered the moment it was made.
+- `context` is the Setup node's context and is never null. Its logs land on Setup, `context.Scenario`
+  describes the scenario being set up, and `context.Services` is the scenario's DI scope.
+- A world that implements `IAsyncDisposable` or `IDisposable` is also disposed in teardown.
 
 ### 2. Step classes: plain classes, instance methods
 
 ```csharp
-public sealed partial class AppointmentGiven : Given<AppointmentWorld>
+public sealed class ClinicGiven : Given<ClinicWorld>
 {
-    // A group is a property. `Given.Patients.` lists only patient steps.
-    public PatientSteps Patients => Steps<PatientSteps>();
-
-    [StepName("Given an available slot exists")]
-    [return: Created]
-    public Task<Slot> AvailableSlot()
-        => World.Isolation.Slots.CreateAsync(Context.CancellationToken);
+    // A group is a property returning Steps<T>(). `Given.Customers.` lists only customer steps.
+    public CustomerSteps Customers => Steps<CustomerSteps>();
+    public BookingSteps Bookings => Steps<BookingSteps>();
+    public StubSteps Stubs => Steps<StubSteps>();
 }
 
-public sealed class PatientSteps : Given<AppointmentWorld>
+public sealed class BookingSteps : Given<ClinicWorld>
 {
-    [StepName("Given patient {name} exists")]
-    [return: Created]
-    public async Task<Patient> Exists(string name)
+    [StepName("Given {customer} has a booking in {daysAhead} days")]
+    public Task<Booking> Existing(Customer customer, int daysAhead)
     {
-        var patient = await World.Isolation.Patients.CreateAsync(name, Context.CancellationToken);
-        Context.OnTeardown(t => World.Isolation.Patients.DeleteAsync(patient, t.CancellationToken));
-        return patient;
+        var booking = new Booking($"B-{World.Isolation.Seed}-{customer.Name}", customer, /* … */);
+        Context.OnTeardown(teardown => { teardown.Log($"deleted {booking.Id}"); return Task.CompletedTask; });
+        return Task.FromResult(booking);
     }
-}
-
-public sealed class AppointmentWhen : When<AppointmentWorld>
-{
-    [StepName("When {patient} books {slot}")]
-    [return: Created]
-    public Task<Appointment> Book([Read] Patient patient, [Edited] Slot slot)
-        => World.Isolation.Api.BookAsync(patient, slot, Context.CancellationToken);
 }
 
 // A custom phase is the same thing with its own label.
 [PhaseName("Eventually")]
-public sealed class AppointmentEventually : Phase<AppointmentWorld> { /* … */ }
+public sealed class ClinicEventually : Phase<ClinicWorld> { /* … */ }
 ```
 
-Everything else a step can declare works exactly as it does today: `[StepName]`, resource roles,
-`[Uses<T>]`, timeouts and `OnTeardown`. Only where a step lives has changed.
+Everything else a step can declare works as it does today: `[StepName]`, resource roles, `[Uses<T>]`,
+timeouts and `OnTeardown`. Only where a step lives has changed.
 
-### 3. The wiring: once per project
+### 3. The wiring: once per suite
 
 ```csharp
-public abstract class AppointmentScenarios : Scenarios<AppointmentWorld>
+public abstract class ClinicScenarios : Scenarios<ClinicWorld>
 {
-    public AppointmentGiven      Given      => Steps<AppointmentGiven>();
-    public AppointmentWhen       When       => Steps<AppointmentWhen>();
-    public AppointmentThen       Then       => Steps<AppointmentThen>();
-    public AppointmentEventually Eventually => Steps<AppointmentEventually>();
+    public ClinicGiven      Given      => Steps<ClinicGiven>();
+    public ClinicWhen       When       => Steps<ClinicWhen>();
+    public ClinicThen       Then       => Steps<ClinicThen>();
+    public ClinicEventually Eventually => Steps<ClinicEventually>();
 }
 ```
-
-Built-in and custom phases are declared on the same line, the same way. Go-to-definition on `Given`
-inside a scenario lands here.
 
 ### 4. Scenarios: instance methods, explicit results
 
 ```csharp
-public sealed class BookingScenarios : AppointmentScenarios
+[DisplayName("Appointment cancellation")]
+public sealed class CancellationScenarios : ClinicScenarios
 {
-    [Scenario("patient books an available slot")]
-    public async Task Books()
+    [Scenario("customer cancels a booking")]
+    [IsolationSeed(2102)]
+    public async Task CustomerCancels()
     {
-        var (patient, slot) = await (Given.Patients.Exists("Jane"), Given.AvailableSlot());
-        var appointment     = await When.Book(patient, slot);
-        await Then.IsConfirmed(appointment);
+        var customer = await Given.Customers.Exists("Jane");
+        var booking = await Given.Bookings.Existing(customer, daysAhead: 10);
+        await (Given.Stubs.Accepts("notifications"), Given.Stubs.Accepts("calendar"));
+
+        var cancellation = await When.Bookings.Cancel(customer, booking);
+
+        await (Then.IsRecorded(cancellation), Then.Notifications.WereSent(customer, booking));
+        await Eventually.SlotIsFree(booking);
     }
 }
 ```
@@ -164,40 +170,121 @@ Tuple and array groups, LINQ unrolls, `if`/`else` conditions and step arguments 
 ### What Raun ships
 
 ```csharp
-public interface IScenarioWorld
+public interface IScenarioWorld<TSelf> where TSelf : class, IScenarioWorld<TSelf>
 {
-    ValueTask InitializeAsync(ScenarioContext context) => ValueTask.CompletedTask;
+    static abstract ValueTask<TSelf> CreateAsync(ScenarioContext context);
 }
 
-public abstract class Phase<TWorld> where TWorld : IScenarioWorld
+public abstract class Phase<TWorld> where TWorld : class, IScenarioWorld<TWorld>
 {
-    protected TWorld World { get; }                     // bound by Raun, one per scenario
+    protected TWorld World { get; }                     // the scenario's world
     protected ScenarioContext Context { get; }          // the running step's; throws outside a step
-    protected T Steps<T>() where T : Phase<TWorld>;     // groups: same scenario, same world
+    protected T Steps<T>() where T : Phase<TWorld>;     // groups
 }
 
-[PhaseName("Given")] public abstract class Given<TWorld> : Phase<TWorld> where TWorld : IScenarioWorld;
-[PhaseName("When")]  public abstract class When<TWorld>  : Phase<TWorld> where TWorld : IScenarioWorld;
-[PhaseName("Then")]  public abstract class Then<TWorld>  : Phase<TWorld> where TWorld : IScenarioWorld;
+[PhaseName("Given")] public abstract class Given<TWorld> : Phase<TWorld> …;
+[PhaseName("When")]  public abstract class When<TWorld>  : Phase<TWorld> …;
+[PhaseName("Then")]  public abstract class Then<TWorld>  : Phase<TWorld> …;
 
-public abstract class Scenarios<TWorld> where TWorld : IScenarioWorld
+public abstract class Scenarios<TWorld> where TWorld : class, IScenarioWorld<TWorld>
 {
-    public TWorld World { get; }
-    protected T Steps<T>() where T : Phase<TWorld>;
+    protected T Steps<T>() where T : Phase<TWorld>;     // for the compiler and the IDE; never run
 }
 
-[AttributeUsage(AttributeTargets.Class, Inherited = true)]
 public sealed class PhaseNameAttribute(string name) : Attribute;
-
-public sealed class NoWorld : IScenarioWorld;           // for suites with no state
+public sealed record ScenarioInfo(string Id, string DisplayName, string MethodName, MethodInfo? Method);
+public sealed class NoWorld : IScenarioWorld<NoWorld>;   // for suites with no state
 ```
 
-This replaces:
+`ScenarioContext` gains `Scenario` (a `ScenarioInfo`). `ScenarioScope<TWorld>` is public, because
+generated code calls it, but it is hidden from IntelliSense and is not for user code.
+
+After the cutover these replace:
 
 - `IPhase` and the sealed `Given`/`When`/`Then` markers;
 - static extension-member DSLs;
 - the `ScenarioContext? ctx = null` parameter;
 - static `[Scenario]` methods.
+
+## Review resolutions
+
+### 1. Where the isolation seed comes from
+
+The suite calls `Given.Isolation(2102)` today, varying the seed per scenario. If the world creates the
+isolation before any step runs, the seed has to be known before any step runs. **It is scenario
+metadata.** `ScenarioContext.Scenario.Method` is the `[Scenario]` method, so a world reads an attribute
+of its own from it:
+
+```csharp
+var seed = context.Scenario.Method?.GetCustomAttribute<IsolationSeedAttribute>()?.Seed
+    ?? StableSeed(context.Scenario.Id);
+```
+
+This is plain reflection over a plain attribute. Raun does not know what a seed is. `context.Scenario.Id`
+is the scenario's stable id, the same on every run and every machine, so a scenario that doesn't care
+which seed it gets can derive one and needs no attribute at all.
+
+The alternative was to keep isolation creation as an explicit step, with Setup creating only the
+world's common dependencies. That stays possible: `var isolation = await Given.Isolation(2102);` is
+an ordinary step whose result is passed explicitly, just as today. It was not chosen as the model,
+because it brings back what the world exists to remove: every step that needs the isolation takes it as
+a parameter again. Mutating the world from inside a step is not a middle way, because the world is
+fixed once Setup finishes (see 3).
+
+### 2. What guarantees a group belongs to the current scenario
+
+The first draft had the generator emit the receiver chain as written, which re-evaluates the properties
+when the step runs. A property could return a new, unbound step object. **Raun now binds a step class
+by its type and never runs a phase or group property.** For `Given.Customers.Exists("Jane")` the
+generator emits:
+
+```csharp
+__inputs.Get<ScenarioScope<ClinicWorld>>(0).Steps<CustomerSteps>().Exists("Jane")
+```
+
+Node 0 is Setup, and its output is the scenario's scope. `Steps<T>()` returns that scenario's one
+instance of `T`, created on first use and bound to its world.
+
+For that to be honest, every property on the way must say the same thing. The contract, checked by
+RAUN018 at the offending link, is:
+
+- the receiver is a chain of properties starting at the scenario: `Given`, `this.Given`,
+  `Given.Customers`, and so on;
+- the first property is declared on a `Scenarios<TWorld>` class, and each later one on a step class;
+- each property is declared `=> Steps<T>()` (or a getter that returns it), where `T` is the
+  property's own type.
+
+A local, a cast, a method call, a field, or a property that builds its own instance is refused, and
+the diagnostic names the link and says why. A property from a referenced assembly has no source to
+read, so it is taken at its type.
+
+`Scenarios<TWorld>.Steps<T>()` throws if it is ever actually called, because a scenario body is never
+run directly. The properties exist for the compiler, the IDE and the reader.
+
+### 3. What "read-only world" means
+
+The world's **references** do not change after `CreateAsync` returns. `World.Isolation` is the same
+object for every step of the scenario. The objects they point at (the isolation, its stub server, its
+clients) are **mutable, shared infrastructure**. Sibling steps of a tuple or array group use them at
+the same time:
+
+```csharp
+await (Given.Stubs.Accepts("notifications"), Given.Stubs.Accepts("calendar"));
+```
+
+The two steps above both write to the one stub server, concurrently, on one `StubSteps` instance. Raun
+guarantees that:
+
+- each sibling sees its own `Context`;
+- both see the same `World`;
+- the step class holds no per-step state.
+
+Raun does **not** detect two siblings conflicting on shared infrastructure. RAUN013 covers step
+outputs with resource roles, and the world is not a step output. Infrastructure that parallel steps
+touch has to be safe for concurrent use: the sample's stub server keeps its stubs in a
+`ConcurrentDictionary` keyed by service. Steps that cannot share it have to be sequenced rather than
+grouped. A later analyzer rule could flag writable fields on step classes. It cannot see inside the
+world's objects.
 
 ## Runtime model
 
@@ -205,102 +292,78 @@ This replaces:
 
 For each scenario run, Raun creates:
 
-- **one scenario-class instance.** It needs a parameterless constructor, because a scenario class holds
-  no state (state belongs in the world);
-- **one world**, built from the scenario's DI scope;
-- **at most one instance of each step class**, created on first use by `Steps<T>()`. Creation goes
-  through the same DI scope, so a step class may take constructor dependencies. `World` is bound
-  after construction, so it cannot be used in the constructor.
+- **one world**, in the Setup node;
+- **one scope**, `ScenarioScope<TWorld>`, which holds the world and the step-class instances;
+- **at most one instance of each step class**, created on first use, through the scenario's DI scope
+  when there is one, so a step class may take constructor dependencies. `World` is bound after
+  construction, so it cannot be used in the constructor.
 
-Nothing is static, and nothing is shared between scenarios.
+The scenario class itself is never instantiated. Nothing is static, and nothing is shared between
+scenarios.
 
 ### Context
 
 `Phase<TWorld>.Context` returns the context of the step that is running. Underneath, it reads the
 `AsyncLocal` that `ScenarioContext.Current` already uses for per-step log attribution, so parallel
-siblings each see their own context. Outside a running step it throws an `InvalidOperationException`
-that says so. It never returns null. `RAUN014` (a step's context captured into a cleanup) keeps
-applying: a cleanup takes the teardown context as its lambda parameter.
+siblings each see their own. Outside a running step it throws an `InvalidOperationException` that
+says so. It never returns null.
+
+A side effect is that `Context` read *inside* a cleanup lambda is the Teardown node's context, because
+the scheduler makes that one current while cleanups run. So `Context.Log(…)` in a cleanup lands on
+Teardown, which is what RAUN014 exists to enforce for today's captured `ctx`. Capturing it first
+(`var ctx = Context;`) still gets the registering step's context. RAUN014 is not yet taught about that
+case.
 
 ### Lifetime
 
-1. **Setup node.** Raun constructs the scenario instance and the world, then awaits
-   `World.InitializeAsync(context)`. Setup is reported like Teardown, and logs written during
-   initialization land on it.
+1. **Setup** is node 0. It awaits `TWorld.CreateAsync(context)` and outputs the scope. **Every step
+   depends on it.** So Setup reuses the graph's own rules instead of adding new scheduler code:
+   - a failed Setup skips every step with `dependency failed: Setup`;
+   - a cancelled one skips them as cancelled;
+   - a run filter that selects one step keeps Setup, because Setup is a dependency.
 2. **Steps** run on the graph, as today.
-3. **Teardown node:** registered cleanups run in the order the teardown design defines.
-4. **World disposal** fills the reserved final slot that the teardown design left for framework-owned
-   cleanups. It runs after every user cleanup, because those cleanups may still use the world. It runs
-   whatever the scenario's outcome, the same way a `Cleanup.Required` registration does.
-
-If Setup fails, every step is skipped with `dependency failed: Setup`. Teardown still runs (a
-half-initialized world may already have registered cleanups), and a world that was constructed is
-still disposed.
-
-Selecting one step with a run filter also runs Setup, the same way it already runs Teardown.
-
-### Parallelism
-
-- **Across scenarios:** each scenario has its own world, step-class instances and DI scope.
-  Anything genuinely shared goes through DI singletons and `[Uses<T>]`, as today.
-- **Within a scenario:** siblings in a tuple or array group share the world and the step-class
-  instances concurrently. **A world must be read-only once `InitializeAsync` returns, or
-  thread-safe, and a step class must hold no mutable state.** RAUN013 does not police this, because
-  the world is not a step output. A later analyzer rule could flag writable fields on step classes.
+3. **Teardown** runs cleanups in reverse order of the owning node, so **Setup's cleanups run last,
+   after every step's.** Within Setup they run last-registered first: the world is disposed, and then
+   the isolation it was built on is released.
+4. A world that implements `IAsyncDisposable`/`IDisposable` is registered for disposal the moment it
+   exists, as a required cleanup. It is disposed whatever the scenario's outcome, cancellation and
+   timeout included.
 
 ## Generator
 
-### Recognising a step
-
-A call is a step when the invoked method is declared on a class deriving from `Phase<>`. Its phase
-label comes from the nearest `[PhaseName]` in the class's base chain. Built-in and custom phases go
-through exactly the same path, which covers requirement 1.
-
-### Lowering the receiver
-
-The receiver has to be a chain of property or field reads that starts at the scenario instance:
-`Given`, `this.Given`, `Given.Patients`. The generator emits that chain unchanged against the instance
-Raun created:
-
-```csharp
-// today
-Invoke = static async (__inputs, __ctx) => { var __r = await Given.PatientExists("Jane"); … }
-
-// proposed
-Invoke = static async (__scenario, __inputs, __ctx) =>
-    { var __r = await ((BookingScenarios)__scenario).Given.Patients.Exists("Jane"); … }
-```
-
-The generated code is compiled outside the scenario class, so every link in the chain must be
-reachable from there, which means public or internal. This is the same reachability rule that step
-arguments already follow.
+- **Recognising a step.** A call is a step of a step class when the invoked method is an instance
+  method declared on a class deriving from `Phase<>`. Its phase label comes from the nearest
+  `[PhaseName]` in the class's base chain, so built-in and custom phases take exactly the same path.
+  Calls on the old phase markers are unchanged.
+- **Setup and dependencies.** A scenario whose class derives from `Scenarios<TWorld>` gets the Setup
+  node, and every step depends on it.
+- **Step identity.** It includes the group path: `Customers.Exists("Jane")`, not `Exists("Jane")`. Two
+  groups with a same-named step therefore get different ids.
+- **The method.** `ScenarioDefinition.Method` is emitted only for scenarios with a world, so every
+  other scenario's generated source is byte-identical to before.
 
 ### Diagnostics
 
-New rules (numbers provisional; each goes in `AnalyzerReleases.Unshipped.md`):
+Each new rule is listed in `AnalyzerReleases.Unshipped.md`.
 
 | Rule | When | Reported at |
 |---|---|---|
-| **RAUN018** Step receiver cannot be followed | The receiver is not a property/field chain from the scenario. It might be a local (`var g = Given;`), a method call (`GetGiven().X()`), an indexer, or a link that is `private`/`protected`. The message names the link and the reason. This replaces the generic RAUN004 for grouped calls (requirement 2). | the offending link |
-| **RAUN019** Scenario class shape | A `[Scenario]` method that is static; a scenario class that does not derive from `Scenarios<TWorld>`; a scenario class with no accessible parameterless constructor. | the method or class |
-| **RAUN020** Step class and scenario worlds differ | A step class for `WorldA` is reached from a `Scenarios<WorldB>`. | the receiver |
+| **RAUN018** Step receiver cannot be followed | Any break in the binding contract above: a local, a cast, a method call, a field, a static or indexed property, a property on the wrong kind of class, a property not declared `=> Steps<T>()`, a step class with no `[PhaseName]` in its chain, or a step class used from a class that is not a `Scenarios<>`. It replaces RAUN004 for grouped calls. | the offending link |
+| **RAUN019** Scenario does not fit its class | A static `[Scenario]` method in a `Scenarios<>` class. | the method name |
+| **RAUN020** Step class belongs to another world | A step class of `WorldA` reached from a `Scenarios<WorldB>`. | the receiver |
 
-RAUN004 stays for a call on something that is not a step class at all. The messages of RAUN002, 004,
-006 and 011 change from "phase-marker call" to "step call".
-
-### Emission
-
-- `ScenarioDefinition` gains a factory for the scenario instance and one for the world.
-- The Setup node is emitted in every scenario, the way Teardown already is.
-- Step identity (the uid) keeps its current definition, so moving a step into a group changes its
-  uid, just as renaming it does today.
+A step-class call nested inside another step's argument is refused by RAUN007, as a phase-marker call
+already is.
 
 ## Reporting
 
-- Setup is a reported node with the reserved name `Setup`, mirroring `Teardown`.
-- The HTML report shows it at the top of the scenario card.
-- Group membership does not change the display name. `[StepName]` stays the whole name, and a group
-  exists only for authoring.
+- Setup is a reported node with phase `Setup` and display name `Setup`. **It is unnumbered.**
+  `--list-tests` shows `Setup` and then `1. Given customer Jane exists`, so giving a scenario a world
+  does not renumber its steps.
+- The HTML report shows it first, with the world's log lines. Teardown shows the world's cleanups
+  last.
+- A group does not change a step's display name. `[StepName]` is the whole name, and a group exists
+  only for authoring.
 
 ## Requirements, and how each is met
 
@@ -308,71 +371,91 @@ RAUN004 stays for a call on something that is not a step class at all. The messa
 |---|---|
 | Groups for Given/When/Then and custom phases | A group is a property on a step class. Recognition goes by `Phase<>`, and custom phases take the same path. |
 | A specific diagnostic | RAUN018 names the link it could not follow and the reason. |
-| Useful IntelliSense | A step class's public surface is its steps plus its groups. `World`, `Context` and `Steps<T>()` are protected, so they are hidden from call sites. No flat duplicates are needed. |
-| Execution tests | See Testing below. |
-| One typed state object per scenario | `Scenarios<TWorld>` / `IScenarioWorld`, built per scenario from the scenario's DI scope. |
-| Step results stay explicit | Unchanged. The world is ready before the first step, so it adds no graph edges and hides none. |
-| A non-null context | `InitializeAsync(ScenarioContext)` receives it as a parameter. Steps read it as `this.Context`, which is never null. The nullable parameter is gone. |
-| Lifetime and parallel behaviour | The Setup node, disposal in the reserved final slot, and the parallelism rules above. |
+| Useful IntelliSense | A step class's public surface is its steps plus its groups. `World`, `Context` and `Steps<T>()` are protected. A test asserts that `Phase<TWorld>` adds no public member. |
+| Execution tests | See [The spike](#the-spike). |
+| One typed state object per scenario | `IScenarioWorld<TSelf>`, created per scenario in Setup. |
+| Step results stay explicit | Unchanged. The world is ready before any step, so it adds no step-to-step edges and hides none. |
+| A non-null context | `CreateAsync(ScenarioContext)` receives it. Steps read `this.Context`, which is never null inside a step. |
+| Async creation, disposal on failure | The Setup node; disposal and cleanups as required teardown entries, run after every step's. |
+| Parallel behaviour | Per scenario, everything is separate. Within a scenario: see review resolution 3. |
+| The seed | Scenario metadata through `context.Scenario.Method` (review resolution 1). |
+| Group binding | Bound by type through the Setup node's scope; properties must return `Steps<T>()` (review resolution 2). |
 
-## Migration
+## The spike
 
-Raun is pre-1.0 (`docs/RELEASING.md`: anything may change between minors). **Cut over rather than
-support both authoring models.** Keeping two lowering paths would double the generator's surface and
-every diagnostic's wording. The migration is mechanical:
+The spike is on branch `claude/jolly-johnson-yo85m9`. It is **additive**: the extension-member DSL
+still works, and every existing test passes unchanged.
 
-1. `extension(Given) { public static … }` becomes `class XGiven : Given<W> { public … }`.
-2. `ctx?.` becomes `Context.`.
-3. `[Scenario] public static` becomes an instance method on a `Scenarios<W>` subclass.
-4. The phase properties are declared once.
+- **Runtime** (`src/Raun/Steps/`): `IScenarioWorld<TSelf>`, `NoWorld`, `Phase<TWorld>`,
+  `Given/When/Then<TWorld>`, `PhaseNameAttribute`, `Scenarios<TWorld>`, `ScenarioScope`, `ScenarioInfo`.
+  It also adds `ScenarioContext.Scenario`, `ScenarioDefinition.Method` and `ScenarioNode.IsSetup`, and
+  Setup is unnumbered in `StepNumbering`.
+- **Generator:** the Setup node, step-class recognition, type-bound receivers, RAUN018–020, and
+  step-class calls refused inside arguments.
+- **Sample:** `samples/AppointmentTests/CancellationScenarios.cs` has two cancellation scenarios with a
+  seeded isolation (`[IsolationSeed(2102)]`, and a derived seed), grouped calls under Given, When and
+  Then, a custom `Eventually` phase, and parallel stub steps on the shared world. It runs through the
+  real MTP host and the HTML report.
+- **Tests** (`test/Raun.Generator.Test/StepClassTests.cs`) compile the generated code, run it through
+  the real scheduler, and assert:
+  - step order, prior-result arguments, display names and phases, custom phase included;
+  - Setup is node 0, every step depends on it, and it is unnumbered;
+  - the seed read from the scenario method;
+  - parallel siblings overlapping on one world, each with its own context and logs;
+  - two concurrent scenarios with separate worlds;
+  - a failing step keeps its name and exception, its dependents are skipped, and the world is still
+    disposed after the step cleanups;
+  - a Setup that fails part way skips every step and still releases the isolation it made;
+  - a cancelled scenario still disposes its world;
+  - a single-step filter keeps Setup;
+  - grouped steps get distinct ids;
+  - `Phase<TWorld>` adds no public member;
+  - RAUN018 (local, cast, a property not returning `Steps<T>()`, use outside a `Scenarios<>`),
+    RAUN019 and RAUN020.
 
-Both samples are migrated as part of the work. The Aspire sample's app handle moves into its world,
-which resolves it from DI. The preflight still builds the app, as AGENTS.md requires.
+  A snapshot (`GeneratorSnapshotTests.StepClass_scenario`) pins the emitted code.
 
-## Testing
+**Not in the spike:**
 
-Tests come first, in the existing project split.
+- the cutover (migrating both samples, removing the markers and `IPhase`, the README);
+- step arguments that read the world (`When.Book(World.Isolation.DefaultClinic)` is still refused by
+  RAUN007, as any instance member is);
+- RAUN014 for a captured `Context`;
+- an analyzer rule for mutable step-class fields;
+- the Aspire sample.
 
-| Project | Coverage |
-|---|---|
-| `Raun.Test` | World lifetime: `InitializeAsync` runs before the first step; disposal runs after the last cleanup when a step failed, when the scenario timed out, and when Setup threw. A Setup failure skips every step with `dependency failed: Setup`. Two parallel scenarios get distinct worlds. Two parallel siblings each observe their own `Context`. `Context` throws outside a step. `Steps<T>()` returns one instance per scenario. |
-| `Raun.Generator.Test` | Snapshots of a grouped call under each of Given, When, Then and a custom phase. RAUN018 for each shape it refuses (local, method call, indexer, private link), placed on the link. RAUN019 and RAUN020. A test asserting that `Phase<TWorld>`'s public surface is empty. **Execution tests** (requirement 4): compile the generated source, run it through the scheduler, and assert step order, the arguments a step received from prior results, a failing step's status and exception, and the rendered display names, for both flat and grouped calls. |
-| `Raun.Mtp.Test` | Setup is discovered and reported, and survives a single-step filter. Step numbering around Setup (see open questions). |
-| Samples | `AppointmentTests` uses a world, a group and a custom phase. The Aspire sample holds its app in the world. |
+## Open questions
 
-## Open questions for review
-
-1. **Numbering Setup.** Should Setup be numbered, which shifts every step's number by one, or reported
-   unnumbered? Recommendation: unnumbered, so step numbers and `--list-tests` output stay stable.
-2. **Can step arguments read the world?** For example `When.Book(World.Isolation.DefaultClinic, slot)`.
-   Recommendation: yes, read-only. The world is ready before step 1, so there is no graph edge to track,
-   and writes are refused as they are for step outputs.
-3. **The name "World".** It is the Cucumber/Reqnroll term, so many readers will know it. `State` or
+1. **The name "World".** It is the Cucumber/Reqnroll term, so many readers will know it. `State` or
    `Fixture` are the alternatives.
-4. **`InitializeAsync` versus a static factory.** `InitializeAsync` costs a `= null!` on properties set
-   there. A `static abstract ValueTask<TSelf> CreateAsync(ScenarioContext, IServiceProvider)` avoids that,
-   but static abstract interface members are less familiar than an `IAsyncLifetime`-style init method.
-   Recommendation: `InitializeAsync`.
-5. **Steps shared across worlds.** A generic step class (`class AuditThen<TWorld> : Then<TWorld> where
-   TWorld : IHasIsolation`) should work with no special support. The spike should confirm this.
+2. **Can step arguments read the world?** For example `When.Book(World.Isolation.DefaultClinic, slot)`.
+   Recommendation: yes, read-only. The world is ready before step 1, so it would need only the Setup
+   edge every step already has.
+3. **Steps shared across worlds.** A generic step class
+   (`class AuditThen<TWorld> : Then<TWorld> where TWorld : class, IScenarioWorld<TWorld>, IHasIsolation`)
+   should work with no special support. It is untested.
 
 ## Alternatives considered
 
-- **Groups as static extension properties on the existing markers** (`extension(Given) { public static
-  PatientSteps Patients => … }` plus `extension(PatientSteps) { … }`). This solves grouping alone. A static
-  group has nowhere to keep state, and it takes the extension-block trick one level deeper.
+- **Groups as static extension properties on the existing markers.** This solves grouping alone. A
+  static group has nowhere to keep state, and it takes the extension-block trick one level deeper.
 - **Groups as DI-constructed objects that own their isolation.** This was the first sketch, and the
-  reviewer turned it down: it merges step organisation with state ownership, so every group re-derives
-  the same context.
-- **Raun-owned `Given<TWorld>` with steps as extension members on it.** Less ceremony (no user step classes,
-  no wiring base), but steps read `given.World`, not `this.World`, and extension blocks stay the main
-  way of writing steps.
-- **The scenario class as the world (xUnit-style, one instance per test).** This removes a concept, but it
-  ties every step class to one scenario base class and mixes state with wiring.
+  reviewer turned it down: it merges step organisation with state ownership.
+- **Emitting the receiver chain as written.** This was the first draft. It re-runs arbitrary properties
+  when a step runs, and a property could return an unbound instance (review resolution 2).
+- **`InitializeAsync` on a constructed world.** This was the first draft. It costs a `= null!` on every
+  member set there, and a world that failed part way through initializing still exists, so disposing
+  it has to cope with half a world.
+- **The isolation as an explicit step**, with a world of common dependencies only. It stays possible,
+  but as the model it re-threads the isolation through every step (review resolution 1).
+- **Raun-owned `Given<TWorld>` with steps as extension members on it.** Less ceremony, but steps read
+  `given.World`, not `this.World`, and extension blocks stay the main way of writing steps.
+- **The scenario class as the world (xUnit-style, one instance per test).** This removes a concept, but
+  it ties every step class to one scenario base class and mixes state with wiring.
 - **No base classes: all DI.** Step classes would be injected through each scenario class's primary
-  constructor, with an `IScenarioContextAccessor`. It is the purest option, but the constructor has to
-  be repeated on every scenario class, and steps read `accessor.Context` instead of `this.Context`.
-- **An ambient `Scenario.State<T>()` accessor with no base classes.** It works, but the world's type
-  appears nowhere in a step's signature or class, so a step's dependency on it is invisible.
+  constructor, with an `IScenarioContextAccessor`. The constructor has to be repeated on every scenario
+  class, and steps read `accessor.Context` instead of `this.Context`.
+- **An ambient `Scenario.State<T>()` accessor with no base classes.** The world's type appears nowhere in
+  a step's signature or class, so a step's dependency on it is invisible.
 - **A generator-filled parameter declared `ScenarioContext context = default!`.** The call site shows
-  nothing, and the default lies about nullability. It is today's contract with the `?` hidden.
+  nothing, and the default lies about nullability.
