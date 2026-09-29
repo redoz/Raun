@@ -12,24 +12,6 @@ internal static class SymbolHelpers
         SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(
             SymbolDisplayGlobalNamespaceStyle.Omitted);
 
-    public const string ScenarioContextFullName = "Raun.ScenarioContext";
-
-    /// <summary>Returns the receiver type's name if it implements <c>Raun.IPhase</c> (the built-in
-    /// Given/When/Then markers do; so does any user-defined marker), else null.</summary>
-    public static string? PhaseOf(ExpressionSyntax receiver, SemanticModel model)
-    {
-        if (model.GetSymbolInfo(receiver).Symbol is not INamedTypeSymbol type)
-        {
-            return null;
-        }
-
-        var isPhase = type.AllInterfaces.Any(i =>
-            i.Name == "IPhase"
-            && i.ContainingNamespace?.ToDisplayString(NoGlobal) == "Raun");
-
-        return isPhase ? type.Name : null;
-    }
-
     /// <summary>The world of a scenario class: <c>TWorld</c> when <paramref name="type"/> derives from
     /// <c>Raun.Scenarios&lt;TWorld&gt;</c>, else null.</summary>
     public static ITypeSymbol? WorldOfScenarios(ITypeSymbol? type) => GenericBaseArgument(type, "Scenarios");
@@ -114,19 +96,6 @@ internal static class SymbolHelpers
             && named.ContainingNamespace?.ToDisplayString(NoGlobal) == "System.Threading.Tasks"
             && named.Name is "Task" or "ValueTask"
             && named.Arity == 0;
-
-    /// <summary>Whether the method has a trailing <c>ScenarioContext</c> parameter not supplied by source args.</summary>
-    public static bool WantsContext(IMethodSymbol method, int suppliedArgCount)
-    {
-        if (method.Parameters.Length == 0)
-        {
-            return false;
-        }
-
-        var last = method.Parameters[method.Parameters.Length - 1];
-        return last.Type.ToDisplayString(NoGlobal) == ScenarioContextFullName
-            && suppliedArgCount == method.Parameters.Length - 1;
-    }
 
     /// <summary>
     /// True when <paramref name="type"/> can drive a C# <c>if</c>: it is <c>bool</c>, defines

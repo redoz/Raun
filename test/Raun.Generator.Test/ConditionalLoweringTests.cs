@@ -23,21 +23,21 @@ public class ConditionalLoweringTests
     {
         var def = Lower(SampleSources.IfElseScenario);
 
-        // 0 PatientExists, 1 IsPriority (condition), 2 CreateUrgent, 3 CreateStandard,
-        // 4 «merge appointment», 5 AppointmentExists
-        Assert.Equal(7, def.Nodes.Count);
+        // 0 Setup, 1 PatientExists, 2 IsPriority (condition), 3 CreateUrgent, 4 CreateStandard,
+        // 5 «merge appointment», 6 AppointmentExists
+        Assert.Equal(8, def.Nodes.Count);
 
-        Assert.NotNull(def.Nodes[1].EvaluateCondition);
-        Assert.Equal([new Guard(1, true)], def.Nodes[2].Guards);
-        Assert.Equal([new Guard(1, false)], def.Nodes[3].Guards);
+        Assert.NotNull(def.Nodes[2].EvaluateCondition);
+        Assert.Equal([new Guard(2, true)], def.Nodes[3].Guards);
+        Assert.Equal([new Guard(2, false)], def.Nodes[4].Guards);
 
-        Assert.True(def.Nodes[4].IsSynthetic);
-        Assert.Equal([2, 3], def.Nodes[4].MergeSources);
-        Assert.Empty(def.Nodes[4].DependsOn);
+        Assert.True(def.Nodes[5].IsSynthetic);
+        Assert.Equal([3, 4], def.Nodes[5].MergeSources);
+        Assert.Empty(def.Nodes[5].DependsOn);           // a merge runs nothing, so it needs no Setup
 
         // The consumer joins on the merge, never on an arm.
-        Assert.Equal([4], def.Nodes[5].DependsOn);
-        Assert.Empty(def.Nodes[5].Guards);
+        Assert.Equal([0, 5], def.Nodes[6].DependsOn);
+        Assert.Empty(def.Nodes[6].Guards);
     }
 
     [Fact]
@@ -45,10 +45,10 @@ public class ConditionalLoweringTests
     {
         var def = Lower(SampleSources.IfElseScenario);
 
-        Assert.False(def.Nodes[1].IsSynthetic);
-        Assert.Equal("IsPriority", def.Nodes[1].OperationName);
-        Assert.Equal("the patient is priority", def.Nodes[1].DisplayNameTemplate);
-        Assert.Equal("Given", def.Nodes[1].Phase);
+        Assert.False(def.Nodes[2].IsSynthetic);
+        Assert.Equal("IsPriority", def.Nodes[2].OperationName);
+        Assert.Equal("the patient is priority", def.Nodes[2].DisplayNameTemplate);
+        Assert.Equal("Given", def.Nodes[2].Phase);
     }
 
     [Fact]
@@ -59,10 +59,10 @@ public class ConditionalLoweringTests
         var def = Lower(
             """
 
-            public static class SiblingLocalScenarios
+            public sealed class SiblingLocalScenarios : CondSuite
             {
                 [Scenario("sibling locals")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     var patient = await Given.PatientExists("Alice");
                     if (await Given.IsPriority())
@@ -88,8 +88,8 @@ public class ConditionalLoweringTests
         var def = Lower(SampleSources.BareIfScenario);
 
         // 0 PatientExists, 1 IsPriority, 2 Notify — nothing is assigned, so there is no phi.
-        Assert.Equal(4, def.Nodes.Count);
-        Assert.Equal([new Guard(1, true)], def.Nodes[2].Guards);
+        Assert.Equal(5, def.Nodes.Count);
+        Assert.Equal([new Guard(2, true)], def.Nodes[3].Guards);
         Assert.DoesNotContain(def.Nodes, n => n.IsSynthetic);
     }
 
@@ -100,17 +100,17 @@ public class ConditionalLoweringTests
 
         // 0 PatientExists, 1 CreateStandard (parent def), 2 IsPriority, 3 CreateUrgent (arm),
         // 4 pass-through of 1 guarded false, 5 «merge appointment», 6 AppointmentExists
-        Assert.Equal(8, def.Nodes.Count);
+        Assert.Equal(9, def.Nodes.Count);
 
-        Assert.Equal([new Guard(2, true)], def.Nodes[3].Guards);
-
-        Assert.True(def.Nodes[4].IsSynthetic);
-        Assert.Equal([new Guard(2, false)], def.Nodes[4].Guards);
-        Assert.Equal([1], def.Nodes[4].MergeSources);
+        Assert.Equal([new Guard(3, true)], def.Nodes[4].Guards);
 
         Assert.True(def.Nodes[5].IsSynthetic);
-        Assert.Equal([3, 4], def.Nodes[5].MergeSources);
-        Assert.Equal([5], def.Nodes[6].DependsOn);
+        Assert.Equal([new Guard(3, false)], def.Nodes[5].Guards);
+        Assert.Equal([2], def.Nodes[5].MergeSources);
+
+        Assert.True(def.Nodes[6].IsSynthetic);
+        Assert.Equal([4, 5], def.Nodes[6].MergeSources);
+        Assert.Equal([0, 6], def.Nodes[7].DependsOn);
     }
 
     [Fact]
@@ -119,8 +119,8 @@ public class ConditionalLoweringTests
         var def = Lower(SampleSources.NestedIfScenario);
 
         // 0 PatientExists, 1 IsPriority, 2 HasCapacity, 3 Notify
-        Assert.Equal([new Guard(1, true)], def.Nodes[2].Guards);
-        Assert.Equal([new Guard(1, true), new Guard(2, true)], def.Nodes[3].Guards);
+        Assert.Equal([new Guard(2, true)], def.Nodes[3].Guards);
+        Assert.Equal([new Guard(2, true), new Guard(3, true)], def.Nodes[4].Guards);
     }
 
     [Fact]
@@ -131,10 +131,10 @@ public class ConditionalLoweringTests
 
         var results = await result.Definitions().Single().RunAsync();
 
-        Assert.Equal(StepStatus.Passed, results[2].Status);      // CreateUrgent (IsPriority == true)
-        Assert.Equal(StepStatus.NotTaken, results[3].Status);    // CreateStandard
-        Assert.Equal(StepStatus.Passed, results[4].Status);      // merge
-        Assert.Equal(StepStatus.Passed, results[5].Status);      // AppointmentExists
+        Assert.Equal(StepStatus.Passed, results[3].Status);      // CreateUrgent (IsPriority == true)
+        Assert.Equal(StepStatus.NotTaken, results[4].Status);    // CreateStandard
+        Assert.Equal(StepStatus.Passed, results[5].Status);      // merge
+        Assert.Equal(StepStatus.Passed, results[6].Status);      // AppointmentExists
     }
 
     [Fact]
@@ -149,8 +149,8 @@ public class ConditionalLoweringTests
         Assert.All(results, r => Assert.True(
             r.Status is StepStatus.Passed or StepStatus.NotTaken,
             $"step {r.Node.Index} was {r.Status}: {r.SkipReason}{r.Exception}"));
-        Assert.Equal(StepStatus.NotTaken, results[4].Status);   // pass-through (condition was true)
-        Assert.Equal(StepStatus.Passed, results[5].Status);     // merge took the arm value
+        Assert.Equal(StepStatus.NotTaken, results[5].Status);   // pass-through (condition was true)
+        Assert.Equal(StepStatus.Passed, results[6].Status);     // merge took the arm value
     }
 
     [Fact]
@@ -164,8 +164,8 @@ public class ConditionalLoweringTests
 
         var results = await result.Definitions().Single().RunAsync();
 
-        Assert.Equal(StepStatus.Passed, results[1].Status);   // HasCapacity
-        Assert.Equal(StepStatus.Passed, results[2].Status);   // Notify ran: the guard held
+        Assert.Equal(StepStatus.Passed, results[2].Status);   // HasCapacity
+        Assert.Equal(StepStatus.Passed, results[3].Status);   // Notify ran: the guard held
     }
 
     [Fact]
@@ -200,10 +200,10 @@ public class ConditionalLoweringTests
         Lower(
             $$"""
 
-            public static class WaitScenarios
+            public sealed class WaitScenarios : CondSuite
             {
                 [Scenario("waits")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     var patient = await Given.PatientExists("Jane");
             {{body}}
@@ -223,10 +223,10 @@ public class ConditionalLoweringTests
                     await When.Notify(patient);
             """);
 
-        Assert.Equal([0, 1], def.Nodes[3].DependsOn);   // values: the patient; order: the condition
-        Assert.Equal([2], def.Nodes[3].WaitsFor);       // and the arm's last step, ordering only
-        Assert.Empty(def.Nodes[3].Guards);
-        Assert.Empty(def.Nodes[2].WaitsFor);
+        Assert.Equal([0, 1, 2], def.Nodes[4].DependsOn);   // values: the patient; order: the condition
+        Assert.Equal([3], def.Nodes[4].WaitsFor);       // and the arm's last step, ordering only
+        Assert.Empty(def.Nodes[4].Guards);
+        Assert.Empty(def.Nodes[3].WaitsFor);
     }
 
     [Fact]
@@ -235,8 +235,8 @@ public class ConditionalLoweringTests
         // 0 PatientExists, 1 IsPriority, 2 CreateUrgent, 3 CreateStandard, 4 «merge», 5 AppointmentExists
         var def = Lower(SampleSources.IfElseScenario);
 
-        Assert.Equal([4], def.Nodes[5].DependsOn);
-        Assert.Equal([2, 3], def.Nodes[5].WaitsFor);
+        Assert.Equal([0, 5], def.Nodes[6].DependsOn);
+        Assert.Equal([3, 4], def.Nodes[6].WaitsFor);
     }
 
     [Fact]
@@ -253,7 +253,7 @@ public class ConditionalLoweringTests
                     await When.Notify(patient);
             """);
 
-        Assert.Equal([2, 3], def.Nodes[4].WaitsFor);
+        Assert.Equal([3, 4], def.Nodes[5].WaitsFor);
     }
 
     [Fact]
@@ -273,8 +273,8 @@ public class ConditionalLoweringTests
                     await When.Notify(patient);
             """);
 
-        Assert.Equal([0, 1], def.Nodes[4].DependsOn);
-        Assert.Equal([2, 3], def.Nodes[4].WaitsFor);
+        Assert.Equal([0, 1, 2], def.Nodes[5].DependsOn);
+        Assert.Equal([3, 4], def.Nodes[5].WaitsFor);
     }
 
     [Fact]
@@ -290,9 +290,9 @@ public class ConditionalLoweringTests
                     await When.Notify(patient);
             """);
 
-        Assert.Equal([2], def.Nodes[3].WaitsFor);
-        Assert.Empty(def.Nodes[4].WaitsFor);
-        Assert.Equal([0, 3], def.Nodes[4].DependsOn);
+        Assert.Equal([3], def.Nodes[4].WaitsFor);
+        Assert.Empty(def.Nodes[5].WaitsFor);
+        Assert.Equal([0, 1, 4], def.Nodes[5].DependsOn);
     }
 
     [Fact]
@@ -301,10 +301,10 @@ public class ConditionalLoweringTests
         var result = GeneratorHarness.Run(SampleSources.ConditionalDsl +
             """
 
-            public static class WaitRunScenarios
+            public sealed class WaitRunScenarios : CondSuite
             {
                 [Scenario("notify then confirm")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     var patient = await Given.PatientExists("Jane");
 
@@ -321,8 +321,8 @@ public class ConditionalLoweringTests
 
         // 2 = arm Notify (IsPriority is true), 3 = the Notify after the if. Both pass, and the second
         // did not start before the first finished.
-        Assert.Equal(StepStatus.Passed, results[2].Status);
         Assert.Equal(StepStatus.Passed, results[3].Status);
-        Assert.True(results[3].StartedAt >= results[2].StartedAt + results[2].Duration);
+        Assert.Equal(StepStatus.Passed, results[4].Status);
+        Assert.True(results[4].StartedAt >= results[3].StartedAt + results[3].Duration);
     }
 }

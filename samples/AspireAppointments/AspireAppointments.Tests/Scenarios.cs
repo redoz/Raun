@@ -19,12 +19,12 @@ public sealed class Schedule : IContendedResource;
 /// </summary>
 [DisplayName("Appointments API")]
 [Uses<Schedule>]
-public static class Scenarios
+public sealed class Scenarios : AppointmentsSuite
 {
     // Two actors in one scenario: booked as an admin, read back as a patient. The actor belongs to
     // the call, which is why nothing here mutates headers on a shared client.
     [Scenario("an admin books an appointment a patient can read")]
-    public static async Task AdminBooksPatientReads()
+    public async Task AdminBooksPatientReads()
     {
         await Given.ApiIsReachable();
 
@@ -34,7 +34,7 @@ public static class Scenarios
     }
 
     [Scenario("a patient may not book appointments")]
-    public static async Task PatientCannotBook()
+    public async Task PatientCannotBook()
     {
         await Given.ApiIsReachable();
 
@@ -47,7 +47,7 @@ public static class Scenarios
     // it is done. Without this, "the patient can read" above could race against the clear.
     [Scenario("an admin clears the schedule")]
     [Uses<Schedule>(LockMode.Exclusive)]
-    public static async Task AdminClearsSchedule()
+    public async Task AdminClearsSchedule()
     {
         await Given.ApiIsReachable();
 

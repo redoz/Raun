@@ -12,7 +12,7 @@ public class DisplayNameTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        var greet = def.Nodes[1];
+        var greet = def.Nodes[2];
         Assert.NotNull(greet.FormatDisplayName);
         Assert.Contains("{patient}", greet.DisplayNameTemplate); // unresolved fallback template
     }
@@ -25,6 +25,6 @@ public class DisplayNameTests
 
         var results = await result.Definitions().Single().RunAsync();
 
-        Assert.Contains("Jane", results[1].DisplayName); // formatted from the Patient output
+        Assert.Contains("Jane", results[2].DisplayName); // formatted from the Patient output
     }
 }

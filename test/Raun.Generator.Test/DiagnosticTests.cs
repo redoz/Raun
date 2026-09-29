@@ -46,7 +46,7 @@ public class DiagnosticTests
     {
         var diagnostics = await Analyze(
             """
-            public static class S { [Scenario] public static void Bad() { } }
+            public sealed class S : AppointmentSuite { [Scenario] public void Bad() { } }
             """);
 
         AssertHas(diagnostics, "RAUN001");
@@ -57,7 +57,7 @@ public class DiagnosticTests
     {
         var diagnostics = await Analyze(
             """
-            public static class S { [Scenario] public static async Task Bad() { var x = 5; } }
+            public sealed class S : AppointmentSuite { [Scenario] public async Task Bad() { var x = 5; } }
             """);
 
         AssertHas(diagnostics, "RAUN002");
@@ -68,9 +68,9 @@ public class DiagnosticTests
     {
         var diagnostics = await Analyze(
             """
-            public static class S
+            public sealed class S : AppointmentSuite
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public async Task Bad()
                 {
                     foreach (var i in new[] { 1, 2 }) { await Given.AvailableSlot(); }
                 }
@@ -85,9 +85,9 @@ public class DiagnosticTests
     {
         AssertHas(await Analyze(
             """
-            public static class S
+            public sealed class S : AppointmentSuite
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public async Task Bad()
                 {
                     while (true) { await Given.AvailableSlot(); }
                 }
@@ -96,9 +96,9 @@ public class DiagnosticTests
 
         AssertHas(await Analyze(
             """
-            public static class S
+            public sealed class S : AppointmentSuite
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public async Task Bad()
                 {
                     try { await Given.AvailableSlot(); } catch { }
                 }
@@ -111,9 +111,9 @@ public class DiagnosticTests
     {
         var diagnostics = await Analyze(
             """
-            public static class S
+            public sealed class S : AppointmentSuite
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public async Task Bad()
                 {
                     for (var i = 0; i < 2; i++) { await Given.AvailableSlot(); }
                 }
@@ -158,9 +158,9 @@ public class DiagnosticTests
         var source = SampleSources.ConditionalDsl +
             """
 
-            public static class S
+            public sealed class S : CondSuite
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public async Task Bad()
                 {
                     var patient = await Given.PatientExists("Jane");
                     if (patient.Name.Length > 3)
@@ -178,9 +178,9 @@ public class DiagnosticTests
         var source = SampleSources.ConditionalDsl +
             """
 
-            public static class S
+            public sealed class S : CondSuite
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public async Task Bad()
                 {
                     var patient = await Given.PatientExists("Jane");
                     if (await Task.FromResult(true))
@@ -199,9 +199,9 @@ public class DiagnosticTests
         var source = SampleSources.ConditionalDsl +
             """
 
-            public static class S
+            public sealed class S : CondSuite
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public async Task Bad()
                 {
                     var patient = await Given.PatientExists("Jane");
                     if (await Given.PatientExists("Bob"))
@@ -221,9 +221,9 @@ public class DiagnosticTests
         var source = SampleSources.ConditionalDsl +
             """
 
-            public static class S
+            public sealed class S : CondSuite
             {
-                [Scenario("arm only")] public static async Task Ok()
+                [Scenario("arm only")] public async Task Ok()
                 {
                     var patient = await Given.PatientExists("Jane");
                     Appointment appointment;
@@ -247,9 +247,9 @@ public class DiagnosticTests
         var source = SampleSources.ConditionalDsl +
             """
 
-            public static class S
+            public sealed class S : CondSuite
             {
-                [Scenario("double assign")] public static async Task Ok()
+                [Scenario("double assign")] public async Task Ok()
                 {
                     var patient = await Given.PatientExists("Jane");
                     var appointment = await When.CreateStandard(patient);
@@ -272,9 +272,9 @@ public class DiagnosticTests
     {
         var diagnostics = await Analyze(
             """
-            public static class S
+            public sealed class S : AppointmentSuite
             {
-                [Scenario] public static async Task Bad() { await Task.Delay(1); }
+                [Scenario] public async Task Bad() { await Task.Delay(1); }
             }
             """);
 
@@ -290,16 +290,18 @@ public class DiagnosticTests
             using System.Threading.Tasks;
             using Raun;
             namespace Bad;
-            public static class BadDsl
+            public sealed partial class BadGiven : Given<NoWorld>
             {
-                extension(Given)
-                {
-                    public static int NotATask() => 1;
-                }
+                public int NotATask() => 1;
             }
-            public static class S
+
+            public abstract class BadSuite : Scenarios<NoWorld>
             {
-                [Scenario] public static async Task Bad() { await Given.NotATask(); }
+                public BadGiven Given => Steps<BadGiven>();
+            }
+            public sealed class S : BadSuite
+            {
+                [Scenario] public async Task Bad() { await Given.NotATask(); }
             }
             """;
 
@@ -311,9 +313,9 @@ public class DiagnosticTests
     {
         var diagnostics = await Analyze(
             """
-            public static class S
+            public sealed class S : AppointmentSuite
             {
-                [Scenario] public static async Task Bad()
+                [Scenario] public async Task Bad()
                 {
                     var (a, b) = await (Given.AvailableSlot(), Task.FromResult(1));
                 }
@@ -328,9 +330,9 @@ public class DiagnosticTests
     {
         var diagnostics = await Analyze(
             """
-            public static class S
+            public sealed class S : AppointmentSuite
             {
-                [Scenario] public static async Task Bad(string name)
+                [Scenario] public async Task Bad(string name)
                 {
                     var patient = await Given.PatientExists(name);
                 }
@@ -347,9 +349,9 @@ public class DiagnosticTests
         // generator emits code referencing a name the generated step cannot see.
         var diagnostics = await Analyze(
             """
-            public static class S
+            public sealed class S : AppointmentSuite
             {
-                [Scenario] public static async Task Bad(string name)
+                [Scenario] public async Task Bad(string name)
                 {
                     var patient = await Given.PatientExists(name + "!");
                 }
@@ -367,13 +369,15 @@ public class DiagnosticTests
             using System.Threading.Tasks;
             using Raun;
             namespace Bad;
-            public static class BadDsl
+            public sealed partial class BadGiven : Given<NoWorld>
             {
-                extension(Given)
-                {
-                    [StepName("greet {missing}")]
-                    public static Task Foo() => Task.CompletedTask;
-                }
+                [StepName("greet {missing}")]
+                public Task Foo() => Task.CompletedTask;
+            }
+
+            public abstract class BadSuite : Scenarios<NoWorld>
+            {
+                public BadGiven Given => Steps<BadGiven>();
             }
             """;
 
@@ -394,13 +398,15 @@ public class DiagnosticTests
             {
                 public static ResourceKey KeyFor(User instance) => instance.Email;
             }
-            public static class BadDsl
+            public sealed partial class BadWhen : When<NoWorld>
             {
-                extension(When)
-                {
-                    [StepName("suspending the user")]
-                    public static async Task Suspend(User user) { await Task.Yield(); }
-                }
+                [StepName("suspending the user")]
+                public async Task Suspend(User user) { await Task.Yield(); }
+            }
+
+            public abstract class BadSuite : Scenarios<NoWorld>
+            {
+                public BadWhen When => Steps<BadWhen>();
             }
             """;
 
@@ -420,17 +426,19 @@ public class DiagnosticTests
             {
                 public static ResourceKey KeyFor(User instance) => instance.Email;
             }
-            public static class BadDsl
+            public sealed partial class BadGiven : Given<NoWorld>
             {
-                extension(Given)
+                [StepName("a user exists")]
+                public async Task<User> AUser()
                 {
-                    [StepName("a user exists")]
-                    public static async Task<User> AUser()
-                    {
-                        await Task.Yield();
-                        return new User("jane@acme.com");
-                    }
+                    await Task.Yield();
+                    return new User("jane@acme.com");
                 }
+            }
+
+            public abstract class BadSuite : Scenarios<NoWorld>
+            {
+                public BadGiven Given => Steps<BadGiven>();
             }
             """;
 
@@ -472,14 +480,11 @@ public class DiagnosticTests
     {
         var source = LineageDsl +
             """
-            public static class BadDsl
+            public sealed partial class AppointmentWhen : When<NoWorld>
             {
-                extension(When)
-                {
-                    [StepName("transfer")]
-                    [return: Created(References = [nameof(who), "ghost"])]
-                    public static async Task<Account> Transfer(User who) { await Task.Yield(); return new Account("a"); }
-                }
+                [StepName("transfer")]
+                [return: Created(References = [nameof(who), "ghost"])]
+                public async Task<Account> Transfer(User who) { await Task.Yield(); return new Account("a"); }
             }
             """;
 
@@ -492,13 +497,10 @@ public class DiagnosticTests
         // An [Edited] parameter naming Subject.Return as a target, but the step yields no resource.
         var source = LineageDsl +
             """
-            public static class BadDsl
+            public sealed partial class AppointmentWhen : When<NoWorld>
             {
-                extension(When)
-                {
-                    [StepName("look up")]
-                    public static async Task LookUp([Edited(References = [Subject.Return])] Account acc) { await Task.Yield(); }
-                }
+                [StepName("look up")]
+                public async Task LookUp([Edited(References = [Subject.Return])] Account acc) { await Task.Yield(); }
             }
             """;
 
@@ -511,14 +513,11 @@ public class DiagnosticTests
         // A produced subject may not name itself as a lineage target.
         var source = LineageDsl +
             """
-            public static class BadDsl
+            public sealed partial class AppointmentWhen : When<NoWorld>
             {
-                extension(When)
-                {
-                    [StepName("clone")]
-                    [return: Created(References = [Subject.Return])]
-                    public static async Task<Account> Clone() { await Task.Yield(); return new Account("a"); }
-                }
+                [StepName("clone")]
+                [return: Created(References = [Subject.Return])]
+                public async Task<Account> Clone() { await Task.Yield(); return new Account("a"); }
             }
             """;
 
@@ -530,17 +529,14 @@ public class DiagnosticTests
     {
         var source = LineageDsl +
             """
-            public static class GoodDsl
+            public sealed partial class AppointmentWhen : When<NoWorld>
             {
-                extension(When)
-                {
-                    [StepName("assign")]
-                    public static async Task Assign([Edited(References = [nameof(who)])] Account acc, User who) { await Task.Yield(); }
+                [StepName("assign")]
+                public async Task Assign([Edited(References = [nameof(who)])] Account acc, User who) { await Task.Yield(); }
 
-                    [StepName("create")]
-                    [return: Created(References = [nameof(who)])]
-                    public static async Task<Account> Create(User who) { await Task.Yield(); return new Account("a"); }
-                }
+                [StepName("create")]
+                [return: Created(References = [nameof(who)])]
+                public async Task<Account> Create(User who) { await Task.Yield(); return new Account("a"); }
             }
             """;
 
@@ -563,41 +559,47 @@ public class DiagnosticTests
         {
             public static ResourceKey KeyFor(Note instance) => instance.Text;
         }
-        public static class ConflictDsl
+        public sealed partial class ConflictGiven : Given<NoWorld>
         {
-            extension(Given)
-            {
-                [StepName("patient {name} exists")]
-                [return: Created]
-                public static async Task<Patient> PatientExists(string name) { await Task.Yield(); return new Patient(name); }
-            }
-            extension(When)
-            {
-                [StepName("renaming the patient")]
-                public static async Task Rename([Edited] Patient patient, string name) { await Task.Yield(); }
+            [StepName("patient {name} exists")]
+            [return: Created]
+            public async Task<Patient> PatientExists(string name) { await Task.Yield(); return new Patient(name); }
+        }
 
-                [StepName("suspending the patient")]
-                public static async Task Suspend([Edited] Patient patient) { await Task.Yield(); }
+        public sealed partial class ConflictWhen : When<NoWorld>
+        {
+            [StepName("renaming the patient")]
+            public async Task Rename([Edited] Patient patient, string name) { await Task.Yield(); }
 
-                [StepName("deleting the patient")]
-                public static async Task Delete([Deleted] Patient patient) { await Task.Yield(); }
+            [StepName("suspending the patient")]
+            public async Task Suspend([Edited] Patient patient) { await Task.Yield(); }
 
-                [StepName("attaching a note")]
-                [return: Created(References = [nameof(patient)])]
-                public static async Task<Note> AttachNote(Patient patient, string text) { await Task.Yield(); return new Note(text); }
+            [StepName("deleting the patient")]
+            public async Task Delete([Deleted] Patient patient) { await Task.Yield(); }
 
-                [StepName("tagging the patient {tag}")]
-                [return: Created]
-                public static async Task<Note> Tag([Edited] Patient patient, int tag) { await Task.Yield(); return new Note($"tag-{tag}"); }
-            }
-            extension(Then)
-            {
-                [StepName("the patient can sign in")]
-                public static Task CanSignIn([Read] Patient patient) => Task.CompletedTask;
+            [StepName("attaching a note")]
+            [return: Created(References = [nameof(patient)])]
+            public async Task<Note> AttachNote(Patient patient, string text) { await Task.Yield(); return new Note(text); }
 
-                [StepName("the patient has a name")]
-                public static Task HasName([Read] Patient patient) => Task.CompletedTask;
-            }
+            [StepName("tagging the patient {tag}")]
+            [return: Created]
+            public async Task<Note> Tag([Edited] Patient patient, int tag) { await Task.Yield(); return new Note($"tag-{tag}"); }
+        }
+
+        public sealed partial class ConflictThen : Then<NoWorld>
+        {
+            [StepName("the patient can sign in")]
+            public Task CanSignIn([Read] Patient patient) => Task.CompletedTask;
+
+            [StepName("the patient has a name")]
+            public Task HasName([Read] Patient patient) => Task.CompletedTask;
+        }
+
+        public abstract class ConflictSuite : Scenarios<NoWorld>
+        {
+            public ConflictGiven Given => Steps<ConflictGiven>();
+            public ConflictWhen When => Steps<ConflictWhen>();
+            public ConflictThen Then => Steps<ConflictThen>();
         }
         """;
 
@@ -609,10 +611,10 @@ public class DiagnosticTests
     private static Task<ImmutableArray<Diagnostic>> AnalyzeConflict(string body) =>
         GeneratorHarness.DiagnoseAsync(ConflictDsl +
             $$"""
-            public static class S
+            public sealed class S : ConflictSuite
             {
                 [Scenario("s")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     var patient = await Given.PatientExists("Jane");
                     var other = await Given.PatientExists("Bob");
@@ -751,7 +753,7 @@ public class DiagnosticTests
     }
 
     /// <summary>A step body around <paramref name="registration"/>, which sees `ctx` (the step's own
-    /// nullable context) and `id` (a plain captured value).</summary>
+    /// context, copied into a local) and `id` (a plain captured value).</summary>
     private static Task<ImmutableArray<Diagnostic>> AnalyzeCleanup(string registration, bool requireCompilable = false) =>
         GeneratorHarness.DiagnoseAsync(
             $$"""
@@ -762,18 +764,21 @@ public class DiagnosticTests
             {
                 public static Task Delete(int id) => Task.CompletedTask;
             }
-            public static class CleanupDsl
+            public sealed partial class CleanupGiven : Given<NoWorld>
             {
-                extension(Given)
+                [StepName("a row exists")]
+                public Task<int> RowExists()
                 {
-                    [StepName("a row exists")]
-                    public static Task<int> RowExists(ScenarioContext? ctx = null)
-                    {
-                        var id = 42;
+                    var ctx = Context;
+                    var id = 42;
             {{registration}}
-                        return Task.FromResult(id);
-                    }
+                    return Task.FromResult(id);
                 }
+            }
+
+            public abstract class CleanupSuite : Scenarios<NoWorld>
+            {
+                public CleanupGiven Given => Steps<CleanupGiven>();
             }
             """, requireCompilable);
 
@@ -959,11 +964,11 @@ public class DiagnosticTests
     {
         var scenarios = string.Join("\n\n", scenarioUsesClauses.Select((clause, i) =>
             $$"""
-            public static class Scenario{{i}}
+            public sealed class Scenario{{i}} : StepsSuite
             {
                 [Scenario("s{{i}}")]
                 {{clause}}
-                public static async Task Run{{i}}()
+                public async Task Run{{i}}()
                 {
                     await Given.Step();
                 }
@@ -976,12 +981,14 @@ public class DiagnosticTests
 
             {{resourceDeclaration}}
 
-            public static class Steps
+            public sealed class StepsGiven : Given<NoWorld>
             {
-                extension(Given)
-                {
-                    public static Task Step() => Task.CompletedTask;
-                }
+                public Task Step() => Task.CompletedTask;
+            }
+
+            public abstract class StepsSuite : Scenarios<NoWorld>
+            {
+                public StepsGiven Given => Steps<StepsGiven>();
             }
 
             {{scenarios}}
@@ -1091,32 +1098,34 @@ public class DiagnosticTests
             [SharedResource]
             public sealed class Db : IContendedResource;
 
-            public static class Steps
+            public sealed class StepsGiven : Given<NoWorld>
             {
-                extension(Given)
-                {
-                    [Uses<Db>(LockMode.Exclusive)]
-                    public static Task ExclusiveStep() => Task.CompletedTask;
+                [Uses<Db>(LockMode.Exclusive)]
+                public Task ExclusiveStep() => Task.CompletedTask;
 
-                    public static Task PlainStep() => Task.CompletedTask;
-                }
+                public Task PlainStep() => Task.CompletedTask;
             }
 
-            public static class Scenario0
+            public abstract class StepsSuite : Scenarios<NoWorld>
+            {
+                public StepsGiven Given => Steps<StepsGiven>();
+            }
+
+            public sealed class Scenario0 : StepsSuite
             {
                 [Scenario("s0")]
                 [Uses<Db>]
-                public static async Task Run0()
+                public async Task Run0()
                 {
                     await Given.ExclusiveStep();
                 }
             }
 
-            public static class Scenario1
+            public sealed class Scenario1 : StepsSuite
             {
                 [Scenario("s1")]
                 [Uses<Db>]
-                public static async Task Run1()
+                public async Task Run1()
                 {
                     await Given.PlainStep();
                 }
@@ -1142,30 +1151,32 @@ public class DiagnosticTests
             [SharedResource]
             public sealed class Db : IContendedResource;
 
-            public static class Steps
+            public sealed class StepsGiven : Given<NoWorld>
             {
-                extension(Given)
-                {
-                    public static Task Step() => Task.CompletedTask;
-                }
+                public Task Step() => Task.CompletedTask;
+            }
+
+            public abstract class StepsSuite : Scenarios<NoWorld>
+            {
+                public StepsGiven Given => Steps<StepsGiven>();
             }
 
             [Uses<Db>(LockMode.Exclusive)]
-            public static class Scenario0
+            public sealed class Scenario0 : StepsSuite
             {
                 [Scenario("s0")]
                 [Uses<Db>]
-                public static async Task Run0()
+                public async Task Run0()
                 {
                     await Given.Step();
                 }
             }
 
-            public static class Scenario1
+            public sealed class Scenario1 : StepsSuite
             {
                 [Scenario("s1")]
                 [Uses<Db>]
-                public static async Task Run1()
+                public async Task Run1()
                 {
                     await Given.Step();
                 }

@@ -8,7 +8,7 @@
     <Description>
       Aspire integration for Raun: a bootstrap that builds a DistributedApplication, starts it as
       the run's preflight while waiting for the resources you declare, and registers it for your
-      steps. Plumbing only — it ships no phase markers and no steps, so the DSL stays yours.
+      steps. Plumbing only — it ships no step classes and no steps, so the DSL stays yours.
     </Description>
   </PropertyGroup>
 

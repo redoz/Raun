@@ -42,7 +42,7 @@ public static class GeneratorHarness
             .Where(p => withMtp || !string.Equals(p, mtpAssemblyPath, StringComparison.OrdinalIgnoreCase))
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
             .ToList();
-        refs.Add(MetadataReference.CreateFromFile(typeof(Given).Assembly.Location));
+        refs.Add(MetadataReference.CreateFromFile(typeof(NoWorld).Assembly.Location));
         if (withMtp)
         {
             refs.Add(MetadataReference.CreateFromFile(typeof(Raun.Mtp.RaunTestApplication).Assembly.Location));

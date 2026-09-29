@@ -11,10 +11,10 @@ public class ClassDisplayNameTests
         """
 
         [System.ComponentModel.DisplayName("Appointment booking")]
-        public static class NamedScenarios
+        public sealed class NamedScenarios : AppointmentSuite
         {
             [Scenario("booking")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists("Jane");
                 await Then.Greet(patient);

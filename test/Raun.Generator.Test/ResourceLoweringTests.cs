@@ -23,7 +23,7 @@ public class ResourceLoweringTests
         var results = await RunResourceScenario();
 
         // Given.UserExists → [return: Created]
-        var effect = Assert.Single(results[0].Effects);
+        var effect = Assert.Single(results[1].Effects);
         Assert.Equal(LifecycleVerb.Create, effect.Verb);
         Assert.Equal("User:jane@acme.com", effect.Identity.ToString());
     }
@@ -34,7 +34,7 @@ public class ResourceLoweringTests
         var results = await RunResourceScenario();
 
         // When.Suspend([Edited] User) → [return: Edited]; both resolve to the same identity ⇒ one effect.
-        var effect = Assert.Single(results[1].Effects);
+        var effect = Assert.Single(results[2].Effects);
         Assert.Equal(LifecycleVerb.Edit, effect.Verb);
         Assert.Equal("User:jane@acme.com", effect.Identity.ToString());
     }
@@ -45,7 +45,7 @@ public class ResourceLoweringTests
         var results = await RunResourceScenario();
 
         // Then.CannotSignIn([Read] User)
-        var effect = Assert.Single(results[2].Effects);
+        var effect = Assert.Single(results[3].Effects);
         Assert.Equal(LifecycleVerb.Read, effect.Verb);
         Assert.Equal("User:jane@acme.com", effect.Identity.ToString());
     }
@@ -66,18 +66,18 @@ public class ResourceLoweringTests
         var results = await result.Definitions().Single().RunAsync();
 
         // Step 0: Given.UserExists → single [return: Created] on User:jane@acme.com.
-        var userCreate = Assert.Single(results[0].Effects);
+        var userCreate = Assert.Single(results[1].Effects);
         Assert.Equal(LifecycleVerb.Create, userCreate.Verb);
         Assert.Equal("User:jane@acme.com", userCreate.Identity.ToString());
 
         // Step 1: Given.SlotExists → single [return: Created] on Slot:1.
-        var slotCreate = Assert.Single(results[1].Effects);
+        var slotCreate = Assert.Single(results[2].Effects);
         Assert.Equal(LifecycleVerb.Create, slotCreate.Verb);
         Assert.Equal("Slot:1", slotCreate.Identity.ToString());
 
         // Step 2: When.Book([Read] User, [Edited] Slot) [return: Created] → effects must appear in
         // exactly this order: each role-bearing parameter in declaration order, THEN the return role.
-        var book = results[2].Effects;
+        var book = results[3].Effects;
         Assert.Equal(3, book.Count);
 
         Assert.Equal(LifecycleVerb.Read, book[0].Verb);
@@ -113,7 +113,7 @@ public class ResourceLoweringTests
         // Step 2: When.BookWithLineage(User user, Slot slot) [return: Created(References = [nameof(user)],
         // Consumes = [nameof(slot)])] — the producer's lineage emits Reference(user) then Consume(slot)
         // before the return's Create, so effects read Reference, Consume, Create.
-        var book = results[2].Effects;
+        var book = results[3].Effects;
         Assert.Equal(3, book.Count);
 
         Assert.Equal(LifecycleVerb.Reference, book[0].Verb);
@@ -136,7 +136,7 @@ public class ResourceLoweringTests
         var results = await result.Definitions().Single().RunAsync();
 
         // Step 2: BookWithLineage(User user, Slot slot) [return: Created(References = [nameof(user)], Consumes = [nameof(slot)])] Appointment
-        var relations = results[2].Lineage;
+        var relations = results[3].Lineage;
         Assert.Equal(2, relations.Count);
 
         var reference = relations.Single(e => e.Kind == LifecycleVerb.Reference);
@@ -158,8 +158,8 @@ public class ResourceLoweringTests
         result.AssertCompiles();
         var source = result.GeneratedSource;
 
-        var paramClaim = source.IndexOf("__ctx.Resources.Edit(__inputs.Get<global::ResourceDemo.User>(0))", StringComparison.Ordinal);
-        var call = source.IndexOf("var __r = await When.Suspend(", StringComparison.Ordinal);
+        var paramClaim = source.IndexOf("__ctx.Resources.Edit(__inputs.Get<global::ResourceDemo.User>(1))", StringComparison.Ordinal);
+        var call = source.IndexOf("Steps<global::ResourceDemo.ResourceWhen>().Suspend(", StringComparison.Ordinal);
         var returnClaim = source.IndexOf("__ctx.Resources.Edit(__r)", StringComparison.Ordinal);
 
         Assert.True(paramClaim >= 0 && call >= 0 && returnClaim >= 0, "expected all three statements in the generated source");
@@ -176,7 +176,7 @@ public class ResourceLoweringTests
         result.AssertCompiles();
         var source = result.GeneratedSource;
 
-        var call = source.IndexOf("var __r = await When.BookWithLineage(", StringComparison.Ordinal);
+        var call = source.IndexOf("Steps<global::ResourceDemo.ResourceWhen>().BookWithLineage(", StringComparison.Ordinal);
         var reference = source.IndexOf("__ctx.Resources.Reference(", StringComparison.Ordinal);
 
         Assert.True(call >= 0 && reference >= 0, "expected the call and the lineage claim in the generated source");

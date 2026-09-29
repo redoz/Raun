@@ -53,7 +53,7 @@ public abstract class Phase<TWorld>
 
 /// <summary>Steps that arrange a scenario's preconditions.</summary>
 [PhaseName("Given")]
-#pragma warning disable CA1716 // Mirrors the Given marker the DSL has always used.
+#pragma warning disable CA1716 // "Given" reads as the phase it is; the VB keyword clash does not matter here.
 public abstract class Given<TWorld> : Phase<TWorld>
 #pragma warning restore CA1716
     where TWorld : class, IScenarioWorld<TWorld>;

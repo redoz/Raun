@@ -6,87 +6,110 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AspireAppointments.Tests;
 
 /// <summary>
-/// The suite's own DSL. Raun.Aspire ships no steps — it is plumbing only — so these are ordinary
-/// phase-marker extension members that reach the running application through <c>ctx.Services</c>.
+/// The scenario's world: the API the steps drive, resolved once per scenario from the services
+/// Program.cs registers. Raun.Aspire ships no steps — it is plumbing only — so this, like the steps
+/// below, is the suite's own code. The AppHost is already running when a world is created: it started
+/// as the run's preflight, before any scenario.
 /// </summary>
-public static class AppointmentsDsl
+public sealed class AppointmentsWorld : IScenarioWorld<AppointmentsWorld>
 {
-    private static AppointmentsApi Api(ScenarioContext? ctx) =>
-        ctx!.Services!.GetRequiredService<AppointmentsApi>();
+    private AppointmentsWorld(AppointmentsApi api) => Api = api;
 
-    extension(Given)
+    /// <summary>Hands out a client bound to one identity; see <see cref="AppointmentsApi"/>.</summary>
+    public AppointmentsApi Api { get; }
+
+    public static ValueTask<AppointmentsWorld> CreateAsync(ScenarioContext context)
     {
-        [StepName("the API is reachable")]
-        public static async Task<AppointmentDto[]> ApiIsReachable(ScenarioContext? ctx = null) =>
-            await Api(ctx).As(Actor.Patient).ListAsync();
+        ArgumentNullException.ThrowIfNull(context);
+        var services = context.Services
+            ?? throw new InvalidOperationException("The appointments suite runs through RaunAspire, which provides its services.");
+        return ValueTask.FromResult(new AppointmentsWorld(services.GetRequiredService<AppointmentsApi>()));
+    }
+}
+
+/// <summary>Arrange steps.</summary>
+public sealed class AppointmentsGiven : Given<AppointmentsWorld>
+{
+    [StepName("the API is reachable")]
+    public async Task<AppointmentDto[]> ApiIsReachable() =>
+        await World.Api.As(Actor.Patient).ListAsync();
+}
+
+/// <summary>Actions against the API, each as the actor it names.</summary>
+public sealed class AppointmentsWhen : When<AppointmentsWorld>
+{
+    [StepName("an admin books {patient} into {slot}")]
+    public async Task<AppointmentDto> AdminBooks(string patient, string slot)
+    {
+        var response = await World.Api.As(Actor.Admin).CreateAsync(patient, slot);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"booking failed: {response.StatusCode}");
+        }
+
+        var created = await response.Content.ReadFromJsonAsync<AppointmentDto>()
+            ?? throw new InvalidOperationException("booking returned no body");
+
+        Context.Log($"booked appointment {created.Id}");
+        return created;
     }
 
-    extension(When)
+    [StepName("a patient tries to book {patient} into {slot}")]
+    public async Task<HttpStatusCode> PatientTriesToBook(string patient, string slot)
     {
-        [StepName("an admin books {patient} into {slot}")]
-        public static async Task<AppointmentDto> AdminBooks(
-            string patient, string slot, ScenarioContext? ctx = null)
+        var response = await World.Api.As(Actor.Patient).CreateAsync(patient, slot);
+        return response.StatusCode;
+    }
+
+    [StepName("an admin clears the schedule")]
+    public async Task AdminClearsSchedule()
+    {
+        var response = await World.Api.As(Actor.Admin).ClearAsync();
+        if (!response.IsSuccessStatusCode)
         {
-            var response = await Api(ctx).As(Actor.Admin).CreateAsync(patient, slot);
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InvalidOperationException($"booking failed: {response.StatusCode}");
-            }
-
-            var created = await response.Content.ReadFromJsonAsync<AppointmentDto>()
-                ?? throw new InvalidOperationException("booking returned no body");
-
-            ctx?.Log($"booked appointment {created.Id}");
-            return created;
+            throw new InvalidOperationException($"clear failed: {response.StatusCode}");
         }
+    }
+}
 
-        [StepName("a patient tries to book {patient} into {slot}")]
-        public static async Task<HttpStatusCode> PatientTriesToBook(
-            string patient, string slot, ScenarioContext? ctx = null)
+/// <summary>Assertions, read back through the API.</summary>
+public sealed class AppointmentsThen : Then<AppointmentsWorld>
+{
+    [StepName("the patient can read appointment {appointment}")]
+    public async Task PatientCanRead(AppointmentDto appointment)
+    {
+        // The SECOND identity in the same scenario: booked as an admin, read back as a patient.
+        var read = await World.Api.As(Actor.Patient).GetAsync(appointment.Id);
+        if (read is null || read.Patient != appointment.Patient)
         {
-            var response = await Api(ctx).As(Actor.Patient).CreateAsync(patient, slot);
-            return response.StatusCode;
-        }
-
-        [StepName("an admin clears the schedule")]
-        public static async Task AdminClearsSchedule(ScenarioContext? ctx = null)
-        {
-            var response = await Api(ctx).As(Actor.Admin).ClearAsync();
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InvalidOperationException($"clear failed: {response.StatusCode}");
-            }
+            throw new InvalidOperationException(
+                $"appointment {appointment.Id} did not read back as booked");
         }
     }
 
-    extension(Then)
+    [StepName("the attempt was rejected as {status}")]
+    public Task AttemptWasRejected(HttpStatusCode status)
+        => status == HttpStatusCode.Forbidden
+            ? Task.CompletedTask
+            : throw new InvalidOperationException($"expected Forbidden, got {status}");
+
+    [StepName("the schedule is empty")]
+    public async Task ScheduleIsEmpty()
     {
-        [StepName("the patient can read appointment {appointment}")]
-        public static async Task PatientCanRead(AppointmentDto appointment, ScenarioContext? ctx = null)
+        var remaining = await World.Api.As(Actor.Patient).ListAsync();
+        if (remaining.Length != 0)
         {
-            // The SECOND identity in the same scenario: booked as an admin, read back as a patient.
-            var read = await Api(ctx).As(Actor.Patient).GetAsync(appointment.Id);
-            if (read is null || read.Patient != appointment.Patient)
-            {
-                throw new InvalidOperationException(
-                    $"appointment {appointment.Id} did not read back as booked");
-            }
-        }
-
-        [StepName("the attempt was rejected as {status}")]
-        public static Task AttemptWasRejected(HttpStatusCode status)
-            => status == HttpStatusCode.Forbidden
-                ? Task.CompletedTask
-                : throw new InvalidOperationException($"expected Forbidden, got {status}");
-
-        [StepName("the schedule is empty")]
-        public static async Task ScheduleIsEmpty(ScenarioContext? ctx = null)
-        {
-            var remaining = await Api(ctx).As(Actor.Patient).ListAsync();
-            if (remaining.Length != 0)
-            {
-                throw new InvalidOperationException($"expected an empty schedule, found {remaining.Length} appointment(s)");
-            }
+            throw new InvalidOperationException($"expected an empty schedule, found {remaining.Length} appointment(s)");
         }
     }
+}
+
+/// <summary>The phases the scenarios reach their steps through, declared once.</summary>
+public abstract class AppointmentsSuite : Scenarios<AppointmentsWorld>
+{
+    public AppointmentsGiven Given => Steps<AppointmentsGiven>();
+
+    public AppointmentsWhen When => Steps<AppointmentsWhen>();
+
+    public AppointmentsThen Then => Steps<AppointmentsThen>();
 }

@@ -4,10 +4,11 @@ using System.Reflection;
 using Raun;
 using Xunit;
 
-namespace AppointmentTests.StepClasses;
+namespace AppointmentTests.Cancellations;
 
-// The step-class authoring model (docs/superpowers/specs/2026-09-29-step-classes-and-scenario-world-design.md),
-// next to the extension-member DSL the rest of this sample uses. Two kinds of state are kept apart:
+// A suite with scenario state (docs/superpowers/specs/2026-09-29-step-classes-and-scenario-world-design.md).
+// The booking and lifecycle scenarios need none, so their world is NoWorld; these need a seeded test
+// isolation, so they have a world of their own. Two kinds of state are kept apart:
 //
 //  - the WORLD is scenario infrastructure: a seeded TestIsolation, created once per scenario in its
 //    Setup node, shared by every step, disposed in teardown whatever happened;

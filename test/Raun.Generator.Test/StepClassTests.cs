@@ -532,7 +532,7 @@ public class StepClassTests
     [Theory]
     [InlineData("var given = Given;\n        await given.Customers.Exists(\"Jane\");", "given", "a local")]
     [InlineData("await ((ClinicGiven)Given).Customers.Exists(\"Jane\");", "(ClinicGiven)Given", "not a phase or group property")]
-    public async Task RAUN018_names_the_link_it_cannot_follow(string statements, string link, string reason)
+    public async Task RAUN019_names_the_link_it_cannot_follow(string statements, string link, string reason)
     {
         var diagnostics = await Diagnose(
             $$"""
@@ -546,14 +546,14 @@ public class StepClassTests
             }
             """);
 
-        var diagnostic = Single(diagnostics, "RAUN018");
+        var diagnostic = Single(diagnostics, "RAUN019");
         Assert.Contains(reason, diagnostic.GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
         Assert.Equal(link, diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan));
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN004");
     }
 
     [Fact]
-    public async Task RAUN018_for_a_group_property_that_does_not_return_Steps()
+    public async Task RAUN019_for_a_group_property_that_does_not_return_Steps()
     {
         var diagnostics = await Diagnose(
             """
@@ -574,20 +574,20 @@ public class StepClassTests
             }
             """);
 
-        var diagnostic = Single(diagnostics, "RAUN018");
+        var diagnostic = Single(diagnostics, "RAUN019");
         Assert.Contains("'Customers' must be declared '=> Steps<CustomerSteps>()'", diagnostic.GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
         Assert.Equal("Given.Customers", diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan));
     }
 
     [Fact]
-    public async Task RAUN018_for_a_step_class_used_outside_a_scenarios_class()
+    public async Task RAUN020_for_a_scenario_outside_a_scenarios_class()
     {
         var diagnostics = await Diagnose(
             """
-            public static class S
+            public sealed class S
             {
                 [Scenario]
-                public static async Task Bad()
+                public async Task Bad()
                 {
                     await Steps.Customers.Exists("Jane");
                 }
@@ -596,11 +596,13 @@ public class StepClassTests
             }
             """);
 
-        Assert.Contains("does not derive from Scenarios<>", Single(diagnostics, "RAUN018").GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        // One diagnostic for the scenario, not one per call that cannot be followed without a world.
+        Assert.Contains("does not derive from Scenarios<TWorld>", Single(diagnostics, "RAUN020").GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN019");
     }
 
     [Fact]
-    public async Task RAUN019_for_a_static_scenario_in_a_scenarios_class()
+    public async Task RAUN020_for_a_static_scenario_in_a_scenarios_class()
     {
         var diagnostics = await Diagnose(
             """
@@ -614,11 +616,11 @@ public class StepClassTests
             }
             """);
 
-        Assert.Contains("make it an instance method", Single(diagnostics, "RAUN019").GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        Assert.Contains("make it an instance method", Single(diagnostics, "RAUN020").GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task RAUN020_for_a_step_class_of_another_world()
+    public async Task RAUN021_for_a_step_class_of_another_world()
     {
         var diagnostics = await Diagnose(
             """
@@ -639,7 +641,7 @@ public class StepClassTests
             }
             """);
 
-        Assert.Contains(diagnostics, d => d.Id == "RAUN020");
+        Assert.Contains(diagnostics, d => d.Id == "RAUN021");
     }
 
     [Fact]

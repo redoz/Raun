@@ -18,13 +18,13 @@ public class PlatformSurfaceTests
 {
     // "customer books an appointment" (samples/AppointmentTests/Scenarios.cs) has four authored
     // steps (Given patient exists, Given available slot, When create appointment, Then appointment
-    // exists) plus the Teardown node every scenario reports, even with nothing registered.
+    // exists) plus the Setup and Teardown nodes every scenario reports, even with nothing to do.
     private const string FilteredScenario = "customer books an appointment";
-    private const int FilteredScenarioStepCount = 5;
+    private const int FilteredScenarioStepCount = 6;
 
-    // The sample's full step count across every scenario, confirmed by `--list-tests`. The two
-    // step-class scenarios (CancellationScenarios.cs) report their Setup node as a test too.
-    private const int UnfilteredTotalCount = 71;
+    // The sample's full step count across every scenario, Setup and Teardown included, confirmed by
+    // `--list-tests`.
+    private const int UnfilteredTotalCount = 79;
 
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(3);
 

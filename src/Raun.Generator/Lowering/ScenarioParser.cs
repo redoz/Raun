@@ -20,7 +20,7 @@ namespace Raun.Generator.Lowering;
 /// </summary>
 /// <remarks>
 /// It is also the only judge of what a scenario body may contain. It does not stop at the first
-/// problem: it reports every one it finds (RAUN001–007, RAUN011, RAUN013, RAUN017) and keeps walking, so a
+/// problem: it reports every one it finds (RAUN001–007, RAUN011, RAUN013, RAUN017, RAUN019–021) and keeps walking, so a
 /// build names them all. The outcome is a scenario or its diagnostics — never both, never neither —
 /// and the generator reports what it gets. Nothing else walks a scenario body, so nothing can
 /// disagree with it.
@@ -120,8 +120,11 @@ internal sealed class ScenarioParser
     private readonly record struct LoopElement(IParameterSymbol Variable, int Value);
 
     /// <summary>
-    /// A DSL call resolved and its arguments lowered: everything about a step that does not depend on
-    /// where it sits in the graph.
+    /// A step call resolved and its arguments lowered: everything about a step that does not depend on
+    /// where it sits in the graph. <c>Receiver</c> is what the generated code calls the step on — the
+    /// scenario's instance of its step class, reached through the Setup node's scope; <c>KeyPrefix</c>
+    /// is the group path in front of the operation in the step's identity (<c>Patients.</c> for
+    /// <c>Given.Patients.Exists(…)</c>, empty for a call on a phase itself).
     /// </summary>
     private sealed record StepCall(
         InvocationExpressionSyntax Invocation,
@@ -130,16 +133,10 @@ internal sealed class ScenarioParser
         IMethodSymbol Method,
         ITypeSymbol? ResultType,
         LoweredCall Lowering,
-        LoopElement? Loop)
+        LoopElement? Loop,
+        ExpressionSyntax Receiver,
+        string KeyPrefix)
     {
-        /// <summary>For a step of a step class, the receiver the generated code calls it on — the
-        /// scenario's instance of that class, reached through the Setup node's scope. Null for a
-        /// phase-marker call, which is emitted with its receiver as written.</summary>
-        public ExpressionSyntax? Receiver { get; init; }
-
-        /// <summary>The group path in front of the operation in the step's identity: <c>Patients.</c>
-        /// for <c>Given.Patients.Exists(…)</c>, empty for a call on a phase itself.</summary>
-        public string KeyPrefix { get; init; } = "";
 
         public string Operation => Member.Name.Identifier.Text;
 
@@ -178,19 +175,27 @@ internal sealed class ScenarioParser
         _scenarioId = GenStableId.ForScenario(methodFullName);
 
         _world = SymbolHelpers.WorldOfScenarios(_method.ContainingType);
-        if (_world is not null)
+        if (_world is null)
         {
-            if (_method.IsStatic)
-            {
-                Report(
-                    Descriptors.ScenarioClassShape,
-                    _syntax.Identifier.GetLocation(),
-                    methodFullName,
-                    "is static, but its class derives from Scenarios<" + _world.Name + ">; make it an instance method so it can use the class's phases");
-            }
-
-            AddSetup(_world);
+            // Nothing in the body can be followed without a world, so the one diagnostic is this one.
+            Report(
+                Descriptors.ScenarioClassShape,
+                _syntax.Identifier.GetLocation(),
+                methodFullName,
+                "is declared in '" + _method.ContainingType.Name + "', which does not derive from Scenarios<TWorld>; declare it in a class that does (Scenarios<NoWorld> for a suite with no state)");
+            return null;
         }
+
+        if (_method.IsStatic)
+        {
+            Report(
+                Descriptors.ScenarioClassShape,
+                _syntax.Identifier.GetLocation(),
+                methodFullName,
+                "is static; make it an instance method so it can use its class's phases");
+        }
+
+        AddSetup(_world);
 
         foreach (var statement in _syntax.Body.Statements)
         {
@@ -251,7 +256,7 @@ internal sealed class ScenarioParser
             ClassDisplayName = AttributeReader.ClassDisplayName(_method.ContainingType),
             TimeoutMs = AttributeReader.ScenarioTimeout(_method),
             TeardownPolicy = AttributeReader.TeardownPolicy(_method),
-            DeclaringType = _world is null ? null : TypeSyntaxFactory.From(_method.ContainingType),
+            DeclaringType = TypeSyntaxFactory.From(_method.ContainingType),
             MethodName = _method.Name,
             SourceFile = Location(_syntax.Identifier, out var line),
             SourceLine = line,
@@ -442,7 +447,7 @@ internal sealed class ScenarioParser
     }
 
     /// <summary>
-    /// RAUN011: the condition is an awaited phase-marker call whose result can drive a C# <c>if</c>
+    /// RAUN011: the condition is an awaited step call whose result can drive a C# <c>if</c>
     /// (<c>bool</c>, an implicit conversion to it, or <c>operator true</c>). Returns the condition step,
     /// or null when there is none to guard on.
     /// </summary>
@@ -915,7 +920,7 @@ internal sealed class ScenarioParser
     private static bool IsToArray(InvocationExpressionSyntax invocation)
         => invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "ToArray" };
 
-    /// <summary>RAUN006: every element of a tuple or array group is a phase-marker call.</summary>
+    /// <summary>RAUN006: every element of a tuple or array group is a step call.</summary>
     private StepCall? ResolveGroupElement(ExpressionSyntax element)
     {
         if (element is InvocationExpressionSyntax invocation)
@@ -954,48 +959,27 @@ internal sealed class ScenarioParser
 
     /// <summary>
     /// Resolves a DSL call and lowers its arguments, reporting everything wrong with it:
-    /// <paramref name="notDsl"/> when it is not a phase-marker call (RAUN004, RAUN006 in a group,
+    /// <paramref name="notDsl"/> when it is not a step call (RAUN004, RAUN006 in a group,
     /// RAUN011 as a condition), RAUN007 for each argument the one argument lowering refuses, RAUN005 for
     /// a return type that is not a task. <paramref name="loop"/> binds a LINQ unroll's loop variable to
     /// the value of the element being resolved.
     /// </summary>
     private StepCall? ResolveCall(InvocationExpressionSyntax invocation, DiagnosticDescriptor notDsl, LoopElement? loop = null)
     {
-        ExpressionSyntax? receiver = null;
-        var keyPrefix = "";
-        string phase;
-        IMethodSymbol? method;
-
-        if (invocation.Expression is MemberAccessExpressionSyntax stepMember
-            && _model.GetSymbolInfo(invocation).Symbol is IMethodSymbol { IsStatic: false } stepMethod
-            && SymbolHelpers.WorldOfStepClass(stepMethod.ContainingType) is { } stepWorld)
-        {
-            if (ResolveStepClassReceiver(invocation, stepMember, stepMethod, stepWorld) is not { } resolved)
-            {
-                return null;
-            }
-
-            (receiver, keyPrefix, phase) = resolved;
-            method = stepMethod;
-        }
-        else if (invocation.Expression is not MemberAccessExpressionSyntax markerMember
-            || SymbolHelpers.PhaseOf(markerMember.Expression, _model) is not { } markerPhase)
+        if (invocation.Expression is not MemberAccessExpressionSyntax member
+            || _model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol { IsStatic: false } method
+            || SymbolHelpers.WorldOfStepClass(method.ContainingType) is not { } stepWorld)
         {
             Report(notDsl, invocation);
             return null;
         }
-        else
+
+        if (ResolveStepClassReceiver(member, method, stepWorld) is not { } resolved)
         {
-            phase = markerPhase;
-            method = _model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
-            if (method is null)
-            {
-                Refuse(invocation, "The call does not resolve to one method");
-                return null;
-            }
+            return null;
         }
 
-        var member = (MemberAccessExpressionSyntax)invocation.Expression;
+        var (receiver, keyPrefix, phase) = resolved;
 
         ExpressionSyntax? StepValue(ISymbol symbol) => symbol switch
         {
@@ -1021,7 +1005,7 @@ internal sealed class ScenarioParser
         }
 
         return ok
-            ? new StepCall(invocation, member, phase, method, resultType, lowering, loop) { Receiver = receiver, KeyPrefix = keyPrefix }
+            ? new StepCall(invocation, member, phase, method, resultType, lowering, loop, receiver, keyPrefix)
             : null;
     }
 
@@ -1061,13 +1045,12 @@ internal sealed class ScenarioParser
 
     /// <summary>
     /// A call to a step of a step class, <c>Given.Patients.Exists("Jane")</c>. The receiver is checked
-    /// (RAUN018) but never evaluated: Raun binds a step class by its type, so the generated call is
+    /// (RAUN019) but never evaluated: Raun binds a step class by its type, so the generated call is
     /// <c>__inputs.Get&lt;ScenarioScope&lt;W&gt;&gt;(setup).Steps&lt;PatientSteps&gt;().Exists("Jane")</c>
     /// whatever the properties on the way would have returned. Returns the receiver to emit and the
     /// group path for the step's identity, or null after reporting why the call cannot be lowered.
     /// </summary>
     private (ExpressionSyntax Receiver, string KeyPrefix, string Phase)? ResolveStepClassReceiver(
-        InvocationExpressionSyntax invocation,
         MemberAccessExpressionSyntax member,
         IMethodSymbol method,
         ITypeSymbol stepWorld)
@@ -1075,19 +1058,15 @@ internal sealed class ScenarioParser
         var receiverType = _model.GetTypeInfo(member.Expression).Type ?? method.ContainingType;
         var receiverText = member.Expression.WithoutTrivia().ToString();
 
-        if (_world is null || _setupIndex < 0)
+        if (_world is not { } world || _setupIndex < 0)
         {
-            Report(
-                Descriptors.UnfollowableStepReceiver,
-                member.Expression,
-                receiverText,
-                "'" + receiverType.Name + "' is a step class, and step classes are reached through the phases of a class deriving from Scenarios<" + stepWorld.Name + ">; this scenario's class does not derive from Scenarios<>");
+            // Unreachable: a scenario without a world is refused before its body is walked.
             return null;
         }
 
-        if (!SymbolEqualityComparer.Default.Equals(stepWorld, _world))
+        if (!SymbolEqualityComparer.Default.Equals(stepWorld, world))
         {
-            Report(Descriptors.WorldMismatch, member.Expression, receiverType.Name, stepWorld.Name, _world.Name);
+            Report(Descriptors.WorldMismatch, member.Expression, receiverType.Name, stepWorld.Name, world.Name);
             return null;
         }
 
@@ -1111,7 +1090,7 @@ internal sealed class ScenarioParser
         var receiver = InvocationExpression(
                 MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
-                    InputsGet(ScopeType(TypeSyntaxFactory.From(_world)), _setupIndex),
+                    InputsGet(ScopeType(TypeSyntaxFactory.From(world)), _setupIndex),
                     GenericName(Identifier("Steps"))
                         .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList(
                             TypeSyntaxFactory.From(receiverType))))))
@@ -1123,7 +1102,7 @@ internal sealed class ScenarioParser
     }
 
     /// <summary>
-    /// RAUN018: a receiver is a chain of phase and group properties from the scenario — <c>Given</c>,
+    /// RAUN019: a receiver is a chain of phase and group properties from the scenario — <c>Given</c>,
     /// <c>this.Given</c>, <c>Given.Patients</c> — and each property returns <c>Steps&lt;T&gt;()</c> of its
     /// own type. That is the whole binding contract: it is what lets Raun bind by type without ever
     /// running a property, and still call exactly the instance the property names.
@@ -1258,7 +1237,7 @@ internal sealed class ScenarioParser
     /// plus every step whose output its arguments read.</summary>
     private ParsedStep BuildStep(StepCall call, string? groupId, List<int> sourceOrderDeps)
     {
-        var (invocation, member, phase, method, resultType, lowering, loop) = call;
+        var (invocation, member, phase, method, resultType, lowering, loop, _, _) = call;
 
         var dslNamespace = method.ContainingType?.ContainingNamespace;
         if (dslNamespace is { IsGlobalNamespace: false })
@@ -1270,10 +1249,7 @@ internal sealed class ScenarioParser
         var operation = call.Operation;
 
         var deps = new SortedSet<int>(sourceOrderDeps);
-        if (_setupIndex >= 0)
-        {
-            deps.Add(_setupIndex);
-        }
+        deps.Add(_setupIndex);
 
         foreach (var read in lowering.Reads)
         {
@@ -1282,13 +1258,11 @@ internal sealed class ScenarioParser
 
         var written = invocation.ArgumentList.Arguments;
         var lowered = lowering.Arguments.Select(a => a.Node).ToList();
-        var wantsCtx = SymbolHelpers.WantsContext(method, written.Count);
         var invokeCall = BuildCall(
             invocation,
-            call.Receiver is { } receiver ? member.WithExpression(receiver) : member,
+            member.WithExpression(call.Receiver),
             lowering.TypeArguments?.Node,
-            lowered,
-            wantsCtx);
+            lowered);
         var resourceClaims = BuildResourceClaims(written, method, resultType is not null, lowered);
         AddUses(method.GetAttributes());
 
@@ -1351,23 +1325,17 @@ internal sealed class ScenarioParser
             .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(Num(index)))));
 
     /// <summary>
-    /// The DSL invocation as the generated file will call it: the original receiver and method, its
-    /// type and value arguments lowered, and <c>__ctx</c> appended when the method takes a trailing
-    /// <c>ScenarioContext</c> the scenario left out. Outer trivia is dropped — the call is re-hosted
-    /// inside a lambda, and the emitter formats the whole file.
+    /// The step invocation as the generated file will call it: the method on the scenario's instance of
+    /// its step class, with its type and value arguments lowered. Outer trivia is dropped — the call
+    /// is re-hosted inside a lambda, and the emitter formats the whole file.
     /// </summary>
     private static InvocationExpressionSyntax BuildCall(
         InvocationExpressionSyntax invocation,
         MemberAccessExpressionSyntax member,
         TypeArgumentListSyntax? typeArguments,
-        List<ArgumentSyntax> arguments,
-        bool appendCtx)
+        List<ArgumentSyntax> arguments)
     {
-        var emitted = arguments.ToList();
-        if (appendCtx)
-        {
-            emitted.Add(Argument(IdentifierName("__ctx")));
-        }
+        var emitted = arguments;
 
         var callee = member.Name is GenericNameSyntax generic && typeArguments is not null
             ? member.WithName(generic.WithTypeArgumentList(typeArguments))
