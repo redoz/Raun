@@ -25,3 +25,4 @@ RAUN017 | Raun.Usage | Error | Scenario was not generated
 RAUN019 | Raun.Usage | Error | Step receiver cannot be followed
 RAUN020 | Raun.Usage | Error | Scenario does not fit its class
 RAUN021 | Raun.Usage | Error | Step class belongs to another world
+RAUN022 | Raun.Usage | Warning | Step class holds mutable state

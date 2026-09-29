@@ -76,7 +76,7 @@ and call `RaunTestApplication.RunAsync(args)` yourself — see
 3. The generator lowers each body into a dependency graph (`ScenarioDefinition`): one node per
    step, with **source-order + dataflow** edges, and tuple/array forms lowered to parallel
    sibling groups. The generator reports anything outside the supported subset, and an analyzer
-   catches the remaining authoring mistakes (`RAUN000`–`RAUN021`; `RAUN018` is the SDK-floor build
+   catches the remaining authoring mistakes (`RAUN000`–`RAUN022`; `RAUN018` is the SDK-floor build
    error above), all at compile time. Only one component ever judges a scenario body, so the two
    never disagree.
 4. At run time, the MTP test framework discovers each `[Scenario]`, runs the graph through a DAG
@@ -125,7 +125,8 @@ one step returns, the next takes as an argument, so the dependency graph is what
 phase is a step class deriving from `Phase<TWorld>` with its own `[PhaseName("Eventually")]`. A world
 reads per-scenario settings from the scenario method itself —
 `context.Scenario.Method?.GetCustomAttribute<IsolationSeedAttribute>()` — and parallel steps share it,
-so what it holds must be safe for concurrent use. `samples/AppointmentTests/CancellationScenarios.cs`
+so what it holds must be safe for concurrent use. A step class holds no state of its own: one instance
+serves every step of a scenario, so a writable field or property on it is a warning (`RAUN022`). `samples/AppointmentTests/CancellationScenarios.cs`
 has the whole thing; the design is in
 `docs/superpowers/specs/2026-09-29-step-classes-and-scenario-world-design.md`.
 
@@ -529,7 +530,7 @@ to one collector.
 | Project | What it is |
 | --- | --- |
 | `src/Raun` | The runtime: `[Scenario]`, the step-class bases and the scenario world, parallel awaiters, `ScenarioContext`, the graph model, resources, teardown, tracing, the DAG scheduler, the run loop, and the HTML report. Depends on no test platform. |
-| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN021`) + a CA1822 suppressor for steps. netstandard2.0, shipped inside `Raun`. |
+| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN022`) + a CA1822 suppressor for steps. netstandard2.0, shipped inside `Raun`. |
 | `src/Raun.Mtp` | Microsoft.Testing.Platform adapter: discovery, per-step node reporter, filter translation, the `--report-html` option, the bootstrap the generated entry point calls. |
 | `src/Raun.Aspire` | Aspire integration: builds the AppHost, starts it as the run's preflight while waiting for the resources you declare, registers it for your steps. Plumbing only — no step classes, no steps. |
 | `samples/AppointmentTests` | End-to-end sample: linear, tuple, array, LINQ, conditionals, resources, teardown, logging, a custom phase, a seeded per-scenario world; run with `--report-html` for the report showcase. |

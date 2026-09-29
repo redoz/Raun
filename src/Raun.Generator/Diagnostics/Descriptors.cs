@@ -180,13 +180,24 @@ internal static class Descriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    /// <summary>One step-class instance serves every step of a scenario, parallel siblings included,
+    /// so a writable field or property on it is state those steps race on. A warning, not an error: a
+    /// field guarded by a lock or Interlocked is fine, and only its author knows.</summary>
+    public static readonly DiagnosticDescriptor MutableStepClassState = new(
+        "RAUN022",
+        "Step class holds mutable state",
+        "'{0}' is mutable state on step class '{1}', shared by {2}, parallel steps included; make it readonly, or keep the state in the world or in a step result",
+        Category,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
         UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
-        UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch,
+        UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,
         StepContextInCleanup, ContendedResourceKind, InertContendedResourceUse, ScenarioNotGenerated,
     }.ToDictionary(d => d.Id);

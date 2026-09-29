@@ -285,7 +285,7 @@ Raun does **not** detect two siblings conflicting on shared infrastructure. RAUN
 outputs with resource roles, and the world is not a step output. Infrastructure that parallel steps
 touch has to be safe for concurrent use: the sample's stub server keeps its stubs in a
 `ConcurrentDictionary` keyed by service. Steps that cannot share it have to be sequenced rather than
-grouped. A later analyzer rule could flag writable fields on step classes. It cannot see inside the
+grouped. RAUN022 flags writable fields and properties on step classes. It cannot see inside the
 world's objects.
 
 ## Runtime model
@@ -358,6 +358,7 @@ MSBuild error `Raun.props` raises for an SDK below the floor.
 | **RAUN019** Step receiver cannot be followed | Any break in the binding contract above: a local, a cast, a method call, a field, a static or indexed property, a property on the wrong kind of class, a property not declared `=> Steps<T>()`, or a step class with no `[PhaseName]` in its chain. It replaces RAUN004 for grouped calls. | the offending link |
 | **RAUN020** Scenario does not fit its class | A `[Scenario]` method whose class does not derive from `Scenarios<TWorld>` (reported once, instead of once per step), or a static one. | the method name |
 | **RAUN021** Step class belongs to another world | A step class of `WorldA` reached from a `Scenarios<WorldB>`. | the receiver |
+| **RAUN022** Step class holds mutable state (warning) | A non-readonly field or a property with a setter (`init` excepted) on a step class, instance or static. One instance serves every step of a scenario, and a static member every scenario. A warning, not an error: a field guarded by a lock is fine, and only its author knows. A readonly field is not looked into. | the member |
 
 A step-class call nested inside another step's argument is refused by RAUN007, as a phase-marker call
 already is.
@@ -398,7 +399,7 @@ cutover.
   `Given/When/Then<TWorld>`, `PhaseNameAttribute`, `Scenarios<TWorld>`, `ScenarioScope`, `ScenarioInfo`.
   It also adds `ScenarioContext.Scenario`, `ScenarioDefinition.Method` and `ScenarioNode.IsSetup`, and
   Setup is unnumbered in `StepNumbering`. `Phases.cs` (`IPhase` and the markers) is gone.
-- **Generator:** the Setup node, step-class recognition, type-bound receivers, RAUN019–021, step-class
+- **Generator:** the Setup node, step-class recognition, type-bound receivers, RAUN019–021, RAUN022 in the analyzer, step-class
   calls refused inside arguments, and the CA1822 suppressor. The phase-marker path and the trailing
   `ScenarioContext` injection are gone.
 - **Samples:** all three suites are step classes.
@@ -427,13 +428,11 @@ cutover.
   - RAUN019 (local, cast, a property not returning `Steps<T>()`), RAUN020 (outside a `Scenarios<>`,
     static) and RAUN021.
 
-  `StepMethodSuppressorTests` covers the suppressor, and a snapshot
+  RAUN022 is tested for instance and static fields and settable properties, and for the members
+  it must leave alone. `StepMethodSuppressorTests` covers the suppressor, and a snapshot
   (`GeneratorSnapshotTests.StepClass_scenario`) pins the emitted code.
 
-**Not done:**
-
-- an analyzer rule for mutable step-class fields;
-- step arguments that read the world (open question 2).
+**Not done:** step arguments that read the world (open question 2).
 
 ## Open questions
 

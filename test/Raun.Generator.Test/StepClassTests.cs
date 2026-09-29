@@ -644,6 +644,65 @@ public class StepClassTests
         Assert.Contains(diagnostics, d => d.Id == "RAUN021");
     }
 
+    [Theory]
+    [InlineData("private int _calls;", "_calls", "every step of a scenario")]
+    [InlineData("public string? LastName { get; set; }", "LastName", "every step of a scenario")]
+    [InlineData("public string? Note { get; private set; }", "Note", "every step of a scenario")]
+    [InlineData("private static int s_total;", "s_total", "every scenario")]
+    [InlineData("public static string? Shared { get; set; }", "Shared", "every scenario")]
+    public async Task RAUN022_flags_mutable_state_on_a_step_class(string member, string name, string sharedBy)
+    {
+        var diagnostics = await Diagnose(
+            $$"""
+            public sealed class StatefulSteps : Given<ClinicWorld>
+            {
+                {{member}}
+
+                [StepName("a stateful step")]
+                public Task Step() => Task.CompletedTask;
+            }
+            """);
+
+        var diagnostic = Single(diagnostics, "RAUN022");
+        Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.Equal(name, diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan));
+        var message = diagnostic.GetMessage(CultureInfo.InvariantCulture);
+        Assert.Contains("'StatefulSteps'", message, StringComparison.Ordinal);
+        Assert.Contains(sharedBy, message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RAUN022_leaves_immutable_members_and_other_classes_alone()
+    {
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
+            Clinic +
+            """
+            public sealed class SteadySteps : Given<ClinicWorld>
+            {
+                private const int Limit = 3;
+                private static readonly string Prefix = "p";
+                private readonly object _gate = new();
+                public string Name { get; } = "steady";
+                public string? Label { get; init; }
+                public int Doubled => Limit * 2;
+                public CustomerSteps Customers => Steps<CustomerSteps>();
+
+                [StepName("a steady step")]
+                public Task Step() => Task.CompletedTask;
+            }
+
+            public sealed class NotSteps
+            {
+                private int _calls;
+                public string? Name { get; set; }
+                public int Calls => _calls++;
+            }
+            """,
+            requireCompilable: true);
+
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN022");
+    }
+
     [Fact]
     public async Task The_cancellation_scenario_has_no_diagnostics()
         => Assert.Empty(await GeneratorHarness.DiagnoseAsync(Clinic + Cancellation, requireCompilable: true));

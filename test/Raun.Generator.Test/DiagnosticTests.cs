@@ -28,7 +28,7 @@ public class DiagnosticTests
         var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
 
         Assert.Equal(
-            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016"],
+            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016", "RAUN022"],
             analyzer.SupportedDiagnostics.Select(d => d.Id).Order(StringComparer.Ordinal));
     }
 
