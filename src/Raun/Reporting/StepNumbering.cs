@@ -31,7 +31,13 @@ public static class StepNumbering
 
         foreach (var node in definition.Nodes.OrderBy(n => n.Index))
         {
-            if (node.IsSynthetic)
+            if (node.IsSetup)
+            {
+                // Unnumbered (top 0 renders as no label): giving a scenario a world must not renumber
+                // its steps, and Setup always runs first, so it needs no number to sort first.
+                assignments.Add((node.Index, 0, 0));
+            }
+            else if (node.IsSynthetic)
             {
                 // Consumes no number (users must not see a gap in 1, 2, 3) but still gets a label so
                 // the HTML report can render it. It reuses the previous top-level number, which would
@@ -68,6 +74,12 @@ public static class StepNumbering
         var labels = new Dictionary<int, string>(assignments.Count);
         foreach (var (index, top, sub) in assignments)
         {
+            if (top == 0 && sub == 0 && definition.Nodes[index].IsSetup)
+            {
+                labels[index] = "";
+                continue;
+            }
+
             var topText = top.ToString(CultureInfo.InvariantCulture).PadLeft(topWidth, '0');
             labels[index] = sub == 0
                 ? topText
@@ -88,6 +100,11 @@ public static class StepNumbering
         ArgumentNullException.ThrowIfNull(node);
 
         var label = labels[node.Index];
+        if (label.Length == 0)
+        {
+            return stepText;
+        }
+
         return node.GroupId is null ? label + ". " + stepText : label + " " + stepText;
     }
 

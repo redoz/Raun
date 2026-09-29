@@ -7,15 +7,18 @@ Raun lets you write integration-style scenario tests as readable `Given` / `When
 ```csharp
 using Raun;
 
-[Scenario("customer books an appointment")]
-public static async Task Booking()
+public sealed class BookingScenarios : ClinicScenarios
 {
-    var patient = await Given.PatientExists("Jane");
-    var slot = await Given.AvailableSlot();
+    [Scenario("customer books an appointment")]
+    public async Task Booking()
+    {
+        var patient = await Given.PatientExists("Jane");
+        var slot = await Given.AvailableSlot();
 
-    var appointment = await When.CreateAppointment(patient, slot);
+        var appointment = await When.CreateAppointment(patient, slot);
 
-    await Then.AppointmentExists(appointment);
+        await Then.AppointmentExists(appointment);
+    }
 }
 ```
 
@@ -62,18 +65,70 @@ and call `RaunTestApplication.RunAsync(args)` yourself — see
 
 ## How it works
 
-1. You define a domain DSL as C# 14 static extension members on `Given` / `When` / `Then` (or any
-   marker type implementing `IPhase`), each annotated with `[StepName("...")]`. These are real
-   methods returning ordinary `Task<T>` — each `await` in the scenario unwraps to `T`.
-2. You write `[Scenario]` methods using that DSL. The body is **source for the generator** — it is
-   never executed directly.
+1. You write steps as ordinary instance methods on **step classes** deriving from `Given<TWorld>`,
+   `When<TWorld>` or `Then<TWorld>` (or a custom phase), each annotated with `[StepName("...")]`.
+   These are real methods returning ordinary `Task<T>` — each `await` in the scenario unwraps to `T`.
+   Inside a step, `Context` is Raun's (the running step's cancellation, logs, teardown) and `World`
+   is yours (the scenario's state).
+2. You write `[Scenario]` methods as instance methods of a class deriving from `Scenarios<TWorld>`,
+   whose `Given` / `When` / `Then` properties lead to those steps. The body is **source for the
+   generator** — it is never executed directly.
 3. The generator lowers each body into a dependency graph (`ScenarioDefinition`): one node per
    step, with **source-order + dataflow** edges, and tuple/array forms lowered to parallel
    sibling groups. The generator reports anything outside the supported subset, and an analyzer
-   catches the remaining authoring mistakes (`RAUN000`–`RAUN017`), all at compile time. Only one
-   component ever judges a scenario body, so the two never disagree.
+   catches the remaining authoring mistakes (`RAUN000`–`RAUN022`; `RAUN018` is the SDK-floor build
+   error above), all at compile time. Only one component ever judges a scenario body, so the two
+   never disagree.
 4. At run time, the MTP test framework discovers each `[Scenario]`, runs the graph through a DAG
    scheduler, and reports **every step as its own test** — passed, failed, skipped, or not taken.
+
+### Steps, phases and the world
+
+```csharp
+// Your per-scenario state: created before the first step, disposed after the last cleanup.
+// A suite with no state uses Raun's NoWorld instead.
+public sealed class ClinicWorld : IScenarioWorld<ClinicWorld>
+{
+    private ClinicWorld(TestIsolation isolation) => Isolation = isolation;
+
+    public TestIsolation Isolation { get; }
+
+    public static async ValueTask<ClinicWorld> CreateAsync(ScenarioContext context)
+    {
+        var isolation = await TestIsolation.CreateAsync(context.CancellationToken);
+        context.OnTeardown(Cleanup.Required, _ => isolation.ReleaseAsync());
+        return new ClinicWorld(isolation);
+    }
+}
+
+// Steps: plain classes, instance methods. A group is a property returning Steps<T>().
+public sealed class ClinicGiven : Given<ClinicWorld>
+{
+    public CustomerSteps Customers => Steps<CustomerSteps>();   // Given.Customers.Exists("Jane")
+
+    [StepName("patient {name} exists")]
+    public Task<Patient> PatientExists(string name) => World.Isolation.Patients.CreateAsync(name, Context.CancellationToken);
+}
+
+// The phases, declared once for the suite; scenario classes derive from this.
+public abstract class ClinicScenarios : Scenarios<ClinicWorld>
+{
+    public ClinicGiven Given => Steps<ClinicGiven>();
+    public ClinicWhen When => Steps<ClinicWhen>();
+    public ClinicThen Then => Steps<ClinicThen>();
+}
+```
+
+Every scenario reports a `Setup` step first — it creates the world, and every step depends on it, so a
+failed setup skips the scenario's steps — and a `Teardown` step last. Step results stay explicit: what
+one step returns, the next takes as an argument, so the dependency graph is what you read. A custom
+phase is a step class deriving from `Phase<TWorld>` with its own `[PhaseName("Eventually")]`. A world
+reads per-scenario settings from the scenario method itself —
+`context.Scenario.Method?.GetCustomAttribute<IsolationSeedAttribute>()` — and parallel steps share it,
+so what it holds must be safe for concurrent use. A step class holds no state of its own: one instance
+serves every step of a scenario, so a writable field or property on it is a warning (`RAUN022`). `samples/AppointmentTests/CancellationScenarios.cs`
+has the whole thing; the design is in
+`docs/superpowers/specs/2026-09-29-step-classes-and-scenario-world-design.md`.
 
 ### Parallelism is explicit
 
@@ -211,7 +266,7 @@ three SMTP servers, a serial port — declare it with a token type and `[Uses<T>
 [Uses<Database>]                        // shared use; put it on a step, a scenario, a class, or the assembly
 [Uses<Database>(LockMode.Exclusive)]    // waits for every holder to finish, then keeps them out
 [Scenario("the schema migrates cleanly")]
-public static async Task SchemaMigrates() { … }
+public async Task SchemaMigrates() { … }
 ```
 
 | | Shared use (default) | Exclusive use |
@@ -238,15 +293,18 @@ that runs. Loading scenarios from a referenced library is not supported today.
 
 ## Supported scenario subset
 
-- `[Scenario]` methods are `async Task` / `async ValueTask`.
-- Steps are awaited `Given`/`When`/`Then` calls, awaited tuples of them (arity 2–8), awaited
+- `[Scenario]` methods are `async Task` / `async ValueTask` instance methods of a class deriving from
+  `Scenarios<TWorld>`.
+- Steps are awaited calls on a phase (`Given.X(...)`) or a group of one (`Given.Customers.X(...)`),
+  where every property on the way is declared `=> Steps<T>()`; awaited tuples of them (arity 2–8), awaited
   `new[] { ... }` arrays, or a constant `Enumerable.Range(a, b).Select(...).ToArray()`. A group of
   all `Task<T>` steps awaits to their results; any other mix of `Task` and `Task<T>` steps awaits to
   nothing, and the typed results are discarded — bind those steps in their own group if you need
   them. Steps returning `ValueTask` cannot be grouped.
-- DSL methods return `Task`/`Task<T>`/`ValueTask`/`ValueTask<T>` and may take an optional trailing
-  `ScenarioContext` parameter.
-- `if`/`else` shapes the graph when the condition is an awaited `Given`/`When`/`Then` call whose
+- Steps are public instance methods of step classes and return `Task`/`Task<T>`/`ValueTask`/`ValueTask<T>`.
+  Raun suppresses CA1822 ("could be static") on them: a step that reads neither `World` nor `Context`
+  is still an instance method.
+- `if`/`else` shapes the graph when the condition is an awaited step call whose
   result is usable as a C# condition (`bool`, an implicit conversion to `bool`, or `operator true`).
   The condition is an ordinary step — discovered, timed, and reported like any other. Exactly one arm
   runs; steps in the other are reported **not taken** (skipped with the reason), never green. A local
@@ -361,14 +419,14 @@ reported, not serialized.
 (embedded as JSON), in OTEL span attributes, in TRX, and in anything a CI job archives — so key your
 resources on synthetic identifiers you invent for the test (`Patient:jane-doe-1`), never on a real
 policy number, national ID, account number, or customer name. The same goes for log lines, exception
-messages, and attachments: `ctx.AddAttachment(name, value)` writes the value to a file in the run's results
+messages, and attachments: `Context.AddAttachment(name, value)` writes the value to a file in the run's results
 directory and publishes it as a run artifact, so never attach a raw request or response payload from
 a system that holds personal data. Raun does not redact anything — it reports exactly what the steps
 give it.
 
 ### Logging
 
-Steps write through `ctx.Log` or the standard `ILogger` abstraction; the lines are collected as that
+Steps write through `Context.Log` or the standard `ILogger` abstraction; the lines are collected as that
 step's output, each stamped with the time since the scenario started, and appear under the step in
 the runner and the report:
 
@@ -379,7 +437,7 @@ the runner and the report:
 ```
 
 ```csharp
-ctx.GetLogger<BookingSteps>().LogInformation("seeded {Count} patients", count);
+Context.GetLogger<BookingSteps>().LogInformation("seeded {Count} patients", count);
 ```
 
 Registering `RaunLoggerProvider` with an in-process system under test attributes *its* logs to the
@@ -389,8 +447,8 @@ step that provoked them, because the destination is resolved per write from the 
 builder.Logging.AddProvider(new RaunLoggerProvider());
 ```
 
-`ScenarioContext.Current` is the running step's context for code below the DSL that has no `ctx`
-parameter to hand.
+`ScenarioContext.Current` is the running step's context for code below the steps that is handed no
+context; a step's `Context` reads the same thing.
 
 ### Teardown
 
@@ -402,10 +460,10 @@ context to log or attach anything:
 ```csharp
 [StepName("Given patient {name} exists")]
 [return: Created]
-public static async Task<Patient> PatientExists(string name, ScenarioContext? ctx = null)
+public async Task<Patient> PatientExists(string name)
 {
     var patient = await Db.InsertPatient(name);
-    ctx?.OnTeardown(teardown =>
+    Context.OnTeardown(teardown =>
     {
         teardown.Log($"deleted patient {patient.Id}");
         return Db.DeletePatient(patient.Id);
@@ -414,8 +472,9 @@ public static async Task<Patient> PatientExists(string name, ScenarioContext? ct
 }
 ```
 
-Reaching for the step's own `ctx` inside the cleanup instead is a compile error (`RAUN014`): that
-output would be lost. Every scenario reports a final `Teardown` step, so a cleanup that throws fails
+`Context` read inside the cleanup is that teardown context too. Capturing the step's own context in a
+local (`var ctx = Context;`) and reaching for it inside the cleanup is a compile error (`RAUN014`):
+that output would be lost. Every scenario reports a final `Teardown` step, so a cleanup that throws fails
 visibly instead of being swallowed. Cleanups run in reverse dependency order, and one that throws does
 not stop the rest — every error is collected onto that step.
 
@@ -425,7 +484,7 @@ ignores that policy and runs regardless — including after cancellation or a ti
 whose absence is a leak rather than a choice:
 
 ```csharp
-ctx?.OnTeardown(Cleanup.Required, () => container.StopAsync());
+Context.OnTeardown(Cleanup.Required, () => container.StopAsync());
 ```
 
 ### Tracing
@@ -470,11 +529,11 @@ to one collector.
 
 | Project | What it is |
 | --- | --- |
-| `src/Raun` | The runtime: `[Scenario]`, phase markers, parallel awaiters, `ScenarioContext`, the graph model, resources, teardown, tracing, the DAG scheduler, the run loop, and the HTML report. Depends on no test platform. |
-| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN017`). netstandard2.0, shipped inside `Raun`. |
+| `src/Raun` | The runtime: `[Scenario]`, the step-class bases and the scenario world, parallel awaiters, `ScenarioContext`, the graph model, resources, teardown, tracing, the DAG scheduler, the run loop, and the HTML report. Depends on no test platform. |
+| `src/Raun.Generator` | Roslyn incremental generator + analyzer (`RAUN000`–`RAUN022`) + a CA1822 suppressor for steps. netstandard2.0, shipped inside `Raun`. |
 | `src/Raun.Mtp` | Microsoft.Testing.Platform adapter: discovery, per-step node reporter, filter translation, the `--report-html` option, the bootstrap the generated entry point calls. |
-| `src/Raun.Aspire` | Aspire integration: builds the AppHost, starts it as the run's preflight while waiting for the resources you declare, registers it for your steps. Plumbing only — no phase markers, no steps. |
-| `samples/AppointmentTests` | End-to-end sample: linear, tuple, array, LINQ, conditionals, resources, teardown, logging, a custom phase marker; run with `--report-html` for the report showcase. |
+| `src/Raun.Aspire` | Aspire integration: builds the AppHost, starts it as the run's preflight while waiting for the resources you declare, registers it for your steps. Plumbing only — no step classes, no steps. |
+| `samples/AppointmentTests` | End-to-end sample: linear, tuple, array, LINQ, conditionals, resources, teardown, logging, a custom phase, a seeded per-scenario world; run with `--report-html` for the report showcase. |
 | `samples/AspireAppointments` | Aspire end-to-end: an AppHost, a mock API, and a suite that starts it as preflight, drives it as two actors, and exports traces. |
 | `test/*` | Scheduler tests, generator/analyzer tests (behavioral + Verify snapshots), and MTP acceptance tests. |
 

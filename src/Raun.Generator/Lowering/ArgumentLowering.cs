@@ -199,7 +199,8 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
         }
 
         if (node.Expression is MemberAccessExpressionSyntax member
-            && SymbolHelpers.PhaseOf(member.Expression, _model) is not null)
+            && _model.GetSymbolInfo(node).Symbol is IMethodSymbol { IsStatic: false } method
+            && SymbolHelpers.WorldOfStepClass(method.ContainingType) is not null)
         {
             return Violate(node, member.ToString(), NestedStep);
         }

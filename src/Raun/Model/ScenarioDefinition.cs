@@ -28,6 +28,15 @@ public sealed class ScenarioDefinition
     /// attribute); when null the runner uses the real type name.</summary>
     public string? ClassDisplayName { get; init; }
 
+    /// <summary>The <c>[Scenario]</c> method itself, for a world that reads per-scenario settings from
+    /// its attributes. The generator records it for a scenario with a world; null otherwise.</summary>
+    public System.Reflection.MethodInfo? Method { get; init; }
+
+    /// <summary>What a step's <see cref="ScenarioContext.Scenario"/> reports.</summary>
+    public ScenarioInfo Info => _info ??= new ScenarioInfo(ScenarioId, DisplayName, MethodName, Method);
+
+    private ScenarioInfo? _info;
+
     /// <summary>Source file of the scenario method, if known.</summary>
     public string? SourceFile { get; init; }
 

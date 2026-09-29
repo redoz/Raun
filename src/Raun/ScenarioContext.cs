@@ -113,6 +113,10 @@ public sealed class ScenarioContext
     /// <summary>Stable id of the step this context belongs to.</summary>
     public string StepId { get; }
 
+    /// <summary>The scenario this context's step belongs to; <see cref="ScenarioInfo.Unknown"/> for a
+    /// context built outside a run.</summary>
+    public ScenarioInfo Scenario { get; private set; } = ScenarioInfo.Unknown;
+
     /// <summary>Formatted display name of the running step.</summary>
     public string StepDisplayName { get; }
 
@@ -177,6 +181,9 @@ public sealed class ScenarioContext
         var elapsed = TimeProvider.GetUtcNow() - _scenarioStart;
         _logs.Enqueue(new Model.LogEntry(elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed, message));
     }
+
+    /// <summary>Records which scenario this context's step belongs to. Called by the scheduler.</summary>
+    internal void AttachScenario(ScenarioInfo scenario) => Scenario = scenario;
 
     /// <summary>Sets the instant log offsets are measured from. Called by the scheduler with the
     /// scenario's start (the simulated base instant in simulated-time mode).</summary>

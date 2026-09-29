@@ -12,8 +12,8 @@ namespace Raun;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Ships <b>no phase markers and no steps</b>. The DSL is yours; everything here is reachable from a
-/// step you write, through <c>ctx.Services</c> or <see cref="ScenarioContextAspireExtensions.Aspire"/>.
+/// Ships <b>no step classes and no steps</b>. The DSL is yours; everything here is reachable from a
+/// step you write, through <c>Context.Services</c> or <see cref="ScenarioContextAspireExtensions.Aspire"/>.
 /// </para>
 /// <para>
 /// The application is built here but <b>started as the run's preflight</b>, so startup and the wait

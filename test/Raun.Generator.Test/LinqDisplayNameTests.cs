@@ -17,13 +17,13 @@ public class LinqDisplayNameTests
         var def = Assert.Single(result.Definitions());
 
         // 0..2 are the unrolled UserExists steps for user-1, user-2, user-3.
-        Assert.Equal("user user-1 exists", def.Nodes[0].DisplayNameTemplate);
-        Assert.Equal("user user-2 exists", def.Nodes[1].DisplayNameTemplate);
-        Assert.Equal("user user-3 exists", def.Nodes[2].DisplayNameTemplate);
+        Assert.Equal("user user-1 exists", def.Nodes[1].DisplayNameTemplate);
+        Assert.Equal("user user-2 exists", def.Nodes[2].DisplayNameTemplate);
+        Assert.Equal("user user-3 exists", def.Nodes[3].DisplayNameTemplate);
 
         // Fully constant: no runtime formatter is emitted for them.
-        Assert.Null(def.Nodes[0].FormatDisplayName);
-        Assert.Null(def.Nodes[2].FormatDisplayName);
+        Assert.Null(def.Nodes[1].FormatDisplayName);
+        Assert.Null(def.Nodes[3].FormatDisplayName);
     }
 
     [Fact]
@@ -34,10 +34,10 @@ public class LinqDisplayNameTests
         var result = GeneratorHarness.Run(SampleSources.Dsl +
             """
 
-            public static class LinqMathScenarios
+            public sealed class LinqMathScenarios : AppointmentSuite
             {
                 [Scenario("linq math")]
-                public static async Task Import()
+                public async Task Import()
                 {
                     var users = await Enumerable.Range(1, 2)
                         .Select(i => Given.UserExists($"user-{i * 2}"))
@@ -51,7 +51,7 @@ public class LinqDisplayNameTests
         result.AssertCompiles();
         var def = Assert.Single(result.Definitions());
 
-        Assert.Equal("user {name} exists", def.Nodes[0].DisplayNameTemplate);
-        Assert.NotNull(def.Nodes[0].FormatDisplayName);
+        Assert.Equal("user {name} exists", def.Nodes[1].DisplayNameTemplate);
+        Assert.NotNull(def.Nodes[1].FormatDisplayName);
     }
 }

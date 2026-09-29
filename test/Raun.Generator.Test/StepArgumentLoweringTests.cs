@@ -11,7 +11,8 @@ namespace Raun.Generator.Test;
 /// </summary>
 public class StepArgumentLoweringTests
 {
-    private const int Isolation = 0, Customer = 1, Employee = 2, Clock = 3, Setup = 4, Creation = 5;
+    // Node 0 is the scenario's Setup (its world), which every step depends on.
+    private const int World = 0, Isolation = 1, Customer = 2, Employee = 3, Clock = 4, Setup = 5, Creation = 6;
 
     private static GeneratorResult Generate() =>
         GeneratorHarness.Run(SampleSources.CompositionDsl + SampleSources.CompositionScenario);
@@ -27,7 +28,7 @@ public class StepArgumentLoweringTests
         var setup = Scenario(result, "RappelFailure").Nodes[Setup];
 
         Assert.Equal("CreationContext", setup.OperationName);
-        Assert.Equal([Isolation, Customer, Employee, Clock], setup.DependsOn);
+        Assert.Equal([World, Isolation, Customer, Employee, Clock], setup.DependsOn);
     }
 
     [Fact]
@@ -36,7 +37,7 @@ public class StepArgumentLoweringTests
         var creation = Scenario(Generate(), "RappelFailure").Nodes[Creation];
 
         Assert.Equal("CreateAppointment", creation.OperationName);
-        Assert.Equal([Isolation, Setup], creation.DependsOn);
+        Assert.Equal([World, Isolation, Setup], creation.DependsOn);
     }
 
     [Fact]

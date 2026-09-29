@@ -151,6 +151,20 @@ internal sealed record ParsedScenario
     /// <summary>The scenario teardown policy as the underlying <c>Raun.Run</c> value.</summary>
     public int TeardownPolicy { get; init; }
 
+    private readonly Syn<TypeSyntax> _declaringType;
+
+    /// <summary>For a scenario with a world, its declaring class (fully qualified), so the definition
+    /// can carry the method a world reads its settings from. Null otherwise, which leaves the emitted
+    /// definition exactly as it was.</summary>
+    public TypeSyntax? DeclaringType
+    {
+        get => _declaringType.Node;
+        init => _declaringType = value;
+    }
+
+    /// <summary>The <c>[Scenario]</c> method's simple name.</summary>
+    public string MethodName { get; init; } = "";
+
     /// <summary>Every [Uses&lt;T&gt;] the scenario is subject to, one per type (Exclusive wins),
     /// sorted by <see cref="ParsedUse.SortKey"/> so emission is deterministic. Empty ⇒ no initializer.</summary>
     public IReadOnlyList<ParsedUse> Uses
@@ -262,6 +276,9 @@ internal sealed record ParsedStep
     /// <summary>True for the scenario's single teardown node — discovered and numbered like an
     /// ordinary step, but run by the scheduler after the DAG rather than as part of it.</summary>
     public bool IsTeardown { get; init; }
+
+    /// <summary>True for the Setup node of a scenario with a world (see <c>Raun.Model.ScenarioNode.IsSetup</c>).</summary>
+    public bool IsSetup { get; init; }
 
     /// <summary>When this step is used as an <c>if</c> condition, its fully-qualified result type — the
     /// cast target in the emitted <c>EvaluateCondition</c> coercion. Null otherwise.</summary>

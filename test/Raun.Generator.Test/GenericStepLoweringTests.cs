@@ -33,8 +33,8 @@ public class GenericStepLoweringTests
 
         var results = await result.Definitions().Single().RunAsync();
 
-        Assert.Equal(3, results.Count);   // DefaultOf, ValueShouldBe, teardown
+        Assert.Equal(4, results.Count);   // DefaultOf, ValueShouldBe, teardown
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
-        Assert.Equal("the value should be 0", results[1].DisplayName);
+        Assert.Equal("the value should be 0", results[2].DisplayName);
     }
 }

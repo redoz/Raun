@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Description>
-      The Raun runtime: the [Scenario] attributes and Given/When/Then phase markers, the
+      The Raun runtime: the [Scenario] attributes, the Given/When/Then step-class bases and the scenario world, the
       source generator that lowers a scenario method into a step graph, the DAG step
       scheduler, the run loop, resources, teardown, tracing, and the HTML report. Depends
       on no test platform; Raun.Mtp is the Microsoft.Testing.Platform adapter over it.

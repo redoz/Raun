@@ -13,15 +13,15 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(6, def.Nodes.Count);
-        Assert.Empty(def.Nodes[0].DependsOn);                 // DatabaseIsClean
-        Assert.Equal([0], def.Nodes[1].DependsOn);             // PatientExists
-        Assert.Equal([0], def.Nodes[2].DependsOn);             // AvailableSlot
-        Assert.Equal([1, 2], def.Nodes[3].DependsOn);          // CreateAppointment joins both
+        Assert.Equal(7, def.Nodes.Count);
+        Assert.Equal([0], def.Nodes[1].DependsOn);                 // DatabaseIsClean
+        Assert.Equal([0, 1], def.Nodes[2].DependsOn);             // PatientExists
+        Assert.Equal([0, 1], def.Nodes[3].DependsOn);             // AvailableSlot
+        Assert.Equal([0, 2, 3], def.Nodes[4].DependsOn);          // CreateAppointment joins both
 
-        Assert.NotNull(def.Nodes[1].GroupId);
-        Assert.Equal(def.Nodes[1].GroupId, def.Nodes[2].GroupId);
-        Assert.NotEqual(def.Nodes[1].GroupId, def.Nodes[3].GroupId);
+        Assert.NotNull(def.Nodes[2].GroupId);
+        Assert.Equal(def.Nodes[2].GroupId, def.Nodes[3].GroupId);
+        Assert.NotEqual(def.Nodes[2].GroupId, def.Nodes[4].GroupId);
     }
 
     [Fact]
@@ -42,12 +42,12 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(5, def.Nodes.Count);
-        Assert.Empty(def.Nodes[0].DependsOn);                 // UserExists alice
-        Assert.Empty(def.Nodes[1].DependsOn);                 // UserExists bob
-        Assert.Equal(def.Nodes[0].GroupId, def.Nodes[1].GroupId);
-        Assert.Equal([0, 1], def.Nodes[2].DependsOn);          // ImportUsers consumes the array
-        Assert.Equal([0, 1, 2], def.Nodes[3].DependsOn);       // ImportShouldContainUsers (import + array)
+        Assert.Equal(6, def.Nodes.Count);
+        Assert.Equal([0], def.Nodes[1].DependsOn);                 // UserExists alice
+        Assert.Equal([0], def.Nodes[2].DependsOn);                 // UserExists bob
+        Assert.Equal(def.Nodes[1].GroupId, def.Nodes[2].GroupId);
+        Assert.Equal([0, 1, 2], def.Nodes[3].DependsOn);          // ImportUsers consumes the array
+        Assert.Equal([0, 1, 2, 3], def.Nodes[4].DependsOn);       // ImportShouldContainUsers (import + array)
     }
 
     [Fact]
@@ -70,12 +70,12 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(6, def.Nodes.Count);                      // 3 UserExists + ImportUsers + assertion
-        Assert.Empty(def.Nodes[0].DependsOn);
-        Assert.Empty(def.Nodes[1].DependsOn);
-        Assert.Empty(def.Nodes[2].DependsOn);
-        Assert.Equal([0, 1, 2], def.Nodes[3].DependsOn);
-        Assert.Equal(def.Nodes[0].GroupId, def.Nodes[2].GroupId);
+        Assert.Equal(7, def.Nodes.Count);                      // 3 UserExists + ImportUsers + assertion
+        Assert.Equal([0], def.Nodes[1].DependsOn);
+        Assert.Equal([0], def.Nodes[2].DependsOn);
+        Assert.Equal([0], def.Nodes[3].DependsOn);
+        Assert.Equal([0, 1, 2, 3], def.Nodes[4].DependsOn);
+        Assert.Equal(def.Nodes[1].GroupId, def.Nodes[3].GroupId);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class ParallelLoweringTests
 
         var results = await result.Definitions().Single().RunAsync();
 
-        Assert.Equal(6, results.Count);
+        Assert.Equal(7, results.Count);
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
     }
 
@@ -97,11 +97,11 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(6, def.Nodes.Count);                      // 2 PatientExists + 2 Greet + DatabaseIsClean + teardown
-        Assert.Equal([0, 1], def.Nodes[2].DependsOn);          // Greet jane: data dep on jane, order dep on the step before the group
-        Assert.Equal([1], def.Nodes[3].DependsOn);             // Greet bob
-        Assert.Equal(def.Nodes[2].GroupId, def.Nodes[3].GroupId);
-        Assert.Equal([2, 3], def.Nodes[4].DependsOn);          // DatabaseIsClean joins both
+        Assert.Equal(7, def.Nodes.Count);                      // 2 PatientExists + 2 Greet + DatabaseIsClean + teardown
+        Assert.Equal([0, 1, 2], def.Nodes[3].DependsOn);          // Greet jane: data dep on jane, order dep on the step before the group
+        Assert.Equal([0, 2], def.Nodes[4].DependsOn);             // Greet bob
+        Assert.Equal(def.Nodes[3].GroupId, def.Nodes[4].GroupId);
+        Assert.Equal([0, 3, 4], def.Nodes[5].DependsOn);          // DatabaseIsClean joins both
     }
 
     [Fact]
@@ -122,11 +122,11 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(6, def.Nodes.Count);
-        Assert.Equal([0, 1], def.Nodes[2].DependsOn);
-        Assert.Equal([1], def.Nodes[3].DependsOn);
-        Assert.Equal(def.Nodes[2].GroupId, def.Nodes[3].GroupId);
-        Assert.Equal([2, 3], def.Nodes[4].DependsOn);
+        Assert.Equal(7, def.Nodes.Count);
+        Assert.Equal([0, 1, 2], def.Nodes[3].DependsOn);
+        Assert.Equal([0, 2], def.Nodes[4].DependsOn);
+        Assert.Equal(def.Nodes[3].GroupId, def.Nodes[4].GroupId);
+        Assert.Equal([0, 3, 4], def.Nodes[5].DependsOn);
     }
 
     [Fact]
@@ -147,12 +147,12 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(6, def.Nodes.Count);                      // PatientExists + 3 Greet + DatabaseIsClean + teardown
-        Assert.Equal([0], def.Nodes[1].DependsOn);
-        Assert.Equal([0], def.Nodes[2].DependsOn);
-        Assert.Equal([0], def.Nodes[3].DependsOn);
-        Assert.Equal(def.Nodes[1].GroupId, def.Nodes[3].GroupId);
-        Assert.Equal([1, 2, 3], def.Nodes[4].DependsOn);
+        Assert.Equal(7, def.Nodes.Count);                      // PatientExists + 3 Greet + DatabaseIsClean + teardown
+        Assert.Equal([0, 1], def.Nodes[2].DependsOn);
+        Assert.Equal([0, 1], def.Nodes[3].DependsOn);
+        Assert.Equal([0, 1], def.Nodes[4].DependsOn);
+        Assert.Equal(def.Nodes[2].GroupId, def.Nodes[4].GroupId);
+        Assert.Equal([0, 2, 3, 4], def.Nodes[5].DependsOn);
     }
 
     [Fact]
@@ -173,8 +173,8 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(3, def.Nodes.Count);                      // DatabaseIsClean + AvailableSlot + teardown
-        Assert.Equal([0], def.Nodes[1].DependsOn);
+        Assert.Equal(4, def.Nodes.Count);                      // DatabaseIsClean + AvailableSlot + teardown
+        Assert.Equal([0, 1], def.Nodes[2].DependsOn);
     }
 
     [Fact]
@@ -184,7 +184,7 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(3, def.Nodes.Count);
-        Assert.Equal([0], def.Nodes[1].DependsOn);
+        Assert.Equal(4, def.Nodes.Count);
+        Assert.Equal([0, 1], def.Nodes[2].DependsOn);
     }
 }

@@ -3,8 +3,8 @@ using Xunit;
 
 namespace Raun.Generator.Test;
 
-/// <summary>A custom type implementing Raun.IPhase is recognised as a phase marker, just like the
-/// built-in Given/When/Then, and its type name becomes the step's phase label.</summary>
+/// <summary>A step class deriving from <c>Phase&lt;TWorld&gt;</c> with its own <c>[PhaseName]</c> is a
+/// custom phase: recognised exactly like the built-in Given/When/Then, its name the step's phase label.</summary>
 public class PluggablePhaseTests
 {
     private const string CustomPhaseSource =
@@ -14,27 +14,25 @@ public class PluggablePhaseTests
 
         namespace Demo;
 
-        public sealed class Arrange : IPhase { private Arrange() { } }
-
         public sealed record Widget(int Id);
 
-        public static class CustomDsl
+        [PhaseName("Arrange")]
+        public sealed class Arrangements : Phase<NoWorld>
         {
-            extension(Arrange)
+            [StepName("a widget exists")]
+            public async Task<Widget> WidgetExists()
             {
-                [StepName("a widget exists")]
-                public static async Task<Widget> WidgetExists()
-                {
-                    await Task.Yield();
-                    return new Widget(1);
-                }
+                await Task.Yield();
+                return new Widget(1);
             }
         }
 
-        public static class CustomScenarios
+        public sealed class CustomScenarios : Scenarios<NoWorld>
         {
+            public Arrangements Arrange => Steps<Arrangements>();
+
             [Scenario("custom phase")]
-            public static async Task S()
+            public async Task S()
             {
                 await Arrange.WidgetExists();
             }
@@ -42,14 +40,14 @@ public class PluggablePhaseTests
         """;
 
     [Fact]
-    public void Custom_IPhase_marker_is_recognised_and_names_the_phase()
+    public void A_custom_phase_is_recognised_and_names_the_phase()
     {
         var result = GeneratorHarness.Run(CustomPhaseSource);
         result.AssertCompiles();
 
         var def = Assert.Single(result.Definitions());
-        // Every scenario also carries a trailing teardown node; the business step is the other one.
-        var node = Assert.Single(def.Nodes, n => !n.IsTeardown);
+        // Every scenario also carries a Setup and a trailing Teardown node; the business step is the other one.
+        var node = Assert.Single(def.Nodes, n => !n.IsTeardown && !n.IsSetup);
         Assert.Equal("Arrange", node.Phase);
         Assert.Equal("a widget exists", node.DisplayNameTemplate);
     }

@@ -13,12 +13,12 @@ namespace Raun.Generated
     {
         public static global::System.Collections.Generic.IReadOnlyList<global::Raun.Model.ScenarioDefinition> CreateAll() => new global::Raun.Model.ScenarioDefinition[]
         {
-            Scenario_CondDemo_IfElseScenarios_Routing()
+            Scenario_Clinic_CancellationScenarios_CustomerCancels()
         };
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register("CondDemo.IfElseScenarios.Routing", Scenario_CondDemo_IfElseScenarios_Routing);
+            global::Raun.ScenarioRegistry.Register("Clinic.CancellationScenarios.CustomerCancels", Scenario_Clinic_CancellationScenarios_CustomerCancels);
         }
     }
 }

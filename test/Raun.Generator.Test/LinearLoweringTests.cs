@@ -19,18 +19,18 @@ public class LinearLoweringTests
 
         Assert.Equal("booking", def.DisplayName);
         Assert.Equal("Demo.BookingScenarios.Booking", def.MethodName);
-        Assert.Equal(5, def.Nodes.Count);
+        Assert.Equal(6, def.Nodes.Count);
 
-        Assert.Empty(def.Nodes[0].DependsOn);              // PatientExists
-        Assert.Equal([0], def.Nodes[1].DependsOn);          // AvailableSlot (source order)
-        Assert.Equal([0, 1], def.Nodes[2].DependsOn);       // CreateAppointment (dataflow patient+slot)
-        Assert.Equal([2], def.Nodes[3].DependsOn);          // AppointmentExists (dataflow appointment)
+        Assert.Equal([0], def.Nodes[1].DependsOn);              // PatientExists
+        Assert.Equal([0, 1], def.Nodes[2].DependsOn);          // AvailableSlot (source order)
+        Assert.Equal([0, 1, 2], def.Nodes[3].DependsOn);       // CreateAppointment (dataflow patient+slot)
+        Assert.Equal([0, 3], def.Nodes[4].DependsOn);          // AppointmentExists (dataflow appointment)
 
-        Assert.Equal("Given", def.Nodes[0].Phase);
-        Assert.Equal("When", def.Nodes[2].Phase);
-        Assert.Equal("Then", def.Nodes[3].Phase);
+        Assert.Equal("Given", def.Nodes[1].Phase);
+        Assert.Equal("When", def.Nodes[3].Phase);
+        Assert.Equal("Then", def.Nodes[4].Phase);
 
-        Assert.Equal("CreateAppointment", def.Nodes[2].OperationName);
+        Assert.Equal("CreateAppointment", def.Nodes[3].OperationName);
     }
 
     [Fact]
@@ -38,8 +38,8 @@ public class LinearLoweringTests
     {
         var def = Generate().Definitions().Single();
 
-        Assert.Equal("patient Jane exists", def.Nodes[0].DisplayNameTemplate);
-        Assert.Null(def.Nodes[0].FormatDisplayName);
+        Assert.Equal("patient Jane exists", def.Nodes[1].DisplayNameTemplate);
+        Assert.Null(def.Nodes[1].FormatDisplayName);
     }
 
     [Fact]
@@ -50,8 +50,8 @@ public class LinearLoweringTests
 
         var results = await result.Definitions().Single().RunAsync();
 
-        Assert.Equal(5, results.Count);
+        Assert.Equal(6, results.Count);
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
-        Assert.Equal("patient Jane exists", results[0].DisplayName);
+        Assert.Equal("patient Jane exists", results[1].DisplayName);
     }
 }

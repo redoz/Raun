@@ -14,10 +14,10 @@ public class RejectionReportingTests
     private const string TopLevelRejection =
         """
 
-        public static class RejectScenarios
+        public sealed class RejectScenarios : AppointmentSuite
         {
             [Scenario("rejected")]
-            public static async Task Run()
+            public async Task Run()
             {
                 var jane = await Given.PatientExists("Jane");
                 var n = 1;
@@ -29,10 +29,10 @@ public class RejectionReportingTests
     private const string NestedRejection =
         """
 
-        public static class NestedRejectScenarios
+        public sealed class NestedRejectScenarios : CondSuite
         {
             [Scenario("nested rejected")]
-            public static async Task Run()
+            public async Task Run()
             {
                 var patient = await Given.PatientExists("Jane");
                 if (await Given.IsPriority())
@@ -47,10 +47,10 @@ public class RejectionReportingTests
     private const string ExpressionBodied =
         """
 
-        public static class ExpressionBodiedScenarios
+        public sealed class ExpressionBodiedScenarios : AppointmentSuite
         {
             [Scenario("expression bodied")]
-            public static async Task Run() => await Given.DatabaseIsClean();
+            public async Task Run() => await Given.DatabaseIsClean();
         }
         """;
 
@@ -84,7 +84,7 @@ public class RejectionReportingTests
         var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source));
 
         Assert.Equal("RAUN017", diagnostic.Id);
-        Assert.Equal(LineOf(source, "public static async Task Run() =>"), diagnostic.Location.GetLineSpan().StartLinePosition.Line);
+        Assert.Equal(LineOf(source, "public async Task Run() =>"), diagnostic.Location.GetLineSpan().StartLinePosition.Line);
         Assert.Contains("ExpressionBodiedScenarios.Run", Message(diagnostic), StringComparison.Ordinal);
         Assert.Contains("must be a block", Message(diagnostic), StringComparison.Ordinal);
     }
@@ -95,10 +95,10 @@ public class RejectionReportingTests
         var source = SampleSources.Dsl +
             """
 
-            public static class ManyProblemsScenarios
+            public sealed class ManyProblemsScenarios : AppointmentSuite
             {
                 [Scenario("many problems")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     var n = 1;
                     for (var i = 0; i < 2; i++) { }
@@ -120,10 +120,10 @@ public class RejectionReportingTests
         var source = SampleSources.Dsl +
             """
 
-            public static class CascadeScenarios
+            public sealed class CascadeScenarios : AppointmentSuite
             {
                 [Scenario("cascade")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     var patient = await Given.PatientExists(await Given.PatientExists("x") is { } p ? p.Name : "");
                     await Then.Greet(patient);
@@ -144,10 +144,10 @@ public class RejectionReportingTests
         var source = SampleSources.ConditionalDsl +
             """
 
-            public static class UnresolvedMergeScenarios
+            public sealed class UnresolvedMergeScenarios : CondSuite
             {
                 [Scenario("unresolved merge")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     var patient = await Given.PatientExists("Jane");
                     var appointment = await When.CreateStandard(await Given.PatientExists("x"));
@@ -169,10 +169,10 @@ public class RejectionReportingTests
         var source = SampleSources.ConditionalDsl +
             """
 
-            public static class FailedDeclarationScenarios
+            public sealed class FailedDeclarationScenarios : CondSuite
             {
                 [Scenario("failed declaration")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     var patient = await Given.PatientExists("Jane");
                     Appointment appointment = null!;

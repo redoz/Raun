@@ -54,6 +54,11 @@ public class GeneratorSnapshotTests
     public void Resource_scenario() =>
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.ResourceDsl + SampleSources.ResourceScenario));
 
+    /// <summary>A scenario with a world: the Setup node, and grouped calls bound by type through it.</summary>
+    [Fact]
+    public void StepClass_scenario() =>
+        VerifyDriver(GeneratorHarness.RunDriver(StepClassTests.Clinic + StepClassTests.Cancellation));
+
     [Fact]
     public void Uses_scenario() =>
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.UsesDsl + SampleSources.UsesScenario));

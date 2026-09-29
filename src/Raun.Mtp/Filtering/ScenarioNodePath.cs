@@ -28,7 +28,7 @@ namespace Raun.Mtp;
 /// </remarks>
 internal static class ScenarioNodePath
 {
-    /// <summary>Property key for a step's phase marker (Given/When/Then, or a custom marker).</summary>
+    /// <summary>Property key for a step's phase (Given/When/Then, Setup, or a custom phase).</summary>
     private const string PhaseKey = "Phase";
 
     /// <summary>Property key for the owning scenario's display name.</summary>

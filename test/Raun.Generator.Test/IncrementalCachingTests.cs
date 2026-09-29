@@ -18,10 +18,10 @@ public class IncrementalCachingTests
     /// registry are really emitted (a source that lowers to nothing would make these tests vacuous).</summary>
     private const string Source = SampleSources.Dsl + """
 
-        public static class Scenarios
+        public sealed class Scenarios : AppointmentSuite
         {
             [Scenario("a patient books")]
-            public static async Task Books()
+            public async Task Books()
             {
                 var patient = await Given.PatientExists("Jane");
                 var slot = await Given.AvailableSlot();
@@ -29,7 +29,7 @@ public class IncrementalCachingTests
             }
 
             [Scenario("another patient books")]
-            public static async Task BooksAgain()
+            public async Task BooksAgain()
             {
                 var patient = await Given.PatientExists("John");
                 var slot = await Given.AvailableSlot();

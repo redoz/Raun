@@ -15,9 +15,10 @@ namespace Raun.Generator.Analysis;
 
 /// <summary>
 /// The rules that are not about lowering a scenario body: <c>[StepName]</c> placeholders (RAUN008),
-/// resource roles and lineage on DSL methods (RAUN009/010), a cleanup's context (RAUN014), and
-/// contended resources (RAUN015/016). What a <c>[Scenario]</c> body may contain is the parser's to
-/// judge alone — it reports through the generator — so no second walker can disagree with it.
+/// resource roles and lineage on steps (RAUN009/010), a cleanup's context (RAUN014), contended
+/// resources (RAUN015/016), and mutable state on step classes (RAUN022). What a <c>[Scenario]</c> body
+/// may contain is the parser's to judge alone — it reports through the generator — so no second walker
+/// can disagree with it.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
@@ -31,6 +32,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.StepContextInCleanup,
         Descriptors.ContendedResourceKind,
         Descriptors.InertContendedResourceUse,
+        Descriptors.MutableStepClassState,
     ];
 
     public override void Initialize(AnalysisContext context)
@@ -66,11 +68,48 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         try
         {
             AnalyzeContendedResource(context, (INamedTypeSymbol)context.Symbol);
+            AnalyzeStepClassState(context, (INamedTypeSymbol)context.Symbol);
         }
         catch (Exception ex)
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 Descriptors.UnhandledException, context.Symbol.Locations.FirstOrDefault(), GeneratorSafety.Describe(ex)));
+        }
+    }
+
+    /// <summary>
+    /// RAUN022: a step class holds no mutable state. Raun creates one instance of it per scenario and
+    /// every step of that scenario runs on it — siblings of a parallel group at the same time — so a
+    /// writable instance field or property is state those steps race on, and a writable static one is
+    /// shared by every scenario at once. Readonly fields, get-only and init-only properties, and
+    /// computed properties are fine; so is what a readonly field points at, which only its author can
+    /// judge.
+    /// </summary>
+    private static void AnalyzeStepClassState(SymbolAnalysisContext context, INamedTypeSymbol type)
+    {
+        if (SymbolHelpers.WorldOfStepClass(type) is null)
+        {
+            return;
+        }
+
+        foreach (var member in type.GetMembers())
+        {
+            var mutable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly && !field.IsConst && !field.IsImplicitlyDeclared,
+                IPropertySymbol property => property.SetMethod is { IsInitOnly: false },
+                _ => false,
+            };
+
+            if (mutable && member.Locations.FirstOrDefault() is { IsInSource: true } location)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    Descriptors.MutableStepClassState,
+                    location,
+                    member.Name,
+                    type.Name,
+                    member.IsStatic ? "every scenario" : "every step of a scenario"));
+            }
         }
     }
 

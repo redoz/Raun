@@ -10,7 +10,7 @@ namespace Raun;
 /// <see cref="PooledResourceAttribute"/>, and declare a need with <see cref="UsesAttribute{T}"/>.
 /// Not to be confused with <see cref="IResource{TSelf}"/>, which is data a step traces.
 /// </summary>
-#pragma warning disable CA1040 // Avoid empty interfaces — a deliberate marker, like IPhase; it enables the compile-time constraint on Uses<T>.
+#pragma warning disable CA1040 // Avoid empty interfaces — a deliberate marker; it enables the compile-time constraint on Uses<T>.
 public interface IContendedResource;
 #pragma warning restore CA1040
 

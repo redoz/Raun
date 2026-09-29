@@ -14,10 +14,10 @@ public class StepIdStabilityTests
 {
     private const string Baseline = """
 
-        public static class BookingScenarios
+        public sealed class BookingScenarios : AppointmentSuite
         {
             [Scenario("booking")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists("Jane");
                 var slot = await Given.AvailableSlot();
@@ -29,10 +29,10 @@ public class StepIdStabilityTests
 
     private const string WithAnInsertedStep = """
 
-        public static class BookingScenarios
+        public sealed class BookingScenarios : AppointmentSuite
         {
             [Scenario("booking")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var earlier = await Given.PatientExists("Inserted");
                 var patient = await Given.PatientExists("Jane");
@@ -45,10 +45,10 @@ public class StepIdStabilityTests
 
     private const string WithTwoIdenticalSteps = """
 
-        public static class BookingScenarios
+        public sealed class BookingScenarios : AppointmentSuite
         {
             [Scenario("booking")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists("Jane");
                 var twin = await Given.PatientExists("Jane");
@@ -100,10 +100,10 @@ public class StepIdStabilityTests
 
     private const string ConditionalBaseline = """
 
-        public static class BookingScenarios
+        public sealed class BookingScenarios : CondSuite
         {
             [Scenario("booking")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists("Jane");
                 await When.Notify(patient);
@@ -113,10 +113,10 @@ public class StepIdStabilityTests
 
     private const string ConditionalWrapped = """
 
-        public static class BookingScenarios
+        public sealed class BookingScenarios : CondSuite
         {
             [Scenario("booking")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists("Jane");
                 if (await Given.IsPriority())

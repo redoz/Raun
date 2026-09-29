@@ -10,14 +10,14 @@ namespace AppointmentTests;
 /// ILogger, and a custom phase marker.
 /// </summary>
 [DisplayName("Appointment lifecycle")]
-public static class LifecycleScenarios
+public sealed class LifecycleScenarios : AppointmentSuite
 {
     // Run.OnSuccess: a failed reschedule leaves its rows behind for inspection instead of cleaning up.
     // The hold on the target slot is the exception — HoldSlot registers its release as
     // Cleanup.Required, because a leaked hold blocks real bookings — so it is released either way.
     [Scenario("patient reschedules to a later slot")]
     [Teardown(Run.OnSuccess)]
-    public static async Task Reschedule()
+    public async Task Reschedule()
     {
         var patient = await Given.PatientExists("Erik");
         var (morning, afternoon) = await (
@@ -39,7 +39,7 @@ public static class LifecycleScenarios
     // the appointment is Created and then Deleted in order, which the trace shows as two effects on
     // one identity.
     [Scenario("patient cancels an existing appointment")]
-    public static async Task Cancel()
+    public async Task Cancel()
     {
         var patient = await Given.PatientOnFile("Maja");
         var slot = await Given.AvailableSlotAt(11);
@@ -55,7 +55,7 @@ public static class LifecycleScenarios
     // it holds. The scenario also carries a whole-scenario timeout alongside SendTravelReminder's
     // per-step one.
     [Scenario("out-of-town patients get a travel reminder", Timeout = 30_000)]
-    public static async Task TravelReminder()
+    public async Task TravelReminder()
     {
         var patient = await Given.PatientExists("Sven");
         var traveller = await Given.PatientLivesIn(patient, "Kiruna");

@@ -56,6 +56,11 @@ dotnet run --project samples/AspireAppointments/AspireAppointments.Tests/AspireA
 ## Things that look like bugs but are not
 
 - A `Teardown` node exists in every scenario, even with nothing registered. It reports Passed.
+- A `Setup` node exists in every scenario too: it creates the scenario's world (`NoWorld` included),
+  every step depends on it, and it is unnumbered, so `--list-tests` shows `Setup` then `1. …`. A
+  failed Setup skips every step with `dependency failed: Setup`.
+- `Scenarios<TWorld>.Steps<T>()` throws if called. Phase and group properties exist for the compiler
+  and the IDE; the generator binds a step class by its type and never runs them.
 - A not-taken `if` arm is reported as skipped with reason `not taken: <condition>`.
 - Selecting one step in a run filter executes its predecessor closure (dependencies, merge sources,
   guard conditions) and teardown — nothing after it.

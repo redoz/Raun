@@ -17,63 +17,67 @@ public static class SampleSources
         public sealed record User(string Name);
         public sealed record Import(int Count);
 
-        public static class AppointmentDsl
+        public sealed partial class AppointmentGiven : Given<NoWorld>
         {
-            extension(Given)
+            [StepName("patient {name} exists")]
+            public async Task<Patient> PatientExists(string name)
             {
-                [StepName("patient {name} exists")]
-                public static async Task<Patient> PatientExists(string name)
-                {
-                    await Task.Yield();
-                    return new Patient(name);
-                }
-
-                [StepName("an available slot exists")]
-                public static async Task<Slot> AvailableSlot()
-                {
-                    await Task.Yield();
-                    return new Slot(1);
-                }
-
-                [StepName("database is clean")]
-                public static Task DatabaseIsClean() => Task.CompletedTask;
-
-                [StepName("user {name} exists")]
-                public static async Task<User> UserExists(string name)
-                {
-                    await Task.Yield();
-                    return new User(name);
-                }
+                await Task.Yield();
+                return new Patient(name);
             }
 
-            extension(When)
+            [StepName("an available slot exists")]
+            public async Task<Slot> AvailableSlot()
             {
-                [StepName("creating an appointment")]
-                public static async Task<Appointment> CreateAppointment(Patient patient, Slot slot)
-                {
-                    await Task.Yield();
-                    return new Appointment(patient, slot);
-                }
-
-                [StepName("importing users")]
-                public static async Task<Import> ImportUsers(User[] users)
-                {
-                    await Task.Yield();
-                    return new Import(users.Length);
-                }
+                await Task.Yield();
+                return new Slot(1);
             }
 
-            extension(Then)
+            [StepName("database is clean")]
+            public Task DatabaseIsClean() => Task.CompletedTask;
+
+            [StepName("user {name} exists")]
+            public async Task<User> UserExists(string name)
             {
-                [StepName("the appointment should exist")]
-                public static Task AppointmentExists(Appointment appointment) => Task.CompletedTask;
-
-                [StepName("the import should contain the users")]
-                public static Task ImportShouldContainUsers(Import import, User[] users) => Task.CompletedTask;
-
-                [StepName("greet {patient}")]
-                public static Task Greet(Patient patient) => Task.CompletedTask;
+                await Task.Yield();
+                return new User(name);
             }
+        }
+
+        public sealed partial class AppointmentWhen : When<NoWorld>
+        {
+            [StepName("creating an appointment")]
+            public async Task<Appointment> CreateAppointment(Patient patient, Slot slot)
+            {
+                await Task.Yield();
+                return new Appointment(patient, slot);
+            }
+
+            [StepName("importing users")]
+            public async Task<Import> ImportUsers(User[] users)
+            {
+                await Task.Yield();
+                return new Import(users.Length);
+            }
+        }
+
+        public sealed partial class AppointmentThen : Then<NoWorld>
+        {
+            [StepName("the appointment should exist")]
+            public Task AppointmentExists(Appointment appointment) => Task.CompletedTask;
+
+            [StepName("the import should contain the users")]
+            public Task ImportShouldContainUsers(Import import, User[] users) => Task.CompletedTask;
+
+            [StepName("greet {patient}")]
+            public Task Greet(Patient patient) => Task.CompletedTask;
+        }
+
+        public abstract class AppointmentSuite : Scenarios<NoWorld>
+        {
+            public AppointmentGiven Given => Steps<AppointmentGiven>();
+            public AppointmentWhen When => Steps<AppointmentWhen>();
+            public AppointmentThen Then => Steps<AppointmentThen>();
         }
         """;
 
@@ -81,10 +85,10 @@ public static class SampleSources
     public const string NamedArgScenario =
         """
 
-        public static class NamedArgScenarios
+        public sealed class NamedArgScenarios : AppointmentSuite
         {
             [Scenario("named args")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists(name: "Jane");
                 var slot = await Given.AvailableSlot();
@@ -97,10 +101,10 @@ public static class SampleSources
     public const string RuntimeNameScenario =
         """
 
-        public static class GreetScenarios
+        public sealed class GreetScenarios : AppointmentSuite
         {
             [Scenario("greeting")]
-            public static async Task Greeting()
+            public async Task Greeting()
             {
                 var patient = await Given.PatientExists("Jane");
                 await Then.Greet(patient);
@@ -112,10 +116,10 @@ public static class SampleSources
     public const string LinearScenario =
         """
 
-        public static class BookingScenarios
+        public sealed class BookingScenarios : AppointmentSuite
         {
             [Scenario("booking")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists("Jane");
                 var slot = await Given.AvailableSlot();
@@ -128,10 +132,10 @@ public static class SampleSources
     public const string TupleScenario =
         """
 
-        public static class TupleScenarios
+        public sealed class TupleScenarios : AppointmentSuite
         {
             [Scenario("tuple booking")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 await Given.DatabaseIsClean();
 
@@ -148,10 +152,10 @@ public static class SampleSources
     public const string ArrayScenario =
         """
 
-        public static class ArrayScenarios
+        public sealed class ArrayScenarios : AppointmentSuite
         {
             [Scenario("array import")]
-            public static async Task Import()
+            public async Task Import()
             {
                 var users = await new[]
                 {
@@ -168,10 +172,10 @@ public static class SampleSources
     public const string LinqScenario =
         """
 
-        public static class LinqScenarios
+        public sealed class LinqScenarios : AppointmentSuite
         {
             [Scenario("linq import")]
-            public static async Task Import()
+            public async Task Import()
             {
                 var users = await Enumerable.Range(1, 3)
                     .Select(i => Given.UserExists($"user-{i}"))
@@ -208,59 +212,63 @@ public static class SampleSources
             public static ResourceKey KeyFor(Appointment instance) => instance.User.Email + "@" + instance.Slot.Id;
         }
 
-        public static class ResourceDsl
+        public sealed partial class ResourceGiven : Given<NoWorld>
         {
-            extension(Given)
+            [StepName("user {email} exists")]
+            [return: Created]
+            public async Task<User> UserExists(string email)
             {
-                [StepName("user {email} exists")]
-                [return: Created]
-                public static async Task<User> UserExists(string email)
-                {
-                    await Task.Yield();
-                    return new User(email);
-                }
-
-                [StepName("a slot exists")]
-                [return: Created]
-                public static async Task<Slot> SlotExists()
-                {
-                    await Task.Yield();
-                    return new Slot(1);
-                }
+                await Task.Yield();
+                return new User(email);
             }
 
-            extension(When)
+            [StepName("a slot exists")]
+            [return: Created]
+            public async Task<Slot> SlotExists()
             {
-                [StepName("suspending the user")]
-                [return: Edited]
-                public static async Task<User> Suspend([Edited] User user)
-                {
-                    await Task.Yield();
-                    return user;
-                }
+                await Task.Yield();
+                return new Slot(1);
+            }
+        }
 
-                [StepName("booking a slot")]
-                [return: Created]
-                public static async Task<Appointment> Book([Read] User user, [Edited] Slot slot)
-                {
-                    await Task.Yield();
-                    return new Appointment(user, slot);
-                }
-
-                [StepName("booking with lineage")]
-                [return: Created(References = [nameof(user)], Consumes = [nameof(slot)])]
-                public static async Task<Appointment> BookWithLineage(User user, Slot slot)
-                {
-                    await Task.Yield();
-                    return new Appointment(user, slot);
-                }
+        public sealed partial class ResourceWhen : When<NoWorld>
+        {
+            [StepName("suspending the user")]
+            [return: Edited]
+            public async Task<User> Suspend([Edited] User user)
+            {
+                await Task.Yield();
+                return user;
             }
 
-            extension(Then)
+            [StepName("booking a slot")]
+            [return: Created]
+            public async Task<Appointment> Book([Read] User user, [Edited] Slot slot)
             {
-                [StepName("the user cannot sign in")]
-                public static Task CannotSignIn([Read] User user) => Task.CompletedTask;
+                await Task.Yield();
+                return new Appointment(user, slot);
             }
+
+            [StepName("booking with lineage")]
+            [return: Created(References = [nameof(user)], Consumes = [nameof(slot)])]
+            public async Task<Appointment> BookWithLineage(User user, Slot slot)
+            {
+                await Task.Yield();
+                return new Appointment(user, slot);
+            }
+        }
+
+        public sealed partial class ResourceThen : Then<NoWorld>
+        {
+            [StepName("the user cannot sign in")]
+            public Task CannotSignIn([Read] User user) => Task.CompletedTask;
+        }
+
+        public abstract class ResourceSuite : Scenarios<NoWorld>
+        {
+            public ResourceGiven Given => Steps<ResourceGiven>();
+            public ResourceWhen When => Steps<ResourceWhen>();
+            public ResourceThen Then => Steps<ResourceThen>();
         }
         """;
 
@@ -268,10 +276,10 @@ public static class SampleSources
     public const string ResourceScenario =
         """
 
-        public static class ResourceScenarios
+        public sealed class ResourceScenarios : ResourceSuite
         {
             [Scenario("suspended user cannot sign in")]
-            public static async Task SuspendedUserCannotSignIn()
+            public async Task SuspendedUserCannotSignIn()
             {
                 var user = await Given.UserExists("jane@acme.com");
                 var suspended = await When.Suspend(user);
@@ -286,10 +294,10 @@ public static class SampleSources
     public const string BookingScenario =
         """
 
-        public static class BookingResourceScenarios
+        public sealed class BookingResourceScenarios : ResourceSuite
         {
             [Scenario("booking a slot")]
-            public static async Task BookSlot()
+            public async Task BookSlot()
             {
                 var user = await Given.UserExists("jane@acme.com");
                 var slot = await Given.SlotExists();
@@ -304,10 +312,10 @@ public static class SampleSources
     public const string LineageScenario =
         """
 
-        public static class LineageResourceScenarios
+        public sealed class LineageResourceScenarios : ResourceSuite
         {
             [Scenario("booking with lineage")]
-            public static async Task BookWithLineage()
+            public async Task BookWithLineage()
             {
                 var user = await Given.UserExists("jane@acme.com");
                 var slot = await Given.SlotExists();
@@ -337,57 +345,61 @@ public static class SampleSources
             public static bool operator false(Capacity c) => !c.Value;
         }
 
-        public static class CondDsl
+        public sealed partial class CondGiven : Given<NoWorld>
         {
-            extension(Given)
+            [StepName("patient {name} exists")]
+            public async Task<Patient> PatientExists(string name)
             {
-                [StepName("patient {name} exists")]
-                public static async Task<Patient> PatientExists(string name)
-                {
-                    await Task.Yield();
-                    return new Patient(name);
-                }
-
-                [StepName("the patient is priority")]
-                public static async Task<bool> IsPriority()
-                {
-                    await Task.Yield();
-                    return true;
-                }
-
-                [StepName("the clinic has capacity")]
-                public static async Task<Capacity> HasCapacity()
-                {
-                    await Task.Yield();
-                    return new Capacity(true);
-                }
+                await Task.Yield();
+                return new Patient(name);
             }
 
-            extension(When)
+            [StepName("the patient is priority")]
+            public async Task<bool> IsPriority()
             {
-                [StepName("creating an urgent appointment")]
-                public static async Task<Appointment> CreateUrgent(Patient patient)
-                {
-                    await Task.Yield();
-                    return new Appointment("urgent");
-                }
-
-                [StepName("creating a standard appointment")]
-                public static async Task<Appointment> CreateStandard(Patient patient)
-                {
-                    await Task.Yield();
-                    return new Appointment("standard");
-                }
-
-                [StepName("notifying the patient")]
-                public static Task Notify(Patient patient) => Task.CompletedTask;
+                await Task.Yield();
+                return true;
             }
 
-            extension(Then)
+            [StepName("the clinic has capacity")]
+            public async Task<Capacity> HasCapacity()
             {
-                [StepName("the appointment should exist")]
-                public static Task AppointmentExists(Appointment appointment) => Task.CompletedTask;
+                await Task.Yield();
+                return new Capacity(true);
             }
+        }
+
+        public sealed partial class CondWhen : When<NoWorld>
+        {
+            [StepName("creating an urgent appointment")]
+            public async Task<Appointment> CreateUrgent(Patient patient)
+            {
+                await Task.Yield();
+                return new Appointment("urgent");
+            }
+
+            [StepName("creating a standard appointment")]
+            public async Task<Appointment> CreateStandard(Patient patient)
+            {
+                await Task.Yield();
+                return new Appointment("standard");
+            }
+
+            [StepName("notifying the patient")]
+            public Task Notify(Patient patient) => Task.CompletedTask;
+        }
+
+        public sealed partial class CondThen : Then<NoWorld>
+        {
+            [StepName("the appointment should exist")]
+            public Task AppointmentExists(Appointment appointment) => Task.CompletedTask;
+        }
+
+        public abstract class CondSuite : Scenarios<NoWorld>
+        {
+            public CondGiven Given => Steps<CondGiven>();
+            public CondWhen When => Steps<CondWhen>();
+            public CondThen Then => Steps<CondThen>();
         }
         """;
 
@@ -395,10 +407,10 @@ public static class SampleSources
     public const string IfElseScenario =
         """
 
-        public static class IfElseScenarios
+        public sealed class IfElseScenarios : CondSuite
         {
             [Scenario("priority routing")]
-            public static async Task Routing()
+            public async Task Routing()
             {
                 var patient = await Given.PatientExists("Jane");
 
@@ -417,10 +429,10 @@ public static class SampleSources
     public const string BareIfScenario =
         """
 
-        public static class BareIfScenarios
+        public sealed class BareIfScenarios : CondSuite
         {
             [Scenario("notify priority patients")]
-            public static async Task Notify()
+            public async Task Notify()
             {
                 var patient = await Given.PatientExists("Jane");
 
@@ -435,10 +447,10 @@ public static class SampleSources
     public const string ConditionalOverwriteScenario =
         """
 
-        public static class OverwriteScenarios
+        public sealed class OverwriteScenarios : CondSuite
         {
             [Scenario("upgrade to urgent when priority")]
-            public static async Task Upgrade()
+            public async Task Upgrade()
             {
                 var patient = await Given.PatientExists("Jane");
                 var appointment = await When.CreateStandard(patient);
@@ -455,10 +467,10 @@ public static class SampleSources
     public const string NestedIfScenario =
         """
 
-        public static class NestedIfScenarios
+        public sealed class NestedIfScenarios : CondSuite
         {
             [Scenario("nested routing")]
-            public static async Task Routing()
+            public async Task Routing()
             {
                 var patient = await Given.PatientExists("Jane");
 
@@ -475,10 +487,10 @@ public static class SampleSources
     public const string OperatorTrueScenario =
         """
 
-        public static class OperatorTrueScenarios
+        public sealed class OperatorTrueScenarios : CondSuite
         {
             [Scenario("capacity routing")]
-            public static async Task Routing()
+            public async Task Routing()
             {
                 var patient = await Given.PatientExists("Jane");
 
@@ -493,10 +505,10 @@ public static class SampleSources
     public const string ElseIfChainScenario =
         """
 
-        public static class ElseIfScenarios
+        public sealed class ElseIfScenarios : CondSuite
         {
             [Scenario("three-way routing")]
-            public static async Task Routing()
+            public async Task Routing()
             {
                 var patient = await Given.PatientExists("Jane");
 
@@ -517,11 +529,11 @@ public static class SampleSources
     public const string TeardownOnSuccessScenario =
         """
 
-        public static class TeardownPolicyScenarios
+        public sealed class TeardownPolicyScenarios : AppointmentSuite
         {
             [Scenario("policy")]
             [Teardown(Run.OnSuccess)]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists("Jane");
                 var slot = await Given.AvailableSlot();
@@ -546,33 +558,36 @@ public static class SampleSources
             public static int Cleaned;
         }
 
-        public static class TeardownDemoDsl
+        public sealed partial class TeardownDemoGiven : Given<NoWorld>
         {
-            extension(Given)
+            [StepName("patient {name} exists")]
+            public Task<Patient> PatientExists(string name)
             {
-                [StepName("patient {name} exists")]
-                public static Task<Patient> PatientExists(string name, ScenarioContext? ctx = null)
-                {
-                    ctx?.OnTeardown(() => { Probe.Cleaned++; return Task.CompletedTask; });
-                    return Task.FromResult(new Patient(name));
-                }
+                Context.OnTeardown(() => { Probe.Cleaned++; return Task.CompletedTask; });
+                return Task.FromResult(new Patient(name));
             }
+        }
 
-            extension(Then)
-            {
-                [StepName("the patient should exist")]
-                public static Task PatientIsThere(Patient patient) => Task.CompletedTask;
-            }
+        public sealed partial class TeardownDemoThen : Then<NoWorld>
+        {
+            [StepName("the patient should exist")]
+            public Task PatientIsThere(Patient patient) => Task.CompletedTask;
+        }
+
+        public abstract class TeardownDemoSuite : Scenarios<NoWorld>
+        {
+            public TeardownDemoGiven Given => Steps<TeardownDemoGiven>();
+            public TeardownDemoThen Then => Steps<TeardownDemoThen>();
         }
         """;
 
     public const string TeardownScenario =
         """
 
-        public static class TeardownScenarios
+        public sealed class TeardownScenarios : TeardownDemoSuite
         {
             [Scenario("cleanup runs")]
-            public static async Task Booking()
+            public async Task Booking()
             {
                 var patient = await Given.PatientExists("Jane");
                 await Then.PatientIsThere(patient);
@@ -601,24 +616,27 @@ public static class SampleSources
         [SharedResource]
         public sealed class Audit : IContendedResource;
 
-        public static class UsesDsl
+        public sealed partial class UsesGiven : Given<NoWorld>
         {
-            extension(Given)
-            {
-                [StepName("the schedule is empty")]
-                [Uses<Database>(LockMode.Exclusive)]
-                public static Task ScheduleIsEmpty() => Task.CompletedTask;
+            [StepName("the schedule is empty")]
+            [Uses<Database>(LockMode.Exclusive)]
+            public Task ScheduleIsEmpty() => Task.CompletedTask;
 
-                [StepName("a patient exists")]
-                public static Task PatientExists() => Task.CompletedTask;
-            }
+            [StepName("a patient exists")]
+            public Task PatientExists() => Task.CompletedTask;
+        }
 
-            extension(When)
-            {
-                [StepName("a reminder is sent")]
-                [Uses<Smtp>]
-                public static Task ReminderIsSent() => Task.CompletedTask;
-            }
+        public sealed partial class UsesWhen : When<NoWorld>
+        {
+            [StepName("a reminder is sent")]
+            [Uses<Smtp>]
+            public Task ReminderIsSent() => Task.CompletedTask;
+        }
+
+        public abstract class UsesSuite : Scenarios<NoWorld>
+        {
+            public UsesGiven Given => Steps<UsesGiven>();
+            public UsesWhen When => Steps<UsesWhen>();
         }
         """;
 
@@ -627,11 +645,11 @@ public static class SampleSources
         """
 
         [Uses<Database>]
-        public static class UsesScenarios
+        public sealed class UsesScenarios : UsesSuite
         {
             [Scenario("clears and reminds")]
             [Uses<Smtp>]
-            public static async Task ClearAndRemind()
+            public async Task ClearAndRemind()
             {
                 await Given.ScheduleIsEmpty();
                 await When.ReminderIsSent();
@@ -644,10 +662,10 @@ public static class SampleSources
     public const string UsesFreeScenario =
         """
 
-        public static class PlainScenarios
+        public sealed class PlainScenarios : UsesSuite
         {
             [Scenario("just a patient")]
-            public static async Task JustAPatient()
+            public async Task JustAPatient()
             {
                 await Given.PatientExists();
             }
@@ -669,11 +687,11 @@ public static class SampleSources
         public sealed class Queue : IContendedResource;
 
         [Uses<Cache>]
-        public static class SiteScenarios
+        public sealed class SiteScenarios : UsesSuite
         {
             [Scenario("class and method sites")]
             [Uses<Queue>(LockMode.Exclusive)]
-            public static async Task ClassAndMethodSites()
+            public async Task ClassAndMethodSites()
             {
                 await Given.PatientExists();
             }
@@ -688,29 +706,26 @@ public static class SampleSources
     public const string GenericStepScenario =
         """
 
-        public static class GenericDsl
+        public sealed partial class AppointmentGiven : Given<NoWorld>
         {
-            extension(Given)
+            [StepName("a default value exists")]
+            public async Task<T> DefaultOf<T>()
             {
-                [StepName("a default value exists")]
-                public static async Task<T> DefaultOf<T>()
-                {
-                    await Task.Yield();
-                    return default!;
-                }
-            }
-
-            extension(Then)
-            {
-                [StepName("the value should be {value}")]
-                public static Task ValueShouldBe(int value) => Task.CompletedTask;
+                await Task.Yield();
+                return default!;
             }
         }
 
-        public static class GenericScenarios
+        public sealed partial class AppointmentThen : Then<NoWorld>
+        {
+            [StepName("the value should be {value}")]
+            public Task ValueShouldBe(int value) => Task.CompletedTask;
+        }
+
+        public sealed class GenericScenarios : AppointmentSuite
         {
             [Scenario("explicit type argument")]
-            public static async Task ExplicitTypeArgument()
+            public async Task ExplicitTypeArgument()
             {
                 var zero = await Given.DefaultOf<int>();
                 await Then.ValueShouldBe(zero);
@@ -724,10 +739,10 @@ public static class SampleSources
     public const string VoidTupleScenario =
         """
 
-        public static class VoidTupleScenarios
+        public sealed class VoidTupleScenarios : AppointmentSuite
         {
             [Scenario("parallel greetings")]
-            public static async Task Greetings()
+            public async Task Greetings()
             {
                 var jane = await Given.PatientExists("Jane");
                 var bob = await Given.PatientExists("Bob");
@@ -742,10 +757,10 @@ public static class SampleSources
     public const string VoidArrayScenario =
         """
 
-        public static class VoidArrayScenarios
+        public sealed class VoidArrayScenarios : AppointmentSuite
         {
             [Scenario("parallel greetings array")]
-            public static async Task Greetings()
+            public async Task Greetings()
             {
                 var jane = await Given.PatientExists("Jane");
                 var bob = await Given.PatientExists("Bob");
@@ -760,10 +775,10 @@ public static class SampleSources
     public const string VoidLinqScenario =
         """
 
-        public static class VoidLinqScenarios
+        public sealed class VoidLinqScenarios : AppointmentSuite
         {
             [Scenario("parallel greetings linq")]
-            public static async Task Greetings()
+            public async Task Greetings()
             {
                 var jane = await Given.PatientExists("Jane");
 
@@ -779,10 +794,10 @@ public static class SampleSources
     public const string EmptyArrayScenario =
         """
 
-        public static class EmptyArrayScenarios
+        public sealed class EmptyArrayScenarios : AppointmentSuite
         {
             [Scenario("empty array group")]
-            public static async Task Empty()
+            public async Task Empty()
             {
                 await Given.DatabaseIsClean();
 
@@ -796,10 +811,10 @@ public static class SampleSources
     public const string EmptyLinqScenario =
         """
 
-        public static class EmptyLinqScenarios
+        public sealed class EmptyLinqScenarios : AppointmentSuite
         {
             [Scenario("empty linq group")]
-            public static async Task Empty()
+            public async Task Empty()
             {
                 await Given.DatabaseIsClean();
 
@@ -817,10 +832,10 @@ public static class SampleSources
 
         public static class Outer
         {
-            public static class Inner
+            public sealed class Inner : AppointmentSuite
             {
                 [Scenario("nested")]
-                public static async Task Run()
+                public async Task Run()
                 {
                     await Given.DatabaseIsClean();
                 }
@@ -865,56 +880,60 @@ public static class SampleSources
                 public static int Contexts;
             }
 
-            public static class CompositionDsl
+            public sealed partial class CompositionGiven : Given<NoWorld>
             {
-                extension(Given)
+                [StepName("isolation {seed}")]
+                public Task<Isolation> Isolation(int seed) => Task.FromResult(new Isolation(seed));
+
+                [StepName("a customer")]
+                public Task<Customer> Customer(Isolation isolation)
+                    => Task.FromResult(new Customer("customer-" + isolation.Seed));
+
+                [StepName("an employee")]
+                public Task<Employee> Employee(Isolation isolation)
+                    => Task.FromResult(new Employee("employee-" + isolation.Seed));
+
+                [StepName("the clock is frozen")]
+                public Task ClockIsFrozen() => Task.CompletedTask;
+
+                [StepName("an appointment creation context")]
+                public Task<CreationContext> CreationContext(Isolation isolation, CreationSpec spec)
                 {
-                    [StepName("isolation {seed}")]
-                    public static Task<Isolation> Isolation(int seed) => Task.FromResult(new Isolation(seed));
-
-                    [StepName("a customer")]
-                    public static Task<Customer> Customer(Isolation isolation)
-                        => Task.FromResult(new Customer("customer-" + isolation.Seed));
-
-                    [StepName("an employee")]
-                    public static Task<Employee> Employee(Isolation isolation)
-                        => Task.FromResult(new Employee("employee-" + isolation.Seed));
-
-                    [StepName("the clock is frozen")]
-                    public static Task ClockIsFrozen() => Task.CompletedTask;
-
-                    [StepName("an appointment creation context")]
-                    public static Task<CreationContext> CreationContext(Isolation isolation, CreationSpec spec)
-                    {
-                        Calls.Contexts++;
-                        return Task.FromResult(new CreationContext(
-                            spec.Customer,
-                            spec.Dossier + ":" + spec.Employee.Name + ":" + spec.Rappel,
-                            new Profile(new Address("Oslo"), null),
-                            spec.Rappel == Outcome.Fail ? "partial" : null,
-                            ["first", "second"]));
-                    }
+                    Calls.Contexts++;
+                    return Task.FromResult(new CreationContext(
+                        spec.Customer,
+                        spec.Dossier + ":" + spec.Employee.Name + ":" + spec.Rappel,
+                        new Profile(new Address("Oslo"), null),
+                        spec.Rappel == Outcome.Fail ? "partial" : null,
+                        ["first", "second"]));
                 }
+            }
 
-                extension(When)
-                {
-                    [StepName("{customer} creates an appointment")]
-                    public static Task<string> CreateAppointment(Isolation isolation, Customer customer, string request)
-                        => Task.FromResult(customer.Name + "|" + request);
-                }
+            public sealed partial class CompositionWhen : When<NoWorld>
+            {
+                [StepName("{customer} creates an appointment")]
+                public Task<string> CreateAppointment(Isolation isolation, Customer customer, string request)
+                    => Task.FromResult(customer.Name + "|" + request);
+            }
 
-                extension(Then)
-                {
-                    [StepName("{actual} equals {expected}")]
-                    public static Task Equal(object? actual, object? expected)
-                        => Equals(actual, expected)
-                            ? Task.CompletedTask
-                            : throw new InvalidOperationException("expected '" + expected + "' but was '" + actual + "'");
+            public sealed partial class CompositionThen : Then<NoWorld>
+            {
+                [StepName("{actual} equals {expected}")]
+                public Task Equal(object? actual, object? expected)
+                    => Equals(actual, expected)
+                        ? Task.CompletedTask
+                        : throw new InvalidOperationException("expected '" + expected + "' but was '" + actual + "'");
 
-                    [StepName("{value} satisfies the predicate")]
-                    public static Task Satisfies<T>(T value, Func<T, bool> predicate)
-                        => predicate(value) ? Task.CompletedTask : throw new InvalidOperationException("predicate failed");
-                }
+                [StepName("{value} satisfies the predicate")]
+                public Task Satisfies<T>(T value, Func<T, bool> predicate)
+                    => predicate(value) ? Task.CompletedTask : throw new InvalidOperationException("predicate failed");
+            }
+
+            public abstract class CompositionSuite : Scenarios<NoWorld>
+            {
+                public CompositionGiven Given => Steps<CompositionGiven>();
+                public CompositionWhen When => Steps<CompositionWhen>();
+                public CompositionThen Then => Steps<CompositionThen>();
             }
         }
         """;
@@ -926,13 +945,13 @@ public static class SampleSources
         {
             public sealed record Expected(string State);
 
-            public static class CompositionScenarios
+            public sealed class CompositionScenarios : CompositionSuite
             {
                 internal const string Dossier = "22012000753";
                 internal static readonly string City = "Oslo";
 
                 [Scenario("customer creates an appointment when rappel creation fails")]
-                public static async Task RappelFailure()
+                public async Task RappelFailure()
                 {
                     var isolation = await Given.Isolation(2135);
                     var customer = await Given.Customer(isolation);
@@ -963,7 +982,7 @@ public static class SampleSources
                 }
 
                 [Scenario("a projection that throws fails its own step")]
-                public static async Task ProjectionThrows()
+                public async Task ProjectionThrows()
                 {
                     var isolation = await Given.Isolation(1);
                     var customer = await Given.Customer(isolation);

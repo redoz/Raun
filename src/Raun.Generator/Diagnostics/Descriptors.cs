@@ -6,7 +6,8 @@ namespace Raun.Generator.Diagnostics;
 
 /// <summary>
 /// Every Raun diagnostic. The parser reports the rules about lowering a scenario body (RAUN001–007,
-/// RAUN011, RAUN013, RAUN017) through the generator; the analyzer reports the rest.
+/// RAUN011, RAUN013, RAUN017, RAUN019–021) through the generator; the analyzer reports the rest.
+/// RAUN018 is not here: it is an MSBuild error Raun.props raises for an SDK below the floor.
 /// </summary>
 internal static class Descriptors
 {
@@ -31,7 +32,7 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor UnsupportedStatement = new(
         "RAUN002",
         "Unsupported scenario statement",
-        "Scenario statements must be an awaited phase-marker call (Given/When/Then, or any type implementing Raun.IPhase), an awaited tuple, or an awaited array of such calls",
+        "Scenario statements must be an awaited step call (a method of a Given/When/Then step class, or of any Phase<TWorld>), an awaited tuple, or an awaited array of such calls",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -39,15 +40,15 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor UnsupportedControlFlow = new(
         "RAUN003",
         "Unsupported control flow in scenario",
-        "Loops and other control flow are not supported in scenario bodies — put the loop, retry, or polling inside a step. Only if/else (on an awaited phase-marker condition) shapes the graph.",
+        "Loops and other control flow are not supported in scenario bodies — put the loop, retry, or polling inside a step. Only if/else (on an awaited step condition) shapes the graph.",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor NotADslCall = new(
         "RAUN004",
-        "Scenario step must be a phase-marker call",
-        "Scenario steps must call a static extension member on a phase marker (Given/When/Then, or any type implementing Raun.IPhase)",
+        "Scenario step must be a step call",
+        "Scenario steps must call a step: a public instance method of a step class deriving from Given<TWorld>, When<TWorld>, Then<TWorld>, or another Phase<TWorld>",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -62,8 +63,8 @@ internal static class Descriptors
 
     public static readonly DiagnosticDescriptor InvalidGroupElement = new(
         "RAUN006",
-        "Parallel group element must be a phase-marker call",
-        "Every element of a tuple/array parallel group must be a phase-marker call (Given/When/Then, or any type implementing Raun.IPhase)",
+        "Parallel group element must be a step call",
+        "Every element of a tuple/array parallel group must be a step call (a method of a Given/When/Then step class, or of any Phase<TWorld>)",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -102,8 +103,8 @@ internal static class Descriptors
 
     public static readonly DiagnosticDescriptor InvalidCondition = new(
         "RAUN011",
-        "Scenario condition must be an awaited phase-marker call",
-        "An 'if' condition in a scenario must be an awaited phase-marker call (Given/When/Then, or any type implementing Raun.IPhase) whose result is usable as a C# condition (bool, an implicit conversion to bool, or 'operator true')",
+        "Scenario condition must be an awaited step call",
+        "An 'if' condition in a scenario must be an awaited step call whose result is usable as a C# condition (bool, an implicit conversion to bool, or 'operator true')",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -155,12 +156,48 @@ internal static class Descriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor UnfollowableStepReceiver = new(
+        "RAUN019",
+        "Step receiver cannot be followed",
+        "Raun cannot follow '{0}' to the step class this call runs on: {1}",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ScenarioClassShape = new(
+        "RAUN020",
+        "Scenario does not fit its class",
+        "Scenario '{0}' {1}",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor WorldMismatch = new(
+        "RAUN021",
+        "Step class belongs to another world",
+        "'{0}' is a step class of '{1}', but this scenario's world is '{2}'",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>One step-class instance serves every step of a scenario, parallel siblings included,
+    /// so a writable field or property on it is state those steps race on. A warning, not an error: a
+    /// field guarded by a lock or Interlocked is fine, and only its author knows.</summary>
+    public static readonly DiagnosticDescriptor MutableStepClassState = new(
+        "RAUN022",
+        "Step class holds mutable state",
+        "'{0}' is mutable state on step class '{1}', shared by {2}, parallel steps included; make it readonly, or keep the state in the world or in a step result",
+        Category,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
         UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
+        UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,
         StepContextInCleanup, ContendedResourceKind, InertContendedResourceUse, ScenarioNotGenerated,
     }.ToDictionary(d => d.Id);
