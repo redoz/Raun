@@ -30,8 +30,8 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
 
     <!-- Aspire integration (Raun.Aspire + the Aspire sample). -->
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.5.4" />
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.4" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.0" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
 
     <!-- Coverage spike: does the profiler reach Aspire's child processes?
