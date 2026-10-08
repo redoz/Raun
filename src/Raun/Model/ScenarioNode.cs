@@ -79,8 +79,9 @@ public sealed class ScenarioNode
     /// <summary>
     /// For a condition node: which arm runs. Called once, after the node passes, with the scenario's
     /// inputs (the node's own output is <c>inputs.Get&lt;T&gt;(Index)</c>, and a <c>when</c> clause
-    /// may read other outputs it depends on). Returns an index into <see cref="Arms"/>, or -1 when
-    /// no arm matches. The generator emits the scenario's own <c>switch</c> or <c>is</c> here, so
+    /// may read other outputs it depends on). Returns an index into <see cref="Arms"/>, or
+    /// <see cref="Guard.NoArm"/> (-1) when no arm matches; a node guarded on <see cref="Guard.NoArm"/>
+    /// runs exactly then. The generator emits the scenario's own <c>switch</c> or <c>is</c> here, so
     /// pattern semantics are the compiler's. Null for a node that gates nothing.
     /// </summary>
     public Func<IStepInputs, int>? SelectArm { get; init; }

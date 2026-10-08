@@ -84,6 +84,31 @@ public static class GeneratorHarness
             .ToImmutableArray();
     }
 
+    /// <summary>
+    /// Every warning (or worse) the compiler reports inside the GENERATED files — what a consumer
+    /// building with TreatWarningsAsErrors would trip on. <see cref="Run"/> keeps errors only, and the
+    /// scenario's own source is not the generator's to answer for, so this looks at generated trees.
+    /// </summary>
+    public static ImmutableArray<Diagnostic> GeneratedCodeWarnings(string source)
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
+        var tree = CSharpSyntaxTree.ParseText(source, parseOptions);
+        var compilation = CSharpCompilation.Create(
+            "Warnings_" + Guid.NewGuid().ToString("N"),
+            [tree],
+            References,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable,
+                warningLevel: 9999));
+
+        CSharpGeneratorDriver.Create([new ScenarioGenerator().AsSourceGenerator()], parseOptions: parseOptions)
+            .RunGeneratorsAndUpdateCompilation(compilation, out var output, out _);
+
+        return output.GetDiagnostics()
+            .Where(d => d.Severity >= DiagnosticSeverity.Warning && d.Location.SourceTree is { } t && t != tree)
+            .ToImmutableArray();
+    }
+
     public static GeneratorResult Run(string source, string assemblyName = "ScenarioTests")
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);

@@ -443,23 +443,30 @@ internal sealed class ScenarioParser
     /// Lowers <c>switch (await S) { case …: …; break; … }</c>: the step is the condition; each section
     /// is an arm, chosen by the compiler's own switch over the recorded value (labels re-hosted like
     /// step arguments; a <c>when</c> clause's step reads become the condition's dependencies); a
-    /// section's pattern variables are its case node's outputs; locals rejoin N-way.
+    /// section's pattern variables are its case node's outputs; locals rejoin N-way. Without a
+    /// <c>default</c>, "no section matched" is one more (implicit, empty) arm, so a local the sections
+    /// reassign keeps its earlier value then, as in C#.
     /// </summary>
+    /// <remarks>Under a governing expression that is not an awaited step (RAUN011), the labels and
+    /// sections are still lowered and walked, with no condition to hang them on, so their own problems
+    /// are reported in the same build.</remarks>
     private bool ParseSwitch(SwitchStatementSyntax statement)
     {
-        if (statement.Expression is not AwaitExpressionSyntax { Expression: InvocationExpressionSyntax invocation })
+        StepCall? call = null;
+        if (statement.Expression is AwaitExpressionSyntax { Expression: InvocationExpressionSyntax invocation })
+        {
+            call = ResolveCall(invocation, Descriptors.InvalidCondition);
+            if (call is { ResultType: null })
+            {
+                Report(Descriptors.InvalidCondition, statement.Expression);
+            }
+        }
+        else
         {
             Report(Descriptors.InvalidCondition, statement.Expression);
-            WalkSectionsForDiagnostics(statement);
-            return false;
         }
 
-        var call = ResolveCall(invocation, Descriptors.InvalidCondition);
         var ok = call is { ResultType: not null };
-        if (call is { ResultType: null })
-        {
-            Report(Descriptors.InvalidCondition, statement.Expression);
-        }
 
         // Lower every section's labels; collect the step outputs their when-clauses read.
         var sections = new List<SwitchSectionSyntax>();
@@ -514,21 +521,52 @@ internal sealed class ScenarioParser
             arms.Add(WalkArm(SectionBody(section), conditionIndex, arm, parentVars, bind));
         }
 
+        if (!statement.Sections.Any(s => s.Labels.Any(l => l is DefaultSwitchLabelSyntax)))
+        {
+            arms.Add(WalkArm([], conditionIndex, NoArm, parentVars));
+        }
+
         return Rejoin(statement, conditionIndex, parentVars, arms, ok: condition is not null) && condition is not null;
     }
 
-    /// <summary>A label as written, without its colon: <c>case Accepted a when a.Express</c>,
-    /// <c>default</c>. Display text for the arm, never fed back to a parser.</summary>
+    /// <summary>A label as written, without its colon and with each run of whitespace (line breaks
+    /// included) shown as one space: <c>case Accepted a when a.Express</c>, <c>default</c>. Display
+    /// text for the arm, never fed back to a parser.</summary>
     private static string LabelText(SwitchLabelSyntax label)
-        => label.SyntaxTree.GetText().ToString(Microsoft.CodeAnalysis.Text.TextSpan.FromBounds(
+    {
+        var written = label.SyntaxTree.GetText().ToString(Microsoft.CodeAnalysis.Text.TextSpan.FromBounds(
             label.SpanStart, label.ColonToken.GetPreviousToken().Span.End));
+        var text = new StringBuilder(written.Length);
+        foreach (var c in written)
+        {
+            if (!char.IsWhiteSpace(c))
+            {
+                text.Append(c);
+            }
+            else if (text.Length > 0 && text[text.Length - 1] != ' ')
+            {
+                text.Append(' ');
+            }
+        }
 
-    /// <summary>A section's statements without its closing <c>break;</c>; any other way out of a
-    /// section (<c>return</c>, <c>throw</c>, <c>goto case</c>) stays in, and is RAUN003 when walked.</summary>
+        return text.ToString();
+    }
+
+    /// <summary>A section's statements without its closing <c>break;</c> — also when the section is
+    /// written as one block ending in it, <c>case X: { …; break; }</c>. Any other way out of a section
+    /// (<c>return</c>, <c>throw</c>, <c>goto case</c>, a <c>break</c> anywhere else) stays in, and is
+    /// RAUN003 when walked.</summary>
     private static IEnumerable<StatementSyntax> SectionBody(SwitchSectionSyntax section)
-        => section.Statements.LastOrDefault() is BreakStatementSyntax
-            ? section.Statements.Take(section.Statements.Count - 1)
-            : section.Statements;
+    {
+        var statements = section.Statements.Count == 1
+            && section.Statements[0] is BlockSyntax block
+            && block.Statements.LastOrDefault() is BreakStatementSyntax
+                ? block.Statements
+                : section.Statements;
+        return statements.LastOrDefault() is BreakStatementSyntax
+            ? statements.Take(statements.Count - 1)
+            : statements;
+    }
 
     /// <summary>The case node binding a section's pattern variables. A section with several labels
     /// binds none (C# forbids using them there).</summary>
@@ -553,17 +591,6 @@ internal sealed class ScenarioParser
         => section.Labels.OfType<CasePatternSwitchLabelSyntax>()
             .SelectMany(label => PatternVariables(label.Pattern))
             .ToDictionary<ILocalSymbol, ILocalSymbol, VarSource>(local => local, _ => FailedOutput.Instance, SymbolEqualityComparer.Default);
-
-    /// <summary>Under a broken governing expression, the sections are still walked (with no guard to
-    /// hang them on) so their own problems are reported in the same build.</summary>
-    private void WalkSectionsForDiagnostics(SwitchStatementSyntax statement)
-    {
-        var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
-        var arms = statement.Sections
-            .Select((s, k) => WalkArm(SectionBody(s), -1, k, parentVars, FailedSectionVariables(s)))
-            .ToList();
-        Rejoin(statement, -1, parentVars, arms, ok: false);
-    }
 
     /// <summary>
     /// RAUN011: the condition is an awaited step call whose result can drive a C# <c>if</c>
@@ -779,8 +806,12 @@ internal sealed class ScenarioParser
         _steps[position] = _steps[position] with { Branch = branch };
     }
 
-    /// <summary>One arm's walk result.</summary>
-    private readonly record struct ArmWalk(Dictionary<ILocalSymbol, VarSource> Vars, List<int> Waits, bool Ok);
+    /// <summary>One arm's walk result. <c>Arm</c> is the arm it was walked under — its guard's arm,
+    /// which is <see cref="NoArm"/> for a default-less switch's implicit "no section matched".</summary>
+    private readonly record struct ArmWalk(int Arm, Dictionary<ILocalSymbol, VarSource> Vars, List<int> Waits, bool Ok);
+
+    /// <summary>The arm a condition takes when no arm matches (<c>Raun.Model.Guard.NoArm</c>).</summary>
+    private const int NoArm = -1;
 
     /// <summary>Walks one arm under Guard(conditionIndex, arm), with <paramref name="bind"/> applied
     /// to its definition map first (an arm's pattern variables).</summary>
@@ -823,7 +854,7 @@ internal sealed class ScenarioParser
         _prevFrontier = savedFrontier;
         _pendingWaits = savedWaits;
 
-        return new ArmWalk(new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default), tail, ok);
+        return new ArmWalk(arm, new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default), tail, ok);
     }
 
     /// <summary>Rejoins after a branch: one N-way merge per local the arms define differently, then
@@ -955,7 +986,7 @@ internal sealed class ScenarioParser
         for (var arm = 0; arm < picks.Count; arm++)
         {
             sources.Add(picks[arm].PassThrough
-                ? InsertPassThrough(local, conditionIndex, arm, picks[arm].Node)
+                ? InsertPassThrough(local, conditionIndex, arms[arm].Arm, picks[arm].Node)
                 : picks[arm].Node);
         }
 

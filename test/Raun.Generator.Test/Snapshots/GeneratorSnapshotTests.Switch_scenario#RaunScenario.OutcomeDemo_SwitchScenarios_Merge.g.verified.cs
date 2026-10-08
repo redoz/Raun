@@ -77,13 +77,18 @@ namespace Raun.Generated
                 },
                 SelectArm = static __inputs =>
                 {
+                    int __arm = -1;
                     switch (__inputs.Get<global::OutcomeDemo.Outcome>(2))
                     {
                         case global::OutcomeDemo.Rejected:
-                            return 0;
+                            __arm = 0;
+                            break;
                         default:
-                            return 1;
+                            __arm = 1;
+                            break;
                     }
+
+                    return __arm;
                 },
                 Arms = new string[]
                 {

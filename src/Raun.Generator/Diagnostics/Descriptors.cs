@@ -40,7 +40,7 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor UnsupportedControlFlow = new(
         "RAUN003",
         "Unsupported control flow in scenario",
-        "Loops and other control flow are not supported in scenario bodies — put the loop, retry, or polling inside a step. Only if/else (on an awaited step condition) shapes the graph.",
+        "Loops and other control flow are not supported in scenario bodies — put the loop, retry, or polling inside a step. Only if/else and switch (on an awaited step) shape the graph; a switch section ends in break.",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);

@@ -496,26 +496,32 @@ internal static class ScenarioEmitter
     /// <c>__inputs.Get&lt;T&gt;(index)</c>. Truth: <c>(__v) ? 0 : 1</c>, so Roslyn picks bool, an
     /// implicit conversion, or <c>operator true</c> at compile time; the scheduler never reflects.
     /// Pattern: <c>(__v is P) ? 0 : 1</c>, the compiler's own <c>is</c> over the recorded value.
-    /// Switch: <c>{ switch (__v) { &lt;section k's labels&gt;: return k; … } return -1; }</c>, the
-    /// compiler's own switch; the trailing <c>-1</c> (no arm) only when there is no <c>default</c>,
-    /// where it would be unreachable.
+    /// Switch: <c>{ var __arm = -1; switch (__v) { &lt;section k's labels&gt;: __arm = k; break; … }
+    /// return __arm; }</c>, the compiler's own switch, -1 when no section matches. Assigned, not
+    /// returned from each section: with sections that are exhaustive, any statement after them (a
+    /// trailing <c>return -1;</c>, or an added <c>default</c>'s) is unreachable code (CS0162), which
+    /// breaks a consumer building with warnings as errors.
     /// </summary>
     private static SimpleLambdaExpressionSyntax SelectArmLambda(int conditionIndex, ParsedBranch branch)
     {
         var value = InputsGet(branch.ValueType, conditionIndex);
         if (branch.Form == BranchForm.Switch)
         {
-            var sections = branch.Sections.Select((section, k) =>
-                section.WithStatements(SingletonList<StatementSyntax>(ReturnStatement(Num(k)))));
-            var statements = new List<StatementSyntax> { SwitchStatement(value).WithSections(List(sections)) };
-            if (!branch.Sections.Any(s => s.Labels.Any(l => l is DefaultSwitchLabelSyntax)))
+            var arm = IdentifierName("__arm");
+            var sections = branch.Sections.Select((section, k) => section.WithStatements(List<StatementSyntax>(new StatementSyntax[]
             {
-                statements.Add(ReturnStatement(Num(-1)));
-            }
+                ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, arm, Num(k))),
+                BreakStatement(),
+            })));
 
             return SimpleLambdaExpression(Parameter(Identifier("__inputs")))
                 .WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword)))
-                .WithBlock(Block(statements));
+                .WithBlock(Block(
+                    LocalDeclarationStatement(VariableDeclaration(PredefinedType(Token(SyntaxKind.IntKeyword)))
+                        .WithVariables(SingletonSeparatedList(VariableDeclarator(arm.Identifier)
+                            .WithInitializer(EqualsValueClause(Num(-1)))))),
+                    SwitchStatement(value).WithSections(List(sections)),
+                    ReturnStatement(arm)));
         }
 
         ExpressionSyntax body = branch.Form switch

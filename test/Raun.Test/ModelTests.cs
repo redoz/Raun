@@ -163,6 +163,32 @@ public class ModelTests
     }
 
     [Fact]
+    public void Validate_accepts_a_no_arm_guard_in_an_n_way_merge()
+    {
+        // A switch without a default: the pass-through for "matched no section" is guarded on NoArm,
+        // which is a different arm from every section, so the sources stay mutually exclusive.
+        var two = new ScenarioNode
+        {
+            Index = 0, StepId = "c", Phase = "When", OperationName = "C", DisplayNameTemplate = "c",
+            DependsOn = [], Invoke = (_, _) => Task.FromResult<object?>(0),
+            SelectArm = _ => Guard.NoArm, Arms = ["case 0", "case 1"],
+        };
+        var def = Def(two, Guarded(1, [new Guard(0, 0)], 0), Guarded(2, [new Guard(0, 1)], 0),
+            Guarded(3, [new Guard(0, Guard.NoArm)], 0), Merge(4, 1, 2, 3));
+
+        def.Validate();
+    }
+
+    [Fact]
+    public void Validate_rejects_a_guard_below_no_arm()
+    {
+        var def = Def(Cond(0), Guarded(1, [new Guard(0, -2)], 0));
+
+        var error = Assert.Throws<InvalidOperationException>(def.Validate);
+        Assert.Contains("arm -2", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_rejects_a_guard_on_a_node_without_a_condition_evaluator()
     {
         // Node 0 is a plain step: it has no SelectArm, so it cannot gate a branch.

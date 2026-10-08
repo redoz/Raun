@@ -119,11 +119,13 @@ public sealed class ScenarioDefinition
                         + $"('{condition.OperationName}'), which has no SelectArm.");
                 }
 
-                if (guard.Arm < 0 || guard.Arm >= condition.Arms.Count)
+                // -1 is the "matched no arm" outcome of a switch without a default: a real choice.
+                if (guard.Arm < Guard.NoArm || guard.Arm >= condition.Arms.Count)
                 {
                     throw new InvalidOperationException(
                         $"Step {node.Index} ('{node.OperationName}') is guarded on arm {guard.Arm} of step "
-                        + $"{guard.ConditionIndex} ('{condition.OperationName}'), which has {condition.Arms.Count} arm(s).");
+                        + $"{guard.ConditionIndex} ('{condition.OperationName}'), which has {condition.Arms.Count} arm(s) "
+                        + $"(and {Guard.NoArm} for matching none).");
                 }
             }
 

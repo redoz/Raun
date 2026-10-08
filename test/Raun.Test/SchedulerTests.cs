@@ -152,6 +152,51 @@ public class SchedulerTests
         Assert.Equal("not taken: Choose0 matched no arm", results[1].SkipReason);
     }
 
+    [Theory]
+    [InlineData(-1, "earlier")]
+    [InlineData(0, "arm 0")]
+    public async Task A_no_arm_guard_runs_exactly_when_no_arm_matches(int selected, string expected)
+    {
+        // A switch without a default: arm 0 reassigns the local, arm 1 and "no arm" pass the earlier
+        // value through, and the merge reads whichever ran.
+        var seen = new List<string>();
+        var def = Def(
+            Arm(0, [], Pass("earlier")),
+            Select(1, 7, _ => selected, "case 1", "case 2"),
+            Arm(2, [new Guard(1, 0)], Pass("arm 0"), 1),
+            MergeAlias(3, [new Guard(1, 1)], 0),
+            MergeAlias(4, [new Guard(1, Guard.NoArm)], 0),
+            MergeNode(5, 2, 3, 4),
+            Arm(6, [], (inputs, _) => { seen.Add(inputs.Get<string>(5)); return Task.FromResult<object?>(null); }, 5));
+
+        var results = await new ScenarioScheduler().RunAsync(def);
+
+        Assert.Equal(selected == Guard.NoArm ? StepStatus.Passed : StepStatus.NotTaken, results[4].Status);
+        if (selected != Guard.NoArm)
+        {
+            Assert.Equal("not taken: Choose1 took case 1", results[4].SkipReason);
+        }
+
+        Assert.Equal(StepStatus.NotTaken, results[3].Status);
+        Assert.Equal(StepStatus.Passed, results[6].Status);
+        Assert.Equal([expected], seen);
+    }
+
+    /// <summary>A pass-through: a single-source merge guarded on one arm.</summary>
+    private static ScenarioNode MergeAlias(int index, Guard[] guards, int source) => new()
+    {
+        Index = index,
+        StepId = $"step-{index}",
+        Phase = "When",
+        OperationName = "Unchanged",
+        DisplayNameTemplate = "«unchanged»",
+        DependsOn = [],
+        MergeSources = [source],
+        Guards = guards,
+        IsSynthetic = true,
+        Invoke = (_, _) => Task.FromResult<object?>(null),
+    };
+
     [Fact]
     public async Task A_throwing_arm_selection_fails_the_condition_step()
     {
