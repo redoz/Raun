@@ -165,39 +165,38 @@
   main{ max-width:1180px; margin:0 auto; padding:14px 24px 60px; }
   .card{
     position:relative; background:var(--surface); border:1px solid var(--border);
-    border-left:4px solid var(--edge); border-radius:14px; box-shadow:var(--shadow);
-    padding:16px 20px 18px; margin:16px 0;
+    border-left:4px solid var(--edge); border-radius:10px; box-shadow:var(--shadow-sm);
+    margin:6px 0;
   }
   .card.s-passed{ --edge:var(--bar-pass); }
   .card.s-failed{ --edge:var(--bar-fail); }
   .card.s-skipped{ --edge:var(--bar-skip); }
 
-  .card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; cursor:pointer; }
-  .card.collapsed .card-head{ margin-bottom:0; }
-  .card.collapsed .drill-host{ display:none; }
-  .card.collapsed{ padding-bottom:16px; }
-  .card-head .tw{ color:var(--faint); font-size:11px; margin-left:2px; transition:transform .15s; display:inline-block; }
+  /* one row per scenario: twisty, status, title, where, steps, duration. The "where" text gives way
+     first (flex-shrink 100), so the title and the timing keep their room; both ellipsize, never wrap. */
+  .card-head{ display:flex; align-items:center; gap:12px; padding:9px 14px; cursor:pointer; min-width:0; }
+  .card-head:hover{ background:var(--inset); }
+  .card-head .tw{ color:var(--faint); font-size:10px; transition:transform .15s; flex:none; width:10px; }
   .card.collapsed .card-head .tw{ transform:rotate(-90deg); }
-
-  /* ---------- OVERVIEW (one row per scenario; click to open the card) ---------- */
-  .ov{ background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:6px 8px; margin:16px 0 22px; }
-  .ov table{ width:100%; border-collapse:collapse; font-size:13px; }
-  .ov th{ text-align:left; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); font-weight:600; padding:8px 10px; }
-  .ov td{ padding:7px 10px; border-top:1px solid var(--border); vertical-align:middle; }
-  .ov tr.r{ cursor:pointer; }
-  .ov tr.r:hover td{ background:var(--inset); }
-  .ov td.nm{ font-weight:600; }
-  .ov td.cl{ color:var(--muted); font-size:12px; }
-  .ov td.cl .mth{ color:var(--faint); }
-  .ov td.n{ text-align:right; font-family:var(--mono); color:var(--muted); white-space:nowrap; }
-  .ov td.n .f{ color:var(--bar-fail); font-weight:700; }
-  .ov td.n .k{ color:var(--bar-skip); }
-  .ov td.st{ width:1%; white-space:nowrap; }
-  .card-title{ min-width:0; }
-  .card-title .name{ font-size:15.5px; font-weight:680; letter-spacing:-.01em; }
-  .card-title .cls{ font-size:12.5px; color:var(--muted); margin-top:2px; }
-  .card-title .cls .mth{ color:var(--faint); }
-  .card-meta{ display:flex; align-items:center; gap:10px; flex:none; }
+  .card-head .pill{ flex:none; }
+  .card-head .name{ flex:0 0 auto; max-width:60%; font-size:14px; font-weight:650; letter-spacing:-.01em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card-head .cls{ flex:0 100 auto; min-width:0; font-size:12px; color:var(--faint);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card-head .grow{ flex:1 1 0; min-width:0; }
+  .card-head .cnt{ flex:none; font:12px/1 var(--mono); color:var(--muted); white-space:nowrap; }
+  .card-head .cnt .f{ color:var(--bar-fail); font-weight:700; }
+  .card-head .cnt .k{ color:var(--bar-skip); }
+  .card-head .dur{ flex:none; min-width:4.5em; text-align:right; }
+  @media (max-width:600px){
+    .card-head{ gap:8px; padding:9px 10px; }
+    .card-head .cls, .card-head .cnt, .card-head .grow{ display:none; }
+    .card-head .name{ flex:1 1 auto; max-width:none; min-width:0; }
+  }
+  .card-body{ padding:0 16px 14px 36px; }
+  .card.collapsed .card-body{ display:none; }
+  .card-body .where{ font-size:12px; color:var(--muted); margin:0 0 2px; overflow-wrap:anywhere; }
+  .card-body .where .mth{ color:var(--faint); }
   .dur{ font:13px/1 var(--mono); color:var(--muted); }
 
   .pill{
@@ -246,8 +245,11 @@
   }
   .logs{ margin:0; padding:0; list-style:none; }
   .logs li{ font-family:var(--mono); font-size:12px; color:var(--ink); margin:2px 0; }
-  .att{ margin:6px 0; }
-  .att .an{ font-size:12px; font-weight:600; color:var(--ink); margin:0 0 3px; }
+  .att{ margin:4px 0; }
+  .att > summary{ cursor:pointer; font-size:12px; color:var(--ink); }
+  .att > summary .an{ font-weight:600; }
+  .att > summary .asz{ font:11.5px var(--mono); color:var(--faint); margin-left:6px; }
+  .att[open] > summary{ margin-bottom:4px; }
   .eff{ display:flex; flex-direction:column; gap:5px; }
   .eff .e{ display:flex; align-items:center; gap:9px; font-size:12.5px; flex-wrap:wrap; }
   .eff .vd{ width:9px; height:9px; border-radius:50%; flex:none; }
@@ -783,45 +785,12 @@
       return card;
     }
 
-    // buildOverview() -> one row per scenario: status, name, class · method, step counts, duration.
-    // Clicking a row opens that card and scrolls to it.
-    function buildOverview(){
-      const ov = el("section", "ov");
-      ov.id = "overview";
-      let h = '<table><thead><tr><th>Status</th><th>Scenario</th><th>Where</th><th style="text-align:right">Steps</th><th style="text-align:right">Duration</th></tr></thead><tbody>';
-      for (const sc of model.scenarios){
-        const failed = sc.steps.filter((s) => s.status === "failed").length;
-        const skipped = sc.steps.filter((s) => s.status === "skipped").length;
-        const counts = sc.steps.length +
-          (failed ? ' <span class="f">' + failed + " failed</span>" : "") +
-          (skipped ? ' <span class="k">' + skipped + " skipped</span>" : "");
-        h += '<tr class="r" data-scenario="' + esc(sc.scenarioId) + '" tabindex="0">' +
-          '<td class="st"><span class="pill ' + sc.status + '"><span class="pd"></span>' + sc.status + "</span></td>" +
-          '<td class="nm">' + esc(sc.displayName) + "</td>" +
-          '<td class="cl">' + esc(sc.classDisplayName || "") + ' <span class="mth mono">· ' + esc(sc.methodName) + "</span></td>" +
-          '<td class="n">' + counts + "</td>" +
-          '<td class="n">' + fmtDur(sc.durationMs) + "</td></tr>";
-      }
-      h += "</tbody></table>";
-      ov.innerHTML = h;
-      const go = (row) => {
-        const sc = model.scenarios.find((x) => x.scenarioId === row.dataset.scenario);
-        if (!sc) return;
-        const card = setExpanded(sc, true);
-        if (card) card.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
-      };
-      ov.addEventListener("click", (ev) => { const row = ev.target.closest("tr.r"); if (row) go(row); });
-      ov.addEventListener("keydown", (ev) => {
-        if (ev.key !== "Enter" && ev.key !== " ") return;
-        const row = ev.target.closest("tr.r"); if (row){ go(row); ev.preventDefault(); }
-      });
-      return ov;
-    }
+    // "Ns.Class.Method" -> "Method": the row shows the short name, the expanded card the full one
+    const shortName = (cls) => !cls ? "" : cls.slice(cls.lastIndexOf(".") + 1);
 
     function renderAll(){
       report.replaceChildren();
       openers.length = 0;
-      report.appendChild(buildOverview());
       for (const sc of model.scenarios) report.appendChild(renderScenario(sc));
 
       // pre-expand the first failing step's scenario drill so its detail is visible by default
@@ -2011,34 +1980,49 @@
       const card = el("section", "card s-" + sc.status + (isExpanded(sc) ? "" : " collapsed"));
       card.dataset.scenario = sc.scenarioId;
 
-      // header
+      // header: one compact row; clicking it expands the card where it is
+      const failed = sc.steps.filter((s) => s.status === "failed").length;
+      const skipped = sc.steps.filter((s) => s.status === "skipped").length;
       const head = el("div", "card-head");
-      const waited = sc.waitedMs > 0
-        ? '<div class="cls">waited ' + fmtDur(sc.waitedMs) + " for " + esc(sc.waitedFor || "") + "</div>"
-        : "";
+      head.tabIndex = 0;
+      head.setAttribute("role", "button");
       head.innerHTML =
-        '<div class="card-title">' +
-          '<div class="name">' + esc(sc.displayName) + ' <span class="tw" aria-hidden="true">▼</span></div>' +
-          '<div class="cls">' + esc(sc.classDisplayName || "") +
-            ' <span class="mth mono">· ' + esc(sc.methodName) + "</span></div>" +
-          waited +
-        "</div>" +
-        '<div class="card-meta">' +
-          '<span class="dur">' + fmtDur(sc.durationMs) + "</span>" +
-          '<span class="pill ' + sc.status + '"><span class="pd"></span>' + sc.status + "</span>" +
-        "</div>";
-      head.addEventListener("click", () => setExpanded(sc, !isExpanded(sc)));
+        '<span class="tw" aria-hidden="true">▼</span>' +
+        '<span class="pill ' + sc.status + '"><span class="pd"></span>' + sc.status + "</span>" +
+        '<span class="name" title="' + esc(sc.displayName) + '">' + esc(sc.displayName) + "</span>" +
+        '<span class="cls" title="' + esc((sc.classDisplayName || "") + " · " + sc.methodName) + '">' +
+          esc(sc.classDisplayName ? sc.classDisplayName + " · " : "") + esc(shortName(sc.methodName)) + "</span>" +
+        '<span class="grow"></span>' +
+        '<span class="cnt">' + sc.steps.length + (sc.steps.length === 1 ? " step" : " steps") +
+          (failed ? ' <span class="f">' + failed + " failed</span>" : "") +
+          (skipped ? ' <span class="k">' + skipped + " skipped</span>" : "") + "</span>" +
+        '<span class="dur">' + fmtDur(sc.durationMs) + "</span>";
+      const toggle = () => { head.setAttribute("aria-expanded", String(!isExpanded(sc))); setExpanded(sc, !isExpanded(sc)); };
+      head.setAttribute("aria-expanded", String(isExpanded(sc)));
+      head.addEventListener("click", toggle);
+      head.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        toggle(); ev.preventDefault();
+      });
       card.appendChild(head);
+
+      // body: the full "where", any wait, then the steps
+      const body = el("div", "card-body");
+      body.innerHTML =
+        '<div class="where">' + esc(sc.classDisplayName || "") + ' <span class="mth mono">· ' + esc(sc.methodName) + "</span></div>" +
+        (sc.waitedMs > 0 ? '<div class="where">waited ' + fmtDur(sc.waitedMs) + " for " + esc(sc.waitedFor || "") + "</div>" : "");
+      card.appendChild(body);
 
       // activity diagram (frame + centred spine + initial/final; interior nodes come in later tasks)
       if (SHOW_DIAGRAM) card.appendChild(buildActivityDiagram(sc, rerender));
+      const host = SHOW_DIAGRAM ? card : body;
 
       // one scenario-level drill panel: every step in run order
       const drill = buildScenarioDrill(sc);
       if (!SHOW_DIAGRAM) drill.classList.add("open");
 
       // open the panel and focus/scroll to a step; toggle closes when re-focusing the same step
-      function focusStep(stepId, { toggle = false } = {}){
+      function focusStep(stepId, { toggle = false, scroll = true } = {}){
         const open = drill.classList.contains("open");
         const same = drill.dataset.focus === stepId;
         if (toggle && open && same){
@@ -2049,7 +2033,7 @@
         for (const entry of drill.querySelectorAll(".step-entry"))
           entry.classList.toggle("focus", entry.dataset.step === stepId);
         const entry = drill.querySelector('.step-entry[data-step="' + stepId + '"]');
-        if (entry) entry.scrollIntoView({ block: "nearest" });
+        if (entry && scroll) entry.scrollIntoView({ block: "nearest" });
         return true;
       }
 
@@ -2091,10 +2075,10 @@
 
       const drillHost = el("div", "drill-host");
       drillHost.appendChild(drill);
-      card.appendChild(drillHost);
+      host.appendChild(drillHost);
 
       // opener for the pre-expand pass: open the drill focused on a step
-      openers.push({ scenarioId: sc.scenarioId, open: (stepId) => focusStep(stepId) });
+      openers.push({ scenarioId: sc.scenarioId, open: (stepId) => focusStep(stepId, { scroll: false }) });
 
       return card;
     }
@@ -2141,6 +2125,15 @@
       }
     });
 
+    // "12 lines · 3.4 KB": what the reader is about to open, since attachments start collapsed
+    function attSize(value){
+      const v = value == null ? "" : String(value);
+      const lines = v === "" ? 0 : v.split("\n").length;
+      const bytes = new Blob([v]).size;
+      const size = bytes < 1024 ? bytes + " B" : (bytes / 1024).toFixed(1) + " KB";
+      return lines + (lines === 1 ? " line" : " lines") + " · " + size;
+    }
+
     // every step of a scenario, in run order, as one expandable list
     function buildScenarioDrill(sc){
       const p = el("div", "drill scenario-drill");
@@ -2174,7 +2167,8 @@
         if (s.attachments && s.attachments.length){
           h += '<div class="sec"><h4>Attachments</h4>' +
             s.attachments.map((a) =>
-              '<div class="att"><div class="an">' + esc(a.name) + '</div><pre class="exc">' + esc(a.value) + "</pre></div>"
+              '<details class="att"><summary><span class="an">' + esc(a.name) + '</span><span class="asz">' + attSize(a.value) + "</span></summary>" +
+              '<pre class="exc">' + esc(a.value) + "</pre></details>"
             ).join("") + "</div>";
         }
         if (s.effects && s.effects.length){

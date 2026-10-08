@@ -160,7 +160,7 @@ public sealed class HtmlReportSinkTests : IDisposable
     }
 
     [Fact]
-    public async Task An_overview_table_leads_and_passing_cards_start_collapsed()
+    public async Task Scenarios_are_one_compact_list_that_expands_in_place()
     {
         var path = Path.Combine(_dir, "raun-report.html");
         var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
@@ -172,11 +172,29 @@ public sealed class HtmlReportSinkTests : IDisposable
         await sink.PublishAsync(new RunFinished());
 
         var html = await File.ReadAllTextAsync(path);
-        Assert.Contains("function buildOverview(", html, StringComparison.Ordinal);
-        Assert.Contains("ov.id = \"overview\";", html, StringComparison.Ordinal);
+        // no separate overview table: the cards are the list, and a click expands a card where it is
+        Assert.DoesNotContain("function buildOverview(", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("scrollIntoView({ block: \"start\"", html, StringComparison.Ordinal);
         // a card is collapsed unless the scenario failed or the reader opened it
         Assert.Contains("const isExpanded = (sc) => expandedFor.has(sc.scenarioId) ? expandedFor.get(sc.scenarioId) : sc.status === \"failed\";", html, StringComparison.Ordinal);
-        Assert.Contains(".card.collapsed .drill-host{ display:none; }", html, StringComparison.Ordinal);
+        Assert.Contains(".card.collapsed .card-body{ display:none; }", html, StringComparison.Ordinal);
+        // the collapsed row gives way on the "where" text first, so the title and timing keep their room
+        Assert.Contains(".card-head .cls{ flex:0 100 auto;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Attachments_start_collapsed()
+    {
+        var path = Path.Combine(_dir, "raun-report-att.html");
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var def = Def();
+        await sink.PublishAsync(new RunStarted(1));
+        await sink.PublishAsync(new ScenarioFinished(def, [Passed(def.Nodes[0])]));
+        await sink.PublishAsync(new RunFinished());
+
+        var html = await File.ReadAllTextAsync(path);
+        Assert.Contains("'<details class=\"att\">", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<details class=\"att\" open", html, StringComparison.Ordinal);
     }
 
     [Fact]
