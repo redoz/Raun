@@ -1,35 +1,28 @@
-# Pattern branching and the move to .NET 11
+# Pattern branching
 
-Status: design approved 2026-10-03; spec awaiting review.
+Status: design approved 2026-10-03. Revised 2026-10-08: the move to .NET 11 is deferred; branching
+ships on .NET 10 / C# 14 first.
 
 ## Goal
 
-Make scenarios able to branch on *what a step returned*, not only on whether it returned `true`, and
-move Raun onto .NET 11 / C# 15 so that union types and closed class hierarchies — the C# 15 features
-whose cases the compiler knows completely — work as first-class scenario branches.
+Make scenarios able to branch on *what a step returned*, not only on whether it returned `true`.
 
-Decisions taken in brainstorming (Patrik, 2026-10-03):
+Decisions taken in brainstorming (Patrik, 2026-10-03, revised 2026-10-08):
 
-- Raun moves its floor to .NET 11, **now, on RC1**, and its packages target **`net11.0` only**.
 - Scenarios gain **`switch` on any step result plus `is` patterns** in `if`, `when` clauses included.
 - The runtime branching model becomes **"a condition selects an arm"** (approach A). The other
   approach was lowering `switch` to nested `if`/`else` over hidden tests; it was rejected because it
   makes the internal graph unlike the source.
+- **Raun stays on .NET 10 (`net10.0`, C# 14).** The move to .NET 11 is a later, separate piece of
+  work (see "Deferred: .NET 11").
 
 Out of scope:
 
+- The move to .NET 11, and with it C# 15 unions, closed hierarchies and collection expression
+  arguments.
 - Unions in Raun's own public model (for example, `StepResult` as a union). That breaks every
-  consumer for an internal benefit, so it is deferred.
-- Extension indexers and labeled `break`/`continue`.
-- Closed hierarchies for Raun's phases, because custom phases must stay possible.
-
-## C# 15, as shipped in RC1
-
-The features C# 15 stabilizes are collection expression arguments (`[with(...), ...]`), unions,
-closed class hierarchies, extension indexers, labeled `break`/`continue`, and non-virtual static
-interface members. Dictionary expressions, closed enums and the inference improvements did *not*
-make C# 15. Collection expression arguments need nothing from Raun: since #2 a step argument is any
-expression, lowered by symbol. A test pins that.
+  consumer for an internal benefit.
+- Labeled `break`/`continue`.
 
 ## 1. Authoring surface
 
@@ -56,8 +49,9 @@ switch (await When.SubmitOrder(order))
 }
 ```
 
-With `public union OrderOutcome(Accepted, Rejected);` as the step's result type, the compiler checks
-that the switch is exhaustive. Raun neither needs nor adds exhaustiveness checking of its own.
+Raun adds no exhaustiveness checking of its own. Once Raun is on C# 15, a `union` or `closed`
+hierarchy as the step's result type gets the compiler's exhaustiveness check with no change to Raun,
+because the generated selector is the scenario's own `switch`.
 
 Rules:
 
@@ -81,8 +75,7 @@ Rules:
   earlier step output a `when` reads becomes a dependency of the condition node, because the branch
   decision reads it.
 - **No match.** When no arm matches, every arm is reported not taken. This is exactly what a bare
-  `if` whose condition is false does today. Exhaustiveness is the compiler's job: unions and closed
-  hierarchies get it, and other types do not need it.
+  `if` whose condition is false does today.
 - **Locals.**
   - A local assigned differently across arms is merged after the branch, with one source per arm.
   - An arm that leaves the local alone contributes a pass-through.
@@ -106,8 +99,8 @@ public readonly record struct Guard(int ConditionIndex, int Arm);
 
 public sealed class ScenarioNode
 {
-    // replaces Func<object?, bool>? EvaluateCondition
-    public Func<object?, int>? SelectArm { get; init; }      // 0..Arms.Count-1, or -1: no arm
+    // replaces Func<object?, bool>? EvaluateCondition; reads the value via inputs.Get<T>(Index)
+    public Func<IStepInputs, int>? SelectArm { get; init; }  // 0..Arms.Count-1, or -1: no arm
     public IReadOnlyList<string> Arms { get; init; } = [];   // labels as written
     …
 }
@@ -118,7 +111,9 @@ public sealed class ScenarioNode
   - for a `switch`, a `switch` statement whose sections return their arm index;
   - for an `if`, `value is P ? 0 : 1`, or `(bool)value ? 0 : 1`.
 
-  Pattern semantics, `when` clauses and union matching are therefore the compiler's, never Raun's.
+  It takes the scenario's inputs, not just the condition's value, because a `when` clause may read
+  other step outputs. Pattern semantics and `when` clauses are therefore the compiler's, never
+  Raun's.
   Patterns are lowered through `ArgumentLowering`, so the type and member names in them resolve in
   generated code, as they do in arguments.
 - **`Arms`** labels each arm as the source writes it: `case Accepted accepted`,
@@ -161,40 +156,25 @@ public sealed class ScenarioNode
 - **Emitter.** It emits `SelectArm`, `Arms`, `Guard(…, arm)`, and the case nodes' `Invoke`, which
   repeats the pattern and returns the variables.
 
-## 4. Platform: .NET 11 RC1
+## 4. Samples, docs and release
 
-- **Toolchain:**
-  - The .NET 11 RC1 SDK, `11.0.100-rc.1.26425.128`, installed from Microsoft's official installer.
-  - A new `global.json` pins the repo to the 11.0 SDK, with `allowPrerelease: true` and
-    `rollForward: latestFeature`.
-- **Targets.** Every project in `src`, `test` and `samples` moves to `net11.0`. The generator stays
-  `netstandard2.0`. `LangVersion latest` is C# 15.
-- **Generator baseline.** `RaunRoslynVersion` becomes the Roslyn version that ships inside RC1. It is
-  read from the installed SDK's compiler during implementation, not guessed. That package is on
-  Microsoft's `dotnet-tools` feed, not nuget.org, so:
-  - `nuget.config` adds that feed, with package-source mapping so it serves only
-    `Microsoft.CodeAnalysis*`;
-  - lock files are regenerated, and locked-mode restore keeps working;
-  - the test harness uses the same compiler, so union and closed-hierarchy sources compile in tests.
-- **SDK floor.**
-  - `RaunMinimumSdkVersion` becomes `11.0.100-rc.1`. RAUN018 says the .NET 11 SDK is required.
-  - `SdkFloorTests` gains prerelease version strings (`11.0.100-rc.1.26425.128`, `11.0.100-preview.7…`,
-    `11.0.100`), proving the comparison orders prereleases correctly.
-- **CI and release workflows.** `setup-dotnet` installs `11.0.x` with `dotnet-quality: preview`.
-- **Dependencies.** `Microsoft.Extensions.*` and Aspire stay on their stable 10.x versions, which run
-  on net11. No RC libraries are taken.
-- **Samples and docs.**
-  - `samples/AppointmentTests` gains a union scenario (a step returning
-    `union BookingOutcome(Booked, Waitlisted, Refused)`, switched on) and a closed-hierarchy one.
-  - The README's install section names the .NET 11 SDK and C# 15. Its supported-subset section
-    documents `switch` and `is` branching.
-  - RELEASING.md records the contract break.
-- **Release.** `v0.3.0-beta.1`.
-- **GA follow-up (November 2026).** When .NET 11 is GA:
-  - move `global.json`, `RaunMinimumSdkVersion` and `RaunRoslynVersion` to the GA versions;
-  - take the GA Roslyn from nuget.org;
-  - remove the `dotnet-tools` feed and its mapping;
-  - drop `dotnet-quality: preview`.
+- **Platform:** unchanged. `net10.0`, C# 14, the current SDK floor and Roslyn baseline.
+- **Samples.** `samples/AppointmentTests` gains a scenario that switches on a step returning a small
+  record hierarchy (for example `Booked`, `Waitlisted`, `Refused`), with one `case` per subtype.
+- **Docs.** The README's supported-subset section documents `switch` and `is` branching. RELEASING.md
+  records the generator-contract break.
+- **Release.** `v0.3.0-beta.1`, because the generated-code contract breaks.
+
+## Deferred: .NET 11
+
+When Raun moves to .NET 11 (after GA, November 2026), as its own spec:
+
+- `net11.0` everywhere, the SDK floor (RAUN018) at 11.0.100, CI on the 11.0 SDK.
+- Tests for C# 15 types: an exhaustive switch over a `union` (a value-type case included) and over a
+  `closed` hierarchy, plus a collection expression argument (`[with(...), ...]`). No production
+  change is expected: the selector is the compiler's own `switch`, and since #2 a step argument is
+  any expression.
+- Union and closed-hierarchy samples.
 
 ## Testing
 
@@ -219,21 +199,14 @@ TDD throughout, behavioural first: generated code is compiled and run through th
   - `return`, `throw` or `goto case` in a section is RAUN003.
   - A switch on a non-step is RAUN011.
   - Each fires once, at the offending node.
-- **Unions and closed hierarchies** compiled with the RC1 compiler. An exhaustive switch over each
-  lowers and runs every arm. A union case that is a value type is matched through the boxed `Value`.
-- **Collection expression arguments** in a step argument (`[with(StringComparer.Ordinal), a, b]`)
-  lower and run.
+- **Value-type results.** A switch on a step returning a value type (an `int`, with constant and
+  relational patterns) selects the right arm and binds unboxed values.
 - **Snapshots.** A new snapshot for a switch scenario. The existing conditional snapshot moves once,
   deliberately, because `EvaluateCondition` becomes `SelectArm`. That change is reviewed, not
   rubber-stamped.
-- **Platform.** `SdkFloorTests` prerelease cases. Every existing test stays green on net11.0.
 
 ## Risks
 
-- **RC churn before GA.** Union pattern lowering changed twice during the previews ("try both" in
-  Preview 7). Because `SelectArm` is the compiler's own `switch`, Raun inherits whatever GA decides
-  and re-implements nothing. Only the union samples could need a touch at GA.
-- **The `dotnet-tools` feed** is Microsoft's public engineering feed. Package-source mapping limits it
-  to `Microsoft.CodeAnalysis*`, and it is removed at GA.
-- **Consumers must install the RC SDK** to take `0.3.0-beta.1`. RAUN018 makes that a clear build
-  error, not a silent green run of zero tests.
+- **Contract break.** `EvaluateCondition` and `Guard.WhenValue` disappear, so code generated by 0.2
+  does not run on 0.3. The generator and runtime ship in one package, and scenario libraries are not
+  supported, so a rebuild is all a consumer needs.

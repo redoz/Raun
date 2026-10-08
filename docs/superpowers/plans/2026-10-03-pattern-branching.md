@@ -1,10 +1,10 @@
-# Pattern Branching and .NET 11 Implementation Plan
+# Pattern Branching Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Scenarios branch on what a step returned — `if (await S is P)` and
-`switch (await S) { … }` — on a runtime model where a condition node selects one of N arms, with
-Raun moved to `net11.0` / C# 15 so union and closed-hierarchy results switch exhaustively.
+`switch (await S) { … }` — on a runtime model where a condition node selects one of N arms. Raun
+stays on .NET 10; the .NET 11 move is deferred (see the spec).
 
 **Architecture:**
 - A condition node carries `SelectArm: Func<IStepInputs, int>` and `Arms: string[]`; a guard is
@@ -14,22 +14,10 @@ Raun moved to `net11.0` / C# 15 so union and closed-hierarchy results switch exh
 - Pattern variables come from hidden per-arm *case nodes*. Locals merge N-way after a branch.
 - The parser stays the only reader of scenario bodies (one-walker design).
 
-**Tech Stack:** C# 15 / .NET 11 RC1 SDK, Roslyn incremental generator (netstandard2.0),
+**Tech Stack:** C# 14 / .NET 10 SDK, Roslyn incremental generator (netstandard2.0),
 Microsoft.Testing.Platform, xUnit v3 tests, jj for version control.
 
-**Spec:** `docs/superpowers/specs/2026-10-03-branching-and-net11-design.md`. Two refinements below
-are recorded in the spec in Task 7.
-
-### Spec refinements decided while planning
-
-1. **`SelectArm` is `Func<IStepInputs, int>`, not `Func<object?, int>`.** A `when` clause may read
-   *other* step outputs, so the selector needs the inputs. It reads the condition's own value through
-   `IStepInputs.Get<T>(conditionIndex)`, the same way `Invoke` and `FormatDisplayName` already work.
-2. **The shipped generator stays on its current Roslyn baseline. Only the test projects take the RC
-   compiler package.** Branching uses no new Roslyn API: the generator copies patterns into generated
-   code, and the consumer's compiler binds them. Building the shipped generator against an RC package
-   would put a prerelease dependency into the package for no gain. The tests still need the C# 15
-   parser to compile union sources, so they reference it.
+**Spec:** `docs/superpowers/specs/2026-10-03-pattern-branching-design.md`.
 
 ## Global Constraints
 
@@ -54,10 +42,9 @@ are recorded in the spec in Task 7.
   - Accept with `RAUN_ACCEPT_SNAPSHOTS=1` *only* where a task says a snapshot moves on purpose, and
     review the diff.
   - Any other snapshot that moves is a bug.
-- **TFM: `net11.0` only.** The SDK floor is `11.0.100`; MSBuild version comparison ignores the
-  prerelease suffix.
-- **Libraries stay on their stable 10.x versions.** `Microsoft.Extensions.*` and Aspire are not moved
-  to RC packages.
+- **Platform unchanged:** `net10.0`, C# 14, current SDK floor, Roslyn baseline and package versions.
+  Nothing in this plan touches `global.json`, `nuget.config`, `Directory.Packages.props` or the
+  workflows.
 - **New authoring shapes need a sample.** Each one gets a `SampleSources` `*Scenario` constant, listed
   in `LoweringCoverageTests.DslFor`.
 
@@ -68,234 +55,20 @@ down. Each one has a test in the task named.
 
 1. **A `when` clause throws at run time,** for example by reading `x.Items[3]` on a short list. The
    condition step should be reported **Failed** with that exception, not crash the scheduler or
-   silently take no arm. (Task 2)
+   silently take no arm. (Task 1)
 2. **A `switch` where no arm matches and there is no `default`.** Every arm step should be **not
-   taken**, with the reason `matched no arm`. The steps after the switch should still run. (Task 5)
+   taken**, with the reason `matched no arm`. The steps after the switch should still run. (Task 4)
 3. **A pattern variable used in a display-name placeholder,** e.g. `[StepName("notify {reason}")]`
-   with `rejected.Reason`. The name should render the live value. (Task 4)
+   with `rejected.Reason`. The name should render the live value. (Task 3)
 4. **A local assigned in some arms of a switch, but not all, then read after the switch, where the
    switch has a `default`.** The arms that left it alone should pass the earlier value through, and
-   the reader should see the value from whichever arm ran. (Task 5)
-5. **A union case that is a value type** (e.g. `union Count(int, string)`). It should match through
-   the union and bind the unboxed value. (Task 6)
+   the reader should see the value from whichever arm ran. (Task 4)
+5. **A switch on a value-type result** (a step returning `int`, with `case 0:`, `case > 100:` and
+   `case int n:`). It should pick the right arm and bind the unboxed value. (Task 5)
 
 ---
 
-### Task 0: Install the .NET 11 RC1 SDK
-
-**Files:** none in the repo.
-
-- [ ] **Step 1: Check whether it is already installed**
-
-Run: `dotnet --list-sdks`
-Expected: a line starting with `11.0.100-rc.1`. If it is there, skip to Step 3.
-
-- [ ] **Step 2: Install it (Patrik approved, 2026-10-03)**
-
-Run (PowerShell; this raises a UAC prompt that Patrik accepts):
-
-```powershell
-winget install --id Microsoft.DotNet.SDK.Preview --exact --accept-source-agreements --accept-package-agreements
-```
-
-If winget is unavailable, download the installer from https://dotnet.microsoft.com/download/dotnet/11.0
-(SDK `11.0.100-rc.1.26425.128`, Windows x64) and run it.
-
-- [ ] **Step 3: Verify**
-
-Run: `dotnet --list-sdks`
-Expected: both `10.0.401` and `11.0.100-rc.1.26425.128`.
-
-Then record the RC compiler version, which Task 1 needs:
-
-```bash
-powershell -c "(Get-Item 'C:\Program Files\dotnet\sdk\11.0.100-rc.1.26425.128\Roslyn\bincore\Microsoft.CodeAnalysis.CSharp.dll').VersionInfo.ProductVersion"
-```
-
-Expected: a value like `5.12.0-2.26421.7+<sha>`. Keep the part before `+`; it is
-`<RC_ROSLYN>` in Task 1.
-
----
-
-### Task 1: Move the platform to .NET 11
-
-**Files:**
-- Create: `global.json`
-- Modify: `nuget.config`, `Directory.Packages.props`, `Directory.Build.props:10`
-- Modify: every `<TargetFramework>net10.0</TargetFramework>` under `src/`, `test/` and `samples/`.
-  Find them with `grep -rln "net10.0" --include=*.csproj .`
-- Modify: `src/Raun/buildTransitive/Raun.props:20-34`
-- Modify: `test/Raun.Mtp.Test/SdkFloorTests.cs:19-41`
-- Modify: `.github/workflows/ci.yml:21-23`, `.github/workflows/release.yml` (the `setup-dotnet` step)
-- Modify: `README.md:29-31`
-- Modify: `test/Raun.Generator.Test/Raun.Generator.Test.csproj`
-- Regenerate: every `packages.lock.json` and `packages.*.lock.json`
-
-**Interfaces:**
-- Produces: a repo that builds and tests on `net11.0`. `Microsoft.CodeAnalysis.CSharp <RC_ROSLYN>`
-  is available to test projects as package version `RaunTestRoslynVersion`.
-
-- [ ] **Step 1: Write the failing floor tests**
-
-In `test/Raun.Mtp.Test/SdkFloorTests.cs`, replace the two theory data lists:
-
-```csharp
-    [Theory]
-    [InlineData("9.0.100")]
-    [InlineData("10.0.100")]
-    [InlineData("10.0.401")]
-    public async Task An_sdk_below_the_floor_fails_the_build(string sdkVersion)
-```
-
-```csharp
-    [Theory]
-    [InlineData("11.0.100")]
-    [InlineData("11.0.100-rc.1.26425.128")]   // MSBuild version comparison ignores the suffix
-    [InlineData("11.0.100-preview.7.26380.1")]
-    [InlineData("11.0.200")]
-    [InlineData("12.0.100")]
-    public async Task An_sdk_at_or_above_the_floor_builds(string sdkVersion)
-```
-
-- [ ] **Step 2: Run them to see them fail**
-
-Run: `cd /c/dev/raun-issue2 && dotnet test test/Raun.Mtp.Test --filter-class "*SdkFloorTests"`
-Expected: FAIL. `10.0.401` currently builds.
-
-- [ ] **Step 3: Raise the floor**
-
-In `src/Raun/buildTransitive/Raun.props`, set `<RaunMinimumSdkVersion>11.0.100</RaunMinimumSdkVersion>`
-and replace the comment above it:
-
-```xml
-    <!-- The SDK a Raun consumer needs: .NET 11 (C# 15). Raun targets net11.0, and an older compiler
-         cannot load Raun's source generator at all: no scenarios, no diagnostics, a green run of zero
-         tests. That is far worse than a build error, hence the check below. MSBuild's version
-         comparison ignores a prerelease suffix, so every 11.0.100 preview and RC passes it. -->
-```
-
-In the `RaunCheckSdkFloor` target's error text, change `Raun requires the .NET SDK
-$(RaunMinimumSdkVersion) or later` to `Raun requires the .NET 11 SDK ($(RaunMinimumSdkVersion) or
-later)`.
-
-- [ ] **Step 4: Pin the SDK, retarget, and add the RC compiler for tests**
-
-Create `global.json`:
-
-```json
-{
-  "sdk": {
-    "version": "11.0.100-rc.1.26425.128",
-    "allowPrerelease": true,
-    "rollForward": "latestFeature"
-  },
-  "test": {
-    "runner": "Microsoft.Testing.Platform"
-  }
-}
-```
-
-If a `global.json` already exists (it holds the `test.runner` block), merge the `sdk` block into it.
-
-Retarget every project:
-
-```bash
-cd /c/dev/raun-issue2 && grep -rln "<TargetFramework>net10.0</TargetFramework>" --include=*.csproj . | grep -v /obj/ | xargs sed -i 's#<TargetFramework>net10.0</TargetFramework>#<TargetFramework>net11.0</TargetFramework>#'
-```
-
-Change the comment in `Directory.Build.props:10` to `<!-- C# 15 (net11.0 default): unions, closed hierarchies -->`.
-
-Replace `nuget.config`:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <clear />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
-    <!-- .NET 11 RC1's compiler packages are not on nuget.org yet. This feed serves ONLY them (see
-         the mapping below), and only the test projects use them. Remove at .NET 11 GA. -->
-    <add key="dotnet-tools" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json" />
-  </packageSources>
-  <packageSourceMapping>
-    <packageSource key="nuget.org">
-      <package pattern="*" />
-    </packageSource>
-    <packageSource key="dotnet-tools">
-      <package pattern="Microsoft.CodeAnalysis.CSharp" />
-      <package pattern="Microsoft.CodeAnalysis.Common" />
-    </packageSource>
-  </packageSourceMapping>
-</configuration>
-```
-
-NuGet's source mapping picks the most specific pattern, so these two packages resolve from
-`dotnet-tools` and everything else from nuget.org. If restore cannot find `5.9.0` there for the
-generator project, add `<package pattern="Microsoft.CodeAnalysis.*" />` to `nuget.org` and pin the RC
-version in the test project only. That is Step 4b.
-
-In `Directory.Packages.props`, add next to the existing CodeAnalysis entry:
-
-```xml
-    <!-- The C# 15 parser for the generator TESTS (union and closed-hierarchy sources). The shipped
-         generator keeps its baseline above: it calls no new Roslyn API. Move to the GA package at
-         .NET 11 GA. -->
-    <RaunTestRoslynVersion>RC_ROSLYN</RaunTestRoslynVersion>
-```
-
-Put this inside a `<PropertyGroup>`, with `RC_ROSLYN` replaced by the value from Task 0 Step 3. In
-`test/Raun.Generator.Test/Raun.Generator.Test.csproj`, find the `Microsoft.CodeAnalysis.CSharp`
-reference (directly or via `Microsoft.CodeAnalysis.CSharp.Workspaces`) and add
-`VersionOverride="$(RaunTestRoslynVersion)"`. If the test project references the generator project,
-also add an explicit `<PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="$(RaunTestRoslynVersion)" />`
-so the higher version wins in the test process.
-
-- [ ] **Step 5: Update CI and the README**
-
-In both workflow files, change the `setup-dotnet` `with:` block to:
-
-```yaml
-        with:
-          dotnet-version: 11.0.x
-          dotnet-quality: preview
-```
-
-In `README.md`, replace the first paragraph of the "Install" section:
-
-```markdown
-**Requires the .NET 11 SDK (11.0.100 or later; the RC works).** Raun targets `net11.0`, and its DSL
-and branching use C# 15. An older compiler would load no generator at all — no scenarios, no
-diagnostics, a green run of zero tests — so Raun fails such a build with `RAUN018` instead.
-```
-
-- [ ] **Step 6: Regenerate the lock files and run everything**
-
-Run: `cd /c/dev/raun-issue2 && dotnet restore Raun.slnx && dotnet restore Raun.slnx --locked-mode`
-Expected: both succeed. The second proves the lock files are current.
-
-Run: `cd /c/dev/raun-issue2 && dotnet build Raun.slnx -c Release 2>&1 | grep -E "warning|error" | grep -v MINVER`
-Expected: no output.
-
-Run: `cd /c/dev/raun-issue2 && dotnet test Raun.slnx`
-Expected: all green, the new floor cases included. Any failure here is a .NET 11 behaviour change.
-Fix it in this task; do not suppress it.
-
-- [ ] **Step 7: Commit**
-
-```bash
-cd /c/dev/raun-issue2 && jj describe -m "build!: move to .NET 11 (net11.0, C# 15) on the RC1 SDK
-
-Every project targets net11.0; global.json pins the RC1 SDK; the SDK floor
-(RAUN018) is 11.0.100. The test projects take RC1's compiler package from
-the dotnet-tools feed, source-mapped to Microsoft.CodeAnalysis only, so
-union and closed-hierarchy sources compile in generator tests; the shipped
-generator keeps its baseline, since branching needs no new Roslyn API.
-Remove the feed at .NET 11 GA." && jj new
-```
-
----
-
-### Task 2: Runtime model — a condition selects an arm
+### Task 1: Runtime model — a condition selects an arm
 
 **Files:**
 - Modify: `src/Raun/Model/Guard.cs`
@@ -327,7 +100,7 @@ Remove the feed at .NET 11 GA." && jj new
   - **Generator IR:**
     - `internal readonly record struct ParsedGuard(int ConditionIndex, int Arm);`
     - `ParsedStep.Branch : ParsedBranch?`, which replaces `ConditionCoercionType`.
-  - **`ParsedBranch`** (new, in `Ir.cs`). Task 2 uses only `Truth`; Tasks 4 and 5 add the other forms.
+  - **`ParsedBranch`** (new, in `Ir.cs`). Task 1 uses only `Truth`; Tasks 3 and 4 add the other forms.
 
     ```csharp
     internal enum BranchForm { Truth, Pattern, Switch }
@@ -877,9 +650,9 @@ sources are exclusive when guarded on different arms of one condition." && jj ne
 
 ---
 
-### Task 3: N-arm branches in the parser
+### Task 2: N-arm branches in the parser
 
-Generalizes the two-arm walk, rejoin and merge to N arms, preserving behaviour. Tasks 4 and 5 then
+Generalizes the two-arm walk, rejoin and merge to N arms, preserving behaviour. Tasks 3 and 4 then
 only add new *forms*.
 
 **Files:**
@@ -888,7 +661,7 @@ only add new *forms*.
 - Test: `test/Raun.Generator.Test/ConditionalLoweringTests.cs`
 
 **Interfaces:**
-- Produces (private to `ScenarioParser`, used by Tasks 4 and 5):
+- Produces (private to `ScenarioParser`, used by Tasks 3 and 4):
 
 ```csharp
     /// <summary>One arm's walk result.</summary>
@@ -1218,7 +991,7 @@ of it merge cleanly." && jj new
 
 ---
 
-### Task 4: `is`-pattern conditions and case nodes
+### Task 3: `is`-pattern conditions and case nodes
 
 **Files:**
 - Modify: `src/Raun.Generator/Lowering/ScenarioParser.cs` (`ParseCondition`, `ParseIf`, `VarSource`,
@@ -1231,7 +1004,7 @@ of it merge cleanly." && jj new
   `test/Raun.Generator.Test/SampleSources.cs`, `test/Raun.Generator.Test/LoweringCoverageTests.cs`
 
 **Interfaces:**
-- Consumes: `ArmWalk`, `WalkArm(..., bind)`, `Rejoin` (Task 3); `ParsedBranch`, `BranchForm` (Task 2).
+- Consumes: `ArmWalk`, `WalkArm(..., bind)`, `Rejoin` (Task 2); `ParsedBranch`, `BranchForm` (Task 1).
 - Produces:
   - **`ParsedStep.CaseBinding`:**
 
@@ -1264,7 +1037,7 @@ internal sealed record ParsedCaseBinding
 }
 ```
 
-  - **`ScenarioParser.AddCaseNode`**, used by Task 5:
+  - **`ScenarioParser.AddCaseNode`**, used by Task 4:
 
 ```csharp
     private IReadOnlyDictionary<ILocalSymbol, VarSource>? AddCaseNode(
@@ -1705,7 +1478,7 @@ stay RAUN011, now saying which forms branch." && jj new
 
 ---
 
-### Task 5: `switch` on a step result
+### Task 4: `switch` on a step result
 
 **Files:**
 - Modify: `src/Raun.Generator/Lowering/ScenarioParser.cs` (`ParseStatement`, new `ParseSwitch`)
@@ -1714,8 +1487,8 @@ stay RAUN011, now saying which forms branch." && jj new
   `LoweringCoverageTests.cs`, `GeneratorSnapshotTests.cs` (one new snapshot)
 
 **Interfaces:**
-- Consumes: `WalkArm`, `Rejoin`, `ArmWalk` (Task 3); `AddCaseNode`, `PatternVariables`,
-  `StepValueFor`, `CaseVariable` (Task 4); `ParsedBranch.Sections` (Task 2).
+- Consumes: `WalkArm`, `Rejoin`, `ArmWalk` (Task 2); `AddCaseNode`, `PatternVariables`,
+  `StepValueFor`, `CaseVariable` (Task 3); `ParsedBranch.Sections` (Task 1).
 
 - [ ] **Step 1: Add the sample scenario**
 
@@ -2141,8 +1914,8 @@ with fully qualified type names in its patterns. There is a `Case` node per bind
 cd /c/dev/raun-issue2 && jj describe -m "feat(generator): switch on a step's result
 
 switch (await S) { … } branches N ways: each section is an arm, chosen by
-the compiler's own switch over the recorded value, so any pattern, 'when'
-clause and (with C# 15) union matching just works. A section ends in break;
+the compiler's own switch over the recorded value, so any pattern and 'when'
+clause just works. A section ends in break;
 return/throw/goto case stay RAUN003. Labels lower like step arguments: a
 when-clause reading an earlier step makes the condition depend on it, and
 await or a step call in one is RAUN007. Section pattern variables are
@@ -2152,184 +1925,97 @@ taken." && jj new
 
 ---
 
-### Task 6: C# 15 — unions, closed hierarchies, collection arguments
+### Task 5: Value-type results and the appointment sample
 
 **Files:**
-- Test: `test/Raun.Generator.Test/CSharp15BranchTests.cs` (new), `SampleSources.cs`,
-  `LoweringCoverageTests.cs`
-- Create: `samples/AppointmentTests/BookingOutcomeScenarios.cs` (+ its steps, in the sample's own
+- Modify: `test/Raun.Generator.Test/SampleSources.cs` (two steps added to `OutcomeDsl`)
+- Test: `test/Raun.Generator.Test/SwitchBranchLoweringTests.cs`
+- Create: `samples/AppointmentTests/BookingOutcomeScenarios.cs` (and its steps, in the sample's own
   DSL files)
 
 **Interfaces:**
-- Consumes: everything from Tasks 2-5. No new production code is expected here. If any test needs
-  production changes, the earlier task missed a case; fix it there.
+- Consumes: everything from Tasks 1-4. No new production code is expected here. If a test needs a
+  production change, the earlier task missed a case: fix it there, with a test in that task's file.
 
-- [ ] **Step 1: Write the tests**
+- [ ] **Step 1: Add the value-type steps**
 
-Add to `SampleSources.cs` a union and closed-hierarchy DSL. It uses the same scenario-class
-boilerplate as `OutcomeDsl`:
-
-```csharp
-    public const string Csharp15Dsl =
-        """
-        using System;
-        using System.Collections.Generic;
-        using System.Threading.Tasks;
-        using Raun;
-
-        namespace Cs15Demo;
-
-        public sealed record Booked(string Slot);
-        public sealed record Waitlisted(int Position);
-        public union BookingOutcome(Booked, Waitlisted, int);   // int: a value-type case
-
-        public closed record class Gate;
-        public sealed record Open(string By) : Gate;
-        public sealed record Shut(string Reason) : Gate;
-
-        public sealed partial class Cs15When : When<NoWorld>
-        {
-            [StepName("booking {who}")]
-            public Task<BookingOutcome> Book(string who) => Task.FromResult<BookingOutcome>(who switch
-            {
-                "a" => new Booked("09:00"),
-                "b" => new Waitlisted(3),
-                _ => 42,
-            });
-
-            [StepName("the gate")]
-            public Task<Gate> TheGate(bool open)
-                => Task.FromResult<Gate>(open ? new Open("guard") : new Shut("closed for lunch"));
-        }
-
-        public sealed partial class Cs15Then : Then<NoWorld>
-        {
-            [StepName("{text} noted")]
-            public Task Note(string text) => Task.CompletedTask;
-
-            [StepName("{names.Count} names")]
-            public Task Names(HashSet<string> names) => Task.CompletedTask;
-        }
-
-        public abstract class Cs15Suite : Scenarios<NoWorld>
-        {
-            public Cs15When When => Steps<Cs15When>();
-            public Cs15Then Then => Steps<Cs15Then>();
-        }
-        """;
-
-    public const string Csharp15Scenario =
-        """
-
-        public sealed class Cs15Scenarios : Cs15Suite
-        {
-            [Scenario("a union switch is exhaustive")]
-            public async Task Union()
-            {
-                switch (await When.Book("c"))
-                {
-                    case Booked booked: await Then.Note(booked.Slot); break;
-                    case Waitlisted waitlisted: await Then.Note("position " + waitlisted.Position); break;
-                    case int code: await Then.Note("code " + code); break;
-                }
-            }
-
-            [Scenario("a closed hierarchy switch is exhaustive")]
-            public async Task Closed()
-            {
-                switch (await When.TheGate(false))
-                {
-                    case Open open: await Then.Note("opened by " + open.By); break;
-                    case Shut shut: await Then.Note(shut.Reason); break;
-                }
-            }
-
-            [Scenario("a collection expression argument")]
-            public async Task CollectionArguments()
-            {
-                await Then.Names([with(StringComparer.OrdinalIgnoreCase), "a", "A", "b"]);
-            }
-        }
-        """;
-```
-
-Add `[nameof(SampleSources.Csharp15Scenario)] = SampleSources.Csharp15Dsl,` to
-`LoweringCoverageTests.DslFor`.
-
-Create `test/Raun.Generator.Test/CSharp15BranchTests.cs`:
+In `SampleSources.OutcomeDsl`, add to `OutcomeWhen`:
 
 ```csharp
-using Raun.Model;
-using Xunit;
-
-namespace Raun.Generator.Test;
-
-/// <summary>C# 15 types branch with no help from Raun: the compiler's switch does the matching
-/// (union "try both" semantics included) and its exhaustiveness check covers the cases.</summary>
-public class CSharp15BranchTests
-{
-    private static GeneratorResult Generate() => GeneratorHarness.Run(SampleSources.Csharp15Dsl + SampleSources.Csharp15Scenario);
-
-    private static ScenarioDefinition Scenario(GeneratorResult result, string method)
-        => result.Definitions().Single(d => d.MethodName.EndsWith("." + method, StringComparison.Ordinal));
-
-    [Fact]
-    public async Task A_value_type_union_case_matches_and_binds_unboxed()
-    {
-        var result = Generate();
-        result.AssertCompiles();
-
-        var results = await Scenario(result, "Union").RunAsync();
-
-        var noted = results.Where(r => r.Node.OperationName == "Note").ToList();
-        Assert.Equal(StepStatus.Passed, noted.Single(r => r.Status == StepStatus.Passed).Status);
-        Assert.Equal("code 42 noted", noted.Single(r => r.Status == StepStatus.Passed).DisplayName);
-    }
-
-    [Fact]
-    public async Task A_closed_hierarchy_switch_runs_the_matching_case()
-    {
-        var result = Generate();
-        result.AssertCompiles();
-
-        var results = await Scenario(result, "Closed").RunAsync();
-
-        Assert.Equal("closed for lunch noted", results.Single(r => r.Node.OperationName == "Note" && r.Status == StepStatus.Passed).DisplayName);
-    }
-
-    [Fact]
-    public async Task A_collection_expression_argument_lowers_and_runs()
-    {
-        var result = Generate();
-        result.AssertCompiles();
-
-        var results = await Scenario(result, "CollectionArguments").RunAsync();
-
-        Assert.Equal(StepStatus.Passed, results.Single(r => r.Node.OperationName == "Names").Status);
-    }
-
-    [Fact]
-    public async Task The_csharp15_sample_is_clean()
-        => Assert.Empty(await GeneratorHarness.DiagnoseAsync(SampleSources.Csharp15Dsl + SampleSources.Csharp15Scenario, requireCompilable: true));
-}
+            [StepName("counting {id}")]
+            public Task<int> Count(string id) => Task.FromResult(id.Length * 50);
 ```
 
-`GeneratorHarness` parses with `LanguageVersion.Preview`, which includes C# 15. It references the
-running framework's assemblies, which are net11.0 after Task 1, so `UnionAttribute`/`IUnion` resolve.
+and to `OutcomeThen`:
 
-- [ ] **Step 2: Run them**
+```csharp
+            [StepName("{n} counted")]
+            public Task Counted(int n) => Task.CompletedTask;
+```
 
-Run: `cd /c/dev/raun-issue2 && dotnet test test/Raun.Generator.Test --filter-class "*CSharp15BranchTests"`
-Expected: PASS. If one fails:
-- a parse error means the RC compiler is not being used, so recheck Task 1 Step 4;
-- a lowering failure is a bug in Tasks 2-5: fix it there, with a test in that task's file.
+- [ ] **Step 2: Write the tests**
 
-- [ ] **Step 3: Add the sample scenario**
+Add to `SwitchBranchLoweringTests.cs`:
 
-In `samples/AppointmentTests`, add a step returning a union and a scenario switching on it. Follow
-the sample's own structure: its world, and its `Given`/`When`/`Then` step classes. Add a
-`union BookingOutcome(Booked, Waitlisted, Refused)` and a step
-`When.TryToBook(patient)` → `Task<BookingOutcome>`. Then add:
+```csharp
+    [Theory]
+    [InlineData("", "nothing")]       // 0
+    [InlineData("abc", "many")]       // 150
+    [InlineData("a", "some 50")]      // 50
+    public async Task A_switch_on_a_value_type_result_picks_the_arm_and_binds_unboxed(string id, string expected)
+    {
+        var source = SampleSources.OutcomeDsl +
+            $$"""
+
+            public sealed class CountScenarios : OutcomeScenarios
+            {
+                [Scenario("count")]
+                public async Task Run()
+                {
+                    switch (await When.Count("{{id}}"))
+                    {
+                        case 0:
+                            await Then.Told("nothing");
+                            break;
+                        case > 100:
+                            await Then.Told("many");
+                            break;
+                        case int n:
+                            await Then.Told("some " + n);
+                            break;
+                    }
+                }
+            }
+            """;
+
+        var result = GeneratorHarness.Run(source);
+        result.AssertCompiles();
+
+        var results = await result.Definitions().Single().RunAsync();
+
+        var ran = Assert.Single(results, r => r.Node.OperationName == "Told" && r.Status == StepStatus.Passed);
+        Assert.Equal("customer told " + expected, ran.DisplayName);
+    }
+```
+
+- [ ] **Step 3: Run them**
+
+Run: `cd /c/dev/raun-issue2 && dotnet test test/Raun.Generator.Test --filter-method "*value_type_result*"`
+Expected: PASS. A failure is a bug in the case-node or selector emission (Task 3 or 4): the case
+node must read the value as `__inputs.Get<int>(c)`, never through `object`.
+
+- [ ] **Step 4: Add the sample scenario**
+
+In `samples/AppointmentTests`, add a small record hierarchy returned by one new step, and a scenario
+switching on it. Follow the sample's own structure (its world, its `Given`/`When`/`Then` step
+classes, its scenario base):
+
+```csharp
+public abstract record BookingOutcome;
+public sealed record Booked(Appointment Appointment) : BookingOutcome;
+public sealed record Waitlisted(int Position) : BookingOutcome;
+public sealed record Refused(string Reason) : BookingOutcome;
+```
 
 ```csharp
 public sealed class BookingOutcomeScenarios : ClinicScenarios   // the sample's scenario base
@@ -2348,36 +2034,30 @@ public sealed class BookingOutcomeScenarios : ClinicScenarios   // the sample's 
 }
 ```
 
-Add a closed-hierarchy scenario the same way: a `closed record class` with two or three cases
-returned by one new step, and a scenario switching on it with one `case` per subtype and no
-`default` (the compiler checks exhaustiveness).
-
-Adapt the names to the sample's real types and steps. Add only steps the scenarios need, and keep
+Adapt the names to the sample's real types and steps. Add only steps the scenario needs, and keep
 them deterministic.
 
 Run: `cd /c/dev/raun-issue2 && dotnet test samples/AppointmentTests`
-Expected: PASS, with each new scenario's taken arm passing and the other arms not taken.
+Expected: PASS, with the taken arm passing and the other arms not taken.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-cd /c/dev/raun-issue2 && jj describe -m "test: union, closed-hierarchy and collection-argument scenarios
+cd /c/dev/raun-issue2 && jj describe -m "test: switch on a value-type result; booking-outcome sample
 
-C# 15 types branch with nothing added to Raun: a union switch (a value-type
-case included) and a closed-hierarchy switch run the matching arm, and a
-collection expression with with(...) is an ordinary step argument. The
-appointment sample gains a booking-outcome union switch." && jj new
+A switch over a step returning int picks the arm by constant, relational
+and type patterns and binds the unboxed value. The appointment sample
+switches on a booking outcome hierarchy." && jj new
 ```
 
 ---
 
-### Task 7: Docs, spec refinements, release
+### Task 6: Docs and release
 
 **Files:**
 - Modify: `README.md` ("Supported scenario subset", a new "Branching on a step's result" section
   after "Conditionals")
-- Modify: `docs/RELEASING.md` (generator↔runtime contract; GA follow-up)
-- Modify: `docs/superpowers/specs/2026-10-03-branching-and-net11-design.md` (the two refinements)
+- Modify: `docs/RELEASING.md` (generator↔runtime contract)
 
 - [ ] **Step 1: README**
 
@@ -2420,8 +2100,7 @@ switch (await When.SubmitOrder(order))
 
 The patterns are C#'s own: Raun hands the switch to the compiler, so anything C# matches, a branch
 matches. A pattern's variables (`big`, `accepted`, `rejected`) are step outputs inside their arm.
-With C# 15, a `union` or a `closed` hierarchy as the step's result makes the compiler check that
-every case is handled. A `when` clause follows the rules for step arguments; one that reads an
+A `when` clause follows the rules for step arguments; one that reads an
 earlier step's result makes the decision wait for that step. A section ends in `break;`.
 ````
 
@@ -2436,40 +2115,7 @@ In "Generator ↔ runtime contract", add a first bullet:
   nothing generated outlives its package.
 ```
 
-At the end of the file, add:
-
-```markdown
-## .NET 11 GA follow-up (November 2026)
-
-0.3.x is built on the .NET 11 RC1 SDK. When .NET 11 is GA:
-
-- `global.json`: the GA SDK version.
-- `Directory.Packages.props`: `RaunTestRoslynVersion` becomes the GA `Microsoft.CodeAnalysis.CSharp`
-  on nuget.org.
-- `nuget.config`: remove the `dotnet-tools` source and its mapping.
-- Both workflows: drop `dotnet-quality: preview`.
-- `dotnet restore Raun.slnx` to refresh the lock files, then release.
-```
-
-- [ ] **Step 3: Record the spec refinements**
-
-In the spec's "2. Runtime model":
-- Change the `SelectArm` line in the code block to
-  `public Func<IStepInputs, int>? SelectArm { get; init; }   // reads the value via inputs.Get<T>(Index)`.
-- Add after the first bullet: "*(Refined in planning: the selector takes the inputs, because a
-  `when` clause may read other step outputs.)*"
-
-In "4. Platform", replace the "Generator baseline" bullet with:
-
-```markdown
-- **Generator baseline:** unchanged. Branching needs no new Roslyn API (the generator copies patterns
-  into generated code; the consumer's compiler binds them), so the shipped generator carries no
-  prerelease dependency. Only the **test projects** take RC1's compiler package — from Microsoft's
-  `dotnet-tools` feed, source-mapped to `Microsoft.CodeAnalysis*` — so union and closed-hierarchy
-  sources compile in tests. *(Refined in planning.)*
-```
-
-- [ ] **Step 4: Full verification**
+- [ ] **Step 3: Full verification**
 
 Run: `cd /c/dev/raun-issue2 && dotnet build Raun.slnx -c Release 2>&1 | grep -E "warning|error" | grep -v MINVER`
 Expected: no output.
@@ -2477,13 +2123,13 @@ Expected: no output.
 Run: `cd /c/dev/raun-issue2 && dotnet test Raun.slnx -c Release 2>&1 | grep -E "^failed|failed:|succeeded:"`
 Expected: `failed: 0`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-cd /c/dev/raun-issue2 && jj describe -m "docs: branching on a step's result; .NET 11 contract and GA follow-up" && jj new
+cd /c/dev/raun-issue2 && jj describe -m "docs: branching on a step's result; the 0.3 generator contract break" && jj new
 ```
 
-- [ ] **Step 6: Land and release (ask Patrik before tagging)**
+- [ ] **Step 5: Land and release (ask Patrik before tagging)**
 
 Move `main` to the last commit and push:
 
