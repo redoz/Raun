@@ -175,6 +175,10 @@ When Raun moves to .NET 11 (after GA, November 2026), as its own spec:
   change is expected: the selector is the compiler's own `switch`, and since #2 a step argument is
   any expression.
 - Union and closed-hierarchy samples.
+- Code style under the .NET 11 SDK: with `AnalysisLevel` at `latest-all`, it enables every IDE style
+  rule at its default preference, which contradicts this repo's style (about 1,100 errors: `var`,
+  expression bodies, file-scoped namespaces). Record the repo's preferences in `.editorconfig` (or pin
+  `AnalysisLevel`), then lift the `global.json` pin to the 10.0 SDK bands.
 
 ## Testing
 
