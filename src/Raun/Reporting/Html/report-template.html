@@ -126,7 +126,7 @@
   }
   .brand{ display:flex; align-items:center; gap:12px; margin-bottom:18px; }
   .brand .logo{
-    width:34px; height:34px; border-radius:9px; flex:none;
+    width:34px; height:34px; border-radius:3px; flex:none;
     background:linear-gradient(135deg, var(--accent), #7aa2ff);
     display:grid; place-items:center; color:#fff; font-weight:800; font-size:15px;
     box-shadow:var(--shadow-sm);
@@ -136,7 +136,7 @@
   .chips{ display:flex; gap:12px; flex-wrap:wrap; }
   .chip{
     display:flex; align-items:center; gap:12px;
-    background:var(--surface); border:1px solid var(--border); border-radius:13px;
+    background:var(--surface); border:1px solid var(--border); border-radius:3px;
     padding:11px 15px 11px 13px; box-shadow:var(--shadow-sm); min-width:118px;
   }
   .chip .dot{ width:10px; height:10px; border-radius:50%; flex:none; }
@@ -153,7 +153,7 @@
   .phase-legend .pl-title{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); }
   .phase-legend .it{ display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); }
   .phase-legend b{
-    width:19px; height:19px; border-radius:5px; flex:none; display:grid; place-items:center;
+    width:19px; height:19px; border-radius:2px; flex:none; display:grid; place-items:center;
     color:#fff; font:700 10.5px/1 var(--mono);
     box-shadow:var(--shadow-sm); border:1px solid rgba(0,0,0,.08);
   }
@@ -165,12 +165,9 @@
   main{ max-width:1180px; margin:0 auto; padding:14px 24px 60px; }
   .card{
     position:relative; background:var(--surface); border:1px solid var(--border);
-    border-left:4px solid var(--edge); border-radius:10px; box-shadow:var(--shadow-sm);
-    margin:6px 0;
+    border-radius:3px; margin:6px 0;
   }
-  .card.s-passed{ --edge:var(--bar-pass); }
-  .card.s-failed{ --edge:var(--bar-fail); }
-  .card.s-skipped{ --edge:var(--bar-skip); }
+  .card.s-failed{ border-color:color-mix(in srgb, var(--fail) 45%, var(--border)); }
 
   /* one row per scenario: twisty, status, title, where, steps, duration. The "where" text gives way
      first (flex-shrink 100), so the title and the timing keep their room; both ellipsize, never wrap. */
@@ -201,7 +198,7 @@
 
   .pill{
     display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
-    padding:4px 10px; border-radius:999px; white-space:nowrap;
+    padding:3px 8px; border-radius:2px; white-space:nowrap;
   }
   .pill .pd{ width:7px; height:7px; border-radius:50%; }
   .pill.passed{ color:var(--pass-text); background:var(--pass-bg); } .pill.passed .pd{ background:var(--pass); }
@@ -210,30 +207,22 @@
 
   /* ---------- DRILL PANEL (scenario-level: every step in run order) ---------- */
   .drill-host{ margin-top:4px; }
-  .drill{
-    display:none; margin-top:12px; background:var(--surface-2); border:1px solid var(--border);
-    border-radius:11px; padding:14px 16px; box-shadow:var(--shadow-sm);
-  }
+  .drill{ display:none; margin-top:10px; }
   .drill.open{ display:block; }
-  .step-list{ display:flex; flex-direction:column; gap:10px; }
+  .step-list{ display:flex; flex-direction:column; border-top:1px solid var(--border); }
   .step-entry{
-    border:1px solid var(--border); border-left:3px solid var(--se-edge, var(--border-strong));
-    border-radius:9px; background:var(--surface); padding:10px 13px 12px; scroll-margin-top:18px;
-    transition:box-shadow .15s ease, border-color .15s ease;
+    border-bottom:1px solid var(--border); padding:10px 4px 12px; scroll-margin-top:18px;
+    transition:box-shadow .15s ease, background .15s ease;
   }
-  .step-entry.ph-given{ --se-edge:var(--ph-given); }
-  .step-entry.ph-when{ --se-edge:var(--ph-when); }
-  .step-entry.ph-then{ --se-edge:var(--ph-then); }
-  .step-entry.status-failed{ --se-edge:var(--bar-fail); }
-  .step-entry.status-skipped{ --se-edge:var(--bar-skip); }
+  .step-entry.status-failed{ background:color-mix(in srgb, var(--fail-bg) 55%, transparent); }
   .step-entry.focus{ box-shadow:0 0 0 2px var(--accent); }
   .step-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .step-head .sx{
     font:700 10.5px/1 var(--mono); color:var(--faint);
-    background:var(--inset); border-radius:5px; padding:4px 6px; flex:none;
+    background:var(--inset); border-radius:2px; padding:4px 6px; flex:none;
   }
   .step-head .ph-chip{
-    color:#fff; padding:2px 7px; border-radius:5px; flex:none;
+    color:#fff; padding:2px 7px; border-radius:2px; flex:none;
     font:700 11px/1.5 var(--mono);
   }
   .step-head .dn{ font-weight:640; font-size:13.5px; }
@@ -258,12 +247,12 @@
   .eff .of{ font-family:var(--mono); color:var(--faint); }
   .eff .da{ color:var(--muted); font-size:12px; }
   .exc{
-    margin:0; padding:11px 13px; border-radius:9px; overflow:auto;
+    margin:0; padding:11px 13px; border-radius:2px; overflow:auto;
     background:var(--fail-bg); border:1px solid color-mix(in srgb, var(--fail) 30%, transparent);
     color:var(--ink); font-family:var(--mono); font-size:12px; line-height:1.55; white-space:pre;
   }
   .skipnote{
-    display:flex; align-items:center; gap:9px; padding:10px 13px; border-radius:9px;
+    display:flex; align-items:center; gap:9px; padding:10px 13px; border-radius:2px;
     background:var(--skip-bg); border:1px solid color-mix(in srgb, var(--skip) 30%, transparent);
     color:var(--skip-text); font-size:12.5px;
   }
