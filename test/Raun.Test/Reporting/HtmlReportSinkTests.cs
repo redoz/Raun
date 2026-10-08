@@ -195,6 +195,8 @@ public sealed class HtmlReportSinkTests : IDisposable
         var html = await File.ReadAllTextAsync(path);
         Assert.Contains("'<details class=\"att\">", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<details class=\"att\" open", html, StringComparison.Ordinal);
+        // an attachment is data, not a failure: it never borrows the exception block's red
+        Assert.Contains("'<pre class=\"att-body\">' + esc(a.value)", html, StringComparison.Ordinal);
     }
 
     [Fact]

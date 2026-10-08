@@ -239,6 +239,12 @@
   .att > summary .an{ font-weight:600; }
   .att > summary .asz{ font:11.5px var(--mono); color:var(--faint); margin-left:6px; }
   .att[open] > summary{ margin-bottom:4px; }
+  /* an attachment is data, not a failure: neutral inset, never the exception red */
+  .att-body{
+    margin:0; padding:11px 13px; border-radius:2px; overflow:auto;
+    background:var(--inset); border:1px solid var(--border);
+    color:var(--ink); font-family:var(--mono); font-size:12px; line-height:1.55; white-space:pre;
+  }
   .eff{ display:flex; flex-direction:column; gap:5px; }
   .eff .e{ display:flex; align-items:center; gap:9px; font-size:12.5px; flex-wrap:wrap; }
   .eff .vd{ width:9px; height:9px; border-radius:50%; flex:none; }
@@ -2157,7 +2163,7 @@
           h += '<div class="sec"><h4>Attachments</h4>' +
             s.attachments.map((a) =>
               '<details class="att"><summary><span class="an">' + esc(a.name) + '</span><span class="asz">' + attSize(a.value) + "</span></summary>" +
-              '<pre class="exc">' + esc(a.value) + "</pre></details>"
+              '<pre class="att-body">' + esc(a.value) + "</pre></details>"
             ).join("") + "</div>";
         }
         if (s.effects && s.effects.length){
