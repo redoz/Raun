@@ -1009,4 +1009,77 @@ public static class SampleSources
             }
         }
         """;
+
+    // Pattern branching: a step returns one of several outcome records; scenarios branch on which.
+    public const string OutcomeDsl =
+        """
+        using System.Threading.Tasks;
+        using Raun;
+
+        namespace OutcomeDemo;
+
+        public abstract record Outcome;
+        public sealed record Accepted(string Shipment, decimal Total, bool Express) : Outcome;
+        public sealed record Rejected(string Reason) : Outcome;
+        public sealed record Pending : Outcome;
+
+        public sealed partial class OutcomeWhen : When<NoWorld>
+        {
+            [StepName("submitting order {id}")]
+            public Task<Outcome> Submit(string id) => Task.FromResult<Outcome>(id switch
+            {
+                "ok" => new Accepted("S1", 10m, false),
+                "big" => new Accepted("S2", 5000m, false),
+                "fast" => new Accepted("S3", 10m, true),
+                "no" => new Rejected("out of stock"),
+                _ => new Pending(),
+            });
+        }
+
+        public sealed partial class OutcomeThen : Then<NoWorld>
+        {
+            [StepName("shipment {shipment} scheduled")]
+            public Task Shipped(string shipment) => Task.CompletedTask;
+
+            [StepName("customer told {reason}")]
+            public Task Told(string reason) => Task.CompletedTask;
+
+            [StepName("review of {total:0.00}")]
+            public Task Review(decimal total) => Task.CompletedTask;
+
+            [StepName("order pending")]
+            public Task StillPending() => Task.CompletedTask;
+        }
+
+        public abstract class OutcomeScenarios : Scenarios<NoWorld>
+        {
+            public OutcomeWhen When => Steps<OutcomeWhen>();
+            public OutcomeThen Then => Steps<OutcomeThen>();
+        }
+        """;
+
+    public const string IsPatternScenario =
+        """
+
+        public sealed class IsPatternScenarios : OutcomeScenarios
+        {
+            [Scenario("rejected order tells the customer")]
+            public async Task Rejection()
+            {
+                if (await When.Submit("no") is Rejected rejected)
+                    await Then.Told(rejected.Reason);
+                else
+                    await Then.StillPending();
+            }
+
+            [Scenario("not rejected order ships")]
+            public async Task NotRejected()
+            {
+                if (await When.Submit("ok") is not Accepted accepted)
+                    await Then.StillPending();
+                else
+                    await Then.Shipped(accepted.Shipment);
+            }
+        }
+        """;
 }

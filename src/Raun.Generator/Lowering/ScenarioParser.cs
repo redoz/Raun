@@ -104,6 +104,13 @@ internal sealed class ScenarioParser
         public override IEnumerable<int> Producers => Indices;
     }
 
+    /// <summary>A pattern variable: element <paramref name="Element"/> of a case node's result
+    /// (the value itself when the case binds one variable).</summary>
+    private sealed record CaseVariable(int Index, int Element, int Count, TypeSyntax Type) : VarSource
+    {
+        public override IEnumerable<int> Producers => [Index];
+    }
+
     /// <summary>
     /// A local a failed statement declared or assigned. It still counts as a step output, so its
     /// readers are not reported a second time for one mistake — but no step stands behind it, and the
@@ -384,28 +391,94 @@ internal sealed class ScenarioParser
     /// </summary>
     private bool ParseIf(IfStatementSyntax statement)
     {
-        var condition = ParseCondition(statement.Condition);
+        var parsed = ParseCondition(statement.Condition);
 
         // The arms are walked even under a broken condition, so their own problems are reported too.
-        var conditionIndex = condition?.Index ?? -1;
+        var conditionIndex = parsed?.Step.Index ?? -1;
         var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
+
+        // A pattern's variables are step outputs in the arm C#'s definite assignment puts them in:
+        // arm 0 for a positive pattern, the else for a top-level `not`.
+        IReadOnlyDictionary<ILocalSymbol, VarSource>? bind0 = null, bind1 = null;
+        if (parsed is { Branch.Form: BranchForm.Pattern } p && p.PatternVariables.Count > 0)
+        {
+            var negated = p.Branch.Pattern is UnaryPatternSyntax { OperatorToken.RawKind: (int)SyntaxKind.NotKeyword };
+            var vIs = IsPatternExpression(IdentifierName("__v"), p.Branch.Pattern!);
+            var match = negated
+                ? PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, ParenthesizedExpression(vIs))
+                : (ExpressionSyntax)vIs;
+            var arm = negated ? 1 : 0;
+            var binding = AddCaseNode(conditionIndex, arm, p.Step.ResultType, match, p.PatternVariables, p.Branch.ArmLabels[arm]);
+            if (negated)
+            {
+                bind1 = binding;
+            }
+            else
+            {
+                bind0 = binding;
+            }
+        }
+        else if (parsed is null)
+        {
+            // A refused condition's variables were reported with it: in both arms they are failed
+            // outputs, so their readers are not reported a second time for the one mistake.
+            bind0 = bind1 = PatternVariables(statement.Condition)
+                .ToDictionary<ILocalSymbol, ILocalSymbol, VarSource>(local => local, _ => FailedOutput.Instance, SymbolEqualityComparer.Default);
+        }
 
         var arms = new List<ArmWalk>
         {
-            WalkArm([statement.Statement], conditionIndex, arm: 0, parentVars),
-            WalkArm(statement.Else is { } elseClause ? [elseClause.Statement] : [], conditionIndex, arm: 1, parentVars),
+            WalkArm([statement.Statement], conditionIndex, arm: 0, parentVars, bind0),
+            WalkArm(statement.Else is { } elseClause ? [elseClause.Statement] : [], conditionIndex, arm: 1, parentVars, bind1),
         };
 
-        return Rejoin(statement, conditionIndex, parentVars, arms, ok: condition is not null);
+        return Rejoin(statement, conditionIndex, parentVars, arms, ok: parsed is not null);
     }
 
     /// <summary>
     /// RAUN011: the condition is an awaited step call whose result can drive a C# <c>if</c>
-    /// (<c>bool</c>, an implicit conversion to it, or <c>operator true</c>). Returns the condition step,
-    /// or null when there is none to guard on.
+    /// (<c>bool</c>, an implicit conversion to it, or <c>operator true</c>), or an awaited step call
+    /// tested by an <c>is</c> pattern. Returns the condition step, its branch, and the variables the
+    /// pattern declares, or null when there is no step to guard on.
     /// </summary>
-    private ParsedStep? ParseCondition(ExpressionSyntax condition)
+    private (ParsedStep Step, ParsedBranch Branch, IReadOnlyList<ILocalSymbol> PatternVariables)? ParseCondition(ExpressionSyntax condition)
     {
+        if (condition is IsPatternExpressionSyntax { Expression: AwaitExpressionSyntax { Expression: InvocationExpressionSyntax patternCall } } isPattern)
+        {
+            var tested = ResolveCall(patternCall, Descriptors.InvalidCondition);
+            if (tested is null || tested.ResultType is null)
+            {
+                if (tested is not null)
+                {
+                    Report(Descriptors.InvalidCondition, condition);
+                }
+
+                return null;
+            }
+
+            var lowered = ArgumentLowering.Lower(_model, isPattern.Pattern, StepValueFor(loop: null));
+            foreach (var violation in lowered.Violations)
+            {
+                Report(Descriptors.InvalidArgument, violation.Node, violation.Subject, violation.Reason);
+            }
+
+            if (lowered.Violations.Count > 0)
+            {
+                return null;
+            }
+
+            var patternStep = BuildStep(tested, groupId: null, _prevFrontier);
+            var patternBranch = new ParsedBranch
+            {
+                Form = BranchForm.Pattern,
+                ValueType = patternStep.ResultType,
+                Pattern = lowered.Node,
+                ArmLabels = ["is " + isPattern.Pattern.ToString(), "else"],
+            };
+            MarkAsCondition(patternStep, patternBranch);
+            return (patternStep, patternBranch, PatternVariables(isPattern.Pattern));
+        }
+
         if (condition is not AwaitExpressionSyntax { Expression: InvocationExpressionSyntax invocation })
         {
             Report(Descriptors.InvalidCondition, condition);
@@ -425,13 +498,74 @@ internal sealed class ScenarioParser
         }
 
         var step = BuildStep(call, groupId: null, _prevFrontier);
-        MarkAsCondition(step, new ParsedBranch
+        var branch = new ParsedBranch
         {
             Form = BranchForm.Truth,
             ValueType = step.ResultType,
             ArmLabels = ["if", "else"],
+        };
+        MarkAsCondition(step, branch);
+        return (step, branch, []);
+    }
+
+    /// <summary>The variables a pattern or condition declares (<c>Rejected r</c>,
+    /// <c>{ Total: var t }</c>), in order.</summary>
+    private List<ILocalSymbol> PatternVariables(SyntaxNode node)
+        => node.DescendantNodesAndSelf()
+            .OfType<SingleVariableDesignationSyntax>()
+            .Select(d => _model.GetDeclaredSymbol(d))
+            .OfType<ILocalSymbol>()
+            .ToList();
+
+    /// <summary>
+    /// Adds the hidden case node of one arm — guarded on that arm, depending on the condition — which
+    /// re-matches the arm's pattern on the recorded value and returns its variables, and returns the
+    /// arm's bindings of those variables to it. Null when the pattern declares none.
+    /// </summary>
+    private Dictionary<ILocalSymbol, VarSource>? AddCaseNode(
+        int conditionIndex, int arm, TypeSyntax valueType, ExpressionSyntax match, IReadOnlyList<ILocalSymbol> variables, string label)
+    {
+        if (variables.Count == 0 || conditionIndex < 0)
+        {
+            return null;
+        }
+
+        var resultType = variables.Count == 1
+            ? TypeSyntaxFactory.From(variables[0].Type)
+            : TupleType(SeparatedList(variables.Select(v => TupleElement(TypeSyntaxFactory.From(v.Type)))));
+        ExpressionSyntax result = variables.Count == 1
+            ? IdentifierName(variables[0].Name)
+            : TupleExpression(SeparatedList(variables.Select(v => Argument(IdentifierName(v.Name)))));
+
+        var index = _nextIndex++;
+        _steps.Add(new ParsedStep
+        {
+            Index = index,
+            StepId = GenStableId.ForStep(_scenarioId, "case:" + conditionIndex + ":" + arm),
+            Phase = _steps.First(s => s.Index == conditionIndex).Phase,
+            OperationName = "Case",
+            HasResult = true,
+            ResultType = resultType,
+            DisplayNameTemplate = "«" + label + "»",
+            IsSynthetic = true,
+            Guards = [.. _guards, new ParsedGuard(conditionIndex, arm)],
+            DependsOn = [conditionIndex],
+            CaseBinding = new ParsedCaseBinding
+            {
+                ConditionIndex = conditionIndex,
+                ValueType = valueType,
+                Match = match,
+                Result = result,
+            },
         });
-        return step;
+
+        var bindings = new Dictionary<ILocalSymbol, VarSource>(SymbolEqualityComparer.Default);
+        for (var i = 0; i < variables.Count; i++)
+        {
+            bindings[variables[i]] = new CaseVariable(index, i, variables.Count, resultType);
+        }
+
+        return bindings;
     }
 
     /// <summary>Closes a top-level statement: the next statement joins on <paramref name="frontier"/>
@@ -1007,16 +1141,7 @@ internal sealed class ScenarioParser
 
         var (receiver, keyPrefix, phase) = resolved;
 
-        ExpressionSyntax? StepValue(ISymbol symbol) => symbol switch
-        {
-            ILocalSymbol local when _vars.TryGetValue(local, out var source)
-                => source is FailedOutput ? IdentifierName(local.Name) : Spell(source),
-            IParameterSymbol parameter when loop is { } element
-                && SymbolEqualityComparer.Default.Equals(parameter, element.Variable) => Num(element.Value),
-            _ => null,
-        };
-
-        var lowering = ArgumentLowering.LowerCall(_model, invocation, StepValue);
+        var lowering = ArgumentLowering.LowerCall(_model, invocation, StepValueFor(loop));
         var ok = true;
         foreach (var violation in lowering.Violations)
         {
@@ -1034,6 +1159,18 @@ internal sealed class ScenarioParser
             ? new StepCall(invocation, member, phase, method, resultType, lowering, loop, receiver, keyPrefix)
             : null;
     }
+
+    /// <summary>How a scenario-level symbol that carries a step's value is spelled in lowered code — a
+    /// step-output local, or <paramref name="loop"/>'s variable — and null for anything else. Step
+    /// arguments and patterns share it, so they read step outputs the same way.</summary>
+    private System.Func<ISymbol, ExpressionSyntax?> StepValueFor(LoopElement? loop) => symbol => symbol switch
+    {
+        ILocalSymbol local when _vars.TryGetValue(local, out var source)
+            => source is FailedOutput ? IdentifierName(local.Name) : Spell(source),
+        IParameterSymbol parameter when loop is { } element
+            && SymbolEqualityComparer.Default.Equals(parameter, element.Variable) => Num(element.Value),
+        _ => null,
+    };
 
     /// <summary>
     /// The Setup node of a scenario with a world: node 0, which awaits the world's creation and hands
@@ -1325,7 +1462,7 @@ internal sealed class ScenarioParser
     /// <summary>
     /// How a step-output local is read inside an emitted step: a scalar is
     /// <c>__inputs.Get&lt;T&gt;(i)</c>, an array-bound group a <c>new T[] { … }</c> over its elements'
-    /// gets.
+    /// gets, a pattern variable its case node's result (or one element of it).
     /// </summary>
     private ExpressionSyntax Spell(VarSource source) => source switch
     {
@@ -1337,6 +1474,11 @@ internal sealed class ScenarioParser
             .WithInitializer(InitializerExpression(
                 SyntaxKind.ArrayInitializerExpression,
                 SeparatedList<ExpressionSyntax>(group.Indices.Select(i => InputsGet(group.ElementType, i))))),
+        CaseVariable variable => variable.Count == 1
+            ? InputsGet(variable.Type, variable.Index)
+            : MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                InputsGet(variable.Type, variable.Index),
+                IdentifierName("Item" + (variable.Element + 1).ToString(System.Globalization.CultureInfo.InvariantCulture))),
         _ => throw new System.InvalidOperationException("a failed output is never spelled"),
     };
 

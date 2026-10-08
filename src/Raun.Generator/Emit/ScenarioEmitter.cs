@@ -316,7 +316,9 @@ internal static class ScenarioEmitter
                 branch.ArmLabels.Select(label => (ExpressionSyntax)Lit(label)))));
         }
 
-        members.Add(Set("Invoke", BuildInvokeLambda(step)));
+        members.Add(Set("Invoke", step.CaseBinding is { } binding
+            ? CaseInvokeLambda(binding)
+            : BuildInvokeLambda(step)));
 
         if (step.FormatExpression is { } format)
         {
@@ -344,15 +346,7 @@ internal static class ScenarioEmitter
             // A merge/pass-through never runs: the scheduler resolves it from its sources; teardown is
             // run outside the DAG. The delegate exists only to satisfy the required member.
             return InvokeLambda()
-                .WithExpressionBody(InvocationExpression(
-                        MemberAccessExpression(
-                            SyntaxKind.SimpleMemberAccessExpression,
-                            Names.Global("System", "Threading", "Tasks", "Task"),
-                            GenericName(Identifier("FromResult"))
-                                .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList<TypeSyntax>(
-                                    NullableType(PredefinedType(Token(SyntaxKind.ObjectKeyword))))))))
-                    .WithArgumentList(ArgumentList(SingletonSeparatedList(
-                        Argument(LiteralExpression(SyntaxKind.NullLiteralExpression))))));
+                .WithExpressionBody(TaskFromResult(LiteralExpression(SyntaxKind.NullLiteralExpression)));
         }
 
         var awaitExpr = AwaitExpression(call);
@@ -402,6 +396,30 @@ internal static class ScenarioEmitter
             .AddModifiers(Token(SyntaxKind.AsyncKeyword))
             .WithBlock(Block(bodyStatements));
     }
+
+    /// <summary>A case node's body: <c>static (__inputs, __ctx) => { var __v = __inputs.Get&lt;T&gt;(c);
+    /// if (MATCH) return Task.FromResult&lt;object?&gt;(RESULT); throw … }</c>. Its guard means the
+    /// arm was chosen, so MATCH holds; the throw guards a generator bug.</summary>
+    private static ParenthesizedLambdaExpressionSyntax CaseInvokeLambda(ParsedCaseBinding binding)
+        => InvokeLambda().WithBlock(Block(
+            LocalDeclarationStatement(VariableDeclaration(IdentifierName("var"))
+                .WithVariables(SingletonSeparatedList(VariableDeclarator(Identifier("__v"))
+                    .WithInitializer(EqualsValueClause(InputsGet(binding.ValueType, binding.ConditionIndex)))))),
+            IfStatement(binding.Match, ReturnStatement(TaskFromResult(binding.Result))),
+            ThrowStatement(ObjectCreationExpression(Names.Global("System", "InvalidOperationException"))
+                .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(
+                    Lit("A case node ran but its arm's pattern did not match; this is a Raun generator bug."))))))));
+
+    /// <summary><c>global::System.Threading.Tasks.Task.FromResult&lt;object?&gt;(value)</c>.</summary>
+    private static InvocationExpressionSyntax TaskFromResult(ExpressionSyntax value)
+        => InvocationExpression(
+                MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    Names.Global("System", "Threading", "Tasks", "Task"),
+                    GenericName(Identifier("FromResult"))
+                        .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList<TypeSyntax>(
+                            NullableType(PredefinedType(Token(SyntaxKind.ObjectKeyword))))))))
+            .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(value))));
 
     /// <summary><c>static (__inputs, __ctx) => …</c>, the shape of <c>ScenarioNode.Invoke</c>.</summary>
     private static ParenthesizedLambdaExpressionSyntax InvokeLambda()
@@ -477,6 +495,7 @@ internal static class ScenarioEmitter
     /// <c>static __inputs => …</c> choosing the arm from the condition's recorded value, read with
     /// <c>__inputs.Get&lt;T&gt;(index)</c>. Truth: <c>(__v) ? 0 : 1</c>, so Roslyn picks bool, an
     /// implicit conversion, or <c>operator true</c> at compile time; the scheduler never reflects.
+    /// Pattern: <c>(__v is P) ? 0 : 1</c>, the compiler's own <c>is</c> over the recorded value.
     /// </summary>
     private static SimpleLambdaExpressionSyntax SelectArmLambda(int conditionIndex, ParsedBranch branch)
     {
@@ -484,6 +503,8 @@ internal static class ScenarioEmitter
         ExpressionSyntax body = branch.Form switch
         {
             BranchForm.Truth => ConditionalExpression(ParenthesizedExpression(value), Num(0), Num(1)),
+            BranchForm.Pattern => ConditionalExpression(
+                ParenthesizedExpression(IsPatternExpression(value, branch.Pattern!)), Num(0), Num(1)),
             _ => throw new System.NotSupportedException(branch.Form.ToString()),
         };
 

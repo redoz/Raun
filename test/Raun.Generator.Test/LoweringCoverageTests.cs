@@ -45,6 +45,7 @@ public class LoweringCoverageTests
         [nameof(SampleSources.UsesFreeScenario)] = SampleSources.UsesDsl,
         [nameof(SampleSources.UsesSitesScenario)] = SampleSources.UsesDsl,
         [nameof(SampleSources.CompositionScenario)] = SampleSources.CompositionDsl,
+        [nameof(SampleSources.IsPatternScenario)] = SampleSources.OutcomeDsl,
     };
 
     private static IEnumerable<string> ScenarioConstants() =>

@@ -327,4 +327,31 @@ internal sealed record ParsedStep
 
     /// <summary>When this step is a branch's condition: how it selects an arm. Null otherwise.</summary>
     public ParsedBranch? Branch { get; init; }
+
+    /// <summary>For a case node: re-runs one arm's pattern on the condition's recorded value and
+    /// returns the pattern's variables. Null for every other node.</summary>
+    public ParsedCaseBinding? CaseBinding { get; init; }
+}
+
+/// <summary>
+/// A case node's body, lowered: the arm's pattern re-matched on the condition's recorded value
+/// (<c>__v</c>), and the variables it declares.
+/// </summary>
+internal sealed record ParsedCaseBinding
+{
+    private readonly Syn<TypeSyntax> _valueType;
+    private readonly Syn<ExpressionSyntax> _match;
+    private readonly Syn<ExpressionSyntax> _result;
+
+    public int ConditionIndex { get; init; }
+
+    /// <summary>The condition step's result type.</summary>
+    public TypeSyntax ValueType { get => _valueType.Node!; init => _valueType = value; }
+
+    /// <summary>A bool expression over <c>__v</c> that matches the arm and declares its variables,
+    /// e.g. <c>__v is Rejected rejected</c> or <c>!(__v is not Rejected rejected)</c>.</summary>
+    public ExpressionSyntax Match { get => _match.Node!; init => _match = value; }
+
+    /// <summary>The variables: <c>rejected</c>, or <c>(big, total)</c>.</summary>
+    public ExpressionSyntax Result { get => _result.Node!; init => _result = value; }
 }

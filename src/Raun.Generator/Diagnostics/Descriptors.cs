@@ -104,7 +104,7 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor InvalidCondition = new(
         "RAUN011",
         "Scenario condition must be an awaited step call",
-        "An 'if' condition in a scenario must be an awaited step call whose result is usable as a C# condition (bool, an implicit conversion to bool, or 'operator true')",
+        "A scenario branch must be 'if (await <step>)', 'if (await <step> is <pattern>)', or 'switch (await <step>)'; the condition here is not — a step's result must be what the branch decides on, and only an 'is' pattern may test it",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
