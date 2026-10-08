@@ -39,7 +39,8 @@ public class RunLoopFrameworkTests
             Guards = guards ?? [],
             MergeSources = mergeSources ?? [],
             IsSynthetic = synthetic,
-            EvaluateCondition = evaluate,
+            SelectArm = evaluate is null ? null : inputs => evaluate(inputs.Get<object?>(index)) ? 0 : 1,
+            Arms = evaluate is null ? [] : ["if", "else"],
             Invoke = invoke ?? ((_, _) => Task.FromResult<object?>(null)),
         };
 

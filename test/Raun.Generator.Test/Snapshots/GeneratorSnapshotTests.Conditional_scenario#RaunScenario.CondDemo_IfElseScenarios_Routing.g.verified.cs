@@ -75,7 +75,12 @@ namespace Raun.Generated
                     0,
                     1
                 },
-                EvaluateCondition = static __o => ((bool)__o!) ? true : false,
+                SelectArm = static __inputs => (__inputs.Get<bool>(2)) ? 0 : 1,
+                Arms = new string[]
+                {
+                    "if",
+                    "else"
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::CondDemo.CondGiven>().IsPriority();
@@ -102,7 +107,7 @@ namespace Raun.Generated
                 },
                 Guards = new global::Raun.Model.Guard[]
                 {
-                    new global::Raun.Model.Guard(2, true)
+                    new global::Raun.Model.Guard(2, 0)
                 },
                 Invoke = static async (__inputs, __ctx) =>
                 {
@@ -130,7 +135,7 @@ namespace Raun.Generated
                 },
                 Guards = new global::Raun.Model.Guard[]
                 {
-                    new global::Raun.Model.Guard(2, false)
+                    new global::Raun.Model.Guard(2, 1)
                 },
                 Invoke = static async (__inputs, __ctx) =>
                 {

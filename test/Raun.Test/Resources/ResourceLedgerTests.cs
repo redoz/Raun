@@ -111,8 +111,8 @@ public class ResourceLedgerTests
         var ledger = new ResourceLedger(
         [
             Node(0),
-            Node(1, dependsOn: [0], guards: [new Guard(0, true)]),
-            Node(2, dependsOn: [0], guards: [new Guard(0, false)]),
+            Node(1, dependsOn: [0], guards: [new Guard(0, 0)]),
+            Node(2, dependsOn: [0], guards: [new Guard(0, 1)]),
             Node(3, mergeSources: [1, 2]),
             Node(4, dependsOn: [3]),
         ]);
@@ -125,7 +125,7 @@ public class ResourceLedgerTests
     public void A_guard_orders_a_step_after_its_condition()
     {
         // 1 is guarded on 0 but declares no DependsOn edge to it.
-        var ledger = new ResourceLedger([Node(0), Node(1, guards: [new Guard(0, true)])]);
+        var ledger = new ResourceLedger([Node(0), Node(1, guards: [new Guard(0, 0)])]);
         ledger.Claim(0, "condition reads", Jane, LifecycleVerb.Edit);
         ledger.Claim(1, "guarded edit", Jane, LifecycleVerb.Edit);
     }

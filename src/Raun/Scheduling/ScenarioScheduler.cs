@@ -74,6 +74,9 @@ public sealed class ScenarioScheduler
         var results = new StepResult?[count];
         var outputs = new object?[count];
         var inputs = new StepInputs(outputs, status);
+
+        // The arm each passed condition node selected, decided once when it passed; -1 = no arm.
+        var selectedArm = new int[nodes.Count];
         var capacity = _maxParallelism > 0 ? _maxParallelism : int.MaxValue;
 
         // The scenario-wide timeout from [Scenario(Timeout = …)]. Its token asks running steps to stop,
@@ -229,9 +232,9 @@ public sealed class ScenarioScheduler
                             anyUnresolved = true;
                             break;
                         case StepStatus.Passed:
-                            if (EvaluateGuard(nodes[guard.ConditionIndex], outputs[guard.ConditionIndex]) != guard.WhenValue)
+                            if (selectedArm[guard.ConditionIndex] != guard.Arm)
                             {
-                                guardNotTaken ??= nodes[guard.ConditionIndex].OperationName;
+                                guardNotTaken ??= NotTakenReason(nodes[guard.ConditionIndex], selectedArm[guard.ConditionIndex]);
                             }
 
                             break;
@@ -259,7 +262,7 @@ public sealed class ScenarioScheduler
                 }
                 else if (guardNotTaken is not null)
                 {
-                    await ApplyTerminalAsync(i, StepStatus.NotTaken, $"not taken: {guardNotTaken}").ConfigureAwait(false);
+                    await ApplyTerminalAsync(i, StepStatus.NotTaken, guardNotTaken).ConfigureAwait(false);
                     progressed = true;
                 }
                 else if (notTaken is not null)
@@ -309,7 +312,7 @@ public sealed class ScenarioScheduler
                     if (node.DependsOn.All(d => status[d] == StepStatus.Passed)
                         && node.WaitsFor.All(w => status[w] is StepStatus.Passed or StepStatus.NotTaken)
                         && node.Guards.All(g => status[g.ConditionIndex] == StepStatus.Passed
-                            && EvaluateGuard(nodes[g.ConditionIndex], outputs[g.ConditionIndex]) == g.WhenValue))
+                            && selectedArm[g.ConditionIndex] == g.Arm))
                     {
                         pending.Remove(i);
                         status[i] = StepStatus.Running;
@@ -570,21 +573,53 @@ public sealed class ScenarioScheduler
         {
             var outcome = await task.ConfigureAwait(false); // RunNodeAsync never throws
 
-            status[i] = outcome.Result.Status;
-            if (outcome.Result.Status == StepStatus.Passed)
+            var result = outcome.Result;
+            status[i] = result.Status;
+            if (result.Status == StepStatus.Passed)
             {
                 outputs[i] = outcome.Output;
+                if (nodes[i].SelectArm is { } select)
+                {
+                    // The branch decision is part of the condition step: a when-clause that throws
+                    // fails the step that holds it, never the scheduler, and its arms cascade as for
+                    // any failed dependency.
+                    try
+                    {
+                        selectedArm[i] = select(inputs);
+                    }
+                    catch (Exception ex)
+                    {
+                        status[i] = StepStatus.Failed;
+                        result = new StepResult
+                        {
+                            Node = result.Node,
+                            DisplayName = result.DisplayName,
+                            Status = StepStatus.Failed,
+                            StartedAt = result.StartedAt,
+                            Duration = result.Duration,
+                            Exception = new InvalidOperationException(
+                                $"Choosing a branch after '{nodes[i].OperationName}' threw.", ex),
+                            Logs = result.Logs,
+                            LogEntries = result.LogEntries,
+                            Attachments = result.Attachments,
+                            Effects = result.Effects,
+                            Lineage = result.Lineage,
+                            TraceId = result.TraceId,
+                            SpanId = result.SpanId,
+                        };
+                    }
+                }
             }
 
             if (_simulatedTime)
             {
-                simFinishOffset![i] = simStartOffset![i] + outcome.Result.Duration;
+                simFinishOffset![i] = simStartOffset![i] + result.Duration;
             }
 
-            results[i] = outcome.Result;
+            results[i] = result;
             if (observer is not null)
             {
-                await observer.OnStepFinishedAsync(outcome.Result).ConfigureAwait(false);
+                await observer.OnStepFinishedAsync(result).ConfigureAwait(false);
             }
         }
 
@@ -759,11 +794,12 @@ public sealed class ScenarioScheduler
         }
     }
 
-    /// <summary>Coerces a condition node's boxed output to its branch value using the generator-emitted
-    /// <see cref="ScenarioNode.EvaluateCondition"/>. <see cref="ScenarioDefinition.Validate"/> has
-    /// already proven it is non-null for every guarded condition.</summary>
-    private static bool EvaluateGuard(ScenarioNode condition, object? output)
-        => condition.EvaluateCondition!(output);
+    /// <summary>Why a guarded step did not run: the arm its condition took instead, or that none
+    /// matched.</summary>
+    private static string NotTakenReason(ScenarioNode condition, int arm)
+        => arm < 0
+            ? $"not taken: {condition.OperationName} matched no arm"
+            : $"not taken: {condition.OperationName} took {condition.Arms[arm]}";
 
     /// <summary>A merge's simulated start offset: the MAX of its sources' finish offsets (it has no
     /// DependsOn edges of its own).</summary>

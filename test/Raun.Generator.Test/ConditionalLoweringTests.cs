@@ -27,9 +27,10 @@ public class ConditionalLoweringTests
         // 5 «merge appointment», 6 AppointmentExists
         Assert.Equal(8, def.Nodes.Count);
 
-        Assert.NotNull(def.Nodes[2].EvaluateCondition);
-        Assert.Equal([new Guard(2, true)], def.Nodes[3].Guards);
-        Assert.Equal([new Guard(2, false)], def.Nodes[4].Guards);
+        Assert.NotNull(def.Nodes[2].SelectArm);
+        Assert.Equal(["if", "else"], def.Nodes[2].Arms);
+        Assert.Equal([new Guard(2, 0)], def.Nodes[3].Guards);
+        Assert.Equal([new Guard(2, 1)], def.Nodes[4].Guards);
 
         Assert.True(def.Nodes[5].IsSynthetic);
         Assert.Equal([3, 4], def.Nodes[5].MergeSources);
@@ -89,7 +90,7 @@ public class ConditionalLoweringTests
 
         // 0 PatientExists, 1 IsPriority, 2 Notify — nothing is assigned, so there is no phi.
         Assert.Equal(5, def.Nodes.Count);
-        Assert.Equal([new Guard(2, true)], def.Nodes[3].Guards);
+        Assert.Equal([new Guard(2, 0)], def.Nodes[3].Guards);
         Assert.DoesNotContain(def.Nodes, n => n.IsSynthetic);
     }
 
@@ -102,10 +103,10 @@ public class ConditionalLoweringTests
         // 4 pass-through of 1 guarded false, 5 «merge appointment», 6 AppointmentExists
         Assert.Equal(9, def.Nodes.Count);
 
-        Assert.Equal([new Guard(3, true)], def.Nodes[4].Guards);
+        Assert.Equal([new Guard(3, 0)], def.Nodes[4].Guards);
 
         Assert.True(def.Nodes[5].IsSynthetic);
-        Assert.Equal([new Guard(3, false)], def.Nodes[5].Guards);
+        Assert.Equal([new Guard(3, 1)], def.Nodes[5].Guards);
         Assert.Equal([2], def.Nodes[5].MergeSources);
 
         Assert.True(def.Nodes[6].IsSynthetic);
@@ -119,8 +120,8 @@ public class ConditionalLoweringTests
         var def = Lower(SampleSources.NestedIfScenario);
 
         // 0 PatientExists, 1 IsPriority, 2 HasCapacity, 3 Notify
-        Assert.Equal([new Guard(2, true)], def.Nodes[3].Guards);
-        Assert.Equal([new Guard(2, true), new Guard(3, true)], def.Nodes[4].Guards);
+        Assert.Equal([new Guard(2, 0)], def.Nodes[3].Guards);
+        Assert.Equal([new Guard(2, 0), new Guard(3, 0)], def.Nodes[4].Guards);
     }
 
     [Fact]

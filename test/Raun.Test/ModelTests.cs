@@ -88,7 +88,8 @@ public class ModelTests
         DisplayNameTemplate = $"cond {index}",
         DependsOn = dependsOn,
         Invoke = (_, _) => Task.FromResult<object?>(true),
-        EvaluateCondition = static o => (bool)o!,
+        SelectArm = inputs => inputs.Get<bool>(index) ? 0 : 1,
+        Arms = ["if", "else"],
     };
 
     private static ScenarioNode Guarded(int index, Guard[] guards, params int[] dependsOn) => new()
@@ -121,8 +122,8 @@ public class ModelTests
     {
         var def = Def(
             Cond(0),
-            Guarded(1, [new Guard(0, true)], 0),
-            Guarded(2, [new Guard(0, false)], 0),
+            Guarded(1, [new Guard(0, 0)], 0),
+            Guarded(2, [new Guard(0, 1)], 0),
             Merge(3, 1, 2));
 
         def.Validate(); // does not throw
@@ -131,20 +132,44 @@ public class ModelTests
     [Fact]
     public void Validate_rejects_an_out_of_range_guard_condition()
     {
-        var def = Def(Cond(0), Guarded(1, [new Guard(9, true)], 0));
+        var def = Def(Cond(0), Guarded(1, [new Guard(9, 0)], 0));
 
         var ex = Assert.Throws<InvalidOperationException>(def.Validate);
         Assert.Contains("guard", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
+    public void Validate_rejects_a_guard_on_an_arm_the_condition_does_not_have()
+    {
+        var def = Def(Cond(0), Guarded(1, [new Guard(0, 2)], 0));
+
+        var error = Assert.Throws<InvalidOperationException>(def.Validate);
+        Assert.Contains("arm 2", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_accepts_an_n_way_merge_over_distinct_arms_of_one_condition()
+    {
+        var three = new ScenarioNode
+        {
+            Index = 0, StepId = "c", Phase = "When", OperationName = "C", DisplayNameTemplate = "c",
+            DependsOn = [], Invoke = (_, _) => Task.FromResult<object?>(0),
+            SelectArm = _ => 0, Arms = ["case 0", "case 1", "default"],
+        };
+        var def = Def(three, Guarded(1, [new Guard(0, 0)], 0), Guarded(2, [new Guard(0, 1)], 0),
+            Guarded(3, [new Guard(0, 2)], 0), Merge(4, 1, 2, 3));
+
+        def.Validate();
+    }
+
+    [Fact]
     public void Validate_rejects_a_guard_on_a_node_without_a_condition_evaluator()
     {
-        // Node 0 is a plain step: it has no EvaluateCondition, so it cannot gate a branch.
-        var def = Def(Node(0), Guarded(1, [new Guard(0, true)], 0));
+        // Node 0 is a plain step: it has no SelectArm, so it cannot gate a branch.
+        var def = Def(Node(0), Guarded(1, [new Guard(0, 0)], 0));
 
         var ex = Assert.Throws<InvalidOperationException>(def.Validate);
-        Assert.Contains("EvaluateCondition", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("SelectArm", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -153,8 +178,8 @@ public class ModelTests
         // Both sources are guarded on the SAME value, so both could pass — a double-write.
         var def = Def(
             Cond(0),
-            Guarded(1, [new Guard(0, true)], 0),
-            Guarded(2, [new Guard(0, true)], 0),
+            Guarded(1, [new Guard(0, 0)], 0),
+            Guarded(2, [new Guard(0, 0)], 0),
             Merge(3, 1, 2));
 
         var ex = Assert.Throws<InvalidOperationException>(def.Validate);

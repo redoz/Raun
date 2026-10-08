@@ -43,7 +43,8 @@ public class RunLoopTests
             Guards = guards ?? [],
             MergeSources = mergeSources ?? [],
             IsSynthetic = synthetic,
-            EvaluateCondition = evaluate,
+            SelectArm = evaluate is null ? null : inputs => evaluate(inputs.Get<object?>(index)) ? 0 : 1,
+            Arms = evaluate is null ? [] : ["if", "else"],
             Invoke = invoke ?? ((_, _) => Task.FromResult<object?>(null)),
         };
 
@@ -816,8 +817,8 @@ public class RunLoopTests
             Node(0, "cond", "is priority",
                 invoke: (_, _) => Task.FromResult<object?>(true),
                 evaluate: static o => (bool)o!),
-            Node(1, "urgent", "create urgent", dependsOn: [0], guards: [new Guard(0, true)]),
-            Node(2, "standard", "create standard", dependsOn: [0], guards: [new Guard(0, false)]),
+            Node(1, "urgent", "create urgent", dependsOn: [0], guards: [new Guard(0, 0)]),
+            Node(2, "standard", "create standard", dependsOn: [0], guards: [new Guard(0, 1)]),
             Node(3, "merge", "«merge appt»", mergeSources: [1, 2], synthetic: true));
 
         var loop = new RunLoop(() => [def]);
@@ -838,7 +839,7 @@ public class RunLoopTests
             Node(0, "cond", "is priority",
                 invoke: (_, _) => Task.FromResult<object?>(false),
                 evaluate: static o => (bool)o!),
-            Node(1, "urgent", "create urgent", dependsOn: [0], guards: [new Guard(0, true)]));
+            Node(1, "urgent", "create urgent", dependsOn: [0], guards: [new Guard(0, 0)]));
 
         var loop = new RunLoop(() => [def]);
         var sink = new RecordingSink();
@@ -897,7 +898,7 @@ public class RunLoopTests
         var def = Definition("cond", "cond",
             Node(0, "patient", "patient"),
             Node(1, "priority", "priority", dependsOn: [0], invoke: (_, _) => Task.FromResult<object?>(true), evaluate: static o => (bool)o!),
-            Node(2, "urgent", "urgent", dependsOn: [1], guards: [new Guard(1, true)]),
+            Node(2, "urgent", "urgent", dependsOn: [1], guards: [new Guard(1, 0)]),
             Node(3, "notify", "notify", dependsOn: [0]));
 
         var loop = new RunLoop(() => [def]);

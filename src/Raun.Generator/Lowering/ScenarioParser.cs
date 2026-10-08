@@ -390,9 +390,9 @@ internal sealed class ScenarioParser
         var conditionIndex = condition?.Index ?? -1;
         var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
 
-        var thenArm = WalkArm(statement.Statement, conditionIndex, whenValue: true, parentVars);
+        var thenArm = WalkArm(statement.Statement, conditionIndex, arm: 0, parentVars);
         var elseArm = statement.Else is { } elseClause
-            ? WalkArm(elseClause.Statement, conditionIndex, whenValue: false, parentVars)
+            ? WalkArm(elseClause.Statement, conditionIndex, arm: 1, parentVars)
             : ((Dictionary<ILocalSymbol, VarSource> Vars, List<int> Waits, bool Ok)?)null;
 
         var ok = condition is not null & thenArm.Ok & (elseArm?.Ok ?? true);
@@ -472,7 +472,12 @@ internal sealed class ScenarioParser
         }
 
         var step = BuildStep(call, groupId: null, _prevFrontier);
-        MarkAsCondition(step);
+        MarkAsCondition(step, new ParsedBranch
+        {
+            Form = BranchForm.Truth,
+            ValueType = step.ResultType,
+            ArmLabels = ["if", "else"],
+        });
         return step;
     }
 
@@ -484,20 +489,20 @@ internal sealed class ScenarioParser
         _pendingWaits = waits ?? [];
     }
 
-    private void MarkAsCondition(ParsedStep condition)
+    private void MarkAsCondition(ParsedStep condition, ParsedBranch branch)
     {
         var position = _steps.FindIndex(s => s.Index == condition.Index);
-        _steps[position] = _steps[position] with { ConditionCoercionType = condition.ResultType };
+        _steps[position] = _steps[position] with { Branch = branch };
     }
 
     /// <summary>
-    /// Walks one arm with <paramref name="whenValue"/> pushed onto the guard stack, on a child copy of
+    /// Walks one arm with <paramref name="arm"/> pushed onto the guard stack, on a child copy of
     /// the definition map. Returns that child map, the arm's tail — its final frontier and any waits a
     /// nested <c>if</c> left unconsumed — which the statement after the enclosing <c>if</c> must wait
     /// for, and whether the arm lowered cleanly.
     /// </summary>
     private (Dictionary<ILocalSymbol, VarSource> Vars, List<int> Waits, bool Ok) WalkArm(
-        StatementSyntax arm, int conditionIndex, bool whenValue, Dictionary<ILocalSymbol, VarSource> parentVars)
+        StatementSyntax body, int conditionIndex, int arm, Dictionary<ILocalSymbol, VarSource> parentVars)
     {
         var savedFrontier = _prevFrontier;
         var savedWaits = _pendingWaits;
@@ -507,10 +512,10 @@ internal sealed class ScenarioParser
             _vars[pair.Key] = pair.Value;
         }
 
-        _guards.Add(new ParsedGuard(conditionIndex, whenValue));
+        _guards.Add(new ParsedGuard(conditionIndex, arm));
         _prevFrontier = conditionIndex >= 0 ? [conditionIndex] : [];
         _pendingWaits = [];
-        var ok = ParseStatement(arm);
+        var ok = ParseStatement(body);
         _guards.RemoveAt(_guards.Count - 1);
 
         var tail = new List<int>(_prevFrontier);
@@ -575,8 +580,8 @@ internal sealed class ScenarioParser
         Dictionary<ILocalSymbol, VarSource> thenVars,
         Dictionary<ILocalSymbol, VarSource>? elseVars)
     {
-        var thenDef = Side(thenVars, whenValue: true);
-        var elseDef = Side(elseVars, whenValue: false);
+        var thenDef = Side(thenVars, arm: 0);
+        var elseDef = Side(elseVars, arm: 1);
         if (thenDef < 0 || elseDef < 0)
         {
             return -1;
@@ -603,7 +608,7 @@ internal sealed class ScenarioParser
         _vars[local] = new StepOutput(index);
         return index;
 
-        int Side(Dictionary<ILocalSymbol, VarSource>? armVars, bool whenValue)
+        int Side(Dictionary<ILocalSymbol, VarSource>? armVars, int arm)
         {
             if (armVars is not null && armVars.TryGetValue(local, out var armSource))
             {
@@ -611,7 +616,7 @@ internal sealed class ScenarioParser
             }
 
             return parentVars.TryGetValue(local, out var parentSource) && parentSource is StepOutput parentStep
-                ? InsertPassThrough(local.Name, conditionIndex, whenValue, parentStep.Index)
+                ? InsertPassThrough(local.Name, conditionIndex, arm, parentStep.Index)
                 : -1;
         }
     }
@@ -619,14 +624,14 @@ internal sealed class ScenarioParser
     /// <summary>
     /// Stands in for the arm that did not redefine the local (the missing <c>else</c> of a bare
     /// <c>if</c>, or an arm that simply left the local alone): a synthetic node aliasing the parent
-    /// definition, guarded on <paramref name="whenValue"/> — the value of the side it OCCUPIES, so the
+    /// definition, guarded on <paramref name="arm"/> — the side it OCCUPIES, so the
     /// merge's two sources end up mutually exclusive, as <c>ScenarioDefinition.Validate</c> requires.
     /// </summary>
-    private int InsertPassThrough(string name, int conditionIndex, bool whenValue, int parentDef)
+    private int InsertPassThrough(string name, int conditionIndex, int arm, int parentDef)
     {
         var producer = _steps.First(s => s.Index == parentDef);
         var index = _nextIndex++;
-        var guards = new List<ParsedGuard>(_guards) { new(conditionIndex, whenValue) };
+        var guards = new List<ParsedGuard>(_guards) { new(conditionIndex, arm) };
         _steps.Add(new ParsedStep
         {
             Index = index,

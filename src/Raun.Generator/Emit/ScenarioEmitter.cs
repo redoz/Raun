@@ -308,21 +308,12 @@ internal static class ScenarioEmitter
             members.Add(Set("IsSetup", LiteralExpression(SyntaxKind.TrueLiteralExpression)));
         }
 
-        if (step.ConditionCoercionType is { } coercionType)
+        if (step.Branch is { } branch)
         {
-            // static __o => ((T)__o!) ? true : false — Roslyn picks bool / implicit conversion /
-            // operator true at COMPILE time, so the scheduler never reflects over the boxed output.
-            members.Add(Set("EvaluateCondition",
-                SimpleLambdaExpression(Parameter(Identifier("__o")))
-                    .WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword)))
-                    .WithExpressionBody(ConditionalExpression(
-                        ParenthesizedExpression(CastExpression(
-                            coercionType,
-                            PostfixUnaryExpression(
-                                SyntaxKind.SuppressNullableWarningExpression,
-                                IdentifierName("__o")))),
-                        LiteralExpression(SyntaxKind.TrueLiteralExpression),
-                        LiteralExpression(SyntaxKind.FalseLiteralExpression)))));
+            members.Add(Set("SelectArm", SelectArmLambda(step.Index, branch)));
+            members.Add(Set("Arms", ArrayOf(
+                PredefinedType(Token(SyntaxKind.StringKeyword)),
+                branch.ArmLabels.Select(label => (ExpressionSyntax)Lit(label)))));
         }
 
         members.Add(Set("Invoke", BuildInvokeLambda(step)));
@@ -482,7 +473,36 @@ internal static class ScenarioEmitter
         return TriviaList(Trivia(directive), EndOfLine("\n"));
     }
 
-    /// <summary>Builds <c>new global::Raun.Model.Guard[] { new(i, true), … }</c>.</summary>
+    /// <summary>
+    /// <c>static __inputs => …</c> choosing the arm from the condition's recorded value, read with
+    /// <c>__inputs.Get&lt;T&gt;(index)</c>. Truth: <c>(__v) ? 0 : 1</c>, so Roslyn picks bool, an
+    /// implicit conversion, or <c>operator true</c> at compile time; the scheduler never reflects.
+    /// </summary>
+    private static SimpleLambdaExpressionSyntax SelectArmLambda(int conditionIndex, ParsedBranch branch)
+    {
+        var value = InputsGet(branch.ValueType, conditionIndex);
+        ExpressionSyntax body = branch.Form switch
+        {
+            BranchForm.Truth => ConditionalExpression(ParenthesizedExpression(value), Num(0), Num(1)),
+            _ => throw new System.NotSupportedException(branch.Form.ToString()),
+        };
+
+        return SimpleLambdaExpression(Parameter(Identifier("__inputs")))
+            .WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword)))
+            .WithExpressionBody(body);
+    }
+
+    /// <summary><c>__inputs.Get&lt;type&gt;(index)</c>.</summary>
+    private static InvocationExpressionSyntax InputsGet(TypeSyntax type, int index)
+        => InvocationExpression(
+                MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName("__inputs"),
+                    GenericName(Identifier("Get"))
+                        .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList(type)))))
+            .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(Num(index)))));
+
+    /// <summary>Builds <c>new global::Raun.Model.Guard[] { new(i, arm), … }</c>.</summary>
     private static ArrayCreationExpressionSyntax GuardArray(IEnumerable<ParsedGuard> guards)
         => ArrayOf(
             Names.Global("Raun", "Model", "Guard"),
@@ -490,9 +510,7 @@ internal static class ScenarioEmitter
                 .WithArgumentList(ArgumentList(SeparatedList<ArgumentSyntax>(new[]
                 {
                     Argument(Num(g.ConditionIndex)),
-                    Argument(LiteralExpression(g.WhenValue
-                        ? SyntaxKind.TrueLiteralExpression
-                        : SyntaxKind.FalseLiteralExpression)),
+                    Argument(Num(g.Arm)),
                 })))));
 
     /// <summary>Builds <c>new int[] { i0, i1, … }</c> (empty initializer when the list is empty).</summary>

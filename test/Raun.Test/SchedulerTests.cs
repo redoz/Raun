@@ -51,7 +51,8 @@ public class SchedulerTests
         DependsOn = dependsOn ?? [],
         Guards = guards ?? [],
         Invoke = (_, _) => Task.FromResult<object?>(value),
-        EvaluateCondition = static o => (bool)o!,
+        SelectArm = inputs => inputs.Get<bool>(index) ? 0 : 1,
+        Arms = ["if", "else"],
     };
 
     private static ScenarioNode ThrowingCond(int index, int[]? dependsOn = null) => new()
@@ -63,7 +64,23 @@ public class SchedulerTests
         DisplayNameTemplate = $"cond {index}",
         DependsOn = dependsOn ?? [],
         Invoke = (_, _) => throw new InvalidOperationException("boom"),
-        EvaluateCondition = static o => (bool)o!,
+        SelectArm = inputs => inputs.Get<bool>(index) ? 0 : 1,
+        Arms = ["if", "else"],
+    };
+
+    /// <summary>A condition producing <paramref name="value"/> that selects through
+    /// <paramref name="select"/> among <paramref name="arms"/>.</summary>
+    private static ScenarioNode Select(int index, object? value, Func<IStepInputs, int> select, params string[] arms) => new()
+    {
+        Index = index,
+        StepId = $"step-{index}",
+        Phase = "When",
+        OperationName = $"Choose{index}",
+        DisplayNameTemplate = $"choose {index}",
+        DependsOn = [],
+        Invoke = (_, _) => Task.FromResult(value),
+        SelectArm = select,
+        Arms = arms,
     };
 
     private static ScenarioNode Arm(
@@ -100,6 +117,69 @@ public class SchedulerTests
         var done = await Task.WhenAny(task, Task.Delay(Generous));
         Assert.True(done == task, "operation did not complete within the test timeout");
         return await task;
+    }
+
+    [Fact]
+    public async Task A_condition_selects_exactly_one_of_n_arms()
+    {
+        var ran = new bool[3];
+        var def = Def(
+            Select(0, "b", inputs => inputs.Get<string>(0) switch { "a" => 0, "b" => 1, _ => 2 },
+                "case \"a\"", "case \"b\"", "default"),
+            Arm(1, [new Guard(0, 0)], (_, _) => { ran[0] = true; return Task.FromResult<object?>(null); }, 0),
+            Arm(2, [new Guard(0, 1)], (_, _) => { ran[1] = true; return Task.FromResult<object?>(null); }, 0),
+            Arm(3, [new Guard(0, 2)], (_, _) => { ran[2] = true; return Task.FromResult<object?>(null); }, 0));
+
+        var results = await new ScenarioScheduler().RunAsync(def);
+
+        Assert.Equal([false, true, false], ran);
+        Assert.Equal(StepStatus.NotTaken, results[1].Status);
+        Assert.Equal("not taken: Choose0 took case \"b\"", results[1].SkipReason);
+        Assert.Equal(StepStatus.Passed, results[2].Status);
+    }
+
+    [Fact]
+    public async Task No_matching_arm_leaves_every_arm_not_taken()
+    {
+        var def = Def(
+            Select(0, 7, _ => -1, "case 1", "case 2"),
+            Arm(1, [new Guard(0, 0)], Pass(), 0),
+            Arm(2, [new Guard(0, 1)], Pass(), 0));
+
+        var results = await new ScenarioScheduler().RunAsync(def);
+
+        Assert.All(results.Skip(1), r => Assert.Equal(StepStatus.NotTaken, r.Status));
+        Assert.Equal("not taken: Choose0 matched no arm", results[1].SkipReason);
+    }
+
+    [Fact]
+    public async Task A_throwing_arm_selection_fails_the_condition_step()
+    {
+        var def = Def(
+            Select(0, "x", _ => new List<int>()[3], "case A", "default"),
+            Arm(1, [new Guard(0, 0)], Pass(), 0),
+            Arm(2, [new Guard(0, 1)], Pass(), 0));
+
+        var results = await new ScenarioScheduler().RunAsync(def);
+
+        Assert.Equal(StepStatus.Failed, results[0].Status);
+        Assert.IsType<ArgumentOutOfRangeException>(results[0].Exception?.InnerException);
+        Assert.All(results.Skip(1), r => Assert.Equal(StepStatus.Skipped, r.Status));
+    }
+
+    [Fact]
+    public async Task Arm_selection_runs_once_per_condition()
+    {
+        var calls = 0;
+        var def = Def(
+            Select(0, 1, _ => { calls++; return 0; }, "case 1", "default"),
+            Arm(1, [new Guard(0, 0)], Pass(), 0),
+            Arm(2, [new Guard(0, 0)], Pass(), 0),
+            Arm(3, [new Guard(0, 1)], Pass(), 0));
+
+        await new ScenarioScheduler().RunAsync(def);
+
+        Assert.Equal(1, calls);
     }
 
     [Fact]
@@ -367,8 +447,8 @@ public class SchedulerTests
         var elseRan = false;
         var def = Def(
             Cond(0, true),
-            Arm(1, [new Guard(0, true)], (_, _) => { ifRan = true; return Task.FromResult<object?>(null); }, 0),
-            Arm(2, [new Guard(0, false)], (_, _) => { elseRan = true; return Task.FromResult<object?>(null); }, 0));
+            Arm(1, [new Guard(0, 0)], (_, _) => { ifRan = true; return Task.FromResult<object?>(null); }, 0),
+            Arm(2, [new Guard(0, 1)], (_, _) => { elseRan = true; return Task.FromResult<object?>(null); }, 0));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
 
@@ -384,8 +464,8 @@ public class SchedulerTests
     {
         var def = Def(
             Cond(0, false),
-            Arm(1, [new Guard(0, true)], Pass(), 0),
-            Arm(2, [new Guard(0, false)], Pass(), 0));
+            Arm(1, [new Guard(0, 0)], Pass(), 0),
+            Arm(2, [new Guard(0, 1)], Pass(), 0));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
 
@@ -400,7 +480,7 @@ public class SchedulerTests
         var def = Def(
             Cond(0, true),
             Cond(1, true, [0]),
-            Arm(2, [new Guard(0, true), new Guard(1, false)], Pass(), 1));
+            Arm(2, [new Guard(0, 0), new Guard(1, 1)], Pass(), 1));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
 
@@ -414,8 +494,8 @@ public class SchedulerTests
         // disguise a failure as a routine decision.
         var def = Def(
             ThrowingCond(0),
-            Arm(1, [new Guard(0, true)], Pass(), 0),
-            Arm(2, [new Guard(0, false)], Pass(), 0));
+            Arm(1, [new Guard(0, 0)], Pass(), 0),
+            Arm(2, [new Guard(0, 1)], Pass(), 0));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
 
@@ -430,8 +510,8 @@ public class SchedulerTests
     {
         var def = Def(
             Cond(0, false),
-            Arm(1, [new Guard(0, true)], Pass("if-value"), 0),
-            Arm(2, [new Guard(0, false)], Pass("else-value"), 0),
+            Arm(1, [new Guard(0, 0)], Pass("if-value"), 0),
+            Arm(2, [new Guard(0, 1)], Pass("else-value"), 0),
             MergeNode(3, 1, 2),
             new ScenarioNode
             {
@@ -456,9 +536,9 @@ public class SchedulerTests
         // Both arms sit inside an outer branch that was not taken.
         var def = Def(
             Cond(0, false),
-            Cond(1, true, [0], [new Guard(0, true)]),
-            Arm(2, [new Guard(0, true), new Guard(1, true)], Pass("a"), 1),
-            Arm(3, [new Guard(0, true), new Guard(1, false)], Pass("b"), 1),
+            Cond(1, true, [0], [new Guard(0, 0)]),
+            Arm(2, [new Guard(0, 0), new Guard(1, 0)], Pass("a"), 1),
+            Arm(3, [new Guard(0, 0), new Guard(1, 1)], Pass("b"), 1),
             MergeNode(4, 2, 3));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
@@ -471,8 +551,8 @@ public class SchedulerTests
     {
         var def = Def(
             Cond(0, true),
-            Arm(1, [new Guard(0, true)], (_, _) => throw new InvalidOperationException("boom"), 0),
-            Arm(2, [new Guard(0, false)], Pass("b"), 0),
+            Arm(1, [new Guard(0, 0)], (_, _) => throw new InvalidOperationException("boom"), 0),
+            Arm(2, [new Guard(0, 1)], Pass("b"), 0),
             MergeNode(3, 1, 2));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
@@ -511,7 +591,7 @@ public class SchedulerTests
     {
         var def = Def(
             Cond(0, false),
-            Arm(1, [new Guard(0, true)], Pass(), 0),
+            Arm(1, [new Guard(0, 0)], Pass(), 0),
             Node(2, Pass(), [1]));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
@@ -527,7 +607,7 @@ public class SchedulerTests
         var clock = new TestTimeProvider(new DateTimeOffset(2026, 9, 3, 12, 0, 0, TimeSpan.Zero));
         var def = Def(
             Cond(0, false),
-            Arm(1, [new Guard(0, true)], Pass(), 0));
+            Arm(1, [new Guard(0, 0)], Pass(), 0));
 
         var results = await WithTimeout(new ScenarioScheduler(timeProvider: clock).RunAsync(def));
 
@@ -544,7 +624,7 @@ public class SchedulerTests
         var observer = new RecordingObserver();
         var def = Def(
             Cond(0, false),
-            Arm(1, [new Guard(0, true)], Pass(), 0));
+            Arm(1, [new Guard(0, 0)], Pass(), 0));
 
         await WithTimeout(new ScenarioScheduler().RunAsync(def, observer: observer));
 
@@ -586,8 +666,8 @@ public class SchedulerTests
         var observer = new RecordingObserver();
         var def = Def(
             Cond(0, true),
-            Arm(1, [new Guard(0, true)], Pass("urgent"), 0),
-            Arm(2, [new Guard(0, false)], Pass("standard"), 0),
+            Arm(1, [new Guard(0, 0)], Pass("urgent"), 0),
+            Arm(2, [new Guard(0, 1)], Pass("standard"), 0),
             MergeNode(3, 1, 2),
             Node(4, (inputs, _) => Task.FromResult<object?>(inputs.Get<string>(3)), [3]));
 
@@ -637,7 +717,7 @@ public class SchedulerTests
         var gate = new TaskCompletionSource();
         var def = Def(
             Cond(0, true),
-            Arm(1, [new Guard(0, true)], async (_, _) => { await gate.Task; armFinished = true; return null; }, 0),
+            Arm(1, [new Guard(0, 0)], async (_, _) => { await gate.Task; armFinished = true; return null; }, 0),
             Waiting(2, (_, _) => { startedAfterArm = armFinished; return Task.FromResult<object?>(null); }, [0], [1]));
 
         var run = new ScenarioScheduler().RunAsync(def);
@@ -656,7 +736,7 @@ public class SchedulerTests
         // The arm is not taken. The statement after the if still runs and passes.
         var def = Def(
             Cond(0, false),
-            Arm(1, [new Guard(0, true)], Pass(), 0),
+            Arm(1, [new Guard(0, 0)], Pass(), 0),
             Waiting(2, Pass(), [0], [1]));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
@@ -670,7 +750,7 @@ public class SchedulerTests
     {
         var def = Def(
             Cond(0, true),
-            Arm(1, [new Guard(0, true)], (_, _) => throw new InvalidOperationException("arm failed"), 0),
+            Arm(1, [new Guard(0, 0)], (_, _) => throw new InvalidOperationException("arm failed"), 0),
             Waiting(2, Pass(), [0], [1]));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
@@ -685,7 +765,7 @@ public class SchedulerTests
     {
         var def = Def(
             Cond(0, true),
-            Arm(1, [new Guard(0, true)], (_, ctx) => { ctx.SimulateElapsed(TimeSpan.FromSeconds(3)); return Task.FromResult<object?>(null); }, 0),
+            Arm(1, [new Guard(0, 0)], (_, ctx) => { ctx.SimulateElapsed(TimeSpan.FromSeconds(3)); return Task.FromResult<object?>(null); }, 0),
             Waiting(2, Pass(), [0], [1]));
 
         var results = await WithTimeout(new ScenarioScheduler(simulatedTime: true).RunAsync(def));
@@ -701,7 +781,7 @@ public class SchedulerTests
             i => (_, _) => { lock (ran) ran.Add(i); return Task.FromResult<object?>(null); };
         var def = Def(
             Cond(0, true),
-            Arm(1, [new Guard(0, true)], rec(1), 0),
+            Arm(1, [new Guard(0, 0)], rec(1), 0),
             Waiting(2, rec(2), [0], [1]));
 
         await WithTimeout(new ScenarioScheduler().RunAsync(def, targets: new HashSet<int> { 2 }));

@@ -77,12 +77,18 @@ public sealed class ScenarioNode
     public bool IsSetup { get; init; }
 
     /// <summary>
-    /// For a condition node, coerces this step's (boxed) output to the branch value. The generator
-    /// emits <c>static o =&gt; ((T)o!) ? true : false</c> so Roslyn selects <c>bool</c>, an implicit
-    /// conversion, or <c>operator true</c> at compile time — the scheduler never reflects. Null for a
-    /// node that gates nothing.
+    /// For a condition node: which arm runs. Called once, after the node passes, with the scenario's
+    /// inputs (the node's own output is <c>inputs.Get&lt;T&gt;(Index)</c>, and a <c>when</c> clause
+    /// may read other outputs it depends on). Returns an index into <see cref="Arms"/>, or -1 when
+    /// no arm matches. The generator emits the scenario's own <c>switch</c> or <c>is</c> here, so
+    /// pattern semantics are the compiler's. Null for a node that gates nothing.
     /// </summary>
-    public Func<object?, bool>? EvaluateCondition { get; init; }
+    public Func<IStepInputs, int>? SelectArm { get; init; }
+
+    /// <summary>For a condition node, each arm's label as the source writes it — <c>if</c>/<c>else</c>,
+    /// <c>case Rejected rejected</c>, <c>default</c>. Guards index into it; the not-taken reason
+    /// quotes it.</summary>
+    public IReadOnlyList<string> Arms { get; init; } = [];
 
     /// <summary>
     /// Runs the underlying DSL operation. Reads its arguments from <see cref="IStepInputs"/>,

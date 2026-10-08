@@ -434,7 +434,8 @@ public class TeardownTests
             DisplayNameTemplate = "cond",
             DependsOn = [],
             Invoke = (_, _) => Task.FromResult<object?>(false),
-            EvaluateCondition = static o => (bool)o!,
+            SelectArm = static inputs => inputs.Get<bool>(0) ? 0 : 1,
+            Arms = ["if", "else"],
         };
         var arm = new ScenarioNode
         {
@@ -444,7 +445,7 @@ public class TeardownTests
             OperationName = "Arm",
             DisplayNameTemplate = "arm",
             DependsOn = [0],
-            Guards = [new Guard(0, true)],
+            Guards = [new Guard(0, 0)],
             Invoke = (_, ctx) => { ctx.OnTeardown(() => { ran = true; return Task.CompletedTask; }); return Task.FromResult<object?>(null); },
         };
 

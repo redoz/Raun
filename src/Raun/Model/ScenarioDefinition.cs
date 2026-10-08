@@ -111,11 +111,19 @@ public sealed class ScenarioDefinition
                         $"Step {node.Index} ('{node.OperationName}') has a guard on out-of-range node {guard.ConditionIndex}.");
                 }
 
-                if (Nodes[guard.ConditionIndex].EvaluateCondition is null)
+                var condition = Nodes[guard.ConditionIndex];
+                if (condition.SelectArm is null)
                 {
                     throw new InvalidOperationException(
                         $"Step {node.Index} ('{node.OperationName}') is guarded on step {guard.ConditionIndex} "
-                        + $"('{Nodes[guard.ConditionIndex].OperationName}'), which has no EvaluateCondition.");
+                        + $"('{condition.OperationName}'), which has no SelectArm.");
+                }
+
+                if (guard.Arm < 0 || guard.Arm >= condition.Arms.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"Step {node.Index} ('{node.OperationName}') is guarded on arm {guard.Arm} of step "
+                        + $"{guard.ConditionIndex} ('{condition.OperationName}'), which has {condition.Arms.Count} arm(s).");
                 }
             }
 
@@ -134,8 +142,8 @@ public sealed class ScenarioDefinition
             }
 
             // Merge sources must be mutually exclusive — every pair must be guarded on a common
-            // condition with opposite WhenValue — so at most one can pass. The generator guarantees
-            // this; without the check a violation would surface as a baffling double-write.
+            // condition, on different arms — so at most one can pass. The generator guarantees this;
+            // without the check a violation would surface as a baffling double-write.
             for (var a = 0; a < node.MergeSources.Count; a++)
             {
                 for (var b = a + 1; b < node.MergeSources.Count; b++)
@@ -144,7 +152,7 @@ public sealed class ScenarioDefinition
                     {
                         throw new InvalidOperationException(
                             $"Merge step {node.Index} sources {node.MergeSources[a]} and {node.MergeSources[b]} "
-                            + "are not mutually exclusive (no shared condition with opposite guard values).");
+                            + "are not mutually exclusive (no shared condition guarding them on different arms).");
                     }
                 }
             }
@@ -163,15 +171,15 @@ public sealed class ScenarioDefinition
         }
     }
 
-    /// <summary>True when two candidate producers can never both run: some condition guards both
-    /// with opposite <see cref="Guard.WhenValue"/>s.</summary>
+    /// <summary>True when two candidate producers can never both run: some condition guards both,
+    /// on different arms.</summary>
     private static bool AreExclusive(ScenarioNode left, ScenarioNode right)
     {
         foreach (var l in left.Guards)
         {
             foreach (var r in right.Guards)
             {
-                if (l.ConditionIndex == r.ConditionIndex && l.WhenValue != r.WhenValue)
+                if (l.ConditionIndex == r.ConditionIndex && l.Arm != r.Arm)
                 {
                     return true;
                 }

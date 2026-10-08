@@ -51,8 +51,54 @@ internal readonly record struct ResourceRoleClaim
 }
 
 /// <summary>A lowered branch guard: the node runs only when node <see cref="ConditionIndex"/> passed
-/// and its condition evaluates to <see cref="WhenValue"/>. Mirrors <c>Raun.Model.Guard</c>.</summary>
-internal readonly record struct ParsedGuard(int ConditionIndex, bool WhenValue);
+/// and selected <see cref="Arm"/>. Mirrors <c>Raun.Model.Guard</c>.</summary>
+internal readonly record struct ParsedGuard(int ConditionIndex, int Arm);
+
+/// <summary>How a branch's condition node is written.</summary>
+internal enum BranchForm
+{
+    /// <summary><c>if (await S)</c>: arm 0 when the value is true, arm 1 otherwise.</summary>
+    Truth,
+
+    /// <summary><c>if (await S is P)</c>: arm 0 when the value matches <see cref="ParsedBranch.Pattern"/>.</summary>
+    Pattern,
+
+    /// <summary><c>switch (await S)</c>: arm k is section k.</summary>
+    Switch,
+}
+
+/// <summary>
+/// A condition node's branch, lowered: what the emitter turns into <c>ScenarioNode.SelectArm</c> and
+/// <c>Arms</c>. Patterns and labels are already re-hosted (names qualified, step outputs read through
+/// <c>__inputs</c>).
+/// </summary>
+internal sealed record ParsedBranch
+{
+    private readonly Syn<TypeSyntax> _valueType;
+    private readonly Syn<PatternSyntax> _pattern;
+    private readonly EquatableArray<Syn<SwitchSectionSyntax>> _sections;
+    private readonly EquatableArray<string> _armLabels;
+
+    public BranchForm Form { get; init; }
+
+    /// <summary>The condition step's result type: what <c>__inputs.Get&lt;T&gt;</c> reads.</summary>
+    public TypeSyntax ValueType { get => _valueType.Node!; init => _valueType = value; }
+
+    public PatternSyntax? Pattern { get => _pattern.Node; init => _pattern = value; }
+
+    /// <summary>For <see cref="BranchForm.Switch"/>: one section per arm, labels only (no statements).</summary>
+    public IReadOnlyList<SwitchSectionSyntax> Sections
+    {
+        get => new SynList<SwitchSectionSyntax>(_sections);
+        init => _sections = SynList<SwitchSectionSyntax>.Wrap(value);
+    }
+
+    public IReadOnlyList<string> ArmLabels
+    {
+        get => _armLabels;
+        init => _armLabels = Equatable.Of(value);
+    }
+}
 
 /// <summary>One reduced contended-resource use of a scenario: the token type (fully qualified, for
 /// <c>typeof</c>) and the mode name (<c>Shared</c> or <c>Exclusive</c>) as spelled on
@@ -197,7 +243,6 @@ internal sealed record ParsedStep
     private readonly Syn<TypeSyntax> _resultType = new(PredefinedType(Token(SyntaxKind.ObjectKeyword)));
     private readonly Syn<InvocationExpressionSyntax> _invokeCall;
     private readonly Syn<ExpressionSyntax> _formatExpression;
-    private readonly Syn<TypeSyntax> _conditionCoercionType;
 
     public IReadOnlyList<int> DependsOn
     {
@@ -280,11 +325,6 @@ internal sealed record ParsedStep
     /// <summary>True for the Setup node of a scenario with a world (see <c>Raun.Model.ScenarioNode.IsSetup</c>).</summary>
     public bool IsSetup { get; init; }
 
-    /// <summary>When this step is used as an <c>if</c> condition, its fully-qualified result type — the
-    /// cast target in the emitted <c>EvaluateCondition</c> coercion. Null otherwise.</summary>
-    public TypeSyntax? ConditionCoercionType
-    {
-        get => _conditionCoercionType.Node;
-        init => _conditionCoercionType = value;
-    }
+    /// <summary>When this step is a branch's condition: how it selects an arm. Null otherwise.</summary>
+    public ParsedBranch? Branch { get; init; }
 }
