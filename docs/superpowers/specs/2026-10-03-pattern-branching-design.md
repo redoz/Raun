@@ -118,8 +118,12 @@ public sealed class ScenarioNode
   generated code, as they do in arguments.
 - **`Arms`** labels each arm as the source writes it: `case Accepted accepted`,
   `case Accepted accepted when accepted.Express`, `default`, `if`, `else`. Validation checks every
-  `Guard.Arm` against it. A not-taken step's reason names the arm that ran, for example
-  `not taken: 'submitting the order' matched case Rejected rejected`, or says that nothing matched.
+  `Guard.Arm` against it. A not-taken step's reason names the arm that ran, or says that nothing
+  matched. *Refined during planning:* the implemented format is
+  `not taken: <operation> took <arm label>` (for example `not taken: Submit took case Rejected
+  rejected`) and `not taken: <operation> matched no arm`; it names the condition by its operation,
+  not its display name. An arm label shows its tokens as written, each run of whitespace or comments
+  between them as one space.
 - **Case nodes.** An arm whose pattern declares variables (`case Accepted a`,
   `{ Total: var total }`, `is Rejected r`) gets one hidden *case node*:
   - it is guarded on that arm and depends on the condition node;

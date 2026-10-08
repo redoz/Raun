@@ -602,6 +602,35 @@ public class BranchingSemanticsProbeTests
         AssertRan(run, $"Submit({key})", key == "no" ? "Reject(stock)" : "Accept(X)", $"Saw({saw})");
     }
 
+    [Theory]
+    [InlineData("no", "Reject(stock)")]
+    [InlineData("ok", "Accept(X)")]
+    [InlineData("later", null)]
+    public async Task P45_non_exhaustive_default_less_switch_assigning_an_unassigned_local_never_read_after(string key, string? arm)
+    {
+        // C# accepts this: `o` is assigned in every section but never read after the switch, so the
+        // switch need not be exhaustive. When no section matches, what follows must still run — the
+        // local must not become a merge that no match leaves not taken.
+        var body = $$"""
+            Outcome o;
+            switch (await When.Submit("{{key}}"))
+            {
+                case Rejected r:
+                    o = await When.Reject(r.Reason);
+                    break;
+                case Accepted:
+                    o = await When.Accept("X");
+                    break;
+            }
+            await Then.Note("done");
+            """;
+        await GeneratorHarness.DiagnoseAsync(Scenario(body), requireCompilable: true); // plain C# compiles
+        var run = await RunProbe(body);
+
+        AssertRan(run, arm is null ? [$"Submit({key})", "Note(done)"] : [$"Submit({key})", arm, "Note(done)"]);
+        Assert.Equal(StepStatus.Passed, run.Step("Note").Status);
+    }
+
     // ----------------------------------------------------------------------------------------------
     // when clauses reading merged locals and outer pattern variables.
     // ----------------------------------------------------------------------------------------------
@@ -1217,7 +1246,7 @@ public class BranchingSemanticsProbeTests
         }
         else
         {
-            Assert.All(diagnostics, d => Assert.StartsWith("RAUN", d.Id, StringComparison.Ordinal));
+            Assert.Equal("RAUN002", Assert.Single(diagnostics).Id);
         }
     }
 

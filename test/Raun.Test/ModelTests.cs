@@ -189,6 +189,34 @@ public class ModelTests
     }
 
     [Fact]
+    public void Validate_rejects_arms_without_a_selector()
+    {
+        var def = Def(new ScenarioNode
+        {
+            Index = 0, StepId = "c", Phase = "When", OperationName = "C", DisplayNameTemplate = "c",
+            DependsOn = [], Invoke = (_, _) => Task.FromResult<object?>(true),
+            Arms = ["if", "else"],
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(def.Validate);
+        Assert.Contains("no SelectArm", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_rejects_a_selector_without_arms()
+    {
+        var def = Def(new ScenarioNode
+        {
+            Index = 0, StepId = "c", Phase = "When", OperationName = "C", DisplayNameTemplate = "c",
+            DependsOn = [], Invoke = (_, _) => Task.FromResult<object?>(true),
+            SelectArm = _ => 0,
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(def.Validate);
+        Assert.Contains("no arms", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_rejects_a_guard_on_a_node_without_a_condition_evaluator()
     {
         // Node 0 is a plain step: it has no SelectArm, so it cannot gate a branch.

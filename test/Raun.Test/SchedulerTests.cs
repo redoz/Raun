@@ -212,6 +212,24 @@ public class SchedulerTests
         Assert.All(results.Skip(1), r => Assert.Equal(StepStatus.Skipped, r.Status));
     }
 
+    [Theory]
+    [InlineData(2)]
+    [InlineData(-2)]
+    public async Task An_arm_selection_out_of_range_fails_the_condition_step(int selected)
+    {
+        var def = Def(
+            Select(0, "x", _ => selected, "case A", "default"),
+            Arm(1, [new Guard(0, 0)], Pass(), 0),
+            Arm(2, [new Guard(0, 1)], Pass(), 0),
+            Arm(3, [new Guard(0, Guard.NoArm)], Pass(), 0));
+
+        var results = await new ScenarioScheduler().RunAsync(def);
+
+        Assert.Equal(StepStatus.Failed, results[0].Status);
+        Assert.Contains($"chose arm {selected}", results[0].Exception?.InnerException?.Message, StringComparison.Ordinal);
+        Assert.All(results.Skip(1), r => Assert.Equal(StepStatus.Skipped, r.Status));
+    }
+
     [Fact]
     public async Task Arm_selection_runs_once_per_condition()
     {

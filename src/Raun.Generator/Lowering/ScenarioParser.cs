@@ -458,12 +458,12 @@ internal sealed class ScenarioParser
             call = ResolveCall(invocation, Descriptors.InvalidCondition);
             if (call is { ResultType: null })
             {
-                Report(Descriptors.InvalidCondition, statement.Expression);
+                Report(Descriptors.InvalidCondition, statement.Expression, NoResultReason(call));
             }
         }
         else
         {
-            Report(Descriptors.InvalidCondition, statement.Expression);
+            Report(Descriptors.InvalidCondition, statement.Expression, WhyNotAStepCondition(statement.Expression));
         }
 
         var ok = call is { ResultType: not null };
@@ -521,36 +521,26 @@ internal sealed class ScenarioParser
             arms.Add(WalkArm(SectionBody(section), conditionIndex, arm, parentVars, bind));
         }
 
+        IReadOnlyCollection<ISymbol>? assignedOnExit = null;
         if (!statement.Sections.Any(s => s.Labels.Any(l => l is DefaultSwitchLabelSyntax)))
         {
             arms.Add(WalkArm([], conditionIndex, NoArm, parentVars));
+
+            // Whether "no section matched" can reach what follows is C#'s own question: a local the
+            // compiler sees definitely assigned after the switch was assigned on every path out of it,
+            // so the implicit arm cannot be one of them (the switch is exhaustive).
+            var flow = _model.AnalyzeDataFlow(statement);
+            assignedOnExit = flow is { Succeeded: true } ? flow.DefinitelyAssignedOnExit : [];
         }
 
-        return Rejoin(statement, conditionIndex, parentVars, arms, ok: condition is not null) && condition is not null;
+        return Rejoin(statement, conditionIndex, parentVars, arms, ok: condition is not null, assignedOnExit) && condition is not null;
     }
 
-    /// <summary>A label as written, without its colon and with each run of whitespace (line breaks
-    /// included) shown as one space: <c>case Accepted a when a.Express</c>, <c>default</c>. Display
-    /// text for the arm, never fed back to a parser.</summary>
+    /// <summary>A label as written, without its colon, as <see cref="TokenText"/> shows it:
+    /// <c>case Accepted a when a.Express</c>, <c>default</c>. Display text for the arm, never fed back
+    /// to a parser.</summary>
     private static string LabelText(SwitchLabelSyntax label)
-    {
-        var written = label.SyntaxTree.GetText().ToString(Microsoft.CodeAnalysis.Text.TextSpan.FromBounds(
-            label.SpanStart, label.ColonToken.GetPreviousToken().Span.End));
-        var text = new StringBuilder(written.Length);
-        foreach (var c in written)
-        {
-            if (!char.IsWhiteSpace(c))
-            {
-                text.Append(c);
-            }
-            else if (text.Length > 0 && text[text.Length - 1] != ' ')
-            {
-                text.Append(' ');
-            }
-        }
-
-        return text.ToString();
-    }
+        => TokenText(label, exclude: label.ColonToken);
 
     /// <summary>A section's statements without its closing <c>break;</c> — also when the section is
     /// written as one block ending in it, <c>case X: { …; break; }</c>. Any other way out of a section
@@ -617,7 +607,7 @@ internal sealed class ScenarioParser
             {
                 if (testedCall is not null)
                 {
-                    Report(Descriptors.InvalidCondition, condition);
+                    Report(Descriptors.InvalidCondition, condition, NoResultReason(testedCall));
                 }
 
                 return null;
@@ -634,7 +624,7 @@ internal sealed class ScenarioParser
                 Form = BranchForm.Pattern,
                 ValueType = patternStep.ResultType,
                 Pattern = pattern,
-                ArmLabels = ["is " + tested.ToString(), "else"],
+                ArmLabels = ["is " + TokenText(tested), "else"],
             };
             MarkAsCondition(patternStep, patternBranch);
             return (patternStep, patternBranch, PatternVariables(tested));
@@ -642,7 +632,7 @@ internal sealed class ScenarioParser
 
         if (condition is not AwaitExpressionSyntax { Expression: InvocationExpressionSyntax invocation })
         {
-            Report(Descriptors.InvalidCondition, condition);
+            Report(Descriptors.InvalidCondition, condition, WhyNotAStepCondition(condition));
             return null;
         }
 
@@ -652,9 +642,18 @@ internal sealed class ScenarioParser
             return null;
         }
 
-        if (call.ResultType is null || !SymbolHelpers.IsUsableAsCondition(call.ResultType, _model.Compilation))
+        if (call.ResultType is null)
         {
-            Report(Descriptors.InvalidCondition, condition);
+            Report(Descriptors.InvalidCondition, condition, NoResultReason(call));
+            return null;
+        }
+
+        if (!SymbolHelpers.IsUsableAsCondition(call.ResultType, _model.Compilation))
+        {
+            Report(
+                Descriptors.InvalidCondition, condition,
+                "'" + call.Method.Name + "' returns '" + call.Method.ReturnType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                    + "', which cannot decide an 'if' by itself; test it with an 'is' pattern or switch on it");
             return null;
         }
 
@@ -667,6 +666,74 @@ internal sealed class ScenarioParser
         };
         MarkAsCondition(step, branch);
         return (step, branch, []);
+    }
+
+    /// <summary>RAUN011's reason for a condition that is not an awaited step call: which of the
+    /// refused forms it is.</summary>
+    private string WhyNotAStepCondition(ExpressionSyntax condition)
+    {
+        while (condition is ParenthesizedExpressionSyntax parenthesized)
+        {
+            condition = parenthesized.Expression;
+        }
+
+        switch (condition)
+        {
+            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalAndExpression }:
+                return "it combines conditions with '&&'; branch on one step, and nest the next branch inside its arm";
+            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalOrExpression }:
+                return "it combines conditions with '||'; branch on one step, and test the next one in its else";
+            case IsPatternExpressionSyntax isPattern:
+                return WhyNotAStepCondition(isPattern.Expression);
+            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression } isType:
+                return WhyNotAStepCondition(isType.Left);
+            case AwaitExpressionSyntax:
+                return "it awaits something other than a step call";
+        }
+
+        var heldInLocal = condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+            .Select(name => _model.GetSymbolInfo(name).Symbol)
+            .OfType<ILocalSymbol>()
+            .FirstOrDefault(local => _vars.ContainsKey(local));
+        if (heldInLocal is not null)
+        {
+            return "it reads '" + heldInLocal.Name + "', a step result held in a local; await the step in the condition itself";
+        }
+
+        return condition.DescendantNodesAndSelf().OfType<AwaitExpressionSyntax>().Any()
+            ? "it computes on an awaited value instead of being the awaited step call itself"
+            : "it is a value that no awaited step call produces";
+    }
+
+    /// <summary>RAUN011's reason for a condition step that returns nothing.</summary>
+    private static string NoResultReason(StepCall call)
+        => "'" + call.Method.Name + "' returns no result to decide on";
+
+    /// <summary>A pattern, type or label as display text, built from its tokens: wherever the source
+    /// has whitespace or a comment between two tokens (a line break included) it shows one space,
+    /// and nothing where it has none, so <c>a.Express</c> stays as written; string and character
+    /// literals keep their exact text. Never fed back to a parser.</summary>
+    private static string TokenText(SyntaxNode node, SyntaxToken? exclude = null)
+    {
+        var text = new StringBuilder();
+        SyntaxToken? previous = null;
+        foreach (var token in node.DescendantTokens())
+        {
+            if (exclude is { } excluded && token == excluded)
+            {
+                continue;
+            }
+
+            if (previous is { } before && (before.HasTrailingTrivia || token.HasLeadingTrivia))
+            {
+                text.Append(' ');
+            }
+
+            text.Append(token.Text);
+            previous = token;
+        }
+
+        return text.ToString();
     }
 
     /// <summary>
@@ -692,7 +759,7 @@ internal sealed class ScenarioParser
                     (violations, pattern) = (loweredValue.Violations, ConstantPattern(loweredValue.Node));
                     break;
                 default:
-                    Report(Descriptors.InvalidCondition, condition);
+                    Report(Descriptors.InvalidCondition, condition, "'" + type + "' after 'is' names neither a type nor a constant");
                     return null;
             }
         }
@@ -864,7 +931,8 @@ internal sealed class ScenarioParser
         int conditionIndex,
         Dictionary<ILocalSymbol, VarSource> parentVars,
         IReadOnlyList<ArmWalk> arms,
-        bool ok)
+        bool ok,
+        IReadOnlyCollection<ISymbol>? assignedOnExit = null)
     {
         ok &= arms.All(a => a.Ok);
 
@@ -875,11 +943,11 @@ internal sealed class ScenarioParser
         }
 
         var frontier = new List<int>();
-        foreach (var local in DifferingLocals(parentVars, arms))
+        foreach (var (local, participating) in DifferingLocals(parentVars, arms, assignedOnExit))
         {
             // Nothing to merge when the branch is broken, or when a failed statement defined the
             // local: the local stays failed, already reported where it went wrong.
-            var definitions = arms.Select(a => a.Vars.TryGetValue(local, out var s) ? s : null)
+            var definitions = participating.Select(a => a.Vars.TryGetValue(local, out var s) ? s : null)
                 .Append(parentVars.TryGetValue(local, out var p) ? p : null);
             if (!ok || definitions.Any(source => source is FailedOutput))
             {
@@ -887,12 +955,15 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            var mergeIndex = InsertMerge(local, conditionIndex, parentVars, arms, out var unmergeable);
+            var mergeIndex = InsertMerge(local, conditionIndex, parentVars, participating, out var unmergeable);
             if (mergeIndex < 0)
             {
-                Refuse(branch, unmergeable is CaseVariable
-                    ? "'" + local.Name + "' is one of several variables bound by one pattern, which cannot be merged across the arms of a branch; bind it with a pattern of its own"
-                    : "'" + local.Name + "' holds an array group, which cannot be merged across the arms of a branch; bind each arm's group to its own local");
+                Refuse(branch, unmergeable switch
+                {
+                    CaseVariable => "'" + local.Name + "' is one of several variables bound by one pattern, which cannot be merged across the arms of a branch; bind it with a pattern of its own",
+                    GroupOutput => "'" + local.Name + "' holds an array group, which cannot be merged across the arms of a branch; bind each arm's group to its own local",
+                    _ => "'" + local.Name + "' has no single step's result to merge in every arm of the branch; produce it with one step in each arm",
+                });
                 _vars[local] = FailedOutput.Instance;
                 ok = false;
                 continue;
@@ -922,9 +993,10 @@ internal sealed class ScenarioParser
     /// exactly the set that needs a phi. A local declared inside one arm is branch-local (absent from
     /// the parent and from the other arms) and C# scoping forbids its later use, so it is dropped; a
     /// local declared before the branch without a value and assigned in EVERY arm is the ordinary
-    /// phi. Ordered by name, then declaration position, so merges are inserted identically every run.</summary>
-    private static IEnumerable<ILocalSymbol> DifferingLocals(
-        Dictionary<ILocalSymbol, VarSource> parentVars, IReadOnlyList<ArmWalk> arms)
+    /// phi. Ordered by name, then declaration position, so merges are inserted identically every run.
+    /// Each comes with the arms its merge draws from (<see cref="ParticipatingArms"/>).</summary>
+    private static IEnumerable<(ILocalSymbol Local, IReadOnlyList<ArmWalk> Arms)> DifferingLocals(
+        Dictionary<ILocalSymbol, VarSource> parentVars, IReadOnlyList<ArmWalk> arms, IReadOnlyCollection<ISymbol>? assignedOnExit)
     {
         var locals = arms.SelectMany(a => a.Vars.Keys)
             .Distinct<ILocalSymbol>(SymbolEqualityComparer.Default)
@@ -934,18 +1006,34 @@ internal sealed class ScenarioParser
         foreach (var local in locals)
         {
             var inParent = parentVars.TryGetValue(local, out var parentDef);
-            if (!inParent && !arms.All(a => a.Vars.ContainsKey(local)))
+            var participating = ParticipatingArms(local, inParent, arms, assignedOnExit);
+            if (!inParent && !participating.All(a => a.Vars.ContainsKey(local)))
             {
                 continue;
             }
 
-            var defs = arms.Select(a => a.Vars.TryGetValue(local, out var s) ? s : parentDef).ToList();
+            var defs = participating.Select(a => a.Vars.TryGetValue(local, out var s) ? s : parentDef).ToList();
             if (defs.Distinct().Count() > 1)
             {
-                yield return local;
+                yield return (local, participating);
             }
         }
     }
+
+    /// <summary>
+    /// The arms a local's merge draws from. Every arm, except a default-less switch's implicit
+    /// "no section matched" arm (<see cref="NoArm"/>) for a local with no earlier value that C# sees
+    /// definitely assigned after the switch: that switch is exhaustive, so the arm never runs and
+    /// has nothing to pass through. A local with an earlier value keeps the arm (it passes the value
+    /// through); a local with none that C# does NOT see assigned keeps it too, so the local, missing
+    /// from that arm, is dropped rather than merged into a merge that no match would leave not taken
+    /// (taking every later statement with it).
+    /// </summary>
+    private static IReadOnlyList<ArmWalk> ParticipatingArms(
+        ILocalSymbol local, bool inParent, IReadOnlyList<ArmWalk> arms, IReadOnlyCollection<ISymbol>? assignedOnExit)
+        => inParent || assignedOnExit is null || !assignedOnExit.Contains(local, SymbolEqualityComparer.Default)
+            ? arms
+            : [.. arms.Where(a => a.Arm != NoArm)];
 
     /// <summary>
     /// Inserts the phi for one local: a synthetic merge with one source per arm — the arm's own
@@ -1374,7 +1462,15 @@ internal sealed class ScenarioParser
             || _model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol { IsStatic: false } method
             || SymbolHelpers.WorldOfStepClass(method.ContainingType) is not { } stepWorld)
         {
-            Report(notDsl, invocation);
+            if (notDsl == Descriptors.InvalidCondition)
+            {
+                Report(notDsl, invocation, "'" + invocation.Expression + "' is not a step call");
+            }
+            else
+            {
+                Report(notDsl, invocation);
+            }
+
             return null;
         }
 

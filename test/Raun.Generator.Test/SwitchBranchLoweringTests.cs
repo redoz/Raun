@@ -279,6 +279,58 @@ public class SwitchBranchLoweringTests
     }
 
     [Fact]
+    public void A_labels_string_literal_keeps_its_spacing_and_comments_drop_out()
+    {
+        var result = GeneratorHarness.Run(OneScenario("""
+            switch (await When.Reroute())
+            {
+                case "a  b" /* two spaces */:
+                    await Then.StillPending();
+                    break;
+            }
+            """));
+        result.AssertCompiles();
+
+        Assert.Equal(
+            ["case \"a  b\""],
+            result.Definitions().Single().Nodes.First(n => n.OperationName == "Reroute").Arms);
+    }
+
+    [Fact]
+    public void An_is_pattern_written_over_several_lines_is_shown_on_one()
+    {
+        var result = GeneratorHarness.Run(OneScenario("""
+            if (await When.Submit("fast") is Accepted
+                {
+                    Express: true, // fast lane
+                } accepted)
+                await Then.Shipped(accepted.Shipment);
+            """));
+        result.AssertCompiles();
+
+        Assert.Equal(
+            ["is Accepted { Express: true, } accepted", "else"],
+            result.Definitions().Single().Nodes.First(n => n.OperationName == "Submit").Arms);
+    }
+
+    [Fact]
+    public async Task A_local_holding_an_array_group_in_each_arm_is_refused_as_an_array_group()
+    {
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(OneScenario("""
+            Accepted[] parts;
+            if (await When.Recheck())
+                parts = await new[] { When.Accept("A"), When.Accept("B") };
+            else
+                parts = await new[] { When.Accept("C"), When.Accept("D") };
+            await Then.Shipped(parts[0].Shipment);
+            """));
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("RAUN017", diagnostic.Id);
+        Assert.Contains("'parts' holds an array group", diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_label_written_over_several_lines_is_shown_on_one()
     {
         var result = GeneratorHarness.Run(OneScenario("""

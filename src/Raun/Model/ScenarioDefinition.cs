@@ -103,6 +103,18 @@ public sealed class ScenarioDefinition
                 }
             }
 
+            if (node.Arms.Count > 0 && node.SelectArm is null)
+            {
+                throw new InvalidOperationException(
+                    $"Step {node.Index} ('{node.OperationName}') has {node.Arms.Count} arm(s) but no SelectArm to choose one.");
+            }
+
+            if (node.SelectArm is not null && node.Arms.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Step {node.Index} ('{node.OperationName}') has a SelectArm but no arms to choose from.");
+            }
+
             foreach (var guard in node.Guards)
             {
                 if (guard.ConditionIndex < 0 || guard.ConditionIndex >= count)

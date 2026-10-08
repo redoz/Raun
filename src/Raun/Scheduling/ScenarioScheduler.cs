@@ -585,7 +585,15 @@ public sealed class ScenarioScheduler
                     // any failed dependency.
                     try
                     {
-                        selectedArm[i] = select(inputs);
+                        var arm = select(inputs);
+                        if (arm < Guard.NoArm || arm >= nodes[i].Arms.Count)
+                        {
+                            throw new InvalidOperationException(
+                                $"'{nodes[i].OperationName}' chose arm {arm}, but it has {nodes[i].Arms.Count} arm(s) "
+                                + $"(and {Guard.NoArm} for matching none).");
+                        }
+
+                        selectedArm[i] = arm;
                     }
                     catch (Exception ex)
                     {

@@ -1185,4 +1185,31 @@ public class DiagnosticTests
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN016");
     }
+
+    [Theory]
+    [InlineData("if (await Given.IsPriority() && await Given.IsRegular())", "it combines conditions with '&&'")]
+    [InlineData("if (await Given.IsPriority() || await Given.IsRegular())", "it combines conditions with '||'")]
+    [InlineData("var priority = await Given.IsPriority(); if (priority)", "it reads 'priority', a step result held in a local")]
+    [InlineData("if (await Given.PatientExists(\"Bob\"))", "'PatientExists' returns 'Task<Patient>', which cannot decide an 'if' by itself")]
+    [InlineData("if (await Task.FromResult(true))", "'Task.FromResult' is not a step call")]
+    [InlineData("if (!await Given.IsPriority())", "it computes on an awaited value")]
+    public async Task RAUN011_says_which_wrong_form_the_condition_is(string condition, string reason)
+    {
+        var source = SampleSources.ConditionalDsl +
+            $$"""
+
+            public sealed class S : CondSuite
+            {
+                [Scenario] public async Task Bad()
+                {
+                    var patient = await Given.PatientExists("Jane");
+                    {{condition}}
+                        await When.Notify(patient);
+                }
+            }
+            """;
+
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source), d => d.Id == "RAUN011");
+        Assert.Contains(reason, diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
 }

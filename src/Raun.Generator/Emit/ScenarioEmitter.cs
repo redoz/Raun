@@ -399,7 +399,8 @@ internal static class ScenarioEmitter
 
     /// <summary>A case node's body: <c>static (__inputs, __ctx) => { var __v = __inputs.Get&lt;T&gt;(c);
     /// if (MATCH) return Task.FromResult&lt;object?&gt;(RESULT); throw … }</c>. Its guard means the
-    /// arm was chosen, so MATCH holds; the throw guards a generator bug.</summary>
+    /// arm was chosen, so MATCH held then; it re-tests the recorded value, so it fails only when the
+    /// value changed since — a sibling step mutated state its pattern reads.</summary>
     private static ParenthesizedLambdaExpressionSyntax CaseInvokeLambda(ParsedCaseBinding binding)
         => InvokeLambda().WithBlock(Block(
             LocalDeclarationStatement(VariableDeclaration(IdentifierName("var"))
@@ -408,7 +409,7 @@ internal static class ScenarioEmitter
             IfStatement(binding.Match, ReturnStatement(TaskFromResult(binding.Result))),
             ThrowStatement(ObjectCreationExpression(Names.Global("System", "InvalidOperationException"))
                 .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(
-                    Lit("A case node ran but its arm's pattern did not match; this is a Raun generator bug."))))))));
+                    Lit("The branch's value no longer matches the pattern it matched when the branch was chosen; a step that ran since changed state the pattern reads."))))))));
 
     /// <summary><c>global::System.Threading.Tasks.Task.FromResult&lt;object?&gt;(value)</c>.</summary>
     private static InvocationExpressionSyntax TaskFromResult(ExpressionSyntax value)

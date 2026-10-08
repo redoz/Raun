@@ -112,7 +112,7 @@ namespace Raun.Generated
                     var __v = __inputs.Get<global::OutcomeDemo.Outcome>(1);
                     if (__v is global::OutcomeDemo.Accepted { Total: > 1000 } big)
                         return global::System.Threading.Tasks.Task.FromResult<object?>(big);
-                    throw new global::System.InvalidOperationException("A case node ran but its arm's pattern did not match; this is a Raun generator bug.");
+                    throw new global::System.InvalidOperationException("The branch's value no longer matches the pattern it matched when the branch was chosen; a step that ran since changed state the pattern reads.");
                 }
             };
             nodes[3] = new global::Raun.Model.ScenarioNode
@@ -169,7 +169,7 @@ namespace Raun.Generated
                     var __v = __inputs.Get<global::OutcomeDemo.Outcome>(1);
                     if (__v is global::OutcomeDemo.Accepted accepted)
                         return global::System.Threading.Tasks.Task.FromResult<object?>(accepted);
-                    throw new global::System.InvalidOperationException("A case node ran but its arm's pattern did not match; this is a Raun generator bug.");
+                    throw new global::System.InvalidOperationException("The branch's value no longer matches the pattern it matched when the branch was chosen; a step that ran since changed state the pattern reads.");
                 }
             };
             nodes[5] = new global::Raun.Model.ScenarioNode
@@ -226,7 +226,7 @@ namespace Raun.Generated
                     var __v = __inputs.Get<global::OutcomeDemo.Outcome>(1);
                     if (__v is global::OutcomeDemo.Rejected rejected)
                         return global::System.Threading.Tasks.Task.FromResult<object?>(rejected);
-                    throw new global::System.InvalidOperationException("A case node ran but its arm's pattern did not match; this is a Raun generator bug.");
+                    throw new global::System.InvalidOperationException("The branch's value no longer matches the pattern it matched when the branch was chosen; a step that ran since changed state the pattern reads.");
                 }
             };
             nodes[7] = new global::Raun.Model.ScenarioNode

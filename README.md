@@ -418,16 +418,16 @@ in the other arm and read after the `if`. A `when` clause follows the rules for 
 that reads an earlier step's result makes the decision wait for that step.
 
 A section ends in `break;`, or is a single block ending in `break;` (`case X: { ...; break; }`).
-`return`, `throw` and `goto case` in a section are `RAUN003`. A skipped step's reason reads
+`return`, `throw` and `goto case` in a section are `RAUN003`. A not-taken step's reason reads
 `not taken: <condition step> took <arm label>`, or `not taken: <condition step> matched no arm`.
 A `switch` without a `default` where no section matches takes no arm: every section's steps are not
 taken and the scenario carries on, and a local reassigned in some sections keeps its earlier value,
-as in C#.
+as in C#. A local first assigned in every section can be read after a `switch` that C# sees as
+exhaustive without a `default` (`case var other:`, or a type pattern plus `case null:`).
 
 Limitations: a variable declared inside a `when` clause cannot be read in the section body
-(`RAUN007`); a local holding several variables bound by one pattern cannot be merged across arms
-(refused with a message); and a variable declared by a pattern that binds several variables is read
-per variable inside its own arm only.
+(`RAUN007`); and a variable declared by a pattern that binds several variables is read inside its own
+arm only — it cannot be merged across arms (refused with a message).
 
 ### Resources
 
