@@ -398,11 +398,12 @@ internal sealed class ScenarioParser
         var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
 
         // A pattern's variables are step outputs in the arm C#'s definite assignment puts them in:
-        // arm 0 for a positive pattern, the else for a top-level `not`.
+        // arm 0 for a positive pattern, the else for a negated one (an odd number of `not`s around it,
+        // through parentheses).
         IReadOnlyDictionary<ILocalSymbol, VarSource>? bind0 = null, bind1 = null;
         if (parsed is { Branch.Form: BranchForm.Pattern } p && p.PatternVariables.Count > 0)
         {
-            var negated = p.Branch.Pattern is UnaryPatternSyntax { OperatorToken.RawKind: (int)SyntaxKind.NotKeyword };
+            var negated = IsNegated(p.Branch.Pattern!);
             var vIs = IsPatternExpression(IdentifierName("__v"), p.Branch.Pattern!);
             var match = negated
                 ? PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, ParenthesizedExpression(vIs))
@@ -443,12 +444,22 @@ internal sealed class ScenarioParser
     /// </summary>
     private (ParsedStep Step, ParsedBranch Branch, IReadOnlyList<ILocalSymbol> PatternVariables)? ParseCondition(ExpressionSyntax condition)
     {
-        if (condition is IsPatternExpressionSyntax { Expression: AwaitExpressionSyntax { Expression: InvocationExpressionSyntax patternCall } } isPattern)
+        // `await S is P`, or `await S is T`, which C# reads as a type test rather than a pattern.
+        var (patternCall, tested) = condition switch
         {
-            var tested = ResolveCall(patternCall, Descriptors.InvalidCondition);
-            if (tested is null || tested.ResultType is null)
+            IsPatternExpressionSyntax { Expression: AwaitExpressionSyntax { Expression: InvocationExpressionSyntax c } } isPattern
+                => (c, (SyntaxNode)isPattern.Pattern),
+            BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression, Left: AwaitExpressionSyntax { Expression: InvocationExpressionSyntax c }, Right: TypeSyntax type }
+                => (c, type),
+            _ => (null, null),
+        };
+
+        if (patternCall is not null && tested is not null)
+        {
+            var testedCall = ResolveCall(patternCall, Descriptors.InvalidCondition);
+            if (testedCall is null || testedCall.ResultType is null)
             {
-                if (tested is not null)
+                if (testedCall is not null)
                 {
                     Report(Descriptors.InvalidCondition, condition);
                 }
@@ -456,27 +467,21 @@ internal sealed class ScenarioParser
                 return null;
             }
 
-            var lowered = ArgumentLowering.Lower(_model, isPattern.Pattern, StepValueFor(loop: null));
-            foreach (var violation in lowered.Violations)
-            {
-                Report(Descriptors.InvalidArgument, violation.Node, violation.Subject, violation.Reason);
-            }
-
-            if (lowered.Violations.Count > 0)
+            if (LowerPattern(tested) is not { } pattern)
             {
                 return null;
             }
 
-            var patternStep = BuildStep(tested, groupId: null, _prevFrontier);
+            var patternStep = BuildStep(testedCall, groupId: null, _prevFrontier);
             var patternBranch = new ParsedBranch
             {
                 Form = BranchForm.Pattern,
                 ValueType = patternStep.ResultType,
-                Pattern = lowered.Node,
-                ArmLabels = ["is " + isPattern.Pattern.ToString(), "else"],
+                Pattern = pattern,
+                ArmLabels = ["is " + tested.ToString(), "else"],
             };
             MarkAsCondition(patternStep, patternBranch);
-            return (patternStep, patternBranch, PatternVariables(isPattern.Pattern));
+            return (patternStep, patternBranch, PatternVariables(tested));
         }
 
         if (condition is not AwaitExpressionSyntax { Expression: InvocationExpressionSyntax invocation })
@@ -506,6 +511,53 @@ internal sealed class ScenarioParser
         };
         MarkAsCondition(step, branch);
         return (step, branch, []);
+    }
+
+    /// <summary>The pattern a condition tests, re-hosted like a step argument — a type test becomes a
+    /// type pattern — or null after reporting why it cannot be.</summary>
+    private PatternSyntax? LowerPattern(SyntaxNode tested)
+    {
+        IReadOnlyList<ArgumentViolation> violations;
+        PatternSyntax pattern;
+        if (tested is TypeSyntax type)
+        {
+            var lowered = ArgumentLowering.Lower(_model, type, StepValueFor(loop: null));
+            (violations, pattern) = (lowered.Violations, TypePattern(lowered.Node));
+        }
+        else
+        {
+            var lowered = ArgumentLowering.Lower(_model, (PatternSyntax)tested, StepValueFor(loop: null));
+            (violations, pattern) = (lowered.Violations, lowered.Node);
+        }
+
+        foreach (var violation in violations)
+        {
+            Report(Descriptors.InvalidArgument, violation.Node, violation.Subject, violation.Reason);
+        }
+
+        return violations.Count == 0 ? pattern : null;
+    }
+
+    /// <summary>True when a pattern is negated — an odd number of <c>not</c>s around it, through
+    /// parentheses — so its variables are definitely assigned when it does NOT match.</summary>
+    private static bool IsNegated(PatternSyntax pattern)
+    {
+        var negated = false;
+        while (true)
+        {
+            switch (pattern)
+            {
+                case ParenthesizedPatternSyntax parenthesized:
+                    pattern = parenthesized.Pattern;
+                    continue;
+                case UnaryPatternSyntax { RawKind: (int)SyntaxKind.NotPattern } not:
+                    negated = !negated;
+                    pattern = not.Pattern;
+                    continue;
+                default:
+                    return negated;
+            }
+        }
     }
 
     /// <summary>The variables a pattern or condition declares (<c>Rejected r</c>,
@@ -659,10 +711,12 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            var mergeIndex = InsertMerge(local, conditionIndex, parentVars, arms);
+            var mergeIndex = InsertMerge(local, conditionIndex, parentVars, arms, out var unmergeable);
             if (mergeIndex < 0)
             {
-                Refuse(branch, "'" + local.Name + "' holds an array group, which cannot be merged across the arms of a branch; bind each arm's group to its own local");
+                Refuse(branch, unmergeable is CaseVariable
+                    ? "'" + local.Name + "' is one of several variables bound by one pattern, which cannot be merged across the arms of a branch; bind it with a pattern of its own"
+                    : "'" + local.Name + "' holds an array group, which cannot be merged across the arms of a branch; bind each arm's group to its own local");
                 _vars[local] = FailedOutput.Instance;
                 ok = false;
                 continue;
@@ -722,38 +776,42 @@ internal sealed class ScenarioParser
     /// definition, or, when the arm left the local alone, a PASS-THROUGH aliasing the parent
     /// definition, guarded on that arm. Every source is guarded on a different arm of one condition,
     /// so they are mutually exclusive, as <c>ScenarioDefinition.Validate</c> requires. Typed as the
-    /// LOCAL, not as any one arm's producer, since arms may produce different subtypes. Arrays are not
-    /// mergeable; returns -1 and the caller refuses the shape.
+    /// LOCAL, not as any one arm's producer, since arms may produce different subtypes. A source must be
+    /// one node's value (<see cref="ValueNode"/>): otherwise nothing is inserted, -1 is returned, and
+    /// <paramref name="unmergeable"/> is the definition the caller refuses the shape over.
     /// </summary>
     private int InsertMerge(
         ILocalSymbol local,
         int conditionIndex,
         Dictionary<ILocalSymbol, VarSource> parentVars,
-        IReadOnlyList<ArmWalk> arms)
+        IReadOnlyList<ArmWalk> arms,
+        out VarSource? unmergeable)
     {
-        var sources = new List<int>();
+        // Each arm's source: its own definition, or the parent's through a pass-through. All are
+        // checked before anything is inserted, so a refused merge leaves no stray node behind.
+        var picks = new List<(int Node, bool PassThrough)>();
         for (var arm = 0; arm < arms.Count; arm++)
         {
-            int source;
             var inArm = arms[arm].Vars.TryGetValue(local, out var armSource);
             var inParent = parentVars.TryGetValue(local, out var definedBefore);
-            if (inArm && !(inParent && Equals(armSource, definedBefore)))
+            var passThrough = !(inArm && !(inParent && Equals(armSource, definedBefore)));
+            var definition = passThrough ? definedBefore : armSource;
+            if (ValueNode(definition) is not { } node)
             {
-                source = armSource is StepOutput armStep ? armStep.Index : -1;
-            }
-            else
-            {
-                source = parentVars.TryGetValue(local, out var parentSource) && parentSource is StepOutput parentStep
-                    ? InsertPassThrough(local, conditionIndex, arm, parentStep.Index)
-                    : -1;
-            }
-
-            if (source < 0)
-            {
+                unmergeable = definition;
                 return -1;
             }
 
-            sources.Add(source);
+            picks.Add((node, passThrough));
+        }
+
+        unmergeable = null;
+        var sources = new List<int>();
+        for (var arm = 0; arm < picks.Count; arm++)
+        {
+            sources.Add(picks[arm].PassThrough
+                ? InsertPassThrough(local, conditionIndex, arm, picks[arm].Node)
+                : picks[arm].Node);
         }
 
         var phase = _steps.First(s => s.Index == sources[0]).Phase;
@@ -776,6 +834,16 @@ internal sealed class ScenarioParser
         _vars[local] = new StepOutput(index);
         return index;
     }
+
+    /// <summary>The node whose result IS the local's value — a step's output, or the case node of a
+    /// pattern that binds this one variable — or null when no single node's result is (an array group,
+    /// one of several pattern variables, a missing definition).</summary>
+    private static int? ValueNode(VarSource? source) => source switch
+    {
+        StepOutput step => step.Index,
+        CaseVariable { Count: 1 } variable => variable.Index,
+        _ => null,
+    };
 
     /// <summary>
     /// Stands in for an arm that did not redefine the local: a synthetic node aliasing the parent

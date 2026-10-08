@@ -1034,6 +1034,18 @@ public static class SampleSources
                 "no" => new Rejected("out of stock"),
                 _ => new Pending(),
             });
+
+            [StepName("accepting order {shipment}")]
+            public Task<Accepted> Accept(string shipment) => Task.FromResult(new Accepted(shipment, 1m, false));
+
+            [StepName("rejecting order with {reason}")]
+            public Task<Rejected> Reject(string reason) => Task.FromResult(new Rejected(reason));
+
+            [StepName("rechecking the order")]
+            public Task<bool> Recheck() => Task.FromResult(true);
+
+            [StepName("rerouting the shipment")]
+            public Task<string> Reroute() => Task.FromResult("R1");
         }
 
         public sealed partial class OutcomeThen : Then<NoWorld>
@@ -1079,6 +1091,69 @@ public static class SampleSources
                     await Then.StillPending();
                 else
                     await Then.Shipped(accepted.Shipment);
+            }
+        }
+        """;
+
+    // The other `is` shapes: a pattern variable merged after the branch, a parenthesized `not`, a
+    // pattern binding several variables, a pattern binding none, and a pattern variable reassigned
+    // inside its own arm.
+    public const string IsPatternShapesScenario =
+        """
+
+        public sealed class IsPatternShapeScenarios : OutcomeScenarios
+        {
+            [Scenario("an unaccepted order ships a fallback")]
+            public async Task Fallback()
+            {
+                if (await When.Submit("no") is not Accepted accepted)
+                    accepted = await When.Accept("F1");
+                await Then.Shipped(accepted.Shipment);
+            }
+
+            [Scenario("an accepted order ships without a fallback")]
+            public async Task NoFallback()
+            {
+                if (await When.Submit("ok") is not Accepted accepted)
+                    accepted = await When.Accept("F1");
+                await Then.Shipped(accepted.Shipment);
+            }
+
+            [Scenario("a parenthesized not binds in the else")]
+            public async Task ParenthesizedNot()
+            {
+                if (await When.Submit("ok") is (not Accepted accepted))
+                    await Then.StillPending();
+                else
+                    await Then.Shipped(accepted.Shipment);
+            }
+
+            [Scenario("a big order is reviewed")]
+            public async Task BigOrder()
+            {
+                if (await When.Submit("big") is Accepted { Shipment: var shipment, Total: var total })
+                {
+                    await Then.Review(total);
+                    await Then.Shipped(shipment);
+                }
+            }
+
+            [Scenario("a pending order waits")]
+            public async Task Waiting()
+            {
+                if (await When.Submit("later") is Pending)
+                    await Then.StillPending();
+            }
+
+            [Scenario("a rechecked rejection tells the new reason")]
+            public async Task Rechecked()
+            {
+                if (await When.Submit("no") is Rejected rejected)
+                {
+                    if (await When.Recheck())
+                        rejected = await When.Reject("recalled");
+                    await Then.Told(rejected.Reason);
+                }
             }
         }
         """;
