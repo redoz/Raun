@@ -312,18 +312,19 @@ that runs. Loading scenarios from a referenced library is not supported today.
   is applied with the invariant culture, so a step's name is the same on every machine. A placeholder
   that does not bind, or a format on a value that is not `IFormattable`, is a warning (`RAUN008`)
   saying which part did not resolve.
-- `if`/`else` shapes the graph when the condition is an awaited step call whose
-  result is usable as a C# condition (`bool`, an implicit conversion to `bool`, or `operator true`).
-  The condition is an ordinary step — discovered, timed, and reported like any other. Exactly one arm
-  runs; steps in the other are reported **not taken** (skipped with the reason), never green. A local
-  assigned in both arms is merged automatically, and the statement after the `if` waits for the arm
-  to finish before it runs.
+- A scenario branches on a step's result: `if (await S)` when the result is usable as a C# condition
+  (`bool`, an implicit conversion to `bool`, or `operator true`), `if (await S is <pattern>)`, or
+  `switch (await S) { ... }` with any patterns, `when` clauses and `default`. The condition is an
+  ordinary step — discovered, timed, and reported like any other. Exactly one arm runs; the others
+  are reported **not taken** (skipped, with the arm that ran as the reason), never green — and when no
+  arm matches, every arm is not taken. A local assigned in some arms is merged automatically, and the
+  statement after the branch waits for it to finish.
 - A step argument is an ordinary C# expression, including construction, `with`, and projections of
   earlier results; see [Step arguments](#step-arguments).
-- Loops (`for`/`foreach`/`while`/`do`), `switch`, `try`/`catch`, and `goto` are rejected with a
+- Loops (`for`/`foreach`/`while`/`do`), `try`/`catch`, and `goto` are rejected with a
   diagnostic: put the loop, retry, or polling **inside a step**. A step is an ordinary
   `async Task<T>` method, so it can loop, retry, or poll internally; what a step cannot do is stop a
-  later step from running, which is why `if`/`else` is the one construct the graph models.
+  later step from running, which is why branching on a step's result (`if`/`else` and `switch`) is the one construct the graph models.
 
 ### Step arguments
 
@@ -387,6 +388,46 @@ else
 
 await Then.AppointmentExists(appointment);
 ```
+
+### Branching on a step's result
+
+```csharp
+switch (await When.SubmitOrder(order))
+{
+    case Accepted { Total: > 1000 } big:
+        await Then.ManualReviewRequested(big);
+        break;
+    case Accepted accepted when accepted.Express:
+        await Then.ShipmentScheduled(accepted.Shipment);
+        break;
+    case Rejected rejected:
+        await Then.CustomerNotified(rejected.Reason);
+        break;
+    default:
+        await Then.OrderIsPending(order);
+        break;
+}
+```
+
+The patterns are C#'s own: Raun hands the switch to the compiler, so anything C# matches, a branch
+matches. `if (await S is Accepted a)` and `if (await S is not Accepted a)` work the same way (the
+latter binds `a` in the else arm), and a bare type or constant, `await S is Accepted` or
+`await S is Status.Done`, is a pattern too. A pattern's variables (`big`, `accepted`, `rejected`)
+are step outputs inside their arm; one variable bound by a single-variable pattern may be reassigned
+in the other arm and read after the `if`. A `when` clause follows the rules for step arguments; one
+that reads an earlier step's result makes the decision wait for that step.
+
+A section ends in `break;`, or is a single block ending in `break;` (`case X: { ...; break; }`).
+`return`, `throw` and `goto case` in a section are `RAUN003`. A skipped step's reason reads
+`not taken: <condition step> took <arm label>`, or `not taken: <condition step> matched no arm`.
+A `switch` without a `default` where no section matches takes no arm: every section's steps are not
+taken and the scenario carries on, and a local reassigned in some sections keeps its earlier value,
+as in C#.
+
+Limitations: a variable declared inside a `when` clause cannot be read in the section body
+(`RAUN007`); a local holding several variables bound by one pattern cannot be merged across arms
+(refused with a message); and a variable declared by a pattern that binds several variables is read
+per variable inside its own arm only.
 
 ### Resources
 
