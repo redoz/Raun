@@ -157,6 +157,72 @@ public class PatternBranchLoweringTests
     }
 
     [Fact]
+    public async Task A_constant_named_like_a_type_is_a_constant_pattern()
+    {
+        // `is Small` parses as a type test; Small binds to a constant, so C# matches it as `is 100`.
+        var source = SampleSources.OutcomeDsl +
+            """
+
+            public sealed class ConstantScenarios : OutcomeScenarios
+            {
+                public const int Small = 100;
+
+                [Scenario("constant")]
+                public async Task Run()
+                {
+                    if (await When.Count("no") is Small)
+                        await Then.Counted(100);
+                    else
+                        await Then.StillPending();
+                }
+            }
+            """;
+        var result = GeneratorHarness.Run(source);
+        result.AssertCompiles();
+        var def = Scenario(result, "Run");
+
+        var results = await def.RunAsync();
+
+        Assert.Equal(["is Small", "else"], def.Nodes.Single(n => n.OperationName == "Count").Arms);
+        Assert.Equal(StepStatus.Passed, results.Single(r => r.Node.OperationName == "Counted").Status);
+        Assert.Equal(StepStatus.NotTaken, results.Single(r => r.Node.OperationName == "StillPending").Status);
+    }
+
+    [Fact]
+    public async Task An_enum_member_imported_with_using_static_is_a_constant_pattern()
+    {
+        var source = "using static OutcomeDemo.Size;\n" + SampleSources.OutcomeDsl +
+            """
+
+            public enum Size { Small, Large }
+
+            public sealed partial class SizeWhen : When<NoWorld>
+            {
+                [StepName("measuring")]
+                public Task<Size> Measure() => Task.FromResult(Size.Large);
+            }
+
+            public sealed class EnumScenarios : OutcomeScenarios
+            {
+                public SizeWhen Sizes => Steps<SizeWhen>();
+
+                [Scenario("enum")]
+                public async Task Run()
+                {
+                    if (await Sizes.Measure() is Large)
+                        await Then.StillPending();
+                }
+            }
+            """;
+        var result = GeneratorHarness.Run(source);
+        result.AssertCompiles();
+
+        var results = await Scenario(result, "Run").RunAsync();
+
+        Assert.Equal(StepStatus.Passed, results.Single(r => r.Node.OperationName == "StillPending").Status);
+    }
+
+    [Fact]
     public async Task A_compound_condition_is_refused_with_the_reason()
     {
         var source = SampleSources.OutcomeDsl +

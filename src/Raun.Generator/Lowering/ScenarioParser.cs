@@ -467,7 +467,7 @@ internal sealed class ScenarioParser
                 return null;
             }
 
-            if (LowerPattern(tested) is not { } pattern)
+            if (LowerPattern(tested, condition) is not { } pattern)
             {
                 return null;
             }
@@ -513,16 +513,32 @@ internal sealed class ScenarioParser
         return (step, branch, []);
     }
 
-    /// <summary>The pattern a condition tests, re-hosted like a step argument — a type test becomes a
-    /// type pattern — or null after reporting why it cannot be.</summary>
-    private PatternSyntax? LowerPattern(SyntaxNode tested)
+    /// <summary>
+    /// The pattern a condition tests, re-hosted like a step argument, or null after reporting why it
+    /// cannot be. <c>is X</c> with a bare name parses as a type test whatever X is: a type becomes a
+    /// type pattern, and anything else (a constant: <c>is Limit</c>, an enum member brought in by
+    /// <c>using static</c>) a constant pattern, which is how C# binds it.
+    /// </summary>
+    private PatternSyntax? LowerPattern(SyntaxNode tested, SyntaxNode condition)
     {
         IReadOnlyList<ArgumentViolation> violations;
         PatternSyntax pattern;
         if (tested is TypeSyntax type)
         {
-            var lowered = ArgumentLowering.Lower(_model, type, StepValueFor(loop: null));
-            (violations, pattern) = (lowered.Violations, TypePattern(lowered.Node));
+            switch (_model.GetSymbolInfo(type).Symbol)
+            {
+                case ITypeSymbol:
+                    var loweredType = ArgumentLowering.Lower(_model, type, StepValueFor(loop: null));
+                    (violations, pattern) = (loweredType.Violations, TypePattern(loweredType.Node));
+                    break;
+                case { }:
+                    var loweredValue = ArgumentLowering.Lower<ExpressionSyntax>(_model, type, StepValueFor(loop: null));
+                    (violations, pattern) = (loweredValue.Violations, ConstantPattern(loweredValue.Node));
+                    break;
+                default:
+                    Report(Descriptors.InvalidCondition, condition);
+                    return null;
+            }
         }
         else
         {

@@ -1046,6 +1046,9 @@ public static class SampleSources
 
             [StepName("rerouting the shipment")]
             public Task<string> Reroute() => Task.FromResult("R1");
+
+            [StepName("counting {id}")]
+            public Task<int> Count(string id) => Task.FromResult(id.Length * 50);
         }
 
         public sealed partial class OutcomeThen : Then<NoWorld>
@@ -1061,6 +1064,9 @@ public static class SampleSources
 
             [StepName("order pending")]
             public Task StillPending() => Task.CompletedTask;
+
+            [StepName("{n} counted")]
+            public Task Counted(int n) => Task.CompletedTask;
         }
 
         public abstract class OutcomeScenarios : Scenarios<NoWorld>
