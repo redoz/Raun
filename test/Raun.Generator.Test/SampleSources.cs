@@ -393,6 +393,9 @@ public static class SampleSources
         {
             [StepName("the appointment should exist")]
             public Task AppointmentExists(Appointment appointment) => Task.CompletedTask;
+
+            [StepName("{value} is logged")]
+            public Task Logged(object value) => Task.CompletedTask;
         }
 
         public abstract class CondSuite : Scenarios<NoWorld>

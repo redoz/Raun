@@ -390,60 +390,18 @@ internal sealed class ScenarioParser
         var conditionIndex = condition?.Index ?? -1;
         var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
 
-        var thenArm = WalkArm(statement.Statement, conditionIndex, arm: 0, parentVars);
-        var elseArm = statement.Else is { } elseClause
-            ? WalkArm(elseClause.Statement, conditionIndex, arm: 1, parentVars)
-            : ((Dictionary<ILocalSymbol, VarSource> Vars, List<int> Waits, bool Ok)?)null;
-
-        var ok = condition is not null & thenArm.Ok & (elseArm?.Ok ?? true);
-
-        // Rejoin: start from the parent map, then insert a phi for every local the arms disagree on.
-        _vars.Clear();
-        foreach (var pair in parentVars)
+        var thenArm = WalkArm([statement.Statement], conditionIndex, arm: 0, parentVars);
+        var elseArm = WalkArm(statement.Else is { } elseClause ? [elseClause.Statement] : [], conditionIndex, arm: 1, parentVars);
+        if (statement.Else is null)
         {
-            _vars[pair.Key] = pair.Value;
+            // An absent else defines nothing, so a local the then arm redefines merges against a
+            // pass-through of the parent rather than directly against the parent's node.
+            elseArm = elseArm with { Vars = new Dictionary<ILocalSymbol, VarSource>(SymbolEqualityComparer.Default) };
         }
 
-        var frontier = new List<int>();
-        foreach (var local in DifferingLocals(parentVars, thenArm.Vars, elseArm?.Vars))
-        {
-            // Nothing to merge when the if is broken, or when a failed statement defined the local:
-            // the local stays failed, already reported where it went wrong.
-            var definitions = new[] { parentVars, thenArm.Vars, elseArm?.Vars }
-                .Select(vars => vars is not null && vars.TryGetValue(local, out var source) ? source : null);
-            if (!ok || definitions.Any(source => source is FailedOutput))
-            {
-                _vars[local] = FailedOutput.Instance;
-                continue;
-            }
+        List<ArmWalk> arms = [thenArm, elseArm];
 
-            var mergeIndex = InsertMerge(local, conditionIndex, parentVars, thenArm.Vars, elseArm?.Vars);
-            if (mergeIndex < 0)
-            {
-                Refuse(statement, "'" + local.Name + "' holds an array group, which cannot be merged across the arms of an if; bind each arm's group to its own local");
-                _vars[local] = FailedOutput.Instance;
-                ok = false;
-                continue;
-            }
-
-            frontier.Add(mergeIndex);
-        }
-
-        if (condition is null)
-        {
-            return false;
-        }
-
-        // An empty arm's frontier is the condition itself, which the next statement already depends on.
-        var waits = new SortedSet<int>(thenArm.Waits.Concat(elseArm?.Waits ?? []));
-        waits.Remove(condition.Index);
-
-        // A following statement must never DEPEND on an arm's node (DependsOn is all-of and an arm may
-        // not run); it joins on the merges, or on the condition when there are none. It must still
-        // WAIT for every arm's last steps, or it would run concurrently with the inside of the if —
-        // that is what WaitsFor carries, and a not-taken arm does not cascade through it.
-        Advance(frontier.Count > 0 ? frontier : [condition.Index], [.. waits]);
-        return ok;
+        return Rejoin(statement, conditionIndex, parentVars, arms, ok: condition is not null) && condition is not null;
     }
 
     /// <summary>
@@ -495,14 +453,17 @@ internal sealed class ScenarioParser
         _steps[position] = _steps[position] with { Branch = branch };
     }
 
-    /// <summary>
-    /// Walks one arm with <paramref name="arm"/> pushed onto the guard stack, on a child copy of
-    /// the definition map. Returns that child map, the arm's tail — its final frontier and any waits a
-    /// nested <c>if</c> left unconsumed — which the statement after the enclosing <c>if</c> must wait
-    /// for, and whether the arm lowered cleanly.
-    /// </summary>
-    private (Dictionary<ILocalSymbol, VarSource> Vars, List<int> Waits, bool Ok) WalkArm(
-        StatementSyntax body, int conditionIndex, int arm, Dictionary<ILocalSymbol, VarSource> parentVars)
+    /// <summary>One arm's walk result.</summary>
+    private readonly record struct ArmWalk(Dictionary<ILocalSymbol, VarSource> Vars, List<int> Waits, bool Ok);
+
+    /// <summary>Walks one arm under Guard(conditionIndex, arm), with <paramref name="bind"/> applied
+    /// to its definition map first (an arm's pattern variables).</summary>
+    private ArmWalk WalkArm(
+        IEnumerable<StatementSyntax> body,
+        int conditionIndex,
+        int arm,
+        Dictionary<ILocalSymbol, VarSource> parentVars,
+        IReadOnlyDictionary<ILocalSymbol, VarSource>? bind = null)
     {
         var savedFrontier = _prevFrontier;
         var savedWaits = _pendingWaits;
@@ -512,10 +473,23 @@ internal sealed class ScenarioParser
             _vars[pair.Key] = pair.Value;
         }
 
+        if (bind is not null)
+        {
+            foreach (var pair in bind)
+            {
+                _vars[pair.Key] = pair.Value;
+            }
+        }
+
         _guards.Add(new ParsedGuard(conditionIndex, arm));
         _prevFrontier = conditionIndex >= 0 ? [conditionIndex] : [];
         _pendingWaits = [];
-        var ok = ParseStatement(body);
+        var ok = true;
+        foreach (var statement in body)
+        {
+            ok &= ParseStatement(statement);
+        }
+
         _guards.RemoveAt(_guards.Count - 1);
 
         var tail = new List<int>(_prevFrontier);
@@ -523,43 +497,91 @@ internal sealed class ScenarioParser
         _prevFrontier = savedFrontier;
         _pendingWaits = savedWaits;
 
-        return (new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default), tail, ok);
+        return new ArmWalk(new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default), tail, ok);
+    }
+
+    /// <summary>Rejoins after a branch: one N-way merge per local the arms define differently, then
+    /// Advance. Returns false when a merge was refused.</summary>
+    private bool Rejoin(
+        SyntaxNode branch,
+        int conditionIndex,
+        Dictionary<ILocalSymbol, VarSource> parentVars,
+        IReadOnlyList<ArmWalk> arms,
+        bool ok)
+    {
+        ok &= arms.All(a => a.Ok);
+
+        _vars.Clear();
+        foreach (var pair in parentVars)
+        {
+            _vars[pair.Key] = pair.Value;
+        }
+
+        var frontier = new List<int>();
+        foreach (var local in DifferingLocals(parentVars, arms))
+        {
+            // Nothing to merge when the branch is broken, or when a failed statement defined the
+            // local: the local stays failed, already reported where it went wrong.
+            var definitions = arms.Select(a => a.Vars.TryGetValue(local, out var s) ? s : null)
+                .Append(parentVars.TryGetValue(local, out var p) ? p : null);
+            if (!ok || definitions.Any(source => source is FailedOutput))
+            {
+                _vars[local] = FailedOutput.Instance;
+                continue;
+            }
+
+            var mergeIndex = InsertMerge(local, conditionIndex, parentVars, arms);
+            if (mergeIndex < 0)
+            {
+                Refuse(branch, "'" + local.Name + "' holds an array group, which cannot be merged across the arms of a branch; bind each arm's group to its own local");
+                _vars[local] = FailedOutput.Instance;
+                ok = false;
+                continue;
+            }
+
+            frontier.Add(mergeIndex);
+        }
+
+        if (conditionIndex < 0)
+        {
+            return false;
+        }
+
+        // An empty arm's frontier is the condition itself, which the next statement already depends on.
+        var waits = new SortedSet<int>(arms.SelectMany(a => a.Waits));
+        waits.Remove(conditionIndex);
+
+        // A following statement must never DEPEND on an arm's node (DependsOn is all-of and an arm may
+        // not run); it joins on the merges, or on the condition when there are none. It must still
+        // WAIT for every arm's last steps, or it would run concurrently with the inside of the branch —
+        // that is what WaitsFor carries, and a not-taken arm does not cascade through it.
+        Advance(frontier.Count > 0 ? frontier : [conditionIndex], [.. waits]);
+        return ok;
     }
 
     /// <summary>Locals whose definition differs between the arms (or between an arm and the parent) —
-    /// exactly the set that needs a phi. A local declared inside one arm is branch-local: it is absent
-    /// from the parent and from the other arm (a sibling scope's same-named local is another symbol),
-    /// and C# scoping already forbids its later use, so it is dropped. Ordered by name, then by
-    /// declaration position, so merge nodes are inserted identically on every run.</summary>
+    /// exactly the set that needs a phi. A local declared inside one arm is branch-local (absent from
+    /// the parent and from the other arms) and C# scoping forbids its later use, so it is dropped; a
+    /// local declared before the branch without a value and assigned in EVERY arm is the ordinary
+    /// phi. Ordered by name, then declaration position, so merges are inserted identically every run.</summary>
     private static IEnumerable<ILocalSymbol> DifferingLocals(
-        Dictionary<ILocalSymbol, VarSource> parentVars,
-        Dictionary<ILocalSymbol, VarSource> thenVars,
-        Dictionary<ILocalSymbol, VarSource>? elseVars)
+        Dictionary<ILocalSymbol, VarSource> parentVars, IReadOnlyList<ArmWalk> arms)
     {
-        var locals = thenVars.Keys
-            .Concat(elseVars?.Keys ?? Enumerable.Empty<ILocalSymbol>())
+        var locals = arms.SelectMany(a => a.Vars.Keys)
             .Distinct<ILocalSymbol>(SymbolEqualityComparer.Default)
             .OrderBy(l => l.Name, System.StringComparer.Ordinal)
             .ThenBy(l => l.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0);
 
         foreach (var local in locals)
         {
-            var inThen = thenVars.TryGetValue(local, out var thenSource);
-            VarSource? elseSource = null;
-            var inElse = elseVars is not null && elseVars.TryGetValue(local, out elseSource);
             var inParent = parentVars.TryGetValue(local, out var parentDef);
-
-            // Declared before the `if` without a value (`Appointment a;`) and assigned in both arms is
-            // the ordinary phi; anything else missing from the parent is branch-local.
-            if (!inParent && !(inThen && inElse))
+            if (!inParent && !arms.All(a => a.Vars.ContainsKey(local)))
             {
                 continue;
             }
 
-            var thenDef = inThen ? thenSource : parentDef;
-            var elseDef = inElse ? elseSource : parentDef;
-
-            if (!Equals(thenDef, elseDef))
+            var defs = arms.Select(a => a.Vars.TryGetValue(local, out var s) ? s : parentDef).ToList();
+            if (defs.Distinct().Count() > 1)
             {
                 yield return local;
             }
@@ -567,67 +589,69 @@ internal sealed class ScenarioParser
     }
 
     /// <summary>
-    /// Inserts the phi for one local: a synthetic merge over the two arm definitions. When an arm did
-    /// not redefine the local, that side is a synthetic PASS-THROUGH node — guarded on the opposite
-    /// value, aliasing the parent definition — so the merge's sources stay mutually exclusive (what
-    /// <c>ScenarioDefinition.Validate</c> requires) and the parent value flows through when the arm is
-    /// not taken. Arrays are not mergeable; returns -1 and the caller refuses the shape.
+    /// Inserts the phi for one local: a synthetic merge with one source per arm — the arm's own
+    /// definition, or, when the arm left the local alone, a PASS-THROUGH aliasing the parent
+    /// definition, guarded on that arm. Every source is guarded on a different arm of one condition,
+    /// so they are mutually exclusive, as <c>ScenarioDefinition.Validate</c> requires. Typed as the
+    /// LOCAL, not as any one arm's producer, since arms may produce different subtypes. Arrays are not
+    /// mergeable; returns -1 and the caller refuses the shape.
     /// </summary>
     private int InsertMerge(
         ILocalSymbol local,
         int conditionIndex,
         Dictionary<ILocalSymbol, VarSource> parentVars,
-        Dictionary<ILocalSymbol, VarSource> thenVars,
-        Dictionary<ILocalSymbol, VarSource>? elseVars)
+        IReadOnlyList<ArmWalk> arms)
     {
-        var thenDef = Side(thenVars, arm: 0);
-        var elseDef = Side(elseVars, arm: 1);
-        if (thenDef < 0 || elseDef < 0)
+        var sources = new List<int>();
+        for (var arm = 0; arm < arms.Count; arm++)
         {
-            return -1;
+            int source;
+            if (arms[arm].Vars.TryGetValue(local, out var armSource))
+            {
+                source = armSource is StepOutput armStep ? armStep.Index : -1;
+            }
+            else
+            {
+                source = parentVars.TryGetValue(local, out var parentSource) && parentSource is StepOutput parentStep
+                    ? InsertPassThrough(local, conditionIndex, arm, parentStep.Index)
+                    : -1;
+            }
+
+            if (source < 0)
+            {
+                return -1;
+            }
+
+            sources.Add(source);
         }
 
-        var producer = _steps.First(s => s.Index == thenDef);
+        var phase = _steps.First(s => s.Index == sources[0]).Phase;
         var index = _nextIndex++;
-        var merge = new ParsedStep
+        _steps.Add(new ParsedStep
         {
             Index = index,
             StepId = GenStableId.ForStep(_scenarioId, "merge:" + local.Name + ":" + index),
-            Phase = producer.Phase,
+            Phase = phase,
             OperationName = "Merge",
             HasResult = true,
-            ResultType = producer.ResultType,
+            ResultType = TypeSyntaxFactory.From(local.Type),
             DisplayNameTemplate = "«merge " + local.Name + "»",
-            MergeSources = [thenDef, elseDef],
+            MergeSources = sources,
             IsSynthetic = true,
             Guards = [.. _guards],
             DependsOn = [],
-        };
+        });
 
-        _steps.Add(merge);
         _vars[local] = new StepOutput(index);
         return index;
-
-        int Side(Dictionary<ILocalSymbol, VarSource>? armVars, int arm)
-        {
-            if (armVars is not null && armVars.TryGetValue(local, out var armSource))
-            {
-                return armSource is StepOutput armStep ? armStep.Index : -1;
-            }
-
-            return parentVars.TryGetValue(local, out var parentSource) && parentSource is StepOutput parentStep
-                ? InsertPassThrough(local.Name, conditionIndex, arm, parentStep.Index)
-                : -1;
-        }
     }
 
     /// <summary>
-    /// Stands in for the arm that did not redefine the local (the missing <c>else</c> of a bare
-    /// <c>if</c>, or an arm that simply left the local alone): a synthetic node aliasing the parent
-    /// definition, guarded on <paramref name="arm"/> — the side it OCCUPIES, so the
-    /// merge's two sources end up mutually exclusive, as <c>ScenarioDefinition.Validate</c> requires.
+    /// Stands in for an arm that did not redefine the local: a synthetic node aliasing the parent
+    /// definition, guarded on the arm it OCCUPIES, so a merge's sources stay mutually exclusive and
+    /// the parent value flows through when that arm runs.
     /// </summary>
-    private int InsertPassThrough(string name, int conditionIndex, int arm, int parentDef)
+    private int InsertPassThrough(ILocalSymbol local, int conditionIndex, int arm, int parentDef)
     {
         var producer = _steps.First(s => s.Index == parentDef);
         var index = _nextIndex++;
@@ -635,12 +659,12 @@ internal sealed class ScenarioParser
         _steps.Add(new ParsedStep
         {
             Index = index,
-            StepId = GenStableId.ForStep(_scenarioId, "phi:" + name + ":" + index),
+            StepId = GenStableId.ForStep(_scenarioId, "phi:" + local.Name + ":" + index),
             Phase = producer.Phase,
             OperationName = "Unchanged",
             HasResult = true,
-            ResultType = producer.ResultType,
-            DisplayNameTemplate = "«" + name + " unchanged»",
+            ResultType = TypeSyntaxFactory.From(local.Type),
+            DisplayNameTemplate = "«" + local.Name + " unchanged»",
             MergeSources = [parentDef],
             IsSynthetic = true,
             Guards = guards,

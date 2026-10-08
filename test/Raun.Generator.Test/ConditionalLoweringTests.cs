@@ -326,4 +326,33 @@ public class ConditionalLoweringTests
         Assert.Equal(StepStatus.Passed, results[4].Status);
         Assert.True(results[4].StartedAt >= results[3].StartedAt + results[3].Duration);
     }
+
+    [Fact]
+    public async Task A_merge_takes_the_locals_type_when_arms_produce_subtypes()
+    {
+        // The arms return different subtypes of the local's type; the merge must be read as the
+        // local's type, or the generated code reading it does not compile.
+        var source = SampleSources.ConditionalDsl +
+            """
+
+            public sealed class SubtypeMergeScenarios : CondSuite
+            {
+                [Scenario("subtype merge")]
+                public async Task Run()
+                {
+                    var patient = await Given.PatientExists("Alice");
+                    object booking;
+                    if (await Given.IsPriority())
+                        booking = await When.CreateUrgent(patient);
+                    else
+                        booking = await Given.PatientExists("Bob");
+                    await Then.Logged(booking);
+                }
+            }
+            """;
+
+        var result = GeneratorHarness.Run(source);
+        result.AssertCompiles();
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source));
+    }
 }
