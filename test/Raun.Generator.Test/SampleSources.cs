@@ -361,6 +361,13 @@ public static class SampleSources
                 return true;
             }
 
+            [StepName("the patient is regular")]
+            public async Task<bool> IsRegular()
+            {
+                await Task.Yield();
+                return false;
+            }
+
             [StepName("the clinic has capacity")]
             public async Task<Capacity> HasCapacity()
             {

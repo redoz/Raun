@@ -330,9 +330,10 @@ public class ConditionalLoweringTests
     [Fact]
     public async Task A_merge_takes_the_locals_type_when_arms_produce_subtypes()
     {
-        // The arms return different subtypes of the local's type; the merge must be read as the
-        // local's type, or the generated code reading it does not compile.
-        var source = SampleSources.ConditionalDsl +
+        // The else arm produces a Patient, the then arm an Appointment; the local is an object. The
+        // merge must be read as the local's type: read as the first producer's type (Appointment),
+        // the Patient the else arm yields fails the cast at run time.
+        var result = GeneratorHarness.Run(SampleSources.ConditionalDsl +
             """
 
             public sealed class SubtypeMergeScenarios : CondSuite
@@ -342,17 +343,86 @@ public class ConditionalLoweringTests
                 {
                     var patient = await Given.PatientExists("Alice");
                     object booking;
-                    if (await Given.IsPriority())
+                    if (await Given.IsRegular())
                         booking = await When.CreateUrgent(patient);
                     else
                         booking = await Given.PatientExists("Bob");
                     await Then.Logged(booking);
                 }
             }
-            """;
-
-        var result = GeneratorHarness.Run(source);
+            """);
         result.AssertCompiles();
-        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source));
+
+        var results = await result.Definitions().Single().RunAsync();
+
+        Assert.All(results.Where(r => r.Status != StepStatus.NotTaken), r => Assert.Equal(StepStatus.Passed, r.Status));
+        Assert.Equal(StepStatus.Passed, results[^1].Status);
+    }
+
+    private const string OneArmReassigns =
+        """
+
+        public sealed class OneArmScenarios : CondSuite
+        {
+            [Scenario("one arm reassigns")]
+            public async Task Run()
+            {
+                var patient = await Given.PatientExists("Jane");
+                var appointment = await When.CreateStandard(patient);
+                if (await Given.IsPriority())
+                    appointment = await When.CreateUrgent(patient);
+                else
+                    await When.Notify(patient);
+                await Then.AppointmentExists(appointment);
+            }
+        }
+        """;
+
+    [Fact]
+    public async Task An_arm_that_leaves_a_local_alone_passes_it_through_and_the_scenario_validates()
+    {
+        var result = GeneratorHarness.Run(SampleSources.ConditionalDsl + OneArmReassigns);
+        result.AssertCompiles();
+        var def = Assert.Single(result.Definitions());
+
+        // 0 PatientExists, 1 CreateStandard, 2 IsPriority, 3 CreateUrgent (arm 0), 4 Notify (arm 1),
+        // 5 pass-through of 1 on arm 1, 6 merge, 7 AppointmentExists
+        var merge = Assert.Single(def.Nodes, n => n.OperationName == "Merge");
+        Assert.Equal(2, merge.MergeSources.Count);
+        var guards = merge.MergeSources.Select(i => Assert.Single(def.Nodes[i].Guards)).ToList();
+        var cond = def.Nodes.First(n => n.OperationName == "IsPriority").Index;
+        Assert.Contains(new Guard(cond, 0), guards);
+        Assert.Contains(new Guard(cond, 1), guards);
+
+        // RunAsync validates the definition; unguarded merge sources would throw "not mutually exclusive".
+        var results = await def.RunAsync();
+        Assert.Equal(StepStatus.Passed, results[^1].Status);
+    }
+
+    [Fact]
+    public async Task An_explicit_empty_else_passes_the_parent_through()
+    {
+        var result = GeneratorHarness.Run(SampleSources.ConditionalDsl +
+            """
+
+            public sealed class EmptyElseScenarios : CondSuite
+            {
+                [Scenario("empty else")]
+                public async Task Run()
+                {
+                    var patient = await Given.PatientExists("Jane");
+                    var appointment = await When.CreateStandard(patient);
+                    if (await Given.IsPriority())
+                        appointment = await When.CreateUrgent(patient);
+                    else
+                    {
+                    }
+                    await Then.AppointmentExists(appointment);
+                }
+            }
+            """);
+        result.AssertCompiles();
+        var results = await result.Definitions().Single().RunAsync();
+        Assert.Equal(StepStatus.Passed, results[^1].Status);
     }
 }

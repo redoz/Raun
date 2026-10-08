@@ -390,18 +390,13 @@ internal sealed class ScenarioParser
         var conditionIndex = condition?.Index ?? -1;
         var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
 
-        var thenArm = WalkArm([statement.Statement], conditionIndex, arm: 0, parentVars);
-        var elseArm = WalkArm(statement.Else is { } elseClause ? [elseClause.Statement] : [], conditionIndex, arm: 1, parentVars);
-        if (statement.Else is null)
+        var arms = new List<ArmWalk>
         {
-            // An absent else defines nothing, so a local the then arm redefines merges against a
-            // pass-through of the parent rather than directly against the parent's node.
-            elseArm = elseArm with { Vars = new Dictionary<ILocalSymbol, VarSource>(SymbolEqualityComparer.Default) };
-        }
+            WalkArm([statement.Statement], conditionIndex, arm: 0, parentVars),
+            WalkArm(statement.Else is { } elseClause ? [elseClause.Statement] : [], conditionIndex, arm: 1, parentVars),
+        };
 
-        List<ArmWalk> arms = [thenArm, elseArm];
-
-        return Rejoin(statement, conditionIndex, parentVars, arms, ok: condition is not null) && condition is not null;
+        return Rejoin(statement, conditionIndex, parentVars, arms, ok: condition is not null);
     }
 
     /// <summary>
@@ -606,7 +601,9 @@ internal sealed class ScenarioParser
         for (var arm = 0; arm < arms.Count; arm++)
         {
             int source;
-            if (arms[arm].Vars.TryGetValue(local, out var armSource))
+            var inArm = arms[arm].Vars.TryGetValue(local, out var armSource);
+            var inParent = parentVars.TryGetValue(local, out var definedBefore);
+            if (inArm && !(inParent && Equals(armSource, definedBefore)))
             {
                 source = armSource is StepOutput armStep ? armStep.Index : -1;
             }
