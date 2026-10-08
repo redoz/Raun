@@ -376,4 +376,43 @@ public class SwitchBranchLoweringTests
 
         Assert.Single(await GeneratorHarness.DiagnoseAsync(source), d => d.Id == "RAUN011");
     }
+
+    [Theory]
+    [InlineData("", "nothing")]       // 0
+    [InlineData("abc", "many")]       // 150
+    [InlineData("a", "some 50")]      // 50
+    public async Task A_switch_on_a_value_type_result_picks_the_arm_and_binds_unboxed(string id, string expected)
+    {
+        var source = SampleSources.OutcomeDsl +
+            $$"""
+
+            public sealed class CountScenarios : OutcomeScenarios
+            {
+                [Scenario("count")]
+                public async Task Run()
+                {
+                    switch (await When.Count("{{id}}"))
+                    {
+                        case 0:
+                            await Then.Told("nothing");
+                            break;
+                        case > 100:
+                            await Then.Told("many");
+                            break;
+                        case int n:
+                            await Then.Told("some " + n);
+                            break;
+                    }
+                }
+            }
+            """;
+
+        var result = GeneratorHarness.Run(source);
+        result.AssertCompiles();
+
+        var results = await result.Definitions().Single().RunAsync();
+
+        var ran = Assert.Single(results, r => r.Node.OperationName == "Told" && r.Status == StepStatus.Passed);
+        Assert.Equal("customer told " + expected, ran.DisplayName);
+    }
 }
