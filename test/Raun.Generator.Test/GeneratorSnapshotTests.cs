@@ -51,6 +51,10 @@ public class GeneratorSnapshotTests
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.ConditionalDsl + SampleSources.IfElseScenario));
 
     [Fact]
+    public void Switch_scenario() =>
+        VerifyDriver(GeneratorHarness.RunDriver(SampleSources.OutcomeDsl + SampleSources.SwitchScenario));
+
+    [Fact]
     public void Resource_scenario() =>
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.ResourceDsl + SampleSources.ResourceScenario));
 

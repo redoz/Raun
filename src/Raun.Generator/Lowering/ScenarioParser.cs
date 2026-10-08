@@ -356,8 +356,11 @@ internal sealed class ScenarioParser
             case BlockSyntax block:
                 return ParseBlock(block);
 
+            case SwitchStatementSyntax switchStatement:
+                return ParseSwitch(switchStatement);
+
             case ForStatementSyntax or ForEachStatementSyntax
-                or WhileStatementSyntax or DoStatementSyntax or SwitchStatementSyntax
+                or WhileStatementSyntax or DoStatementSyntax
                 or TryStatementSyntax or UsingStatementSyntax or LockStatementSyntax
                 or GotoStatementSyntax or BreakStatementSyntax or ContinueStatementSyntax
                 or ThrowStatementSyntax or YieldStatementSyntax or LabeledStatementSyntax
@@ -434,6 +437,132 @@ internal sealed class ScenarioParser
         };
 
         return Rejoin(statement, conditionIndex, parentVars, arms, ok: parsed is not null);
+    }
+
+    /// <summary>
+    /// Lowers <c>switch (await S) { case …: …; break; … }</c>: the step is the condition; each section
+    /// is an arm, chosen by the compiler's own switch over the recorded value (labels re-hosted like
+    /// step arguments; a <c>when</c> clause's step reads become the condition's dependencies); a
+    /// section's pattern variables are its case node's outputs; locals rejoin N-way.
+    /// </summary>
+    private bool ParseSwitch(SwitchStatementSyntax statement)
+    {
+        if (statement.Expression is not AwaitExpressionSyntax { Expression: InvocationExpressionSyntax invocation })
+        {
+            Report(Descriptors.InvalidCondition, statement.Expression);
+            WalkSectionsForDiagnostics(statement);
+            return false;
+        }
+
+        var call = ResolveCall(invocation, Descriptors.InvalidCondition);
+        var ok = call is { ResultType: not null };
+        if (call is { ResultType: null })
+        {
+            Report(Descriptors.InvalidCondition, statement.Expression);
+        }
+
+        // Lower every section's labels; collect the step outputs their when-clauses read.
+        var sections = new List<SwitchSectionSyntax>();
+        var labels = new List<string>();
+        var whenReads = new SortedSet<int>();
+        foreach (var section in statement.Sections)
+        {
+            var lowered = new List<SwitchLabelSyntax>();
+            foreach (var label in section.Labels)
+            {
+                var result = ArgumentLowering.Lower(_model, label, StepValueFor(loop: null));
+                foreach (var violation in result.Violations)
+                {
+                    Report(Descriptors.InvalidArgument, violation.Node, violation.Subject, violation.Reason);
+                    ok = false;
+                }
+
+                foreach (var read in result.Reads)
+                {
+                    whenReads.UnionWith(_vars[read.Local].Producers);
+                }
+
+                lowered.Add(result.Node.WithoutTrivia());
+            }
+
+            sections.Add(SwitchSection(List(lowered), List<StatementSyntax>()));
+            labels.Add(string.Join(" ", section.Labels.Select(LabelText)));
+        }
+
+        ParsedStep? condition = null;
+        if (call is { ResultType: not null } && ok)
+        {
+            condition = BuildStep(call, groupId: null, [.. _prevFrontier.Concat(whenReads)]);
+            MarkAsCondition(condition, new ParsedBranch
+            {
+                Form = BranchForm.Switch,
+                ValueType = condition.ResultType,
+                Sections = sections,
+                ArmLabels = labels,
+            });
+        }
+
+        var conditionIndex = condition?.Index ?? -1;
+        var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
+        var arms = new List<ArmWalk>();
+        for (var arm = 0; arm < statement.Sections.Count; arm++)
+        {
+            var section = statement.Sections[arm];
+            var bind = condition is null
+                ? FailedSectionVariables(section)
+                : BindSection(condition, arm, section, sections[arm], labels[arm]);
+            arms.Add(WalkArm(SectionBody(section), conditionIndex, arm, parentVars, bind));
+        }
+
+        return Rejoin(statement, conditionIndex, parentVars, arms, ok: condition is not null) && condition is not null;
+    }
+
+    /// <summary>A label as written, without its colon: <c>case Accepted a when a.Express</c>,
+    /// <c>default</c>. Display text for the arm, never fed back to a parser.</summary>
+    private static string LabelText(SwitchLabelSyntax label)
+        => label.SyntaxTree.GetText().ToString(Microsoft.CodeAnalysis.Text.TextSpan.FromBounds(
+            label.SpanStart, label.ColonToken.GetPreviousToken().Span.End));
+
+    /// <summary>A section's statements without its closing <c>break;</c>; any other way out of a
+    /// section (<c>return</c>, <c>throw</c>, <c>goto case</c>) stays in, and is RAUN003 when walked.</summary>
+    private static IEnumerable<StatementSyntax> SectionBody(SwitchSectionSyntax section)
+        => section.Statements.LastOrDefault() is BreakStatementSyntax
+            ? section.Statements.Take(section.Statements.Count - 1)
+            : section.Statements;
+
+    /// <summary>The case node binding a section's pattern variables. A section with several labels
+    /// binds none (C# forbids using them there).</summary>
+    private Dictionary<ILocalSymbol, VarSource>? BindSection(
+        ParsedStep condition, int arm, SwitchSectionSyntax written, SwitchSectionSyntax lowered, string label)
+    {
+        if (written.Labels.Count != 1 || written.Labels[0] is not CasePatternSwitchLabelSyntax patternLabel)
+        {
+            return null;
+        }
+
+        var variables = PatternVariables(patternLabel.Pattern);
+        var loweredPattern = ((CasePatternSwitchLabelSyntax)lowered.Labels[0]).Pattern;
+        return AddCaseNode(
+            condition.Index, arm, condition.ResultType,
+            IsPatternExpression(IdentifierName("__v"), loweredPattern), variables, label);
+    }
+
+    /// <summary>Under a refused switch, a section's pattern variables are failed outputs, so their
+    /// readers are not reported a second time for the one mistake.</summary>
+    private Dictionary<ILocalSymbol, VarSource> FailedSectionVariables(SwitchSectionSyntax section)
+        => section.Labels.OfType<CasePatternSwitchLabelSyntax>()
+            .SelectMany(label => PatternVariables(label.Pattern))
+            .ToDictionary<ILocalSymbol, ILocalSymbol, VarSource>(local => local, _ => FailedOutput.Instance, SymbolEqualityComparer.Default);
+
+    /// <summary>Under a broken governing expression, the sections are still walked (with no guard to
+    /// hang them on) so their own problems are reported in the same build.</summary>
+    private void WalkSectionsForDiagnostics(SwitchStatementSyntax statement)
+    {
+        var parentVars = new Dictionary<ILocalSymbol, VarSource>(_vars, SymbolEqualityComparer.Default);
+        var arms = statement.Sections
+            .Select((s, k) => WalkArm(SectionBody(s), -1, k, parentVars, FailedSectionVariables(s)))
+            .ToList();
+        Rejoin(statement, -1, parentVars, arms, ok: false);
     }
 
     /// <summary>

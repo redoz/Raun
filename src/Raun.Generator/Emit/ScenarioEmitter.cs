@@ -496,10 +496,28 @@ internal static class ScenarioEmitter
     /// <c>__inputs.Get&lt;T&gt;(index)</c>. Truth: <c>(__v) ? 0 : 1</c>, so Roslyn picks bool, an
     /// implicit conversion, or <c>operator true</c> at compile time; the scheduler never reflects.
     /// Pattern: <c>(__v is P) ? 0 : 1</c>, the compiler's own <c>is</c> over the recorded value.
+    /// Switch: <c>{ switch (__v) { &lt;section k's labels&gt;: return k; … } return -1; }</c>, the
+    /// compiler's own switch; the trailing <c>-1</c> (no arm) only when there is no <c>default</c>,
+    /// where it would be unreachable.
     /// </summary>
     private static SimpleLambdaExpressionSyntax SelectArmLambda(int conditionIndex, ParsedBranch branch)
     {
         var value = InputsGet(branch.ValueType, conditionIndex);
+        if (branch.Form == BranchForm.Switch)
+        {
+            var sections = branch.Sections.Select((section, k) =>
+                section.WithStatements(SingletonList<StatementSyntax>(ReturnStatement(Num(k)))));
+            var statements = new List<StatementSyntax> { SwitchStatement(value).WithSections(List(sections)) };
+            if (!branch.Sections.Any(s => s.Labels.Any(l => l is DefaultSwitchLabelSyntax)))
+            {
+                statements.Add(ReturnStatement(Num(-1)));
+            }
+
+            return SimpleLambdaExpression(Parameter(Identifier("__inputs")))
+                .WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword)))
+                .WithBlock(Block(statements));
+        }
+
         ExpressionSyntax body = branch.Form switch
         {
             BranchForm.Truth => ConditionalExpression(ParenthesizedExpression(value), Num(0), Num(1)),

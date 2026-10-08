@@ -1163,4 +1163,66 @@ public static class SampleSources
             }
         }
         """;
+
+    // `switch` on a step's result: N arms with patterns, a `when` clause and a default; no arm
+    // matching without a default; a local reassigned in some arms merging after the switch.
+    public const string SwitchScenario =
+        """
+
+        public sealed class SwitchScenarios : OutcomeScenarios
+        {
+            [Scenario("an order is routed by its outcome")]
+            public async Task Route()
+            {
+                switch (await When.Submit("big"))
+                {
+                    case Accepted { Total: > 1000 } big:
+                        await Then.Review(big.Total);
+                        break;
+                    case Accepted accepted when accepted.Express:
+                        await Then.Shipped(accepted.Shipment);
+                        break;
+                    case Rejected rejected:
+                        await Then.Told(rejected.Reason);
+                        break;
+                    default:
+                        await Then.StillPending();
+                        break;
+                }
+            }
+
+            [Scenario("no arm matches")]
+            public async Task NoMatch()
+            {
+                switch (await When.Submit("pending"))
+                {
+                    case Accepted accepted:
+                        await Then.Shipped(accepted.Shipment);
+                        break;
+                    case Rejected rejected:
+                        await Then.Told(rejected.Reason);
+                        break;
+                }
+
+                await Then.StillPending();
+            }
+
+            [Scenario("a local merges across switch arms")]
+            public async Task Merge()
+            {
+                var outcome = await When.Submit("ok");
+                switch (await When.Submit("no"))
+                {
+                    case Rejected:
+                        outcome = await When.Submit("fast");
+                        break;
+                    default:
+                        break;
+                }
+
+                if (await When.Submit("x") is Pending)
+                    await Then.Shipped(((Accepted)outcome).Shipment);
+            }
+        }
+        """;
 }
