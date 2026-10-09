@@ -360,9 +360,11 @@
     const esc = (x) => { const d = document.createElement("div"); d.textContent = x == null ? "" : String(x); return d.innerHTML; };
     const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
 
+    // milliseconds to one decimal: the timings are measured, not exact, and more digits are noise
+    function fmtMs(ms){ return Number(ms).toFixed(1) + " ms"; }
     function fmtDur(ms){
       if (ms >= 1000) return (ms / 1000).toFixed(2) + " s";
-      return Math.round(ms) + " ms";
+      return fmtMs(ms);
     }
     function fmtGen(iso){
       // 2026-06-19T21:42:11Z -> 2026-06-19 21:42:11 UTC
@@ -2145,7 +2147,7 @@
             '<span class="ph-chip" style="background:' + (PHCOLOR[s.phase.toLowerCase()] || "var(--faint)") + '">' + esc(s.phase) + "</span>" +
             '<span class="dn">' + esc(s.displayName) + "</span>" +
             '<span class="pill ' + s.status + '"><span class="pd"></span>' + s.status + "</span>" +
-            '<span class="dm">+' + s.offsetMs + "ms · " + fmtDur(s.durationMs) + "</span>" +
+            '<span class="dm">+' + fmtMs(s.offsetMs) + " · " + fmtDur(s.durationMs) + "</span>" +
           "</div>";
 
         if (s.skipReason){
@@ -2173,7 +2175,7 @@
                 '<span class="vd" style="background:' + (VCOLOR[e.verb.toLowerCase()] || "var(--faint)") + '"></span>' +
                 '<span class="vb">' + esc(e.verb) + "</span>" +
                 resChip(e.type, e.key) +
-                '<span class="of">+' + e.offsetMs + "ms</span>" +
+                '<span class="of">+' + fmtMs(e.offsetMs) + "</span>" +
                 (e.data ? '<span class="da">· ' + esc(e.data) + "</span>" : "") +
               "</div>"
             ).join("") + "</div></div>";

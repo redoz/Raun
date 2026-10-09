@@ -178,6 +178,9 @@ public sealed class HtmlReportSinkTests : IDisposable
         // a card is collapsed unless the scenario failed or the reader opened it
         Assert.Contains("const isExpanded = (sc) => expandedFor.has(sc.scenarioId) ? expandedFor.get(sc.scenarioId) : sc.status === \"failed\";", html, StringComparison.Ordinal);
         Assert.Contains(".card.collapsed .card-body{ display:none; }", html, StringComparison.Ordinal);
+        // milliseconds are shown to one decimal, never as the raw double
+        Assert.Contains("function fmtMs(ms){ return Number(ms).toFixed(1) + \" ms\"; }", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("s.offsetMs + \"ms", html, StringComparison.Ordinal);
         // the collapsed row gives way on the "where" text first, so the title and timing keep their room
         Assert.Contains(".card-head .cls{ flex:0 100 auto;", html, StringComparison.Ordinal);
     }
