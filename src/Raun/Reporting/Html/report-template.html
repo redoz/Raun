@@ -191,6 +191,17 @@
     .card-head .name{ flex:1 1 auto; max-width:none; min-width:0; }
   }
   .card-body{ padding:0 16px 14px 36px; }
+
+  /* one group per scenario class: its [DisplayName], or the class name */
+  .group{ margin:18px 0 4px; }
+  .group-head{ display:flex; align-items:baseline; gap:10px; padding:2px 2px 4px; cursor:pointer; }
+  .group-head .tw{ color:var(--faint); font-size:10px; transition:transform .15s; width:10px; flex:none; }
+  .group.collapsed .group-head .tw{ transform:rotate(-90deg); }
+  .group-head .gn{ font-size:13px; font-weight:700; color:var(--ink); }
+  .group-head .gc{ font:12px var(--mono); color:var(--faint); }
+  .group-head .gc .f{ color:var(--bar-fail); font-weight:700; }
+  .group-head .gc .k{ color:var(--bar-skip); }
+  .group.collapsed .group-body{ display:none; }
   .card.collapsed .card-body{ display:none; }
   .card-body .where{ font-size:12px; color:var(--muted); margin:0 0 2px; overflow-wrap:anywhere; }
   .card-body .where .mth{ color:var(--faint); }
@@ -227,6 +238,12 @@
   }
   .step-head .dn{ font-weight:640; font-size:13.5px; }
   .step-head .dm{ font:12px/1 var(--mono); color:var(--muted); margin-left:auto; }
+  /* a step's details start collapsed; clicking the step opens them (a failed step starts open) */
+  .step-head .stw{ color:var(--faint); font-size:9px; width:9px; flex:none; transition:transform .15s; transform:rotate(-90deg); }
+  .step-entry.open .step-head .stw{ transform:none; }
+  .step-entry.has-body .step-head{ cursor:pointer; }
+  .step-body{ display:none; }
+  .step-entry.open .step-body{ display:block; }
   .sec{ margin-top:11px; }
   .sec h4{
     margin:0 0 7px; font-size:10.5px; font-weight:700; letter-spacing:.07em;
@@ -785,10 +802,54 @@
     // "Ns.Class.Method" -> "Method": the row shows the short name, the expanded card the full one
     const shortName = (cls) => !cls ? "" : cls.slice(cls.lastIndexOf(".") + 1);
 
+    // Scenarios grouped by their class (the method name without its last segment), in first-appearance
+    // order. The label is the class's [DisplayName] when it has one, else the class name.
+    function groupByClass(scenarios){
+      const groups = new Map();
+      for (const sc of scenarios){
+        const type = sc.methodName.slice(0, sc.methodName.lastIndexOf("."));
+        if (!groups.has(type)) groups.set(type, { type, label: sc.classDisplayName || shortName(type), scenarios: [] });
+        groups.get(type).scenarios.push(sc);
+      }
+      return [...groups.values()];
+    }
+
+    const collapsedGroups = new Set();
+    function buildGroup(group){
+      const sec = el("section", "group" + (collapsedGroups.has(group.type) ? " collapsed" : ""));
+      const failed = group.scenarios.filter((sc) => sc.status === "failed").length;
+      const skipped = group.scenarios.filter((sc) => sc.status === "skipped").length;
+      const head = el("div", "group-head");
+      head.tabIndex = 0;
+      head.setAttribute("role", "button");
+      head.title = group.type;
+      head.innerHTML =
+        '<span class="tw" aria-hidden="true">▼</span>' +
+        '<span class="gn">' + esc(group.label) + "</span>" +
+        '<span class="gc">' + group.scenarios.length + (group.scenarios.length === 1 ? " scenario" : " scenarios") +
+          (failed ? ' · <span class="f">' + failed + " failed</span>" : "") +
+          (skipped ? ' · <span class="k">' + skipped + " skipped</span>" : "") + "</span>";
+      const toggle = () => {
+        const on = !sec.classList.toggle("collapsed");
+        if (on) collapsedGroups.delete(group.type); else collapsedGroups.add(group.type);
+        head.setAttribute("aria-expanded", String(on));
+      };
+      head.setAttribute("aria-expanded", String(!sec.classList.contains("collapsed")));
+      head.addEventListener("click", toggle);
+      head.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        toggle(); ev.preventDefault();
+      });
+      const body = el("div", "group-body");
+      for (const sc of group.scenarios) body.appendChild(renderScenario(sc));
+      sec.append(head, body);
+      return sec;
+    }
+
     function renderAll(){
       report.replaceChildren();
       openers.length = 0;
-      for (const sc of model.scenarios) report.appendChild(renderScenario(sc));
+      for (const group of groupByClass(model.scenarios)) report.appendChild(buildGroup(group));
 
       // pre-expand the first failing step's scenario drill so its detail is visible by default
       for (const sc of model.scenarios){
@@ -1988,7 +2049,7 @@
         '<span class="pill ' + sc.status + '"><span class="pd"></span>' + sc.status + "</span>" +
         '<span class="name" title="' + esc(sc.displayName) + '">' + esc(sc.displayName) + "</span>" +
         '<span class="cls" title="' + esc((sc.classDisplayName || "") + " · " + sc.methodName) + '">' +
-          esc(sc.classDisplayName ? sc.classDisplayName + " · " : "") + esc(shortName(sc.methodName)) + "</span>" +
+          esc(shortName(sc.methodName)) + "</span>" +
         '<span class="grow"></span>' +
         '<span class="cnt">' + sc.steps.length + (sc.steps.length === 1 ? " step" : " steps") +
           (failed ? ' <span class="f">' + failed + " failed</span>" : "") +
@@ -2006,7 +2067,7 @@
       // body: the full "where", any wait, then the steps
       const body = el("div", "card-body");
       body.innerHTML =
-        '<div class="where">' + esc(sc.classDisplayName || "") + ' <span class="mth mono">· ' + esc(sc.methodName) + "</span></div>" +
+        '<div class="where"><span class="mth mono">' + esc(sc.methodName) + "</span></div>" +
         (sc.waitedMs > 0 ? '<div class="where">waited ' + fmtDur(sc.waitedMs) + " for " + esc(sc.waitedFor || "") + "</div>" : "");
       card.appendChild(body);
 
@@ -2030,6 +2091,7 @@
         for (const entry of drill.querySelectorAll(".step-entry"))
           entry.classList.toggle("focus", entry.dataset.step === stepId);
         const entry = drill.querySelector('.step-entry[data-step="' + stepId + '"]');
+        if (entry && entry.classList.contains("has-body")) entry.classList.add("open");
         if (entry && scroll) entry.scrollIntoView({ block: "nearest" });
         return true;
       }
@@ -2141,35 +2203,27 @@
       let h = '<div class="hint">' + hint + "</div>" +
               '<div class="step-list">';
       for (const s of sc.steps){
-        h += '<div class="step-entry status-' + s.status + ' ph-' + s.phase.toLowerCase() + '" data-step="' + esc(s.stepId) + '">' +
-          '<div class="step-head">' +
-            '<span class="sx">#' + s.index + "</span>" +
-            '<span class="ph-chip" style="background:' + (PHCOLOR[s.phase.toLowerCase()] || "var(--faint)") + '">' + esc(s.phase) + "</span>" +
-            '<span class="dn">' + esc(s.displayName) + "</span>" +
-            '<span class="pill ' + s.status + '"><span class="pd"></span>' + s.status + "</span>" +
-            '<span class="dm">+' + fmtMs(s.offsetMs) + " · " + fmtDur(s.durationMs) + "</span>" +
-          "</div>";
-
+        let b = "";
         if (s.skipReason){
-          h += '<div class="sec"><div class="skipnote">' + esc(s.skipReason) + "</div></div>";
+          b += '<div class="sec"><div class="skipnote">' + esc(s.skipReason) + "</div></div>";
         }
         if (s.logs && s.logs.length){
-          h += '<div class="sec"><h4>Logs</h4><ul class="logs">' +
+          b += '<div class="sec"><h4>Logs</h4><ul class="logs">' +
             s.logs.map((l) => "<li>" + logHtml(l) + "</li>").join("") + "</ul></div>";
         }
         if (s.traceId){
-          h += '<div class="sec"><h4>Trace</h4><ul class="logs"><li>trace ' + esc(s.traceId) +
+          b += '<div class="sec"><h4>Trace</h4><ul class="logs"><li>trace ' + esc(s.traceId) +
             (s.spanId ? " · span " + esc(s.spanId) : "") + "</li></ul></div>";
         }
         if (s.attachments && s.attachments.length){
-          h += '<div class="sec"><h4>Attachments</h4>' +
+          b += '<div class="sec"><h4>Attachments</h4>' +
             s.attachments.map((a) =>
               '<details class="att"><summary><span class="an">' + esc(a.name) + '</span><span class="asz">' + attSize(a.value) + "</span></summary>" +
               '<pre class="att-body">' + esc(a.value) + "</pre></details>"
             ).join("") + "</div>";
         }
         if (s.effects && s.effects.length){
-          h += '<div class="sec"><h4>Effects</h4><div class="eff">' +
+          b += '<div class="sec"><h4>Effects</h4><div class="eff">' +
             s.effects.map((e) =>
               '<div class="e">' +
                 '<span class="vd" style="background:' + (VCOLOR[e.verb.toLowerCase()] || "var(--faint)") + '"></span>' +
@@ -2181,12 +2235,33 @@
             ).join("") + "</div></div>";
         }
         if (s.exception){
-          h += '<div class="sec"><h4>Exception</h4><pre class="exc">' + esc(s.exception) + "</pre></div>";
+          b += '<div class="sec"><h4>Exception</h4><pre class="exc">' + esc(s.exception) + "</pre></div>";
         }
-        h += "</div>";
+
+        // the step's details are its body, collapsed until the step is opened; a failed step starts
+        // open so its exception is in view. A step with nothing to show has no toggle.
+        const cls = "step-entry status-" + s.status + " ph-" + s.phase.toLowerCase() +
+          (b ? " has-body" : "") + (b && s.status === "failed" ? " open" : "");
+        h += '<div class="' + cls + '" data-step="' + esc(s.stepId) + '">' +
+          '<div class="step-head">' +
+            '<span class="stw" aria-hidden="true">' + (b ? "▼" : "") + "</span>" +
+            '<span class="sx">#' + s.index + "</span>" +
+            '<span class="ph-chip" style="background:' + (PHCOLOR[s.phase.toLowerCase()] || "var(--faint)") + '">' + esc(s.phase) + "</span>" +
+            '<span class="dn">' + esc(s.displayName) + "</span>" +
+            '<span class="pill ' + s.status + '"><span class="pd"></span>' + s.status + "</span>" +
+            '<span class="dm">+' + fmtMs(s.offsetMs) + " · " + fmtDur(s.durationMs) + "</span>" +
+          "</div>" +
+          (b ? '<div class="step-body">' + b + "</div>" : "") +
+        "</div>";
       }
       h += "</div>";
       p.innerHTML = h;
+      // a click on a step's head opens or closes its details (resource chips keep their own click)
+      p.addEventListener("click", (ev) => {
+        if (!ev.target.closest || ev.target.closest(".res-chip")) return;
+        const head = ev.target.closest(".step-entry.has-body > .step-head");
+        if (head) head.parentElement.classList.toggle("open");
+      });
       return p;
     }
   </script>

@@ -181,6 +181,12 @@ public sealed class HtmlReportSinkTests : IDisposable
         // milliseconds are shown to one decimal, never as the raw double
         Assert.Contains("function fmtMs(ms){ return Number(ms).toFixed(1) + \" ms\"; }", html, StringComparison.Ordinal);
         Assert.DoesNotContain("s.offsetMs + \"ms", html, StringComparison.Ordinal);
+        // scenarios are grouped by their class, labelled by its [DisplayName] or else the class name
+        Assert.Contains("function groupByClass(scenarios){", html, StringComparison.Ordinal);
+        Assert.Contains("label: sc.classDisplayName || shortName(type)", html, StringComparison.Ordinal);
+        // a step's details start collapsed; only a failed step starts open
+        Assert.Contains(".step-body{ display:none; }", html, StringComparison.Ordinal);
+        Assert.Contains("(b && s.status === \"failed\" ? \" open\" : \"\")", html, StringComparison.Ordinal);
         // the collapsed row gives way on the "where" text first, so the title and timing keep their room
         Assert.Contains(".card-head .cls{ flex:0 100 auto;", html, StringComparison.Ordinal);
     }
