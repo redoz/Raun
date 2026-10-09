@@ -322,6 +322,26 @@ public class HtmlReportModelBuilderTests
     }
 
     [Fact]
+    public void A_branch_not_taken_is_its_own_status_and_leaves_the_scenario_passed()
+    {
+        // A not-taken arm is a decision, not a skip: the step reads "not taken", and a scenario
+        // whose every executed step passed is passed, however many arms it did not take.
+        var def = Def("branch", Node(0, "c", "Given", "Condition"), Node(1, "arm", "When", "Arm"));
+
+        var builder = new HtmlReportModelBuilder();
+        builder.OnRunStarted([def]);
+        builder.OnScenarioStarted(def);
+        builder.OnStepFinished(def, Result(def.Nodes[0], T0, 10));
+        builder.OnStepFinished(def, Result(def.Nodes[1], T0, 0, StepStatus.NotTaken));
+
+        var model = builder.Build("2026-09-06T00:00:00Z");
+        Assert.Equal("not-taken", model.Scenarios[0].Steps[1].Status);
+        Assert.Equal("passed", model.Scenarios[0].Status);
+        Assert.Equal(1, model.Summary.Passed);
+        Assert.Equal(0, model.Summary.Skipped);
+    }
+
+    [Fact]
     public void Scenarios_skipped_by_a_failed_preflight_carry_no_time_and_leave_the_wall_span_to_what_ran()
     {
         // A failed preflight (the "raun" scenario) really ran for 40 ms; the two selected scenarios

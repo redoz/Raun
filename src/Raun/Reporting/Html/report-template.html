@@ -215,6 +215,9 @@
   .pill.passed{ color:var(--pass-text); background:var(--pass-bg); } .pill.passed .pd{ background:var(--pass); }
   .pill.failed{ color:var(--fail-text); background:var(--fail-bg); } .pill.failed .pd{ background:var(--fail); }
   .pill.skipped{ color:var(--skip-text); background:var(--skip-bg); } .pill.skipped .pd{ background:var(--skip); }
+  /* a branch arm that was not chosen: a decision, not a problem, so neutral rather than amber */
+  .pill.not-taken{ color:var(--muted); background:var(--inset); } .pill.not-taken .pd{ background:var(--faint); }
+  .step-entry.status-not-taken .dn{ color:var(--muted); }
 
   /* ---------- DRILL PANEL (scenario-level: every step in run order) ---------- */
   .drill-host{ margin-top:4px; }
@@ -2248,7 +2251,7 @@
             '<span class="sx">#' + s.index + "</span>" +
             '<span class="ph-chip" style="background:' + (PHCOLOR[s.phase.toLowerCase()] || "var(--faint)") + '">' + esc(s.phase) + "</span>" +
             '<span class="dn">' + esc(s.displayName) + "</span>" +
-            '<span class="pill ' + s.status + '"><span class="pd"></span>' + s.status + "</span>" +
+            '<span class="pill ' + s.status + '"><span class="pd"></span>' + s.status.replace("-", " ") + "</span>" +
             '<span class="dm">+' + fmtMs(s.offsetMs) + " · " + fmtDur(s.durationMs) + "</span>" +
           "</div>" +
           (b ? '<div class="step-body">' + b + "</div>" : "") +
