@@ -26,7 +26,8 @@ Resource-aware `Context.Log` messages and `[StepName]` titles support `:id` and 
 recognition uses `IResource<T>`, `IResourceIdentity` or a registered `Identify<T>` selector.
 
 The coverage/classification APIs are available in `Raun.Coverage` and `Raun.Mtp`.
-This beta keeps the existing HTML report; the new coverage and structured-message UI is deferred.
+The HTML report has Tests and Coverage views. Expand a step for its resource events;
+open its logs when needed. Resource references highlight their usage; Esc clears the highlight.
 
 ```bash
 dotnet add package Raun.Mtp --prerelease      # .NET 10 SDK 10.0.300+

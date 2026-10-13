@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Raun.Model;
 using Raun.Reporting;
 using Raun.Reporting.Html;
@@ -58,7 +59,7 @@ public sealed class HtmlReportSinkTests : IDisposable
         Assert.Contains("\"scenarioId\": \"scn\"", html, StringComparison.Ordinal); // JSON blob present
         Assert.DoesNotContain("__RAUN_REPORT_JSON__", html, StringComparison.Ordinal); // token replaced
         Assert.Contains("Raun run report", html, StringComparison.Ordinal); // restyled shell present
-        Assert.Contains("id=\"chips\"", html, StringComparison.Ordinal); // dashboard header chips present
+        Assert.Contains("id=\"report\"", html, StringComparison.Ordinal); // interactive report host present
         Assert.Contains("data-theme", html, StringComparison.Ordinal); // theme override wiring present
     }
 
@@ -172,40 +173,48 @@ public sealed class HtmlReportSinkTests : IDisposable
         await sink.PublishAsync(new RunFinished());
 
         var html = await File.ReadAllTextAsync(path);
-        // no separate overview table: the cards are the list, and a click expands a card where it is
-        Assert.DoesNotContain("function buildOverview(", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("scrollIntoView({ block: \"start\"", html, StringComparison.Ordinal);
-        // a card is collapsed unless the scenario failed or the reader opened it
-        Assert.Contains("const isExpanded = (sc) => expandedFor.has(sc.scenarioId) ? expandedFor.get(sc.scenarioId) : sc.status === \"failed\";", html, StringComparison.Ordinal);
-        Assert.Contains(".card.collapsed .card-body{ display:none; }", html, StringComparison.Ordinal);
-        // milliseconds are shown to one decimal, never as the raw double
-        Assert.Contains("function fmtMs(ms){ return Number(ms).toFixed(1) + \" ms\"; }", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("s.offsetMs + \"ms", html, StringComparison.Ordinal);
-        // scenarios are grouped by their class, labelled by its [DisplayName] or else the class name
-        Assert.Contains("function groupByClass(scenarios){", html, StringComparison.Ordinal);
-        Assert.Contains("label: sc.classDisplayName || shortName(type)", html, StringComparison.Ordinal);
-        // a step's details start collapsed; only a failed step starts open
-        Assert.Contains(".step-body{ display:none; }", html, StringComparison.Ordinal);
-        Assert.Contains("(b && s.status === \"failed\" ? \" open\" : \"\")", html, StringComparison.Ordinal);
-        // the collapsed row gives way on the "where" text first, so the title and timing keep their room
-        Assert.Contains(".card-head .cls{ flex:0 100 auto;", html, StringComparison.Ordinal);
+        // Rendering and expansion are exercised by the real-template Node suite.
+        // The sink must preserve the canonical scenario and step records consumed by that UI.
+        const string marker = "<script id=\"model\" type=\"application/json\">";
+        var start = html.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+        var end = html.IndexOf("</script>", start, StringComparison.Ordinal);
+        using var data = JsonDocument.Parse(html[start..end]);
+        var scenario = Assert.Single(data.RootElement.GetProperty("scenarios").EnumerateArray());
+        Assert.Equal(def.ScenarioId, scenario.GetProperty("scenarioId").GetString());
+        Assert.Equal(def.MethodName, scenario.GetProperty("methodName").GetString());
+        var step = Assert.Single(scenario.GetProperty("steps").EnumerateArray());
+        Assert.Equal("passed", step.GetProperty("status").GetString());
+        Assert.Equal("Given patient Jane exists", step.GetProperty("displayName").GetString());
     }
 
     [Fact]
-    public async Task Attachments_start_collapsed()
+    public async Task Attachments_are_preserved_as_captured_data()
     {
         var path = Path.Combine(_dir, "raun-report-att.html");
         var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
         var def = Def();
+        const string captured = "first\n<script>unsafe</script>";
+        var result = new StepResult
+        {
+            Node = def.Nodes[0], DisplayName = def.Nodes[0].DisplayNameTemplate, Status = StepStatus.Passed,
+            StartedAt = T0, Attachments = new Dictionary<string, string> { ["response"] = captured },
+        };
         await sink.PublishAsync(new RunStarted(1));
-        await sink.PublishAsync(new ScenarioFinished(def, [Passed(def.Nodes[0])]));
+        await sink.PublishAsync(new ScenarioStarted(def));
+        await sink.PublishAsync(new StepFinished(def, result));
+        await sink.PublishAsync(new ScenarioFinished(def, [result]));
         await sink.PublishAsync(new RunFinished());
 
         var html = await File.ReadAllTextAsync(path);
-        Assert.Contains("'<details class=\"att\">", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("<details class=\"att\" open", html, StringComparison.Ordinal);
-        // an attachment is data, not a failure: it never borrows the exception block's red
-        Assert.Contains("'<pre class=\"att-body\">' + esc(a.value)", html, StringComparison.Ordinal);
+        const string marker = "<script id=\"model\" type=\"application/json\">";
+        var start = html.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+        var end = html.IndexOf("</script>", start, StringComparison.Ordinal);
+        using var data = JsonDocument.Parse(html[start..end]);
+        var attachment = Assert.Single(data.RootElement.GetProperty("scenarios")[0].GetProperty("steps")[0]
+            .GetProperty("attachments").EnumerateArray());
+        Assert.Equal("response", attachment.GetProperty("name").GetString());
+        Assert.Equal(captured, attachment.GetProperty("value").GetString());
+        Assert.DoesNotContain("<script>unsafe", html, StringComparison.Ordinal);
     }
 
     [Fact]

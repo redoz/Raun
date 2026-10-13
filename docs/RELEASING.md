@@ -167,3 +167,11 @@ and StepName id/data formatting. The HTML template stays byte-for-byte identical
 the experimental full-window coverage UI, header tabs and resource popup are deferred.
 Structured notes/references and classified coverage remain in the result/report data for
 API consumers; this beta does not promise their experimental HTML presentation.
+
+## 0.3.0 beta 8 scope
+
+The HTML report uses a shared Tests/Coverage workspace with matching header boxes,
+indented scenario steps, status-colored step numbers and phase verbs. Notes stay visible;
+expanded steps show resource events before separately collapsed logs. Resource references
+highlight their usage directly. Coverage retains drilldown, band filtering and source snippets.
+Report interaction checks run in CI and the release workflow before packing.

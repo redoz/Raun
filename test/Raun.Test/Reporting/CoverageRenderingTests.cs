@@ -9,7 +9,7 @@ namespace Raun.Test;
 public sealed class CoverageRenderingTests
 {
     [Fact]
-    public async Task Report_retains_coverage_payload_without_the_experimental_interface()
+    public async Task Report_retains_classified_coverage_payload_in_the_interactive_report()
     {
         var directory = Path.Combine(Path.GetTempPath(), "raun-coverage-ui-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -36,9 +36,6 @@ public sealed class CoverageRenderingTests
             Assert.Equal("available", data.GetProperty("status").GetString());
             Assert.Equal(7, data.GetProperty("categories")[0].GetProperty("counts").GetProperty("complete").GetInt32());
             Assert.Equal("CalculateFinanceReport()", data.GetProperty("types")[0].GetProperty("methods")[0].GetProperty("signature").GetString());
-            Assert.Contains("function buildScenarioCard", html, StringComparison.Ordinal);
-            Assert.DoesNotContain("function buildCoverageReport", html, StringComparison.Ordinal);
-            Assert.DoesNotContain(".resource-inspector{", html, StringComparison.Ordinal);
         }
         finally { Directory.Delete(directory, true); }
     }

@@ -33,6 +33,9 @@ jobs:
       - name: Test
         run: dotnet test Raun.slnx -c Release --no-build
 
+      - name: Report interaction tests
+        run: node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs
+
       - name: Pack
         run: |
           dotnet pack src/Raun/Raun.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
