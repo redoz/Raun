@@ -40,14 +40,23 @@ public sealed class CoverageEnrichmentTests : IDisposable
         await sink.PublishAsync(new RunStarted(0));
         await sink.PublishAsync(new RunFinished());
         var original = await File.ReadAllBytesAsync(path);
-        await using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
-        {
-            await Assert.ThrowsAsync<IOException>(() => sink.SetCoverageAsync(new ReportCoverage { Status = "available" }));
-        }
-        Assert.Equal(original, await File.ReadAllBytesAsync(path));
+        // An open file can still be replaced on Unix. Occupy the destination to fail the final rename instead.
+        var backup = path + ".original";
+        File.Move(path, backup);
+        Directory.CreateDirectory(path);
+        var sentinel = Path.Combine(path, "occupied.txt");
+        await File.WriteAllTextAsync(sentinel, "keep destination");
+        await Assert.ThrowsAsync<IOException>(() => sink.SetCoverageAsync(new ReportCoverage { Status = "available" }));
+        Assert.Equal(original, await File.ReadAllBytesAsync(backup));
+        Assert.Equal(sentinel, Assert.Single(Directory.GetFileSystemEntries(path)));
+        Assert.Equal("keep destination", await File.ReadAllTextAsync(sentinel));
         Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
+        Directory.Delete(path, true);
+        File.Move(backup, path);
+        Assert.Equal(original, await File.ReadAllBytesAsync(path));
         await sink.SetCoverageAsync(new ReportCoverage { Status = "available" });
         Assert.Contains("\"status\": \"available\"", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
     }
 
     [Fact]

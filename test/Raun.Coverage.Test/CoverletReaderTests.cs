@@ -145,6 +145,22 @@ public sealed class CoverletReaderTests
         Assert.Empty(BranchInventoryBuilder.Build(compilation, scope, TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData("**/Excluded.cs", @"src\Excluded.cs", false)]
+    [InlineData(@"**\Excluded.cs", "src/Excluded.cs", false)]
+    [InlineData(@"**\Excluded.cs", @"src\Excluded.cs", false)]
+    [InlineData(@"**\Excluded.cs", "src/Excluded.cs.generated.cs", true)]
+    [InlineData(@"**\Generated\*.cs", "src/Generated/One.cs", false)]
+    [InlineData("**/Generated/*.cs", @"src/Generated\One.cs", false)]
+    [InlineData(@"**/Generated\*.cs", @"src\Generated/One.cs", false)]
+    [InlineData(@"**\Generated\*.cs", @"src\Generated\Nested\One.cs", true)]
+    [InlineData(@"\src\Generated\*.cs", "/src/Generated/One.cs", false)]
+    [InlineData("/src/Generated/*.cs", @"\src\Generated\One.cs", false)]
+    public void Coverlet_source_exclusions_normalize_both_glob_and_source_separators(string pattern, string source, bool included)
+    {
+        var scope = new CollectorScope { CoverletSourceExcludes = [pattern] };
+        Assert.Equal(included, scope.IncludesSource(source));
+    }
     [Fact]
     public void Effective_settings_choose_specific_testconfig_then_cli_overrides()
     {

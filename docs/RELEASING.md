@@ -160,7 +160,7 @@ against the `Raun` it referenced, and an application that consumes the library m
 Packages cannot be deleted from nuget.org, only unlisted. Tag the fix as the next patch and unlist
 the bad version in the nuget.org package settings.
 
-## 0.3.0 beta 5 scope
+## 0.3.0 beta 6 scope
 
 Keep the coverage and structured-message APIs, including Task.Note, resource-aware logs
 and StepName id/data formatting. The HTML template stays byte-for-byte identical to beta 4;

@@ -55,7 +55,11 @@ public sealed record CollectorScope
     {
         if (CoverletSourceExcludes.Count == 0) { return false; }
         // Coverlet's ExcludedFilesHelper uses Matcher with filesystem roots removed.
-        static string Relative(string value) => Path.IsPathRooted(value) ? value[Path.GetPathRoot(value)!.Length..] : value;
+        static string Relative(string value)
+        {
+            value = value.Replace('\\', '/');
+            return Path.IsPathRooted(value) ? value[Path.GetPathRoot(value)!.Length..] : value;
+        }
         var matcher = new Matcher();
         foreach (var pattern in CoverletSourceExcludes) { matcher.AddInclude(Relative(pattern)); }
         return matcher.Match(Relative(path)).HasMatches;
