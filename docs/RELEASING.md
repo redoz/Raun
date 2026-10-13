@@ -1,8 +1,8 @@
 # Releasing Raun
 
 Versions come from git tags via [MinVer](https://github.com/adamralph/minver). There is no version
-number in any file. Three packages ship from one tag, in lockstep: `Raun` (which carries the source
-generator as an analyzer), `Raun.Mtp`, and `Raun.Aspire`.
+number in any file. Four packages ship from one tag, in lockstep: `Raun` (which carries the source
+generator as an analyzer), `Raun.Coverage`, `Raun.Mtp`, and `Raun.Aspire`.
 
 ## Version scheme
 
@@ -58,6 +58,7 @@ both together.
 
    ```bash
    dotnet pack src/Raun/Raun.csproj -c Release -o artifacts
+   dotnet pack src/Raun.Coverage/Raun.Coverage.csproj -c Release -o artifacts
    dotnet pack src/Raun.Mtp/Raun.Mtp.csproj -c Release -o artifacts
    dotnet pack src/Raun.Aspire/Raun.Aspire.csproj -c Release -o artifacts
    ```
@@ -73,16 +74,16 @@ both together.
    ```
 
 5. The `Release` workflow builds, tests, packs with `ContinuousIntegrationBuild`, publishes all
-   three packages to **nuget.org** using trusted publishing, and creates the GitHub release with
+   four packages to **nuget.org** using trusted publishing, and creates the GitHub release with
    the packages attached. Before the first tag:
    - In nuget.org, configure a trusted publishing policy for the package owner with GitHub
      repository owner `redoz`, repository `Raun`, and workflow file `release.yml` (file name only).
      Leave the environment empty because the workflow uses no GitHub environment. Grant the
-     policy permission to publish new packages and new versions of all three package IDs; a
+     policy permission to publish new packages and new versions of all four package IDs; a
      `Raun.*` scope does not include the bare `Raun` package.
    - In GitHub Actions, set the repository **variable** `NUGET_USER` to the nuget.org account's
      username (not its email address). No persistent NuGet API key is needed.
-6. Verify on nuget.org that `Raun`, `Raun.Mtp`, and `Raun.Aspire` show the tagged version, the
+6. Verify on nuget.org that `Raun`, `Raun.Coverage`, `Raun.Mtp`, and `Raun.Aspire` show the tagged version, the
    license (Apache-2.0), and the README.
 
 ## Where the packages live
@@ -158,3 +159,11 @@ against the `Raun` it referenced, and an application that consumes the library m
 
 Packages cannot be deleted from nuget.org, only unlisted. Tag the fix as the next patch and unlist
 the bad version in the nuget.org package settings.
+
+## 0.3.0 beta 5 scope
+
+Keep the coverage and structured-message APIs, including Task.Note, resource-aware logs
+and StepName id/data formatting. The HTML template stays byte-for-byte identical to beta 4;
+the experimental full-window coverage UI, header tabs and resource popup are deferred.
+Structured notes/references and classified coverage remain in the result/report data for
+API consumers; this beta does not promise their experimental HTML presentation.

@@ -45,6 +45,29 @@ public sealed class ResourceIdentityResolver
         return new(type, ResolveKey(type, instance));
     }
 
+    /// <summary>Resolves only explicit resource contracts or selectors on the declared type.</summary>
+    public bool TryResolve(Type declaredType, object instance, out ResourceIdentity identity)
+    {
+        ArgumentNullException.ThrowIfNull(declaredType);
+        ArgumentNullException.ThrowIfNull(instance);
+        var type = declaredType;
+        if ((type == typeof(ResourceIdentity) || Nullable.GetUnderlyingType(type) == typeof(ResourceIdentity))
+            && instance is ResourceIdentity supplied)
+        {
+            identity = supplied;
+            return true;
+        }
+        if (_keyForInvokers.GetOrAdd(type, BuildKeyForInvoker) is not null
+            || _selectors.ContainsKey(type)
+            || typeof(IResourceIdentity).IsAssignableFrom(type))
+        {
+            identity = Resolve(type, instance);
+            return true;
+        }
+        identity = default;
+        return false;
+    }
+
     private ResourceKey ResolveKey(Type type, object instance)
     {
         // 1. IResource<TSelf>.KeyFor (the runtime form of [ResourceKey]/[Resource(Key)]).

@@ -15,6 +15,7 @@ using Microsoft.Testing.Platform.Requests;
 using Microsoft.Testing.Platform.Services;
 using Microsoft.Testing.Platform.TestHost;
 using Raun.Model;
+using Raun.Mtp.Coverage;
 using Raun.Reporting;
 using Raun.Reporting.Html;
 using Raun.Running;
@@ -56,6 +57,7 @@ public class RaunTestFramework :
     private readonly bool _simulateTime;
     private readonly int _maxParallelScenarios;
     private readonly RunStopSignal? _stopSignal;
+    private readonly CoverageSessionCoordinator? _coverage;
 
     /// <summary>Parameterless ctor for tests and the default registration path.</summary>
     public RaunTestFramework() { }
@@ -104,8 +106,13 @@ public class RaunTestFramework :
         IServiceProvider? userServices,
         Func<ScenarioContext, Task>? preflight,
         int maxParallelScenarios,
-        RunStopSignal? stopSignal)
-        : this(services, simulateTime, userServices, preflight, maxParallelScenarios) => _stopSignal = stopSignal;
+        RunStopSignal? stopSignal,
+        CoverageSessionCoordinator? coverage = null)
+        : this(services, simulateTime, userServices, preflight, maxParallelScenarios)
+    {
+        _stopSignal = stopSignal;
+        _coverage = coverage;
+    }
 
     /// <inheritdoc/>
     public string Uid => ExtensionUid;
@@ -293,7 +300,14 @@ public class RaunTestFramework :
         var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this, attachmentRoot) };
         if (HtmlReport.HtmlReportPath.Resolve(_services) is { } reportPath)
         {
-            sinks.Add(new HtmlReportSink(reportPath, TimeProvider.System));
+            var coverageRequested = _coverage is not null && _services is not null
+                && (_services.GetCommandLineOptions().IsOptionSet("coverage") || _services.GetCommandLineOptions().IsOptionSet("coverlet"));
+            var report = new HtmlReportSink(reportPath, TimeProvider.System, coverageRequested);
+            sinks.Add(report);
+            if (coverageRequested)
+            {
+                await _coverage!.AttachReportAsync(sessionUid.Value, report).ConfigureAwait(false);
+            }
         }
 
         var bus = new RunEventBus(sinks);

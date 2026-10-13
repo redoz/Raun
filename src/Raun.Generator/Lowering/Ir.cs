@@ -243,6 +243,14 @@ internal sealed record ParsedStep
     private readonly Syn<TypeSyntax> _resultType = new(PredefinedType(Token(SyntaxKind.ObjectKeyword)));
     private readonly Syn<InvocationExpressionSyntax> _invokeCall;
     private readonly Syn<ExpressionSyntax> _formatExpression;
+    private readonly Syn<ExpressionSyntax> _titleExpression;
+    private readonly EquatableArray<Syn<ExpressionSyntax>> _notes;
+
+    public IReadOnlyList<ExpressionSyntax> NoteExpressions
+    {
+        get => new SynList<ExpressionSyntax>(_notes);
+        init => _notes = SynList<ExpressionSyntax>.Wrap(value);
+    }
 
     public IReadOnlyList<int> DependsOn
     {
@@ -280,6 +288,13 @@ internal sealed record ParsedStep
     {
         get => _formatExpression.Node;
         init => _formatExpression = value;
+    }
+
+    /// <summary>A resource-aware title builder using __inputs and explicit __formatting services.</summary>
+    public ExpressionSyntax? TitleExpression
+    {
+        get => _titleExpression.Node;
+        init => _titleExpression = value;
     }
 
     /// <summary>

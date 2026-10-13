@@ -30,7 +30,8 @@ public sealed class Scenarios : AppointmentsSuite
 
         var appointment = await When.AdminBooks("Alice", "2026-09-05T09:00");
 
-        await Then.PatientCanRead(appointment);
+        await Then.PatientCanRead(appointment)
+            .Note($"Admin creation must preserve patient access to {appointment:id}. Booked data: {appointment:data}.");
     }
 
     [Scenario("a patient may not book appointments")]
@@ -40,7 +41,8 @@ public sealed class Scenarios : AppointmentsSuite
 
         var status = await When.PatientTriesToBook("Bob", "2026-09-05T10:00");
 
-        await Then.AttemptWasRejected(status);
+        await Then.AttemptWasRejected(status)
+            .Note($"The patient role must be rejected; the API returned status {status}.");
     }
 
     // Exclusive: waits until no booking scenario holds the schedule, and keeps new ones out until
@@ -51,7 +53,8 @@ public sealed class Scenarios : AppointmentsSuite
     {
         await Given.ApiIsReachable();
 
-        await When.AdminClearsSchedule();
+        await When.AdminClearsSchedule()
+            .Note("Hold the schedule exclusively so clearing cannot erase another scenario’s booking.");
 
         await Then.ScheduleIsEmpty();
     }

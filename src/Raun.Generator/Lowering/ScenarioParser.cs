@@ -145,6 +145,8 @@ internal sealed class ScenarioParser
         string KeyPrefix)
     {
 
+        public IReadOnlyList<LoweredArgument<ExpressionSyntax>> Notes { get; init; } = [];
+
         public string Operation => Member.Name.Identifier.Text;
 
         public List<ParallelAccess> Accesses()
@@ -1458,6 +1460,48 @@ internal sealed class ScenarioParser
     /// </summary>
     private StepCall? ResolveCall(InvocationExpressionSyntax invocation, DiagnosticDescriptor notDsl, LoopElement? loop = null)
     {
+        if (_model.GetSymbolInfo(invocation).Symbol is IMethodSymbol noteMethod
+            && noteMethod.Name == "Note"
+            && (noteMethod.ReducedFrom ?? noteMethod).ContainingType.ToDisplayString() == "Raun.TaskNoteExtensions"
+            && invocation.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner })
+        {
+            var call = ResolveCall(inner, notDsl, loop);
+            if (call is null)
+            {
+                return null;
+            }
+
+            var note = ArgumentLowering.Lower(_model, invocation.ArgumentList.Arguments[0].Expression, StepValueFor(loop), preserveStepValueTypes: true);
+            foreach (var violation in note.Violations)
+            {
+                Report(Descriptors.InvalidArgument, violation.Node, violation.Subject, violation.Reason);
+            }
+
+            if (note.Violations.Count > 0)
+            {
+                return null;
+            }
+
+            // Preserve an already frozen message; all other overloads bind through the shared
+            // formatter with the generated delegate's explicit services. Bare interpolation then
+            // selects the handler rather than converting to string first.
+            if (noteMethod.Parameters.Last().Type.ToDisplayString() != "Raun.StepMessage")
+            {
+                note = note with
+                {
+                    Node = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                            Names.Global("Raun", "StepMessage"), IdentifierName("Create")))
+                        .WithArgumentList(ArgumentList(SeparatedList(new[]
+                        {
+                            Argument(IdentifierName("__formatting")),
+                            Argument(note.Node),
+                        }))),
+                };
+            }
+
+            return call with { Notes = [.. call.Notes, note] };
+        }
+
         if (invocation.Expression is not MemberAccessExpressionSyntax member
             || _model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol { IsStatic: false } method
             || SymbolHelpers.WorldOfStepClass(method.ContainingType) is not { } stepWorld)
@@ -1754,7 +1798,7 @@ internal sealed class ScenarioParser
         var deps = new SortedSet<int>(sourceOrderDeps);
         deps.Add(_setupIndex);
 
-        foreach (var read in lowering.Reads)
+        foreach (var read in lowering.Reads.Concat(call.Notes.SelectMany(note => note.Reads)))
         {
             deps.UnionWith(_vars[read.Local].Producers);
         }
@@ -1769,7 +1813,7 @@ internal sealed class ScenarioParser
         var resourceClaims = BuildResourceClaims(written, method, resultType is not null, lowered);
         AddUses(method.GetAttributes());
 
-        var (template, formatExpr) = DisplayNameBuilder.Build(_model, method, written, lowered);
+        var (template, formatExpr, titleExpr) = DisplayNameBuilder.Build(_model, method, written, lowered);
 
         var step = new ParsedStep
         {
@@ -1784,6 +1828,8 @@ internal sealed class ScenarioParser
             InvokeCall = invokeCall,
             DisplayNameTemplate = template,
             FormatExpression = formatExpr,
+            TitleExpression = titleExpr,
+            NoteExpressions = call.Notes.Select(note => note.Node).ToArray(),
             GroupId = groupId,
             TimeoutMs = AttributeReader.StepTimeout(method),
             SourceFile = Location(invocation, out var line),

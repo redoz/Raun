@@ -57,7 +57,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentGiven>().PatientExists("Jane");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("patient ").AppendFormatted(((string)("Jane"))).AppendLiteral(" exists").Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
@@ -81,7 +82,8 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "greet " + (__inputs.Get<global::Demo.Patient>(1))
+                FormatDisplayName = static __inputs => "greet " + ((global::Demo.Patient)(__inputs.Get<global::Demo.Patient>(1))),
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("greet ").AppendFormatted(((global::Demo.Patient)(__inputs.Get<global::Demo.Patient>(1)))).Build()
             };
             nodes[3] = new global::Raun.Model.ScenarioNode
             {

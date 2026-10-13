@@ -35,8 +35,9 @@ public class StepMethodSuppressorTests
 
     /// <summary>A stand-in for CA1822 that flags every public instance method by name.</summary>
     // A test double that never ships: the analyzer-authoring rules (target framework, release tracking,
-    // reserved ids) are about analyzers that do, and reusing CA1822's id is the point.
-#pragma warning disable RS1041, RS1036, RS1029, RS2008
+    // reserved ids, Workspace references) are about analyzers that do. This test assembly runs
+    // in the test host with Workspaces available; reusing CA1822's id is the point.
+#pragma warning disable RS1041, RS1036, RS1038, RS1029, RS2008
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     private sealed class EveryInstanceMethodCouldBeStatic : DiagnosticAnalyzer
     {
@@ -61,5 +62,5 @@ public class StepMethodSuppressorTests
                 SymbolKind.Method);
         }
     }
-#pragma warning restore RS1041, RS1036, RS1029, RS2008
+#pragma warning restore RS1041, RS1036, RS1038, RS1029, RS2008
 }

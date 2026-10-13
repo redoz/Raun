@@ -102,4 +102,13 @@ public sealed class ScenarioNode
     /// (a prior step's output). When null, <see cref="DisplayNameTemplate"/> is used verbatim.
     /// </summary>
     public Func<IStepInputs, string>? FormatDisplayName { get; init; }
+
+    /// <summary>Resource-aware title formatter. Takes precedence over <see cref="FormatDisplayName"/>.</summary>
+    public Func<IStepInputs, MessageFormattingContext, StepMessage>? FormatTitleMessage { get; init; }
+
+    /// <summary>Resource-aware explanations. When present, take precedence over <see cref="FormatNotes"/>.</summary>
+    public IReadOnlyList<Func<IStepInputs, MessageFormattingContext, StepMessage>> FormatNoteMessages { get; init; } = [];
+
+    /// <summary>Independent explanations, formatted from available step inputs even when skipped.</summary>
+    public IReadOnlyList<Func<IStepInputs, string>> FormatNotes { get; init; } = [];
 }

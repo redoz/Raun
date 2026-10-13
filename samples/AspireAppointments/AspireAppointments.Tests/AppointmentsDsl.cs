@@ -39,6 +39,7 @@ public sealed class AppointmentsGiven : Given<AppointmentsWorld>
 public sealed class AppointmentsWhen : When<AppointmentsWorld>
 {
     [StepName("an admin books {patient} into {slot}")]
+    [return: Created]
     public async Task<AppointmentDto> AdminBooks(string patient, string slot)
     {
         var response = await World.Api.As(Actor.Admin).CreateAsync(patient, slot);
@@ -50,7 +51,7 @@ public sealed class AppointmentsWhen : When<AppointmentsWorld>
         var created = await response.Content.ReadFromJsonAsync<AppointmentDto>()
             ?? throw new InvalidOperationException("booking returned no body");
 
-        Context.Log($"booked appointment {created.Id}");
+        Context.Log($"Booked {created}.");
         return created;
     }
 
@@ -75,9 +76,10 @@ public sealed class AppointmentsWhen : When<AppointmentsWorld>
 /// <summary>Assertions, read back through the API.</summary>
 public sealed class AppointmentsThen : Then<AppointmentsWorld>
 {
-    [StepName("the patient can read appointment {appointment}")]
-    public async Task PatientCanRead(AppointmentDto appointment)
+    [StepName("the patient can read appointment {appointment:id}")]
+    public async Task PatientCanRead([Read] AppointmentDto appointment)
     {
+        Context.Log($"Using {appointment} to test patient access.");
         // The SECOND identity in the same scenario: booked as an admin, read back as a patient.
         var read = await World.Api.As(Actor.Patient).GetAsync(appointment.Id);
         if (read is null || read.Patient != appointment.Patient)

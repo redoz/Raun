@@ -36,6 +36,7 @@ jobs:
       - name: Pack (verifies the packages assemble on every push)
         run: |
           dotnet pack src/Raun/Raun.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
+          dotnet pack src/Raun.Coverage/Raun.Coverage.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
           dotnet pack src/Raun.Mtp/Raun.Mtp.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
           dotnet pack src/Raun.Aspire/Raun.Aspire.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
 

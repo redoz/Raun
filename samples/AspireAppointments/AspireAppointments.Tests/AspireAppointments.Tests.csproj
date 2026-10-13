@@ -19,6 +19,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="coverlet.MTP" />
     <!-- Exports Raun's spans (and the HttpClient spans under them) over OTLP. Raun itself has no
          OpenTelemetry dependency; the suite decides where its traces go. -->
     <PackageReference Include="OpenTelemetry" />

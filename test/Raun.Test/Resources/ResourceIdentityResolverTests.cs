@@ -19,6 +19,50 @@ public sealed class Session : IResourceIdentity
 public class ResourceIdentityResolverTests
 {
     [Fact]
+    public void TryResolve_excludes_unregistered_fallback_values()
+    {
+        var resolver = new ResourceIdentityResolver();
+        Assert.False(resolver.TryResolve(typeof(int), 42, out _));
+        Assert.False(resolver.TryResolve(typeof(Plain), new Plain("widget"), out _));
+        Assert.False(resolver.TryResolve(typeof(object), new Session("abc"), out _));
+    }
+
+    [Fact]
+    public void TryResolve_uses_declared_contract_and_selector_identity()
+    {
+        var resolver = new ResourceIdentityResolver();
+        IResourceIdentity value = new Session("abc");
+        Assert.True(resolver.TryResolve(typeof(IResourceIdentity), value, out var identity));
+        Assert.Equal(resolver.Resolve(value), identity);
+        resolver.Identify<IResourceIdentity>(_ => "selected");
+        Assert.True(resolver.TryResolve(typeof(IResourceIdentity), value, out identity));
+        Assert.Equal(new ResourceIdentity(typeof(IResourceIdentity), "selected"), identity);
+        Assert.True(resolver.TryResolve(typeof(User), new User("admin@acme.com"), out identity));
+        Assert.Equal(new ResourceIdentity(typeof(User), "admin@acme.com"), identity);
+    }
+
+    [Fact]
+    public void TryResolve_accepts_registered_plain_records_and_identity_values()
+    {
+        var resolver = new ResourceIdentityResolver();
+        resolver.Identify<Plain>(p => p.Name);
+        Assert.True(resolver.TryResolve(typeof(Plain), new Plain("widget"), out var identity));
+        Assert.Equal(new ResourceIdentity(typeof(Plain), "widget"), identity);
+        Assert.True(resolver.TryResolve(typeof(ResourceIdentity), identity, out var resolved));
+        Assert.Equal(identity, resolved);
+    }
+
+    [Fact]
+    public void TryResolve_preserves_a_nullable_declared_selector_type()
+    {
+        var resolver = new ResourceIdentityResolver();
+        resolver.Identify<int?>(_ => "nullable-key");
+        Assert.True(resolver.TryResolve(typeof(int?), 42, out var identity));
+        Assert.Equal(new ResourceIdentity(typeof(int?), "nullable-key"), identity);
+        Assert.Equal(resolver.Resolve(typeof(int?), 42), identity);
+    }
+
+    [Fact]
     public void Link1_uses_IResource_KeyFor()
     {
         var resolver = new ResourceIdentityResolver();

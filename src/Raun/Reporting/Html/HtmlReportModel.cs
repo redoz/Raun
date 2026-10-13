@@ -4,6 +4,8 @@ namespace Raun.Reporting.Html;
 /// pre-reduced to millisecond offsets from each scenario's start so the renderer does no clock math.</summary>
 internal sealed record HtmlReportModel
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Raun.Reporting.Coverage.ReportCoverage? Coverage { get; init; }
     public required string GeneratedAtUtc { get; init; }
     public required ReportSummary Summary { get; init; }
     public required IReadOnlyList<ReportScenario> Scenarios { get; init; }
@@ -47,12 +49,16 @@ internal sealed record ReportStep
     public required string Label { get; init; }
     public required string Phase { get; init; }
     public required string DisplayName { get; init; }
+    public ReportMessage? TitleMessage { get; init; }
+    public IReadOnlyList<ReportMessage> NoteMessages { get; init; } = [];
+    public IReadOnlyList<ReportMessage> LogMessages { get; init; } = [];
     public required string Status { get; init; }
     public required double OffsetMs { get; init; }
     public required double DurationMs { get; init; }
     public required int Lane { get; init; }
     public required IReadOnlyList<int> DependsOn { get; init; }
     public string? GroupId { get; init; }
+    public IReadOnlyList<string> Notes { get; init; } = [];
     public required IReadOnlyList<string> Logs { get; init; }
     public required IReadOnlyList<ReportEffect> Effects { get; init; }
     public string? Exception { get; init; }
@@ -68,6 +74,20 @@ internal sealed record ReportStep
     public IReadOnlyList<ReportAttachment> Attachments { get; init; } = [];
 }
 
+internal sealed record ReportMessage
+{
+    public required string Text { get; init; }
+    public required IReadOnlyList<ReportMessagePart> Parts { get; init; }
+}
+
+internal sealed record ReportMessagePart
+{
+    public required string Text { get; init; }
+    public string? ResourceId { get; init; }
+    public string? Data { get; init; }
+    public bool DataTruncated { get; init; }
+}
+
 internal sealed record ReportAttachment
 {
     public required string Name { get; init; }
@@ -76,6 +96,7 @@ internal sealed record ReportAttachment
 
 internal sealed record ReportEffect
 {
+    public string? ResourceId { get; init; }
     public required string Verb { get; init; }
     public required string Type { get; init; }
     public required string Key { get; init; }
@@ -85,6 +106,8 @@ internal sealed record ReportEffect
 
 internal sealed record ReportResource
 {
+    public string? Id { get; init; }
+    public string? QualifiedType { get; init; }
     public required string Type { get; init; }
     public required string Key { get; init; }
     public required IReadOnlyList<ReportResourceEvent> Events { get; init; }
@@ -98,9 +121,11 @@ internal sealed record ReportResourceEvent
 }
 
 /// <summary>One resource→resource lineage edge in the report, mapped from a step's recorded
-/// producer References/Consumes targets. Endpoints are (Type, Key) pairs matching <see cref="ReportResource"/>.</summary>
+/// producer References/Consumes targets. Endpoints carry scoped IDs alongside legacy (Type, Key) labels matching <see cref="ReportResource"/>.</summary>
 internal sealed record ReportReference
 {
+    public string? SubjectId { get; init; }
+    public string? TargetId { get; init; }
     public required string SubjectType { get; init; }
     public required string SubjectKey { get; init; }
     public required string TargetType { get; init; }

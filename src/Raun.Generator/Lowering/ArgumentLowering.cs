@@ -93,14 +93,16 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
     private readonly SemanticModel _model;
     private readonly SyntaxNode _root;
     private readonly Func<ISymbol, ExpressionSyntax?> _stepValue;
+    private readonly bool _preserveStepValueTypes;
     private readonly List<StepOutputRead> _reads = [];
     private readonly List<ArgumentViolation> _violations = [];
 
-    private ArgumentLowering(SemanticModel model, SyntaxNode root, Func<ISymbol, ExpressionSyntax?> stepValue)
+    private ArgumentLowering(SemanticModel model, SyntaxNode root, Func<ISymbol, ExpressionSyntax?> stepValue, bool preserveStepValueTypes)
     {
         _model = model;
         _root = root;
         _stepValue = stepValue;
+        _preserveStepValueTypes = preserveStepValueTypes;
     }
 
     /// <summary>
@@ -120,12 +122,21 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
     /// step-output local, or a LINQ unroll's loop variable — and returns null for anything else.
     /// </summary>
     public static LoweredArgument<TNode> Lower<TNode>(
-        SemanticModel model, TNode node, Func<ISymbol, ExpressionSyntax?> stepValue)
+        SemanticModel model, TNode node, Func<ISymbol, ExpressionSyntax?> stepValue, bool preserveStepValueTypes = false)
         where TNode : SyntaxNode
     {
-        var lowering = new ArgumentLowering(model, node, stepValue);
+        var lowering = new ArgumentLowering(model, node, stepValue, preserveStepValueTypes);
         var lowered = (TNode)lowering.Visit(node);
         return new LoweredArgument<TNode>(lowered, lowering._reads, lowering._violations);
+    }
+
+    public override SyntaxNode? VisitInterpolation(InterpolationSyntax node)
+    {
+        var lowered = (InterpolationSyntax)base.VisitInterpolation(node)!;
+        // An alias qualifier's ':' can be parsed as an interpolation format delimiter.
+        return lowered.Expression.DescendantNodesAndSelf().OfType<AliasQualifiedNameSyntax>().Any()
+            ? lowered.WithExpression(ParenthesizedExpression(lowered.Expression))
+            : lowered;
     }
 
     public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node) => Rehost(node, node);
@@ -156,6 +167,19 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
             if (symbol is ILocalSymbol local && node is IdentifierNameSyntax identifier)
             {
                 _reads.Add(new StepOutputRead(local, identifier));
+            }
+
+            // Note handlers capture the authored declared type, not the producer's result type.
+            // Keep this opt-in so unrelated DSL argument/interpolation lowering stays unchanged.
+            var declaredType = symbol switch
+            {
+                ILocalSymbol declaredLocal => declaredLocal.Type,
+                IParameterSymbol parameter => parameter.Type,
+                _ => null,
+            };
+            if (_preserveStepValueTypes && declaredType is not null)
+            {
+                value = ParenthesizedExpression(CastExpression(TypeSyntaxFactory.From(declaredType), ParenthesizedExpression(value)));
             }
 
             return value.WithTriviaFrom(node);

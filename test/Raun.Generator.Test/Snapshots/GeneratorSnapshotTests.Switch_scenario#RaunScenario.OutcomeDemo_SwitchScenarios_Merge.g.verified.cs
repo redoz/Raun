@@ -57,7 +57,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("ok");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("ok"))).Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
@@ -100,7 +101,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("no");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("no"))).Build()
             };
             nodes[3] = new global::Raun.Model.ScenarioNode
             {
@@ -127,7 +129,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("fast");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("fast"))).Build()
             };
             nodes[4] = new global::Raun.Model.ScenarioNode
             {
@@ -207,7 +210,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("x");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("x"))).Build()
             };
             nodes[7] = new global::Raun.Model.ScenarioNode
             {
@@ -236,7 +240,8 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "shipment " + (((global::OutcomeDemo.Accepted)__inputs.Get<global::OutcomeDemo.Outcome>(5)).Shipment) + " scheduled"
+                FormatDisplayName = static __inputs => "shipment " + ((string)(((global::OutcomeDemo.Accepted)__inputs.Get<global::OutcomeDemo.Outcome>(5)).Shipment)) + " scheduled",
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("shipment ").AppendFormatted(((string)(((global::OutcomeDemo.Accepted)__inputs.Get<global::OutcomeDemo.Outcome>(5)).Shipment))).AppendLiteral(" scheduled").Build()
             };
             nodes[8] = new global::Raun.Model.ScenarioNode
             {

@@ -61,7 +61,7 @@ internal sealed class HtmlReportModelBuilder
         // A scenario the run never launched (cancellation mid-run, a faulted sibling, a mis-declared
         // token halting further admission) has nothing to report — it never had a Status, and
         // without this filter Build() below would default it to "passed" with zero steps.
-        var scenarios = _scenarios.Where(s => s.Started).Select(s => s.Build()).ToList();
+        var scenarios = _scenarios.Where(s => s.Started).Select((s, index) => s.Build(index)).ToList();
 
         // Wall clock: earliest start to latest end over the scenarios that ran, not the sum — with
         // concurrent scenarios the sum would count overlapping time twice.
@@ -121,7 +121,7 @@ internal sealed class HtmlReportModelBuilder
 
         public void Add(StepResult result) => _results.Add(result);
 
-        public ReportScenario Build()
+        public ReportScenario Build(int scenarioIndex)
         {
             var start = Start;
 
@@ -129,6 +129,34 @@ internal sealed class HtmlReportModelBuilder
             var lanes = PackLanes(ordered, start);
             // The same "1", "2.1" labels the MTP tree shows, so a step has one name across surfaces.
             var labels = StepNumbering.Compute(Definition);
+
+            // Actual CLR identities are the sole lookup key. Labels never participate in identity.
+            var identities = new Dictionary<ResourceIdentity, string>();
+            string ResourceId(ResourceIdentity identity)
+            {
+                if (!identities.TryGetValue(identity, out var id))
+                {
+                    id = "r" + scenarioIndex.ToString(CultureInfo.InvariantCulture) + "-"
+                        + identities.Count.ToString(CultureInfo.InvariantCulture);
+                    identities.Add(identity, id);
+                }
+
+                return id;
+            }
+
+            ReportMessage Message(StepMessage message, string prefix = "")
+            {
+                var parts = new List<ReportMessagePart>();
+                if (prefix.Length > 0) { parts.Add(new ReportMessagePart { Text = prefix }); }
+                parts.AddRange(message.Parts.Select(part => new ReportMessagePart
+                {
+                    Text = part.Text,
+                    ResourceId = part.Resource is { } identity ? ResourceId(identity) : null,
+                    Data = part.Data,
+                    DataTruncated = part.DataTruncated,
+                }));
+                return new ReportMessage { Text = prefix + message.Text, Parts = parts };
+            }
 
             var steps = new List<ReportStep>(ordered.Count);
             for (var i = 0; i < ordered.Count; i++)
@@ -144,12 +172,19 @@ internal sealed class HtmlReportModelBuilder
                     Label = labels[r.Node.Index],
                     Phase = r.Node.Phase,
                     DisplayName = r.DisplayName,
+                    TitleMessage = Message(r.TitleMessage),
+                    NoteMessages = r.NoteMessages.Select(note => Message(note)).ToList(),
+                    LogMessages = r.LogEntries.Count > 0
+                        ? r.LogEntries.Select(e => Message(e.Content ?? StepMessage.FromText(string.Empty),
+                            "+" + e.Elapsed.TotalSeconds.ToString("0.000", CultureInfo.InvariantCulture) + "s ")).ToList()
+                        : r.Logs.Select(line => Message(StepMessage.FromText(line))).ToList(),
                     Status = StatusText(r.Status),
                     OffsetMs = offset,
                     DurationMs = Ms(r.Duration),
                     Lane = lanes[i],
                     DependsOn = r.Node.DependsOn,
                     GroupId = r.Node.GroupId,
+                    Notes = r.Notes,
                     // Timer-prefixed ("+1.234s …") when the scheduler supplied offsets; plain lines otherwise.
                     Logs = r.LogEntries.Count > 0 ? r.LogEntries.Select(e => e.ToString()).ToList() : r.Logs,
                     TraceId = r.TraceId,
@@ -160,6 +195,7 @@ internal sealed class HtmlReportModelBuilder
                         .ToList(),
                     Effects = r.Effects.Select(e => new ReportEffect
                     {
+                        ResourceId = ResourceId(e.Identity),
                         Verb = e.Verb.ToString(),
                         Type = e.Identity.Type.Name,
                         Key = e.Identity.Key.ToString(),
@@ -171,27 +207,11 @@ internal sealed class HtmlReportModelBuilder
                 });
             }
 
-            var resources = ordered
-                .SelectMany(r => r.Effects)
-                .GroupBy(e => (e.Identity.Type.Name, Key: e.Identity.Key.ToString()))
-                .Select(g => new ReportResource
-                {
-                    Type = g.Key.Name,
-                    Key = g.Key.Key,
-                    Events = g.Select(e => new ReportResourceEvent
-                    {
-                        Verb = e.Verb.ToString(),
-                        OffsetMs = Ms(e.Timestamp - start),
-                        StepId = e.StepId ?? string.Empty,
-                    }).ToList(),
-                })
-                .ToList();
-
             // Lineage relations (2026-06-22 spec): relations are recorded explicitly at runtime from each
             // producer's [Created]/[Loaded]/[Edited] References/Consumes targets. Map them straight
             // through; dedup by (subject, target) across the scenario. No subject inference.
             var references = new List<ReportReference>();
-            var seenRelations = new HashSet<(string, string, string, string)>();
+            var seenRelations = new HashSet<(ResourceIdentity, ResourceIdentity)>();
             foreach (var r in ordered)
             {
                 foreach (var relation in r.Lineage)
@@ -200,13 +220,15 @@ internal sealed class HtmlReportModelBuilder
                     var subjectKey = relation.Subject.Key.ToString();
                     var targetType = relation.Target.Type.Name;
                     var targetKey = relation.Target.Key.ToString();
-                    if (!seenRelations.Add((subjectType, subjectKey, targetType, targetKey)))
+                    if (!seenRelations.Add((relation.Subject, relation.Target)))
                     {
                         continue;
                     }
 
                     references.Add(new ReportReference
                     {
+                        SubjectId = ResourceId(relation.Subject),
+                        TargetId = ResourceId(relation.Target),
                         SubjectType = subjectType,
                         SubjectKey = subjectKey,
                         TargetType = targetType,
@@ -215,6 +237,22 @@ internal sealed class HtmlReportModelBuilder
                     });
                 }
             }
+
+            // Mentions and lineage endpoints get entries, but only actual effects add activity.
+            var events = ordered.SelectMany(r => r.Effects).ToLookup(e => e.Identity);
+            var resources = identities.Select(pair => new ReportResource
+            {
+                Id = pair.Value,
+                QualifiedType = pair.Key.Type.FullName ?? pair.Key.Type.Name,
+                Type = pair.Key.Type.Name,
+                Key = pair.Key.Key.ToString(),
+                Events = events[pair.Key].Select(e => new ReportResourceEvent
+                {
+                    Verb = e.Verb.ToString(),
+                    OffsetMs = Ms(e.Timestamp - start),
+                    StepId = e.StepId ?? string.Empty,
+                }).ToList(),
+            }).ToList();
 
             var status = steps.Any(s => s.Status == "failed") ? "failed"
                 : steps.Any(s => s.Status == "skipped") ? "skipped"

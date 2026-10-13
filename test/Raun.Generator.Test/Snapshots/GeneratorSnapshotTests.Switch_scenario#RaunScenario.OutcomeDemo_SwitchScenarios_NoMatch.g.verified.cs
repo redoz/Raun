@@ -77,7 +77,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("pending");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("pending"))).Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
@@ -134,7 +135,8 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "shipment " + (__inputs.Get<global::OutcomeDemo.Accepted>(2).Shipment) + " scheduled"
+                FormatDisplayName = static __inputs => "shipment " + ((string)(__inputs.Get<global::OutcomeDemo.Accepted>(2).Shipment)) + " scheduled",
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("shipment ").AppendFormatted(((string)(__inputs.Get<global::OutcomeDemo.Accepted>(2).Shipment))).AppendLiteral(" scheduled").Build()
             };
             nodes[4] = new global::Raun.Model.ScenarioNode
             {
@@ -191,7 +193,8 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "customer told " + (__inputs.Get<global::OutcomeDemo.Rejected>(4).Reason)
+                FormatDisplayName = static __inputs => "customer told " + ((string)(__inputs.Get<global::OutcomeDemo.Rejected>(4).Reason)),
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("customer told ").AppendFormatted(((string)(__inputs.Get<global::OutcomeDemo.Rejected>(4).Reason))).Build()
             };
             nodes[6] = new global::Raun.Model.ScenarioNode
             {

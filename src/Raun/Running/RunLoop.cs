@@ -321,23 +321,30 @@ public sealed class RunLoop
     private readonly record struct Wait(long Since, Type By);
 
     /// <summary>Reports every step of a scenario that never ran because preflight failed.</summary>
-    private static async ValueTask SkipScenarioAsync(
+    private async ValueTask SkipScenarioAsync(
         ScenarioDefinition definition, IRunEventSink bus, ActivityContext? runContext, string runId)
     {
         await bus.PublishAsync(new ScenarioStarted(definition)).ConfigureAwait(false);
         using var scenarioActivity = StartScenarioActivity(definition, runContext, runId, waited: TimeSpan.Zero, waitedFor: null);
         scenarioActivity?.SetTag(RaunTelemetry.Attributes.TestSuiteRunStatus, "skipped");
 
+        using var scope = services?.GetService(typeof(IServiceScopeFactory)) is IServiceScopeFactory factory
+            ? factory.CreateScope()
+            : null;
+        var formatting = ScenarioContext.CreateMessageFormattingContext(scope?.ServiceProvider ?? services);
         var results = new List<StepResult>(definition.Nodes.Count);
         foreach (var node in definition.Nodes)
         {
+            var titleMessage = StepNotes.FormatTitle(node, formatting);
             var result = new StepResult
             {
                 Node = node,
-                DisplayName = node.DisplayNameTemplate,
+                DisplayName = titleMessage.Text,
+                TitleMessage = titleMessage,
                 Status = StepStatus.Skipped,
                 StartedAt = default,
                 SkipReason = Preflight.FailedSkipReason,
+                NoteMessages = StepNotes.FormatMessages(node, formatting),
             };
             results.Add(result);
             await bus.PublishAsync(new StepFinished(definition, result)).ConfigureAwait(false);

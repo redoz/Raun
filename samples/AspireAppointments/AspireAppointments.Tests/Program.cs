@@ -1,4 +1,5 @@
 using Aspire.Hosting;
+using Coverlet.MTP;
 using Aspire.Hosting.Testing;
 using AspireAppointments.Tests;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,7 +32,11 @@ return await RaunAspire.RunAsync<Projects.AspireAppointments_AppHost>(args, aspi
 {
     // Declarative: scenarios do not start until these report healthy. Starting and waiting happen
     // inside the run as the "Preflight" node, so both are timed and reported.
-    aspire.ConfigureTestApplication(b => b.AddCodeCoverageProvider());
+    aspire.ConfigureTestApplication(b =>
+    {
+        b.AddCodeCoverageProvider();
+        b.AddCoverletExtensionProvider();
+    });
 
     aspire.WaitFor("api");
     aspire.StartupTimeout = TimeSpan.FromMinutes(2);

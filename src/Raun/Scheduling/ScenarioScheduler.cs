@@ -74,6 +74,8 @@ public sealed class ScenarioScheduler
         var results = new StepResult?[count];
         var outputs = new object?[count];
         var inputs = new StepInputs(outputs, status);
+        var messageFormatting = ScenarioContext.CreateMessageFormattingContext(services);
+        var titleMessages = new StepMessage?[count];
 
         // The arm each passed condition node selected, decided once when it passed; -1 = no arm.
         var selectedArm = new int[nodes.Count];
@@ -87,6 +89,7 @@ public sealed class ScenarioScheduler
         var scenarioTimeout = definition.Timeout is { } configured && configured > TimeSpan.Zero
             ? configured
             : (TimeSpan?)null;
+        var stepContexts = scenarioTimeout is null ? null : new ScenarioContext?[count];
         using var timeoutCts = scenarioTimeout is null
             ? null
             : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -316,7 +319,9 @@ public sealed class ScenarioScheduler
                     {
                         pending.Remove(i);
                         status[i] = StepStatus.Running;
-                        var displayName = FormatName(node, inputs);
+                        var titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs);
+                        titleMessages[i] = titleMessage;
+                        var displayName = titleMessage.Text;
                         if (observer is not null)
                         {
                             await observer.OnStepStartingAsync(
@@ -337,7 +342,7 @@ public sealed class ScenarioScheduler
                         }
 
                         running[RunNodeAsync(
-                            definition, node, inputs, services, displayName, scenarioStart, startOffset, teardownLog, ledger, scenarioStartRef, scenarioToken)] = i;
+                            definition, node, inputs, services, titleMessage, messageFormatting, scenarioStart, startOffset, teardownLog, ledger, scenarioStartRef, stepContexts, scenarioToken)] = i;
                         progressed = true;
                     }
                 }
@@ -413,6 +418,26 @@ public sealed class ScenarioScheduler
             await RunTeardownAsync(teardownIndex).ConfigureAwait(false);
         }
 
+        // Filtered steps may reference values produced by selected predecessors.
+        for (var i = 0; i < count; i++)
+        {
+            if (excluded[i])
+            {
+                var previous = results[i]!;
+                var titleMessage = StepNotes.FormatTitle(nodes[i], messageFormatting, inputs);
+                results[i] = new StepResult
+                {
+                    Node = previous.Node,
+                    DisplayName = titleMessage.Text,
+                    TitleMessage = titleMessage,
+                    Status = previous.Status,
+                    StartedAt = previous.StartedAt,
+                    SkipReason = previous.SkipReason,
+                    NoteMessages = StepNotes.FormatMessages(nodes[i], messageFormatting, inputs),
+                };
+            }
+        }
+
         return results.Select(r => r!).ToList();
 
         // Runs after the scheduling loop, so a cancelled scenario token has already stopped the DAG
@@ -421,7 +446,8 @@ public sealed class ScenarioScheduler
         async Task RunTeardownAsync(int i)
         {
             var node = nodes[i];
-            var name = FormatName(node, inputs);
+            var titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs);
+            var name = titleMessage.Text;
 
             // Success is a property of the SCENARIO, not of the step that registered a cleanup: a
             // failed run should leave the whole world intact, not a half-torn-down mix of it. Steps a
@@ -475,7 +501,11 @@ public sealed class ScenarioScheduler
             // terminal, so it is ordered after all of them, and a cleanup's Delete must never be refused
             // as a conflict with the step that created the thing.
             var teardownContext = new ScenarioContext(
-                node.StepId, name, services, resolver: null, _timeProvider, CancellationToken.None);
+                node.StepId, name, services, messageFormatting.Resolver, _timeProvider, CancellationToken.None);
+            foreach (var note in StepNotes.FormatMessages(node, messageFormatting, inputs))
+            {
+                teardownContext.AddNote(note);
+            }
             teardownContext.AttachScenario(definition.Info);
             teardownContext.AttachScenarioStart(scenarioStartRef.Of(startedAt));
             using var teardownActivity = StartStepActivity(definition, node, name);
@@ -548,12 +578,13 @@ public sealed class ScenarioScheduler
             {
                 Node = node,
                 DisplayName = name,
+                TitleMessage = titleMessage,
                 Status = status[i],
                 StartedAt = startedAt,
                 Duration = stopwatch.Elapsed,
                 TraceId = teardownActivity?.TraceId.ToString(),
                 SpanId = teardownActivity?.SpanId.ToString(),
-                Logs = teardownContext.Logs,
+                NoteMessages = teardownContext.NoteMessages,
                 LogEntries = teardownContext.LogEntries,
                 Attachments = teardownContext.Attachments,
                 Effects = teardownContext.Resources.Effects,
@@ -602,12 +633,13 @@ public sealed class ScenarioScheduler
                         {
                             Node = result.Node,
                             DisplayName = result.DisplayName,
+                            TitleMessage = result.TitleMessage,
                             Status = StepStatus.Failed,
                             StartedAt = result.StartedAt,
                             Duration = result.Duration,
                             Exception = new InvalidOperationException(
                                 $"Choosing a branch after '{nodes[i].OperationName}' threw.", ex),
-                            Logs = result.Logs,
+                            NoteMessages = result.NoteMessages,
                             LogEntries = result.LogEntries,
                             Attachments = result.Attachments,
                             Effects = result.Effects,
@@ -636,7 +668,9 @@ public sealed class ScenarioScheduler
         async Task ApplyTimedOutAsync(int i, TimeSpan timeout)
         {
             var node = nodes[i];
-            var name = FormatName(node, inputs);
+            var titleMessage = titleMessages[i]!;
+            var context = stepContexts?[i];
+            var name = titleMessage.Text;
             status[i] = StepStatus.Failed;
 
             var startedAt = _simulatedTime ? scenarioStart + simStartOffset![i] : launchedAt[i];
@@ -650,9 +684,17 @@ public sealed class ScenarioScheduler
             {
                 Node = node,
                 DisplayName = name,
+                TitleMessage = titleMessage,
                 Status = StepStatus.Failed,
                 StartedAt = startedAt,
                 Duration = duration,
+                NoteMessages = context?.NoteMessages ?? StepNotes.FormatMessages(node, messageFormatting, inputs),
+                LogEntries = context?.LogEntries ?? [],
+                Attachments = context?.Attachments ?? new Dictionary<string, string>(),
+                Effects = context?.Resources.Effects ?? [],
+                Lineage = context?.Resources.Lineage ?? [],
+                TraceId = context?.Activity?.TraceId.ToString(),
+                SpanId = context?.Activity?.SpanId.ToString(),
                 Exception = new TimeoutException(
                     $"Scenario '{definition.DisplayName}' exceeded its timeout of {timeout} while running step '{name}'."),
             };
@@ -677,7 +719,8 @@ public sealed class ScenarioScheduler
             pending.Remove(i);
             status[i] = terminal;
             var node = nodes[i];
-            var name = FormatName(node, inputs);
+            var titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs);
+            var name = titleMessage.Text;
 
             // A not-taken branch never started, so no observer sees it start — that is what lets a
             // reporter leave the node in its discovered state instead of stranding it "in progress".
@@ -701,9 +744,11 @@ public sealed class ScenarioScheduler
             {
                 Node = node,
                 DisplayName = name,
+                TitleMessage = titleMessage,
                 Status = terminal,
                 StartedAt = startedAt,
                 SkipReason = reason,
+                NoteMessages = StepNotes.FormatMessages(node, messageFormatting, inputs),
             };
 
             // A step that never ran gets no span of its own — a span for no work is noise in a trace
@@ -777,7 +822,8 @@ public sealed class ScenarioScheduler
         async Task ApplyMergePassAsync(int i)
         {
             var node = nodes[i];
-            var name = FormatName(node, inputs);
+            var titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs);
+            var name = titleMessage.Text;
             var startedAt = _timeProvider.GetUtcNow();
             if (_simulatedTime)
             {
@@ -791,6 +837,7 @@ public sealed class ScenarioScheduler
             {
                 Node = node,
                 DisplayName = name,
+                TitleMessage = titleMessage,
                 Status = StepStatus.Passed,
                 StartedAt = startedAt,
             };
@@ -830,12 +877,14 @@ public sealed class ScenarioScheduler
         ScenarioNode node,
         IStepInputs inputs,
         IServiceProvider? services,
-        string displayName,
+        StepMessage titleMessage,
+        MessageFormattingContext messageFormatting,
         DateTimeOffset scenarioStart,
         TimeSpan simStartOffset,
         TeardownLog teardownLog,
         ResourceLedger ledger,
         ScenarioStart scenarioStartRef,
+        ScenarioContext?[]? stepContexts,
         CancellationToken scenarioToken)
     {
         // In simulated mode each step runs on its own clock seeded at base + start offset, so the
@@ -848,8 +897,19 @@ public sealed class ScenarioScheduler
         var stopwatch = Stopwatch.StartNew();
         TimeSpan Elapsed() => simClock?.Advanced ?? stopwatch.Elapsed;
         using var stepCts = CancellationTokenSource.CreateLinkedTokenSource(scenarioToken);
+        var displayName = titleMessage.Text;
         var context = new ScenarioContext(
-            node.StepId, displayName, services, resolver: null, stepTimeProvider, stepCts.Token);
+            node.StepId, displayName, services, messageFormatting.Resolver, stepTimeProvider, stepCts.Token);
+
+        if (stepContexts is not null)
+        {
+            stepContexts[node.Index] = context;
+        }
+
+        foreach (var note in StepNotes.FormatMessages(node, messageFormatting, inputs))
+        {
+            context.AddNote(note);
+        }
 
         context.AttachScenario(definition.Info);
         context.AttachTeardown(teardownLog, node.Index);
@@ -906,10 +966,11 @@ public sealed class ScenarioScheduler
                 {
                     Node = node,
                     DisplayName = displayName,
+                    TitleMessage = titleMessage,
                     Status = StepStatus.Passed,
                     StartedAt = startedAt,
                     Duration = Elapsed(),
-                    Logs = context.Logs,
+                    NoteMessages = context.NoteMessages,
                     LogEntries = context.LogEntries,
                     Attachments = context.Attachments,
                     Effects = context.Resources.Effects,
@@ -944,12 +1005,13 @@ public sealed class ScenarioScheduler
                 {
                     Node = node,
                     DisplayName = displayName,
+                    TitleMessage = titleMessage,
                     Status = statusValue,
                     StartedAt = startedAt,
                     Duration = Elapsed(),
                     Exception = exception,
                     SkipReason = skipReason,
-                    Logs = context.Logs,
+                    NoteMessages = context.NoteMessages,
                     LogEntries = context.LogEntries,
                     Attachments = context.Attachments,
                     Effects = context.Resources.Effects,
@@ -982,25 +1044,6 @@ public sealed class ScenarioScheduler
         }
 
         return activity;
-    }
-
-    private static string FormatName(ScenarioNode node, IStepInputs inputs)
-    {
-        if (node.FormatDisplayName is null)
-        {
-            return node.DisplayNameTemplate;
-        }
-
-        try
-        {
-            return node.FormatDisplayName(inputs);
-        }
-        catch
-        {
-            // A throwing formatter (or, for skips, unavailable dependency outputs) must not abort
-            // the scenario — fall back to the unformatted template.
-            return node.DisplayNameTemplate;
-        }
     }
 
     /// <summary>
@@ -1055,7 +1098,7 @@ public sealed class ScenarioScheduler
     /// reading it earlier means the reader does not depend on the producer, which only a generator
     /// bug can arrange, and a null cast would let that pass silently (or surface as a bare
     /// NullReferenceException for a value type). Display-name formatting for a skipped step may
-    /// legitimately hit this and is caught by <see cref="FormatName"/>.
+    /// legitimately hit this and is caught by <see cref="StepNotes.FormatTitle"/>.
     /// </summary>
     private sealed class StepInputs(object?[] outputs, StepStatus[] status) : IStepInputs
     {

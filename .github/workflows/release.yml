@@ -36,6 +36,7 @@ jobs:
       - name: Pack
         run: |
           dotnet pack src/Raun/Raun.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
+          dotnet pack src/Raun.Coverage/Raun.Coverage.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
           dotnet pack src/Raun.Mtp/Raun.Mtp.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
           dotnet pack src/Raun.Aspire/Raun.Aspire.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
 
@@ -50,7 +51,7 @@ jobs:
           NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          for package in Raun Raun.Mtp Raun.Aspire; do
+          for package in Raun Raun.Coverage Raun.Mtp Raun.Aspire; do
             dotnet nuget push "artifacts/$package.$version.nupkg" \
               --source "https://api.nuget.org/v3/index.json" \
               --api-key "$NUGET_API_KEY" \

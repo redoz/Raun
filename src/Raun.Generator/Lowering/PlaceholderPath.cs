@@ -99,7 +99,7 @@ internal sealed class PlaceholderPath
             };
         }
 
-        if (format is not null && !IsFormattable(UnderlyingIfNullable(type)))
+        if (format is not null && format is not ("id" or "data") && !IsFormattable(UnderlyingIfNullable(type)))
         {
             reason = "'" + UnderlyingIfNullable(type).Name + "' does not implement IFormattable, so it takes no format";
             return false;
@@ -154,7 +154,7 @@ internal sealed class PlaceholderPath
                 IdentifierName("CultureInfo")),
             IdentifierName("InvariantCulture"));
 
-    private ExpressionSyntax Walk(ExpressionSyntax argument)
+    public ExpressionSyntax Walk(ExpressionSyntax argument)
     {
         ExpressionSyntax head = ParenthesizedExpression(argument);
         var first = 0;

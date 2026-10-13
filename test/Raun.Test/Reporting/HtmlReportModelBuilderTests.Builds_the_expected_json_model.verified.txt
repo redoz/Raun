@@ -1,4 +1,4 @@
-﻿{
+{
   "GeneratedAtUtc": "2026-06-09T12:00:01Z",
   "Summary": {
     "Passed": 1,
@@ -22,15 +22,30 @@
           "Label": "1",
           "Phase": "Given",
           "DisplayName": "Given patient Jane exists",
+          "TitleMessage": {
+            "Text": "Given patient Jane exists",
+            "Parts": [
+              {
+                "Text": "Given patient Jane exists",
+                "ResourceId": null,
+                "Data": null,
+                "DataTruncated": false
+              }
+            ]
+          },
+          "NoteMessages": [],
+          "LogMessages": [],
           "Status": "passed",
           "OffsetMs": 0,
           "DurationMs": 40,
           "Lane": 0,
           "DependsOn": [],
           "GroupId": null,
+          "Notes": [],
           "Logs": [],
           "Effects": [
             {
+              "ResourceId": "r0-0",
               "Verb": "Create",
               "Type": "String",
               "Key": "Jane",
@@ -50,12 +65,26 @@
           "Label": "2",
           "Phase": "Given",
           "DisplayName": "Given an available slot exists",
+          "TitleMessage": {
+            "Text": "Given an available slot exists",
+            "Parts": [
+              {
+                "Text": "Given an available slot exists",
+                "ResourceId": null,
+                "Data": null,
+                "DataTruncated": false
+              }
+            ]
+          },
+          "NoteMessages": [],
+          "LogMessages": [],
           "Status": "passed",
           "OffsetMs": 0,
           "DurationMs": 30,
           "Lane": 1,
           "DependsOn": [],
           "GroupId": null,
+          "Notes": [],
           "Logs": [],
           "Effects": [],
           "Exception": null,
@@ -70,6 +99,19 @@
           "Label": "3",
           "Phase": "When",
           "DisplayName": "When creating an appointment",
+          "TitleMessage": {
+            "Text": "When creating an appointment",
+            "Parts": [
+              {
+                "Text": "When creating an appointment",
+                "ResourceId": null,
+                "Data": null,
+                "DataTruncated": false
+              }
+            ]
+          },
+          "NoteMessages": [],
+          "LogMessages": [],
           "Status": "passed",
           "OffsetMs": 40,
           "DurationMs": 50,
@@ -79,6 +121,7 @@
             1
           ],
           "GroupId": null,
+          "Notes": [],
           "Logs": [],
           "Effects": [],
           "Exception": null,
@@ -95,6 +138,8 @@
       ],
       "Resources": [
         {
+          "Id": "r0-0",
+          "QualifiedType": "System.String",
           "Type": "String",
           "Key": "Jane",
           "Events": [

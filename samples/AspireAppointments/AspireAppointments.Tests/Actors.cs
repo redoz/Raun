@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Net.Http.Json;
+using Raun;
 
 namespace AspireAppointments.Tests;
 
@@ -72,4 +74,7 @@ public sealed class AppointmentsClient(HttpClient http)
 }
 
 /// <summary>An appointment as the API returns it.</summary>
-public sealed record AppointmentDto(int Id, string Patient, string Slot, bool Urgent);
+public sealed record AppointmentDto(int Id, string Patient, string Slot, bool Urgent) : IResource<AppointmentDto>
+{
+    public static ResourceKey KeyFor(AppointmentDto instance) => instance.Id.ToString(CultureInfo.InvariantCulture);
+}

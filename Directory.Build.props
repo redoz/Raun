@@ -1,7 +1,7 @@
 <Project>
 
   <!-- Set this before SDK targets determine whether an external .pdb should be packed. -->
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Raun' or '$(MSBuildProjectName)' == 'Raun.Mtp' or '$(MSBuildProjectName)' == 'Raun.Aspire'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Raun' or '$(MSBuildProjectName)' == 'Raun.Mtp' or '$(MSBuildProjectName)' == 'Raun.Aspire' or '$(MSBuildProjectName)' == 'Raun.Coverage'">
     <DebugType>embedded</DebugType>
   </PropertyGroup>
 
@@ -54,7 +54,7 @@
 
     To add another later, drop in a project whose name is the generator's name plus
     '.Roslyn<digits>' (e.g. src/Raun.Generator.Roslyn414/Raun.Generator.Roslyn414.csproj).
-    The file can be a one-liner — '<Project Sdk="Microsoft.NET.Sdk" />' — because the
+    The file can be a one-liner â€” '<Project Sdk="Microsoft.NET.Sdk" />' â€” because the
     block below derives the target framework, assembly name, Roslyn package version,
     and source set entirely from the project name. No other files change.
     ============================================================================

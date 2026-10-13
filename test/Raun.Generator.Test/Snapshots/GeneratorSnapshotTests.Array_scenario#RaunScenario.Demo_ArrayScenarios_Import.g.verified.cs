@@ -57,7 +57,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentGiven>().UserExists("alice");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("user ").AppendFormatted(((string)("alice"))).AppendLiteral(" exists").Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
@@ -79,7 +80,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentGiven>().UserExists("bob");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("user ").AppendFormatted(((string)("bob"))).AppendLiteral(" exists").Build()
             };
             nodes[3] = new global::Raun.Model.ScenarioNode
             {

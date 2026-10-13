@@ -59,7 +59,8 @@ namespace Raun.Generated
                     await __ctx.Resources.Create(__r);
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("user ").AppendFormatted(((string)("jane@acme.com"))).AppendLiteral(" exists").Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {

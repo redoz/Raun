@@ -320,6 +320,13 @@ internal static class ScenarioEmitter
             ? CaseInvokeLambda(binding)
             : BuildInvokeLambda(step)));
 
+        if (step.NoteExpressions.Count > 0)
+        {
+            members.Add(Set("FormatNoteMessages", CollectionExpression(SeparatedList<CollectionElementSyntax>(
+                step.NoteExpressions.Select(note => ExpressionElement(
+                    MessageLambda().WithExpressionBody(note)))))));
+        }
+
         if (step.FormatExpression is { } format)
         {
             members.Add(Set("FormatDisplayName",
@@ -328,9 +335,23 @@ internal static class ScenarioEmitter
                     .WithExpressionBody(format)));
         }
 
+        if (step.TitleExpression is { } title)
+        {
+            members.Add(Set("FormatTitleMessage", MessageLambda().WithExpressionBody(title)));
+        }
+
         return ObjectCreationExpression(ScenarioNodeType)
             .WithInitializer(InitializerExpression(SyntaxKind.ObjectInitializerExpression, SeparatedList(members)));
     }
+
+    private static ParenthesizedLambdaExpressionSyntax MessageLambda()
+        => ParenthesizedLambdaExpression()
+            .WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword)))
+            .WithParameterList(ParameterList(SeparatedList(new[]
+            {
+                Parameter(Identifier("__inputs")),
+                Parameter(Identifier("__formatting")),
+            })));
 
     /// <summary>
     /// Builds: <c>static async (__inputs, __ctx) => { var __r = await CALL; [resource calls] return (object?)__r; }</c>

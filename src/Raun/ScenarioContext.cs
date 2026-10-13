@@ -14,6 +14,7 @@ public sealed class ScenarioContext
 {
     private static readonly AsyncLocal<ScenarioContext?> CurrentContext = new();
 
+    private readonly ConcurrentQueue<StepMessage> _notes = new();
     private readonly ConcurrentQueue<Model.LogEntry> _logs = new();
     private readonly ConcurrentDictionary<string, string> _attachments = new();
 
@@ -63,15 +64,12 @@ public sealed class ScenarioContext
         CancellationToken = cancellationToken;
         Services = services;
         TimeProvider = timeProvider ?? TimeProvider.System;
-        var effectiveResolver =
-            resolver
-            ?? services?.GetService(typeof(ResourceIdentityResolver)) as ResourceIdentityResolver
-            ?? new ResourceIdentityResolver();
+        MessageFormatting = CreateMessageFormattingContext(services, resolver);
         _scenarioStart = TimeProvider.GetUtcNow();
         Resources = new ResourceContext(
             stepId,
             stepDisplayName,
-            effectiveResolver,
+            MessageFormatting.Resolver,
             TimeProvider);
 
         // Resource events are part of the step's story, so they land in the log stream in order,
@@ -89,10 +87,14 @@ public sealed class ScenarioContext
 
     private void OnResource(LifecycleVerb verb, ResourceIdentity identity, ResourceConflictException? conflict)
     {
-        var line = conflict is null
-            ? $"[resource] {verb} {identity}"
-            : $"[resource] conflict: {conflict.Message}";
-        Append(line);
+        var content = conflict is null
+            ? new StepMessage([new StepMessagePart($"[resource] {verb} "), new StepMessagePart(identity.ToString(), identity)])
+            : new StepMessage([
+                new StepMessagePart($"[resource] conflict: Step '{conflict.StepDisplayName}' ({conflict.Verb}) and step '{conflict.OtherStepDisplayName}' ({conflict.OtherVerb}) both touch "),
+                new StepMessagePart(identity.ToString(), identity),
+                new StepMessagePart(" and nothing orders them; add a dependency between them or declare one access as [Read]."),
+            ]);
+        Append(content);
 
         if (_activity is { IsAllDataRequested: true })
         {
@@ -164,22 +166,40 @@ public sealed class ScenarioContext
 
     /// <summary>Appends a log line associated with the current step, stamped with the time since the
     /// scenario started (see <see cref="LogEntries"/>).</summary>
-    public void Log(string message)
+    public void Log(string message) => Log(StepMessage.FromText(message));
+
+    /// <summary>Appends a captured resource-aware interpolated log line.</summary>
+    public void Log(StepMessageInterpolatedStringHandler message) => Log(message.Materialize(MessageFormatting));
+
+    /// <summary>Appends an explicitly formatted resource-aware log line.</summary>
+    public void Log(FormattableString message) => Log(StepMessage.Create(MessageFormatting, message));
+
+    /// <summary>Appends a frozen message and mirrors its text to telemetry.</summary>
+    public void Log(StepMessage message)
     {
+        ArgumentNullException.ThrowIfNull(message);
         Append(message);
 
         if (_activity is { IsAllDataRequested: true })
         {
             _activity.AddEvent(new System.Diagnostics.ActivityEvent(
                 RaunTelemetry.Events.Log,
-                tags: new System.Diagnostics.ActivityTagsCollection { ["message"] = message }));
+                tags: new System.Diagnostics.ActivityTagsCollection { ["message"] = message.Text }));
         }
     }
 
-    private void Append(string message)
+    internal MessageFormattingContext MessageFormatting { get; }
+
+    internal static MessageFormattingContext CreateMessageFormattingContext(
+        IServiceProvider? services, ResourceIdentityResolver? resolver = null)
+        => new(resolver
+            ?? services?.GetService(typeof(ResourceIdentityResolver)) as ResourceIdentityResolver
+            ?? new ResourceIdentityResolver());
+
+    private void Append(StepMessage message)
     {
         var elapsed = TimeProvider.GetUtcNow() - _scenarioStart;
-        _logs.Enqueue(new Model.LogEntry(elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed, message));
+        _logs.Enqueue(new Model.LogEntry(elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed, message.Text) { Content = message });
     }
 
     /// <summary>Records which scenario this context's step belongs to. Called by the scheduler.</summary>
@@ -249,6 +269,14 @@ public sealed class ScenarioContext
 
     /// <summary>Records a named text attachment associated with the current step.</summary>
     public void AddAttachment(string name, string value) => _attachments[name] = value;
+
+    internal void AddNote(StepMessage message) => _notes.Enqueue(message);
+
+    /// <summary>Explanations collected for this step, in declaration order.</summary>
+    public IReadOnlyList<string> Notes => _notes.Select(message => message.Text).ToArray();
+
+    /// <summary>Frozen explanations collected for this step, in declaration order.</summary>
+    public IReadOnlyList<StepMessage> NoteMessages => _notes.ToArray();
 
     /// <summary>Log lines collected for this step, in append order, messages only.</summary>
     public IReadOnlyList<string> Logs => _logs.Select(e => e.Message).ToArray();

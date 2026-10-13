@@ -80,7 +80,8 @@ namespace Raun.Generated
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentGiven>().PatientExists("Jane");
 #line hidden
                     return (object? )__r;
-                }
+                },
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("patient ").AppendFormatted(((string)("Jane"))).AppendLiteral(" exists").Build()
             };
             nodes[3] = new global::Raun.Model.ScenarioNode
             {

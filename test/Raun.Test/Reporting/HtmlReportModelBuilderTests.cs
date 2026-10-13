@@ -45,6 +45,102 @@ public class HtmlReportModelBuilderTests
     };
 
     [Fact]
+    public void Structured_messages_keep_scoped_identities_and_recording_time_snapshots()
+    {
+        var node = Node(0, "a", "Then", "legacy");
+        var first = Def("first", node);
+        var second = Def("second", node);
+        var left = new ResourceIdentity(typeof(Left.Seed), "key:/<\"&");
+        var right = new ResourceIdentity(typeof(Right.Seed), "key:/<\"&");
+        var mention = new StepMessage([new StepMessagePart("Use <", null), new StepMessagePart("Seed:key", left),
+            new StepMessagePart(" id", right), new StepMessagePart("preview", left, "<script>\nold snapshot", true)]);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnRunStarted([first, second]);
+        foreach (var definition in new[] { first, second })
+        {
+            builder.OnScenarioStarted(definition);
+            builder.OnStepFinished(definition, new StepResult
+            {
+                Node = node, DisplayName = "legacy", Status = StepStatus.Passed, StartedAt = T0, TitleMessage = mention,
+                NoteMessages = [mention], LogEntries = [new LogEntry { Elapsed = TimeSpan.FromSeconds(1), Content = mention }],
+            });
+        }
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(builder.Build("x")));
+        var scenarios = json.RootElement.GetProperty("Scenarios");
+        var resources = scenarios[0].GetProperty("Resources");
+        Assert.Equal(2, resources.GetArrayLength());
+        var id = resources[0].GetProperty("Id").GetString();
+        Assert.NotEqual(id, resources[1].GetProperty("Id").GetString());
+        Assert.NotEqual(id, scenarios[1].GetProperty("Resources")[0].GetProperty("Id").GetString());
+        Assert.NotEqual(resources[0].GetProperty("QualifiedType").GetString(), resources[1].GetProperty("QualifiedType").GetString());
+        Assert.All(resources.EnumerateArray(), resource => Assert.Empty(resource.GetProperty("Events").EnumerateArray()));
+        var step = scenarios[0].GetProperty("Steps")[0];
+        Assert.Empty(step.GetProperty("Effects").EnumerateArray());
+        Assert.Empty(scenarios[0].GetProperty("References").EnumerateArray());
+        foreach (var message in new[] { step.GetProperty("TitleMessage"), step.GetProperty("NoteMessages")[0], step.GetProperty("LogMessages")[0] })
+        {
+            var part = message.GetProperty("Parts").EnumerateArray().Last();
+            Assert.Equal(id, part.GetProperty("ResourceId").GetString());
+            Assert.Equal("<script>\nold snapshot", part.GetProperty("Data").GetString());
+            Assert.True(part.GetProperty("DataTruncated").GetBoolean());
+        }
+
+        Assert.Equal("+1.000s " + mention.Text, step.GetProperty("LogMessages")[0].GetProperty("Text").GetString());
+        Assert.DoesNotContain("<script>", JsonSerializer.Serialize(builder.Build("x")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Effects_and_lineage_share_actual_identity_tokens_without_label_collision()
+    {
+        var node = Node(0, "a", "When", "a");
+        var def = Def(node);
+        var left = new ResourceIdentity(typeof(Left.Seed), "same");
+        var right = new ResourceIdentity(typeof(Right.Seed), "same");
+        var builder = new HtmlReportModelBuilder();
+        builder.OnScenarioStarted(def);
+        builder.OnStepFinished(def, Result(node, T0, 10, effects:
+        [
+            new ResourceEffect { Verb = LifecycleVerb.Create, Identity = left, StepId = "a", Timestamp = T0 },
+            new ResourceEffect { Verb = LifecycleVerb.Read, Identity = right, StepId = "a", Timestamp = T0 },
+        ], lineage:
+        [
+            new ResourceLineageRelation { Subject = left, Target = right, Kind = LifecycleVerb.Reference },
+            new ResourceLineageRelation { Subject = right, Target = left, Kind = LifecycleVerb.Reference },
+        ]));
+        var model = builder.Build("x");
+        var scenario = Assert.Single(model.Scenarios);
+        Assert.Equal(2, scenario.Resources.Count);
+        Assert.Equal(2, scenario.References.Count);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(scenario));
+        var root = json.RootElement;
+        var ids = root.GetProperty("Resources").EnumerateArray().Select(r => r.GetProperty("Id").GetString()).ToArray();
+        Assert.Equal(ids, root.GetProperty("Steps")[0].GetProperty("Effects").EnumerateArray().Select(e => e.GetProperty("ResourceId").GetString()));
+        Assert.Equal(ids[0], root.GetProperty("References")[0].GetProperty("SubjectId").GetString());
+        Assert.Equal(ids[1], root.GetProperty("References")[0].GetProperty("TargetId").GetString());
+    }
+
+    private static class Left { internal readonly struct Seed; }
+    private static class Right { internal readonly struct Seed; }
+    [Fact]
+    public void Notes_are_first_class_report_data_even_for_skipped_steps()
+    {
+        var node = Node(0, "r", "Then", "check the result");
+        var def = Def(node);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnScenarioStarted(def);
+        builder.OnStepFinished(def, new StepResult
+        {
+            Node = node, DisplayName = node.DisplayNameTemplate, Status = StepStatus.Skipped,
+            StartedAt = T0, Notes = ["Why <this> matters", "A second explanation"], Logs = ["A log line"],
+        });
+        var step = Assert.Single(Assert.Single(builder.Build("2026-10-13T00:00:00Z").Scenarios).Steps);
+        Assert.Equal(["Why <this> matters", "A second explanation"], step.Notes);
+        Assert.Equal(["A log line"], step.Logs);
+        Assert.Contains("Notes", JsonSerializer.Serialize(step, JsonOptions), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Attachments_are_carried_per_step_ordered_by_name()
     {
         var n0 = Node(0, "r", "When", "When a travel reminder is sent");

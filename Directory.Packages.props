@@ -21,7 +21,7 @@
     <PackageVersion Include="Microsoft.Testing.Platform" Version="2.4.1" />
 
     <!-- ILogger bridge: step logs written through the standard .NET logging abstraction.
-         Abstractions only — no logging implementation is taken as a dependency. -->
+         Abstractions only â€” no logging implementation is taken as a dependency. -->
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
 
     <!-- DI: Raun.Mtp needs only the abstractions (IServiceScopeFactory); the test project needs
@@ -32,12 +32,14 @@
     <!-- Aspire integration (Raun.Aspire + the Aspire sample). -->
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.5.4" />
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.4" />
+    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
 
     <!-- Coverage spike: does the profiler reach Aspire's child processes?
          Moves in lockstep with Microsoft.Testing.Platform above: a version mismatch surfaces as a
          TypeLoadException after tests pass, not a coverage bug. -->
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
+    <PackageVersion Include="coverlet.MTP" Version="10.1.0" />
 
     <!-- TRX reporting, for the AppointmentTests sample only: it is what proves (and documents) that
          a platform extension reaches a Raun run through RunAsync's `configure` callback. Moves in
@@ -46,7 +48,7 @@
 
     <!-- OpenTelemetry, for the Aspire sample only: the test process exports Raun's spans and the API
          exports its own, both over OTLP, so one trace shows a step and the server work it caused.
-         Raun itself takes no OpenTelemetry dependency — it emits through System.Diagnostics. -->
+         Raun itself takes no OpenTelemetry dependency â€” it emits through System.Diagnostics. -->
     <PackageVersion Include="OpenTelemetry" Version="1.*" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.*" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.*" />
@@ -61,6 +63,10 @@
       supported later by adding a lower Raun.Generator.Roslyn<NN> variant.
     -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
+    <PackageVersion Include="Microsoft.Build.Framework" Version="17.11.48" />
 
     <!-- Tag-driven versioning for the packable libraries (referenced from Directory.Build.targets). -->
     <PackageVersion Include="MinVer" Version="8.0.0" />

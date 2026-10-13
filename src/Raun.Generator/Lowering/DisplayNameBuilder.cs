@@ -3,19 +3,20 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Raun.Generator.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Raun.Generator.Lowering;
 
-/// <summary>A lowered display name: the constant template plus an optional string expression
-/// (in terms of <c>__inputs</c>) for runtime placeholders; null when fully constant.</summary>
-internal readonly record struct LoweredDisplayName(string Template, ExpressionSyntax? FormatExpression);
+/// <summary>The folded discovery template, optional legacy string expression, and optional typed
+/// title builder. Runtime expressions use __inputs; the typed builder also uses __formatting.</summary>
+internal readonly record struct LoweredDisplayName(string Template, ExpressionSyntax? FormatExpression, ExpressionSyntax? TitleExpression);
 
 /// <summary>
 /// Builds a step's display name from its <c>[StepName]</c> template: constant placeholders are
 /// folded into a literal, and runtime ones — a member path such as <c>{specification.Outcome}</c>
-/// always is — become a string concatenation (in terms of <c>__inputs</c>). The format expression is
-/// null when the name is fully constant.
+/// always is — feed a typed message builder and, for previously supported formats, a legacy string
+/// concatenation. Fully constant names need neither runtime expression.
 /// </summary>
 /// <remarks>
 /// The runtime form is a <c>+</c> chain rather than an interpolated string: Roslyn has no factory
@@ -41,6 +42,8 @@ internal static class DisplayNameBuilder
 
         var constant = new StringBuilder();
         var format = new Concatenation();
+        var message = new Message();
+        var reservedFormat = false;
 
         foreach (var token in tokens)
         {
@@ -48,6 +51,7 @@ internal static class DisplayNameBuilder
             {
                 constant.Append(token.Text);
                 format.Append(token.Text);
+                message.Append(token.Text);
                 continue;
             }
 
@@ -64,16 +68,22 @@ internal static class DisplayNameBuilder
                 // No argument resolves the placeholder: it stays as written, in both forms.
                 constant.Append('{').Append(token.Text).Append('}');
                 format.Append("{" + token.Text + "}");
+                message.Append("{" + token.Text + "}");
                 continue;
             }
 
             var argument = lowered[index].Expression.WithoutTrivia();
+            // Bind the value as the called method does before accessing members or inferring the
+            // formatter's generic type. The producer may return a more concrete type than this parameter.
+            var boundArgument = CastExpression(TypeSyntaxFactory.From(path!.Parameter.Type), ParenthesizedExpression(argument));
+            message.Append(path.Walk(boundArgument), path.Format);
+            reservedFormat |= path.Format is "id" or "data";
             if (path!.Members.Count > 0)
             {
                 // A member path is always read at run time, null-safely: the value it projects is not
                 // a compile-time constant even when the argument is.
                 constant.Append('{').Append(token.Text).Append('}');
-                format.Append(path.Apply(argument));
+                format.Append(path.Format is "id" or "data" ? path.Walk(boundArgument) : path.Apply(boundArgument));
                 continue;
             }
 
@@ -97,11 +107,64 @@ internal static class DisplayNameBuilder
             {
                 constant.Append('{').Append(token.Text).Append('}');
                 // Parenthesized so the hole binds tighter than the surrounding `+`, whatever it is.
-                format.Append(path.Format is null ? ParenthesizedExpression(argument) : path.Apply(argument));
+                format.Append(path.Format is null or "id" or "data" ? ParenthesizedExpression(boundArgument) : path.Apply(boundArgument));
             }
         }
 
-        return new LoweredDisplayName(constant.ToString(), format.Build());
+        return new LoweredDisplayName(constant.ToString(), reservedFormat ? null : format.Build(), message.Build());
+    }
+
+    /// <summary>Feeds typed runtime values to the same formatting policy as notes and logs.</summary>
+    private sealed class Message
+    {
+        private ExpressionSyntax _builder = ObjectCreationExpression(Names.Global("Raun", "StepMessageBuilder"))
+            .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(IdentifierName("__formatting")))));
+        private readonly StringBuilder _pending = new();
+        private bool _anyHole;
+
+        public void Append(string text) => _pending.Append(text);
+
+        public void Append(ExpressionSyntax value, string? format)
+        {
+            Flush();
+            var arguments = new List<ArgumentSyntax> { Argument(value) };
+            if (format is not null)
+            {
+                arguments.Add(Argument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(format)))
+                    .WithNameColon(NameColon(IdentifierName("format"))));
+            }
+
+            Call("AppendFormatted", arguments);
+            _anyHole = true;
+        }
+
+        public ExpressionSyntax? Build()
+        {
+            if (!_anyHole)
+            {
+                return null;
+            }
+
+            Flush();
+            Call("Build", []);
+            return _builder;
+        }
+
+        private void Flush()
+        {
+            if (_pending.Length == 0)
+            {
+                return;
+            }
+
+            Call("AppendLiteral", [Argument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(_pending.ToString())))]);
+            _pending.Clear();
+        }
+
+        private void Call(string name, IEnumerable<ArgumentSyntax> arguments)
+            => _builder = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                    _builder, IdentifierName(name)))
+                .WithArgumentList(ArgumentList(SeparatedList(arguments)));
     }
 
     /// <summary>Accumulates the <c>+</c> chain, merging adjacent literal runs into one literal and

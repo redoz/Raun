@@ -1,12 +1,14 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Raun/Raun.csproj" />
+    <Project Path="src/Raun.Coverage/Raun.Coverage.csproj" />
     <Project Path="src/Raun.Mtp/Raun.Mtp.csproj" />
     <Project Path="src/Raun.Generator/Raun.Generator.csproj" />
     <Project Path="src/Raun.Aspire/Raun.Aspire.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/Raun.Test/Raun.Test.csproj" />
+    <Project Path="test/Raun.Coverage.Test/Raun.Coverage.Test.csproj" />
     <Project Path="test/Raun.Generator.Test/Raun.Generator.Test.csproj" />
     <Project Path="test/Raun.Mtp.Test/Raun.Mtp.Test.csproj" />
     <Project Path="test/Raun.Aspire.Test/Raun.Aspire.Test.csproj" />
