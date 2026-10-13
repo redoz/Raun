@@ -503,6 +503,26 @@ public class MtpReportSinkTests
     }
 
     [Fact]
+    public async Task Completed_return_title_keeps_the_same_uid_and_step_number()
+    {
+        var def = Definition(id: "s", nodes: [Node(0, "a", "Given patient Bob")]);
+        var (sink, bus) = NewSink();
+        await sink.PublishAsync(new ScenarioStarted(def));
+        await sink.PublishAsync(new StepStarted(def, new StepContext { Node = def.Nodes[0], DisplayName = "Given patient Bob" }));
+        await sink.PublishAsync(new StepFinished(def, new StepResult
+        {
+            Node = def.Nodes[0], DisplayName = "Given patient bob-42", Status = StepStatus.Passed, StartedAt = TestInstant,
+            TitleMessage = new StepMessage([new StepMessagePart("Given patient "), new StepMessagePart("bob-42", new ResourceIdentity(typeof(string), "bob-42"))]),
+        }));
+        var published = bus.Nodes.ToArray();
+        Assert.Equal(2, published.Length);
+        Assert.Equal("1. Given patient Bob", published[0].DisplayName);
+        Assert.Equal("1. Given patient bob-42", published[1].DisplayName);
+        Assert.Equal(published[0].Uid.Value, published[1].Uid.Value);
+        Assert.Equal("s:a", published[1].Uid.Value);
+    }
+
+    [Fact]
     public async Task Each_published_update_carries_the_session_uid()
     {
         var def = Definition(id: "s", nodes: [Node(0, "a", "step a")]);

@@ -26,20 +26,20 @@ public sealed class Scenarios : AppointmentsSuite
     [Scenario("an admin books an appointment a patient can read")]
     public async Task AdminBooksPatientReads()
     {
-        await Given.ApiIsReachable();
+        var patient = await Given.PatientCanReachApi("Alice");
 
-        var appointment = await When.AdminBooks("Alice", "2026-09-05T09:00");
+        var appointment = await When.AdminBooks(patient, "2026-09-05T09:00");
 
-        await Then.PatientCanRead(appointment)
-            .Note($"Admin creation must preserve patient access to {appointment:id}. Booked data: {appointment:data}.");
+        await Then.PatientCanRead(patient, appointment)
+            .Note($"Admin creation must preserve patient access to {appointment}.");
     }
 
     [Scenario("a patient may not book appointments")]
     public async Task PatientCannotBook()
     {
-        await Given.ApiIsReachable();
+        var patient = await Given.PatientCanReachApi("Bob");
 
-        var status = await When.PatientTriesToBook("Bob", "2026-09-05T10:00");
+        var status = await When.PatientTriesToBook(patient, "2026-09-05T10:00");
 
         await Then.AttemptWasRejected(status)
             .Note($"The patient role must be rejected; the API returned status {status}.");

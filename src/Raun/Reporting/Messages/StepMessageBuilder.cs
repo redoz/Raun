@@ -32,7 +32,14 @@ public sealed class StepMessageBuilder
         => AppendPart(new(value), alignment);
 
     internal StepMessageBuilder AppendFormatted(Type declaredType, object? value, int alignment, string? format)
-        => AppendPart(Format(declaredType, value, format), alignment);
+    {
+        var part = Format(declaredType, value, format);
+        if (part.Resource.HasValue)
+        {
+            part = part with { Snapshot = ResourcePresentation.Capture(value) };
+        }
+        return AppendPart(part, alignment);
+    }
 
     private StepMessageBuilder AppendPart(StepMessagePart part, int alignment)
     {
@@ -72,7 +79,7 @@ public sealed class StepMessageBuilder
                 }
                 if (string.IsNullOrEmpty(format))
                 {
-                    return new(resource.ToString(), resource);
+                    return new(ResourcePresentation.Display(resource), resource);
                 }
                 if (string.Equals(format, "id", StringComparison.Ordinal))
                 {
@@ -82,9 +89,9 @@ public sealed class StepMessageBuilder
                 {
                     if (value is ResourceIdentity)
                     {
-                        return new(resource.ToString(), resource);
+                        return new(ResourcePresentation.Display(resource), resource);
                     }
-                    var data = value.ToString() ?? string.Empty;
+                    var data = ResourcePresentation.Data(value);
                     var truncated = data.Length > 16_384;
                     data = Prefix(data, 16_384);
                     var inline = data.Replace("\r\n", " ", StringComparison.Ordinal)

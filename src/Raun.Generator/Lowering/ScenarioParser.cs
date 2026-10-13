@@ -1813,7 +1813,7 @@ internal sealed class ScenarioParser
         var resourceClaims = BuildResourceClaims(written, method, resultType is not null, lowered);
         AddUses(method.GetAttributes());
 
-        var (template, formatExpr, titleExpr) = DisplayNameBuilder.Build(_model, method, written, lowered);
+        var (template, formatExpr, titleExpr, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, lowered);
 
         var step = new ParsedStep
         {
@@ -1829,6 +1829,7 @@ internal sealed class ScenarioParser
             DisplayNameTemplate = template,
             FormatExpression = formatExpr,
             TitleExpression = titleExpr,
+            CompletedTitleExpression = completedTitleExpr,
             NoteExpressions = call.Notes.Select(note => note.Node).ToArray(),
             GroupId = groupId,
             TimeoutMs = AttributeReader.StepTimeout(method),

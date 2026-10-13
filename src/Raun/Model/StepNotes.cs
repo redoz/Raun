@@ -26,6 +26,24 @@ internal static class StepNotes
         return StepMessage.FromText(node.DisplayNameTemplate);
     }
 
+    internal static StepMessage FormatCompletedTitle(
+        ScenarioNode node, StepMessage initialTitle, object? output, MessageFormattingContext formatting)
+    {
+        if (output is not null && node.FormatCompletedTitleMessage is { } completed)
+        {
+            try
+            {
+                var titleFormatting = new MessageFormattingContext(formatting.Resolver, CultureInfo.InvariantCulture);
+                return completed(initialTitle, output, titleFormatting) ?? initialTitle;
+            }
+            catch
+            {
+                // Completion formatting is evidence only; preserve the title recorded at start.
+            }
+        }
+        return initialTitle;
+    }
+
     internal static StepMessage[] FormatMessages(ScenarioNode node, MessageFormattingContext formatting, IStepInputs? inputs = null)
     {
         var notes = new List<StepMessage>();

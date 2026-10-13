@@ -629,11 +629,12 @@ public sealed class ScenarioScheduler
                     catch (Exception ex)
                     {
                         status[i] = StepStatus.Failed;
+                        var initialTitle = titleMessages[i]!;
                         result = new StepResult
                         {
                             Node = result.Node,
-                            DisplayName = result.DisplayName,
-                            TitleMessage = result.TitleMessage,
+                            DisplayName = initialTitle.Text,
+                            TitleMessage = initialTitle,
                             Status = StepStatus.Failed,
                             StartedAt = result.StartedAt,
                             Duration = result.Duration,
@@ -961,12 +962,13 @@ public sealed class ScenarioScheduler
 
             stopwatch.Stop();
             activity?.SetTag(RaunTelemetry.Attributes.TestCaseResultStatus, "pass");
+            var completedTitle = StepNotes.FormatCompletedTitle(node, titleMessage, output, messageFormatting);
             return new NodeOutcome(
                 new StepResult
                 {
                     Node = node,
-                    DisplayName = displayName,
-                    TitleMessage = titleMessage,
+                    DisplayName = completedTitle.Text,
+                    TitleMessage = completedTitle,
                     Status = StepStatus.Passed,
                     StartedAt = startedAt,
                     Duration = Elapsed(),

@@ -15,10 +15,10 @@ public class HtmlReportModelBuilderTests
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private static ScenarioNode Node(int index, string stepId, string phase, string template,
-        int[]? dependsOn = null, string? group = null) => new()
+        int[]? dependsOn = null, string? group = null, bool isSetup = false, bool isTeardown = false) => new()
     {
         Index = index, StepId = stepId, Phase = phase, OperationName = $"Op{index}",
-        DisplayNameTemplate = template, DependsOn = dependsOn ?? [], GroupId = group,
+        DisplayNameTemplate = template, DependsOn = dependsOn ?? [], GroupId = group, IsSetup = isSetup, IsTeardown = isTeardown,
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 
@@ -157,6 +157,29 @@ public class HtmlReportModelBuilderTests
         var step = Assert.Single(Assert.Single(builder.Build(generatedAtUtc: "2026-09-06T00:00:00Z").Scenarios).Steps);
         Assert.Equal(["audit", "reminder"], step.Attachments.Select(a => a.Name));
         Assert.Equal("Hi Sven, plan your trip.", step.Attachments[1].Value);
+    }
+
+    [Fact]
+    public void Lifecycle_metadata_uses_node_flags_and_setup_is_zero_without_renumbering_user_steps()
+    {
+        var setup = Node(0, "setup", "Setup", "Setup", isSetup: true);
+        var ordinary = Node(1, "ordinary", "Given", "Teardown");
+        var teardown = Node(2, "teardown", "Then", "Cleanup", isTeardown: true);
+        var definition = Def(setup, ordinary, teardown);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnScenarioStarted(definition);
+        foreach (var node in definition.Nodes)
+        {
+            builder.OnStepFinished(definition, Result(node, T0, 1));
+        }
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(builder.Build("x")));
+        var steps = json.RootElement.GetProperty("Scenarios")[0].GetProperty("Steps");
+        Assert.Equal("0", steps[0].GetProperty("Label").GetString());
+        Assert.Equal("1", steps[1].GetProperty("Label").GetString());
+        Assert.Equal("2", steps[2].GetProperty("Label").GetString());
+        Assert.True(steps[0].GetProperty("IsLifecycle").GetBoolean());
+        Assert.False(steps[1].TryGetProperty("IsLifecycle", out _));
+        Assert.True(steps[2].GetProperty("IsLifecycle").GetBoolean());
     }
 
     [Fact]

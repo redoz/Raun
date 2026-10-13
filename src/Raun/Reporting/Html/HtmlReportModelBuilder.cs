@@ -127,7 +127,7 @@ internal sealed class HtmlReportModelBuilder
 
             var ordered = _results.OrderBy(r => r.Node.Index).ToList();
             var lanes = PackLanes(ordered, start);
-            // The same "1", "2.1" labels the MTP tree shows, so a step has one name across surfaces.
+            // Ordinary steps share the MTP labels; the HTML report gives unnumbered Setup an explicit zero.
             var labels = StepNumbering.Compute(Definition);
 
             // Actual CLR identities are the sole lookup key. Labels never participate in identity.
@@ -152,8 +152,8 @@ internal sealed class HtmlReportModelBuilder
                 {
                     Text = part.Text,
                     ResourceId = part.Resource is { } identity ? ResourceId(identity) : null,
-                    Data = part.Data,
-                    DataTruncated = part.DataTruncated,
+                    Data = part.Snapshot ?? part.Data,
+                    DataTruncated = part.Snapshot is null && part.DataTruncated,
                 }));
                 return new ReportMessage { Text = prefix + message.Text, Parts = parts };
             }
@@ -169,7 +169,8 @@ internal sealed class HtmlReportModelBuilder
                 {
                     StepId = r.Node.StepId,
                     Index = r.Node.Index,
-                    Label = labels[r.Node.Index],
+                    Label = r.Node.IsSetup ? "0" : labels[r.Node.Index],
+                    IsLifecycle = r.Node.IsSetup || r.Node.IsTeardown,
                     Phase = r.Node.Phase,
                     DisplayName = r.DisplayName,
                     TitleMessage = Message(r.TitleMessage),
@@ -197,10 +198,10 @@ internal sealed class HtmlReportModelBuilder
                     {
                         ResourceId = ResourceId(e.Identity),
                         Verb = e.Verb.ToString(),
-                        Type = e.Identity.Type.Name,
+                        Type = ResourcePresentation.Name(e.Identity.Type),
                         Key = e.Identity.Key.ToString(),
                         OffsetMs = Ms(e.Timestamp - start),
-                        Data = e.Data?.ToString(),
+                        Data = e.DataSnapshotCaptured ? e.DataSnapshot : e.Data?.ToString(),
                     }).ToList(),
                     Exception = r.Exception?.ToString(),
                     SkipReason = r.SkipReason,
@@ -216,9 +217,9 @@ internal sealed class HtmlReportModelBuilder
             {
                 foreach (var relation in r.Lineage)
                 {
-                    var subjectType = relation.Subject.Type.Name;
+                    var subjectType = ResourcePresentation.Name(relation.Subject.Type);
                     var subjectKey = relation.Subject.Key.ToString();
-                    var targetType = relation.Target.Type.Name;
+                    var targetType = ResourcePresentation.Name(relation.Target.Type);
                     var targetKey = relation.Target.Key.ToString();
                     if (!seenRelations.Add((relation.Subject, relation.Target)))
                     {
@@ -244,7 +245,7 @@ internal sealed class HtmlReportModelBuilder
             {
                 Id = pair.Value,
                 QualifiedType = pair.Key.Type.FullName ?? pair.Key.Type.Name,
-                Type = pair.Key.Type.Name,
+                Type = ResourcePresentation.Name(pair.Key.Type),
                 Key = pair.Key.Key.ToString(),
                 Events = events[pair.Key].Select(e => new ReportResourceEvent
                 {

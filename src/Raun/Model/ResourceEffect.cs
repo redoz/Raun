@@ -15,6 +15,12 @@ public sealed record ResourceEffect
     /// <summary>Optional data snapshot shown in the trace (e.g. the resource instance).</summary>
     public object? Data { get; init; }
 
+    /// <summary>Full raw JSON frozen when the resource was recorded, rather than when a report is generated.</summary>
+    public string? DataSnapshot { get; init; }
+
+    /// <summary>Whether recording-time capture was attempted; an unavailable snapshot must not be replaced with live data.</summary>
+    public bool DataSnapshotCaptured { get; init; }
+
     /// <summary>Stable id of the step that produced the effect.</summary>
     public string? StepId { get; init; }
 

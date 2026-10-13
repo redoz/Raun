@@ -25,6 +25,13 @@ Notes remain in the step result, including skipped steps when their inputs are a
 Resource-aware `Context.Log` messages and `[StepName]` titles support `:id` and `:data`;
 recognition uses `IResource<T>`, `IResourceIdentity` or a registered `Identify<T>` selector.
 
+Step titles can link their returned resource with `{$return:id ?? name}`;
+`name` remains visible until the returned value is available.
+
+Resource types can use `[DisplayName("Appointment")]` for friendly report labels.
+Every object reference captures its full raw JSON at that point in the scenario; hover
+to inspect or copy it. `:id` keeps the text compact; `:data` explicitly adds a short inline preview.
+
 The coverage/classification APIs are available in `Raun.Coverage` and `Raun.Mtp`.
 The HTML report has Tests and Coverage views. Expand a step for its resource events;
 open its logs when needed. Resource references highlight their usage; Esc clears the highlight.

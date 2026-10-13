@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Net.Http.Json;
 using Raun;
@@ -73,7 +74,14 @@ public sealed class AppointmentsClient(HttpClient http)
         await http.DeleteAsync(new Uri("/appointments", UriKind.Relative));
 }
 
+/// <summary>The patient fixture used by the scenario.</summary>
+public sealed record Patient(string Name) : IResource<Patient>
+{
+    public static ResourceKey KeyFor(Patient instance) => instance.Name;
+}
+
 /// <summary>An appointment as the API returns it.</summary>
+[DisplayName("Appointment")]
 public sealed record AppointmentDto(int Id, string Patient, string Slot, bool Urgent) : IResource<AppointmentDto>
 {
     public static ResourceKey KeyFor(AppointmentDto instance) => instance.Id.ToString(CultureInfo.InvariantCulture);

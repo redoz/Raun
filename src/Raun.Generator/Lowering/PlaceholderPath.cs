@@ -28,8 +28,21 @@ internal sealed class PlaceholderPath
         Format = format;
     }
 
+    private PlaceholderPath(ITypeSymbol returnType, string? format, PlaceholderPath? fallback, string? fallbackText)
+    {
+        ReturnType = returnType;
+        Format = format;
+        Fallback = fallback;
+        FallbackText = fallbackText;
+        Members = [];
+    }
+
     /// <summary>The parameter the path starts at.</summary>
-    public IParameterSymbol Parameter { get; }
+    public IParameterSymbol? Parameter { get; }
+
+    public ITypeSymbol? ReturnType { get; }
+    public PlaceholderPath? Fallback { get; }
+    public string? FallbackText { get; }
 
     /// <summary>The members after the parameter; empty for a bare <c>{parameter}</c>.</summary>
     public IReadOnlyList<PathMember> Members { get; }
@@ -43,18 +56,63 @@ internal sealed class PlaceholderPath
     /// </summary>
     public static bool TryBind(IMethodSymbol method, string placeholder, out PlaceholderPath? path, out string reason)
     {
-        path = null;
-        string? format = null;
-        var colon = placeholder.IndexOf(':');
-        if (colon >= 0)
+        if (!placeholder.StartsWith("$return", System.StringComparison.Ordinal))
         {
-            format = placeholder.Substring(colon + 1);
-            placeholder = placeholder.Substring(0, colon).TrimEnd();
-            if (format.Length == 0)
+            return TryBindParameter(method, placeholder, out path, out reason);
+        }
+
+        path = null;
+        var coalesce = placeholder.IndexOf("??", System.StringComparison.Ordinal);
+        var primary = coalesce < 0 ? placeholder : placeholder.Substring(0, coalesce).TrimEnd();
+        var fallbackText = coalesce < 0 ? null : placeholder.Substring(coalesce + 2).Trim();
+        if (!TrySplitFormat(primary, out var root, out var format, out reason))
+        {
+            return false;
+        }
+        if (root != "$return")
+        {
+            reason = "a return placeholder starts at '$return' without a member path";
+            return false;
+        }
+        if (!SymbolHelpers.TryUnwrapReturn(method.ReturnType, out var resultType) || resultType is null)
+        {
+            reason = "'$return' requires a Task<T> or ValueTask<T> result";
+            return false;
+        }
+        if (!ValidateFormat(resultType, format, out reason))
+        {
+            return false;
+        }
+        PlaceholderPath? fallback = null;
+        if (fallbackText is not null)
+        {
+            if (fallbackText.IndexOf("??", System.StringComparison.Ordinal) >= 0)
             {
-                reason = "the format after ':' is empty";
+                reason = "a return placeholder accepts only one parameter-path fallback";
                 return false;
             }
+            if (!TryBindParameter(method, fallbackText, out fallback, out reason))
+            {
+                return false;
+            }
+            // Params packing is outside return-title binding; all invocation forms share this rule.
+            // Ordinary parameter placeholders continue through their existing binder unchanged.
+            if (fallback!.Parameter!.IsParams)
+            {
+                reason = "a return placeholder fallback cannot start at a params parameter";
+                return false;
+            }
+        }
+        path = new PlaceholderPath(resultType, format, fallback, fallbackText);
+        return true;
+    }
+
+    private static bool TryBindParameter(IMethodSymbol method, string placeholder, out PlaceholderPath? path, out string reason)
+    {
+        path = null;
+        if (!TrySplitFormat(placeholder, out placeholder, out var format, out reason))
+        {
+            return false;
         }
 
         var segments = placeholder.Split('.');
@@ -99,13 +157,32 @@ internal sealed class PlaceholderPath
             };
         }
 
+        if (!ValidateFormat(type, format, out reason))
+        {
+            return false;
+        }
+
+        path = new PlaceholderPath(parameter, members, format);
+        reason = "";
+        return true;
+    }
+
+    private static bool TrySplitFormat(string placeholder, out string root, out string? format, out string reason)
+    {
+        var colon = placeholder.IndexOf(':');
+        root = colon < 0 ? placeholder : placeholder.Substring(0, colon).TrimEnd();
+        format = colon < 0 ? null : placeholder.Substring(colon + 1);
+        reason = format is { Length: 0 } ? "the format after ':' is empty" : "";
+        return reason.Length == 0;
+    }
+
+    private static bool ValidateFormat(ITypeSymbol type, string? format, out string reason)
+    {
         if (format is not null && format is not ("id" or "data") && !IsFormattable(UnderlyingIfNullable(type)))
         {
             reason = "'" + UnderlyingIfNullable(type).Name + "' does not implement IFormattable, so it takes no format";
             return false;
         }
-
-        path = new PlaceholderPath(parameter, members, format);
         reason = "";
         return true;
     }

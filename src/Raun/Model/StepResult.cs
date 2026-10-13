@@ -22,7 +22,7 @@ public sealed class StepResult
         }
     }
 
-    /// <summary>The frozen title captured before the step started.</summary>
+    /// <summary>The frozen title: input parts captured before the step started, with return parts resolved after successful completion.</summary>
     public StepMessage TitleMessage
     {
         get => _titleMessage ?? StepMessage.FromText(Node.DisplayNameTemplate);

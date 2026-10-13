@@ -12,6 +12,7 @@ class Node {
  set id(value){this.setAttribute('id',value);} get id(){return this.getAttribute('id');}
  replaceWith(node){const parent=this.parentElement;if(parent){const index=parent.children.indexOf(this);parent.children[index]=node;node.parentElement=parent;}}
  setAttribute(k,v){this.attributes[k]=String(v);if(k==='hidden')this.hidden=true;if(k.startsWith('data-'))this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=String(v);}
+ removeAttribute(k){delete this.attributes[k];}
  getAttribute(k){if(k.startsWith('data-'))return this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]??null;return this.attributes[k]??null;}
  appendChild(n){n.parentElement=this;this.children.push(n);return n;} append(...nodes){nodes.forEach(n=>this.appendChild(n));}
  replaceChildren(...nodes){this.children=[];this.append(...nodes);} remove(){if(this.parentElement)this.parentElement.children=this.parentElement.children.filter(n=>n!==this);}
@@ -26,7 +27,7 @@ class Node {
  querySelectorAll(s){return this.children.flatMap(n=>[...(n.matches(s)?[n]:[]),...n.querySelectorAll(s)]);} querySelector(s){return this.querySelectorAll(s)[0]||null;}
  set innerHTML(html){this.html=html;this.children=[];const stack=[this];for(const token of html.matchAll(/<[^>]+>|[^<]+/g)){
   const t=token[0];if(t.startsWith('</')){stack.pop();continue;}
-  if(t.startsWith('<')){const tag=t.match(/^<([\w-]+)/)?.[1];if(!tag)continue;const n=new Node(tag);for(const attr of t.slice(tag.length+1,-1).matchAll(/([\w-]+)(?:="([^"]*)")?/g))n.setAttribute(attr[1],decode(attr[2]??''));stack.at(-1).appendChild(n);if(!['input','br','hr'].includes(tag))stack.push(n);}
+  if(t.startsWith('<')){const tag=t.match(/^<([\w-]+)/)?.[1];if(!tag)continue;const n=new Node(tag);for(const attr of t.slice(tag.length+1,-1).matchAll(/([\w-]+)(?:="([^"]*)")?/g))n.setAttribute(attr[1],decode(attr[2]??''));stack.at(-1).appendChild(n);if(!t.endsWith('/>')&&!['input','br','hr'].includes(tag))stack.push(n);}
   else{const n=new Node('#text');n.textContent=decode(t);stack.at(-1).appendChild(n);}
  }} get innerHTML(){return this.html||'';}
  dispatch(type,props={}){const event={type,target:this,preventDefault(){this.prevented=true;},stopPropagation(){this.stopped=true;},...props};for(let n=this;n;n=n.parentElement){for(const h of n.listeners[type]||[])h(event);if(event.stopped)break;}return event;}
@@ -36,7 +37,7 @@ const svgEl=(tag,attrs)=>{const n=el(tag);for(const [k,v] of Object.entries(attr
 const documentEvents={};
 const document={documentElement:el('html'),body:el('body'),createElement:el,createTextNode:text=>Object.assign(el('#text'),{textContent:text}),addEventListener:(name,handler)=>(documentEvents[name]??=[]).push(handler)};
 const dispatchDocument=(name,target,key)=>{const ev={target,key,preventDefault(){this.prevented=true;}};for(const handler of documentEvents[name]||[])handler(ev);return ev;};
-const scope=vm.createContext({document,el,svgEl,window:{},getComputedStyle:()=>({getPropertyValue:()=>''}),typeColor:()=>'',keyColor:()=>'',fmtMs:n=>Number(n).toFixed(1)+' ms',fmtDur:n=>n+' ms',SHOW_DIAGRAM:false,PHCOLOR:{},VCOLOR:{},Blob,typeSlot:()=>0,hashOf:()=>1,KEY_SLOTS:7,catVar:()=>'',expansionFor:()=>new Map(),labelColor:()=>'',contrastInk:()=>'',placeVerbLabels(){},RESOURCE_LINE:/^(\+[\d.]+s )?\[resource\] (\w+) ([^:\s]+):(.*)$/});
+const scope=vm.createContext({document,el,svgEl,window:{},setTimeout,clearTimeout,getComputedStyle:()=>({getPropertyValue:()=>''}),typeColor:()=>'',keyColor:()=>'',fmtMs:n=>Number(n).toFixed(1)+' ms',fmtDur:n=>n+' ms',SHOW_DIAGRAM:false,PHCOLOR:{},VCOLOR:{},Blob,typeSlot:()=>0,hashOf:()=>1,KEY_SLOTS:7,catVar:()=>'',expansionFor:()=>new Map(),labelColor:()=>'',contrastInk:()=>'',placeVerbLabels(){},RESOURCE_LINE:/^(\+[\d.]+s )?\[resource\] (\w+) ([^:\s]+):(.*)$/});
 vm.runInContext(template.slice(template.indexOf('    const esc ='),template.indexOf('    const el ='))+'\nthis.actualEsc=esc;',scope);
 vm.runInContext(template.slice(template.indexOf('    const AD_W ='),template.indexOf('    const shortName =')),scope);
 vm.runInContext(template.slice(template.indexOf('    const shortName ='),template.indexOf('    const collapsedGroups =')),scope);
@@ -224,16 +225,23 @@ test('expanded step shows resource event table before independently collapsed lo
  assert.ok(p.innerHTML.indexOf('<table')<p.innerHTML.indexOf('step-logs'));
  assert.ok(p.querySelector('.step-note'));assert.match(p.innerHTML,/&lt;old&gt;/);
  assert.match(nodeText(table),/Read/);assert.match(nodeText(table),/\+3\.0 ms/);
+ assert.deepEqual(table.querySelectorAll('th').map(nodeText),['Action','Resource','From step start']);
+ assert.equal(table.querySelector('details'),null);
+ assert.equal(table.querySelector('[data-message-resource]').getAttribute('data-resource-data'),'<old>');
 });
 
-test('phase coloring uses matching authored prefix once and status belongs to numbered box',()=>{
+test('phase coloring uses matching authored prefix once with chevron before status',()=>{
  const current={...step('s',{text:'Given Seed:key',parts:[{text:'Given '},{text:'Seed:key',resourceId:resource.id}]}),phase:'Given',index:12,label:'13'};
  const p=scope.buildScenarioDrill({...scenario,steps:[current]});
  const head=p.querySelector('.step-head');
  assert.equal(head.querySelector('.ph-chip'),null);
  assert.equal(head.querySelector('.pill'),null);
  assert.match(nodeText(head),/#13/);
- assert.ok(head.querySelector('.sx').classList.contains('number-passed'));
+ assert.ok(head.children[0].classList.contains('step-expander') || head.children[0].classList.contains('stw'));
+ assert.ok(head.children[1].classList.contains('scenario-status'));
+ assert.ok(head.children[1].classList.contains('passed'));
+ assert.equal(head.children[1].getAttribute('aria-label'),'passed');
+ assert.equal(head.querySelector('.sx').classList.contains('number-passed'),false);
  assert.ok(head.querySelector('.phase-given'));
  assert.equal((nodeText(head).match(/Given/g)||[]).length,1);
 });
@@ -257,4 +265,128 @@ test('attachments use native collapsed disclosure and escaped captured content',
  assert.ok(attachment.querySelector('.att-body'));assert.equal(attachment.querySelector('.exc'),null);
  assert.match(p.innerHTML,/&lt;script&gt;unsafe&lt;\/script&gt;/);
  assert.equal(p.innerHTML.includes('<script>unsafe'),false);
+});
+
+
+test('resource hover shows captured reference data, preserves highlighting and copies actual key and data',async()=>{
+ const copied=[];scope.navigator={clipboard:{writeText:async value=>copied.push(value)}};
+ const captured='<preview>\n{"patient":"Alice"}';
+ const current=step('hover',{text:'Appointment',parts:[{text:'Appointment',resourceId:resource.id,data:captured,dataTruncated:true}]});
+ const p=scope.buildScenarioDrill({...scenario,steps:[current]});
+ const chip=p.querySelector('[data-message-resource]');
+ chip.dispatch('mouseover');
+ const card=p.querySelector('.resource-hover');assert.ok(card);
+ assert.equal(card.getAttribute('role'),'dialog');
+ assert.equal(nodeText(card.querySelector('pre')),captured);
+ assert.match(nodeText(card),/truncated/i);
+ assert.equal(chip.getAttribute('aria-pressed'),'false');
+ const id=card.querySelector('[data-resource-copy="id"]'),data=card.querySelector('[data-resource-copy="data"]');
+ chip.dispatch('mouseout',{relatedTarget:id});assert.ok(p.querySelector('.resource-hover'));
+ chip.dispatch('mouseout',{relatedTarget:el('div')});card.dispatch('mouseover');
+ await new Promise(resolve=>setTimeout(resolve,220));assert.ok(p.querySelector('.resource-hover'));
+ chip.dispatch('click');assert.equal(chip.getAttribute('aria-pressed'),'true');
+ id.dispatch('click');data.dispatch('click');await new Promise(setImmediate);
+ assert.deepEqual(copied,[resource.key,captured]);
+ assert.equal(chip.getAttribute('aria-pressed'),'true');
+ dispatchDocument('keydown',chip,'Escape');assert.equal(p.querySelector('.resource-hover'),null);
+});
+
+test('identity-only resource focus never borrows data from another reference',()=>{
+ const other={...resource,id:'other'};
+ const current=step('focus',{text:'id',parts:[{text:'id',resourceId:resource.id}]});
+ current.effects=[{verb:'Read',resourceId:other.id,data:'unrelated'}];
+ const p=scope.buildScenarioDrill({...scenario,resources:[resource,other],steps:[current]});
+ const chip=p.querySelector('[data-message-resource]');chip.dispatch('focusin');
+ const card=p.querySelector('.resource-hover');assert.ok(card);
+ assert.match(nodeText(card),/No captured data/);
+ assert.ok(card.querySelector('[data-resource-copy="data"]').disabled);
+ dispatchDocument('keydown',chip,'Escape');
+ current.effects.push({verb:'Read',resourceId:resource.id,data:'matching snapshot'});
+ chip.dispatch('focusin');assert.match(nodeText(p.querySelector('.resource-hover')),/No captured data/);
+ dispatchDocument('keydown',chip,'Escape');
+ current.effects=[];current.noteMessages=[{parts:[{resourceId:resource.id,data:'captured note snapshot'}]}];
+ chip.dispatch('focusin');assert.match(nodeText(p.querySelector('.resource-hover')),/No captured data/);
+ dispatchDocument('keydown',chip,'Escape');
+});
+
+
+test('each resource reference displays its own raw snapshot and copies it without pretty-print changes',async()=>{
+ const copied=[];scope.navigator={clipboard:{writeText:async value=>copied.push(value)}};
+ const named={...resource,type:'Appointment',qualifiedType:'Ns.AppointmentDto'};
+ const before='{"$id":"1","state":"before"}',after='{"$id":"1","state":"after"}';
+ const make=(id,raw)=>step(id,{text:'Appointment',parts:[{text:'Appointment',resourceId:resource.id,data:raw}]});
+ const p=scope.buildScenarioDrill({...scenario,resources:[named],steps:[make('before',before),make('after',after)]});
+ const references=p.querySelectorAll('.step-entry').map(entry=>entry.querySelector('[data-message-resource]'));
+ references[0].dispatch('focusin');
+ let card=p.querySelector('.resource-hover');
+ assert.equal(nodeText(card.querySelector('.resource-hover-title')),'Appointment · '+resource.key);
+ assert.equal(card.querySelector('.resource-hover-id').parentElement,card.querySelector('.resource-hover-title'));
+ assert.equal(card.querySelector('.resource-hover-empty'),null);
+ assert.equal(JSON.parse(nodeText(card.querySelector('pre'))).$id,undefined);
+ assert.equal(JSON.parse(nodeText(card.querySelector('pre'))).state,'before');
+ card.querySelector('[data-resource-copy="data"]').dispatch('click');await new Promise(setImmediate);
+ assert.deepEqual(copied,[before]);
+ references[1].dispatch('focusin');card=p.querySelector('.resource-hover');
+ assert.equal(JSON.parse(nodeText(card.querySelector('pre'))).state,'after');
+ dispatchDocument('keydown',references[1],'Escape');
+});
+
+
+test('resource JSON presentation preserves large integers and decimal precision verbatim',()=>{
+ const raw=String.raw`{"id":9007199254740993,"amount":0.10000000000000000001,"text":"braces: {} [] \"quoted\"","empty":[]}`;
+ assert.doesNotThrow(()=>JSON.parse(raw));
+ const p=scope.buildScenarioDrill({...scenario,steps:[step('precise',{text:'value',parts:[{text:'value',resourceId:resource.id,data:raw}]})]});
+ const chip=p.querySelector('[data-message-resource]');chip.dispatch('mouseover');
+ const display=nodeText(p.querySelector('.resource-hover').querySelector('pre'));
+ assert.match(display,/9007199254740993/);assert.match(display,/0\.10000000000000000001/);
+ assert.match(display,/braces: \{\} \[\]/);assert.ok(display.includes('\n'));
+ dispatchDocument('keydown',chip,'Escape');
+});
+
+
+test('scenario and group headings keep compact identifiers alongside the display names',()=>{
+ const current={...scenario,scenarioId:'metadata',methodName:'Very.Long.Namespace.Scenarios.ReadAppointment',classDisplayName:'Appointments API',displayName:'a patient reads',status:'passed',durationMs:1,waitedMs:59,waitedFor:'Schedule',steps:[{...step('timed',message('key')),offsetMs:59,durationMs:3}]};
+ const body=el('body'),root=el('html');root.appendChild(body);
+ const app=el('div');app.id='report';body.appendChild(app);
+ const summary=el('div');summary.id='run-summary';body.appendChild(summary);
+ const model=el('script');model.id='model';body.appendChild(model);
+ model.textContent=JSON.stringify({summary:{passed:1,failed:0,skipped:0,totalMs:1},generatedAtUtc:'2026-10-13T00:00:00Z',scenarios:[current]});
+ const document={body,documentElement:root,createElement:el,createElementNS:(_,tag)=>el(tag),createTextNode:text=>Object.assign(el('#text'),{textContent:text}),getElementById:id=>root.querySelectorAll('[id]').find(n=>n.id===id),querySelectorAll:s=>root.querySelectorAll(s),addEventListener(){}};
+ const context=vm.createContext({document,window:{matchMedia:()=>({matches:true})},location:{search:'?theme=light'},URLSearchParams,getComputedStyle:()=>({getPropertyValue:()=>''}),Blob,CSS:{escape:x=>x}});
+ const code=template.slice(template.indexOf('  <script>')+'  <script>'.length,template.lastIndexOf('  </script>'));
+ vm.runInContext(code,context);
+ const group=app.querySelector('.tests-class-name');
+ assert.match(nodeText(group),/Appointments API/);
+ assert.equal(nodeText(group.querySelector('.group-type')),'Very.Long.Namespace.Scenarios');
+ const head=app.querySelector('.card-head'),method=head.querySelector('.scenario-method');
+ assert.equal(nodeText(method),'ReadAppointment');
+ assert.equal(method.getAttribute('title'),current.methodName);
+ assert.match(nodeText(head),/a patient reads/);
+ assert.equal(app.querySelector('.card-body').querySelector('.mth'),null);
+ const wait=head.querySelector('.where');assert.ok(wait);assert.equal(wait.parentElement,head);
+ assert.equal(nodeText(wait),'Queued for Schedule · 59.0 ms');
+ const timing=app.querySelector('.step-head').querySelector('.dm');
+ assert.equal(nodeText(timing.querySelector('.step-offset')),'+59.0 ms');
+ assert.equal(nodeText(timing.querySelector('.step-duration')),'3.0 ms');
+});
+
+test('snapshot presentation hides unused serializer IDs without removing real IDs or JSON reference information',()=>{
+ for(const raw of ['{"$id":"1","Id":7,"nested":{"$id":"2","Name":"Alice"}}','{"Id":7,"$id":"1","nested":{"Name":"Alice","$id":"2"}}','{"Id":7,"nested":{"$id":"2","Name":"Alice"},"$id":"1"}']){
+  const shown=scope.formatResourceSnapshot(raw);assert.deepEqual(JSON.parse(shown),{Id:7,nested:{Name:'Alice'}});
+ }
+ assert.equal(scope.formatResourceSnapshot('{"$id":"1"}'),'{}');
+ assert.equal(JSON.parse(scope.formatResourceSnapshot('{"text":"\\\"$id\\\":\\\"1\\\"","$id":"1"}')).text,'"$id":"1"');
+ const cycle='{"$id":"1","self":{"$ref":"1"}}';
+ assert.deepEqual(JSON.parse(scope.formatResourceSnapshot(cycle)),JSON.parse(cycle));
+});
+
+test('lifecycle rows stay visible with setup zero and explicit muted styling without changing status',()=>{
+ const rows=[{...step('setup',{}),label:'0',isLifecycle:true,displayName:'Setup',titleMessage:undefined},{...step('given',{}),label:'1',displayName:'Teardown',titleMessage:undefined},{...step('teardown',{}),label:'2',isLifecycle:true,status:'failed',displayName:'Cleanup',titleMessage:undefined}];
+ const p=scope.buildScenarioDrill({...scenario,steps:rows});
+ const entries=p.querySelectorAll('.step-entry');assert.equal(entries.length,3);
+ assert.equal(nodeText(entries[0].querySelector('.sx')),'#0');
+ assert.equal(nodeText(entries[1].querySelector('.sx')),'#1');
+ assert.ok(entries[0].classList.contains('step-lifecycle'));
+ assert.equal(entries[1].classList.contains('step-lifecycle'),false);
+ assert.ok(entries[2].classList.contains('step-lifecycle'));assert.ok(entries[2].querySelector('.scenario-status.failed'));
 });

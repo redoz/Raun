@@ -244,6 +244,7 @@ internal sealed record ParsedStep
     private readonly Syn<InvocationExpressionSyntax> _invokeCall;
     private readonly Syn<ExpressionSyntax> _formatExpression;
     private readonly Syn<ExpressionSyntax> _titleExpression;
+    private readonly Syn<ExpressionSyntax> _completedTitleExpression;
     private readonly EquatableArray<Syn<ExpressionSyntax>> _notes;
 
     public IReadOnlyList<ExpressionSyntax> NoteExpressions
@@ -295,6 +296,13 @@ internal sealed record ParsedStep
     {
         get => _titleExpression.Node;
         init => _titleExpression = value;
+    }
+
+    /// <summary>Completes return holes using only the frozen title and the actual output.</summary>
+    public ExpressionSyntax? CompletedTitleExpression
+    {
+        get => _completedTitleExpression.Node;
+        init => _completedTitleExpression = value;
     }
 
     /// <summary>

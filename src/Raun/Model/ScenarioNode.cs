@@ -106,6 +106,13 @@ public sealed class ScenarioNode
     /// <summary>Resource-aware title formatter. Takes precedence over <see cref="FormatDisplayName"/>.</summary>
     public Func<IStepInputs, MessageFormattingContext, StepMessage>? FormatTitleMessage { get; init; }
 
+    /// <summary>
+    /// Optional formatter for a successful non-null return. Receives the frozen starting title,
+    /// boxed output, and title formatting services; existing input parts must remain frozen.
+    /// Formatting failures preserve the starting title without changing the step's outcome.
+    /// </summary>
+    public Func<StepMessage, object?, MessageFormattingContext, StepMessage>? FormatCompletedTitleMessage { get; init; }
+
     /// <summary>Resource-aware explanations. When present, take precedence over <see cref="FormatNotes"/>.</summary>
     public IReadOnlyList<Func<IStepInputs, MessageFormattingContext, StepMessage>> FormatNoteMessages { get; init; } = [];
 

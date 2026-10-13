@@ -37,6 +37,10 @@ public class GeneratorSnapshotTests
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.Dsl + SampleSources.RuntimeNameScenario));
 
     [Fact]
+    public void ReturnTitle_scenario() =>
+        VerifyDriver(GeneratorHarness.RunDriver(ReturnTitleTests.Source));
+
+    [Fact]
     public void PathBearing_scenario() =>
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.Dsl + SampleSources.LinearScenario, "Scenario.cs"));
 

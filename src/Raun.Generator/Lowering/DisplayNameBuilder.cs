@@ -10,7 +10,7 @@ namespace Raun.Generator.Lowering;
 
 /// <summary>The folded discovery template, optional legacy string expression, and optional typed
 /// title builder. Runtime expressions use __inputs; the typed builder also uses __formatting.</summary>
-internal readonly record struct LoweredDisplayName(string Template, ExpressionSyntax? FormatExpression, ExpressionSyntax? TitleExpression);
+internal readonly record struct LoweredDisplayName(string Template, ExpressionSyntax? FormatExpression, ExpressionSyntax? TitleExpression, ExpressionSyntax? CompletedTitleExpression);
 
 /// <summary>
 /// Builds a step's display name from its <c>[StepName]</c> template: constant placeholders are
@@ -44,6 +44,7 @@ internal static class DisplayNameBuilder
         var format = new Concatenation();
         var message = new Message();
         var reservedFormat = false;
+        var returns = new List<ReturnHole>();
 
         foreach (var token in tokens)
         {
@@ -57,32 +58,50 @@ internal static class DisplayNameBuilder
 
             var index = -1;
             PlaceholderPath? path = null;
+            var placeholderText = token.Text;
+            var isReturn = false;
             if (PlaceholderPath.TryBind(method, token.Text, out path, out _))
             {
-                var ordinal = method.Parameters.IndexOf(path!.Parameter);
-                index = CallArguments.IndexOf(written, path.Parameter.Name, ordinal);
+                if (path!.ReturnType is { } resultType)
+                {
+                    isReturn = true;
+                    reservedFormat = true;
+                    returns.Add(new ReturnHole(message.MarkReturn(), TypeSyntaxFactory.From(resultType), path.Format));
+                    placeholderText = path.FallbackText ?? "";
+                    path = path.Fallback;
+                    if (path is null)
+                    {
+                        constant.Append('…');
+                        format.Append("…");
+                        message.AppendUnavailableReturn();
+                        continue;
+                    }
+                }
+                var ordinal = method.Parameters.IndexOf(path.Parameter!);
+                index = CallArguments.IndexOf(written, path.Parameter!.Name, ordinal);
             }
 
-            if (index < 0)
+            var defaultParameter = isReturn && index < 0 && path?.Parameter is { HasExplicitDefaultValue: true } parameter ? parameter : null;
+            if (index < 0 && defaultParameter is null)
             {
                 // No argument resolves the placeholder: it stays as written, in both forms.
-                constant.Append('{').Append(token.Text).Append('}');
-                format.Append("{" + token.Text + "}");
-                message.Append("{" + token.Text + "}");
+                constant.Append('{').Append(placeholderText).Append('}');
+                format.Append("{" + placeholderText + "}");
+                message.Append("{" + placeholderText + "}");
                 continue;
             }
 
-            var argument = lowered[index].Expression.WithoutTrivia();
+            var argument = defaultParameter is null ? lowered[index].Expression.WithoutTrivia() : DefaultArgument(defaultParameter);
             // Bind the value as the called method does before accessing members or inferring the
             // formatter's generic type. The producer may return a more concrete type than this parameter.
-            var boundArgument = CastExpression(TypeSyntaxFactory.From(path!.Parameter.Type), ParenthesizedExpression(argument));
+            var boundArgument = CastExpression(TypeSyntaxFactory.From(path!.Parameter!.Type), ParenthesizedExpression(argument));
             message.Append(path.Walk(boundArgument), path.Format);
             reservedFormat |= path.Format is "id" or "data";
             if (path!.Members.Count > 0)
             {
                 // A member path is always read at run time, null-safely: the value it projects is not
                 // a compile-time constant even when the argument is.
-                constant.Append('{').Append(token.Text).Append('}');
+                constant.Append('{').Append(placeholderText).Append('}');
                 format.Append(path.Format is "id" or "data" ? path.Walk(boundArgument) : path.Apply(boundArgument));
                 continue;
             }
@@ -91,7 +110,7 @@ internal static class DisplayNameBuilder
             // lowered argument made only of literals when there is no format: a LINQ unroll binds its
             // loop variable to a literal, and `$"user-{i}"` becomes "user-1" — each unrolled step then
             // lists under its own name at discovery time, not three "{name}" entries.
-            var constValue = model.GetConstantValue(written[index].Expression);
+            var constValue = defaultParameter is null ? model.GetConstantValue(written[index].Expression) : new Optional<object?>(defaultParameter.ExplicitDefaultValue);
             string? folded = null;
             if (constValue.HasValue && path.FormatConstant(constValue.Value) is var formatted && (formatted is not null || path.Format is null))
             {
@@ -105,14 +124,93 @@ internal static class DisplayNameBuilder
             }
             else
             {
-                constant.Append('{').Append(token.Text).Append('}');
+                constant.Append('{').Append(placeholderText).Append('}');
                 // Parenthesized so the hole binds tighter than the surrounding `+`, whatever it is.
                 format.Append(path.Format is null or "id" or "data" ? ParenthesizedExpression(boundArgument) : path.Apply(boundArgument));
             }
         }
 
-        return new LoweredDisplayName(constant.ToString(), reservedFormat ? null : format.Build(), message.Build());
+        var title = message.Build();
+        return new LoweredDisplayName(constant.ToString(), reservedFormat ? null : format.Build(), title,
+            returns.Count == 0 ? null : CompletedTitle(returns, message.PartCount));
     }
+
+    private readonly record struct ReturnHole(int Index, TypeSyntax Type, string? Format);
+
+    private static CastExpressionSyntax DefaultArgument(IParameterSymbol parameter)
+    {
+        var value = parameter.ExplicitDefaultValue;
+        ExpressionSyntax expression = value switch
+        {
+            null when !parameter.Type.IsValueType => PostfixUnaryExpression(SyntaxKind.SuppressNullableWarningExpression,
+                DefaultExpression(TypeSyntaxFactory.From(parameter.Type))),
+            null => DefaultExpression(TypeSyntaxFactory.From(parameter.Type)),
+            string text => LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(text)),
+            char character => LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal(character)),
+            bool boolean => LiteralExpression(boolean ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression),
+            int number => Literals.Num(number),
+            long number when number == long.MinValue => Access(Names.Global("System", "Int64"), "MinValue"),
+            long number => SignedNumber(number, Literal(System.Math.Abs(number))),
+            float number when float.IsNaN(number) => Access(Names.Global("System", "Single"), "NaN"),
+            float number when float.IsPositiveInfinity(number) => Access(Names.Global("System", "Single"), "PositiveInfinity"),
+            float number when float.IsNegativeInfinity(number) => Access(Names.Global("System", "Single"), "NegativeInfinity"),
+            float number => SignedNumber(number, Literal(System.Math.Abs(number))),
+            double number when double.IsNaN(number) => Access(Names.Global("System", "Double"), "NaN"),
+            double number when double.IsPositiveInfinity(number) => Access(Names.Global("System", "Double"), "PositiveInfinity"),
+            double number when double.IsNegativeInfinity(number) => Access(Names.Global("System", "Double"), "NegativeInfinity"),
+            double number => SignedNumber(number, Literal(System.Math.Abs(number))),
+            decimal number => SignedNumber(number, Literal(System.Math.Abs(number))),
+            uint number => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(number)),
+            ulong number => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(number)),
+            _ => Literals.Num(System.Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture)),
+        };
+        return CastExpression(TypeSyntaxFactory.From(parameter.Type), ParenthesizedExpression(expression));
+    }
+
+    private static ExpressionSyntax SignedNumber<T>(T value, SyntaxToken magnitude) where T : struct, System.IComparable<T>
+    {
+        var literal = LiteralExpression(SyntaxKind.NumericLiteralExpression, magnitude);
+        return value.CompareTo(default) < 0 ? PrefixUnaryExpression(SyntaxKind.UnaryMinusExpression, literal) : literal;
+    }
+
+    private static ParenthesizedLambdaExpressionSyntax CompletedTitle(IReadOnlyList<ReturnHole> holes, int partCount)
+    {
+        var title = IdentifierName("__title");
+        var output = IdentifierName("__output");
+        var parts = Access(title, "Parts");
+        var statements = new List<StatementSyntax>
+        {
+            IfStatement(BinaryExpression(SyntaxKind.LogicalOrExpression,
+                IsPatternExpression(output, ConstantPattern(LiteralExpression(SyntaxKind.NullLiteralExpression))),
+                BinaryExpression(SyntaxKind.NotEqualsExpression, Access(parts, "Count"), Literals.Num(partCount))),
+                Block(ReturnStatement(title))),
+            LocalDeclarationStatement(VariableDeclaration(IdentifierName("var"))
+                .WithVariables(SingletonSeparatedList(VariableDeclarator(Identifier("__parts"))
+                    .WithInitializer(EqualsValueClause(ObjectCreationExpression(
+                            Names.Generic(Names.Global("System", "Collections", "Generic"), "List", Names.Global("Raun", "StepMessagePart")))
+                        .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(parts))))))))),
+        };
+        foreach (var hole in holes)
+        {
+            var replacement = new Message();
+            replacement.Append(CastExpression(hole.Type, output), hole.Format);
+            statements.Add(ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
+                At(IdentifierName("__parts"), hole.Index), At(Access(replacement.Build()!, "Parts"), 0))));
+        }
+        statements.Add(ReturnStatement(ObjectCreationExpression(Names.Global("Raun", "StepMessage"))
+            .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(IdentifierName("__parts")))))));
+        return ParenthesizedLambdaExpression().WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword)))
+            .WithParameterList(ParameterList(SeparatedList(new[]
+            {
+                Parameter(Identifier("__title")), Parameter(Identifier("__output")), Parameter(Identifier("__formatting")),
+            }))).WithBlock(Block(statements));
+    }
+
+    private static MemberAccessExpressionSyntax Access(ExpressionSyntax expression, string name)
+        => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, expression, IdentifierName(name));
+
+    private static ElementAccessExpressionSyntax At(ExpressionSyntax expression, int index)
+        => ElementAccessExpression(expression).WithArgumentList(BracketedArgumentList(SingletonSeparatedList(Argument(Literals.Num(index)))));
 
     /// <summary>Feeds typed runtime values to the same formatting policy as notes and logs.</summary>
     private sealed class Message
@@ -121,6 +219,20 @@ internal static class DisplayNameBuilder
             .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(IdentifierName("__formatting")))));
         private readonly StringBuilder _pending = new();
         private bool _anyHole;
+        public int PartCount { get; private set; }
+
+        public int MarkReturn()
+        {
+            Flush();
+            return PartCount;
+        }
+
+        public void AppendUnavailableReturn()
+        {
+            Append("…");
+            Flush();
+            _anyHole = true;
+        }
 
         public void Append(string text) => _pending.Append(text);
 
@@ -136,6 +248,7 @@ internal static class DisplayNameBuilder
 
             Call("AppendFormatted", arguments);
             _anyHole = true;
+            PartCount++;
         }
 
         public ExpressionSyntax? Build()
@@ -159,6 +272,7 @@ internal static class DisplayNameBuilder
 
             Call("AppendLiteral", [Argument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(_pending.ToString())))]);
             _pending.Clear();
+            PartCount++;
         }
 
         private void Call(string name, IEnumerable<ArgumentSyntax> arguments)

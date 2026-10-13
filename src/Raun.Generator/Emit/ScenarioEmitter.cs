@@ -340,6 +340,11 @@ internal static class ScenarioEmitter
             members.Add(Set("FormatTitleMessage", MessageLambda().WithExpressionBody(title)));
         }
 
+        if (step.CompletedTitleExpression is { } completedTitle)
+        {
+            members.Add(Set("FormatCompletedTitleMessage", completedTitle));
+        }
+
         return ObjectCreationExpression(ScenarioNodeType)
             .WithInitializer(InitializerExpression(SyntaxKind.ObjectInitializerExpression, SeparatedList(members)));
     }

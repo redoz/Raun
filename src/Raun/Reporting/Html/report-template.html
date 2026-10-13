@@ -124,7 +124,7 @@
   .appbar{padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface)}
   .run-summary{display:flex;align-items:start;gap:6px}
   .run-summary .logo{width:56px;height:56px;min-width:56px;min-height:56px;max-height:56px;display:grid;place-items:center;color:var(--bar-text);background:var(--pass)}
-  .run-summary .logo svg{width:23px;height:29px}
+  .run-summary .logo svg{width:23px;height:29px;stroke-width:3.2}
   .run-summary:has([data-run-status="fail"]) .logo{background:var(--fail)}
   .run-summary-items{display:flex;align-items:start;gap:6px;flex:1;min-width:0;flex-wrap:wrap}
   #report-tabs{display:flex;gap:6px;min-width:0}
@@ -145,16 +145,16 @@
   .summary-section:focus-visible,.generated-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
   main{margin:0;padding:0}
   .card{position:relative;background:var(--surface);border:0;border-top:1px solid var(--border);border-radius:0;margin:0}
-  .card-head{display:flex;align-items:baseline;gap:10px;padding:12px 0;cursor:pointer;min-width:0}
+  .card-head{display:grid;grid-template-columns:12px 12px minmax(0,1fr) max-content;align-items:center;column-gap:10px;row-gap:0;padding:12px 0;cursor:pointer;min-width:0}
   .card-head:hover{background:var(--surface-2)}
   .card-head:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
-  .card-head .tw{font-size:10px;color:var(--muted);width:10px;flex:none}
+  .card-head .tw,.step-head .stw{display:grid;place-items:center;color:var(--muted);width:12px;height:12px;line-height:1;flex:none}
   .card.collapsed .card-head .tw{transform:rotate(-90deg)}
   .scenario-status{display:inline-block;width:12px;height:12px;border-radius:4px;corner-shape:squircle;flex:none}
   .scenario-status.passed{background:var(--pass)}
   .scenario-status.failed{background:var(--fail)}
   .scenario-status.skipped,.scenario-status.not-taken{background:light-dark(#d3a21e,#e9c478)}
-  .card-head .name{flex:1;min-width:0;font-size:14px;font-weight:500;overflow-wrap:anywhere}
+  .card-head .name{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0;font-size:14px;font-weight:500}.scenario-title{min-width:0;overflow-wrap:anywhere}.card-head .report-meta{max-width:40%}
   .card-head .dur{flex:none;white-space:nowrap;text-align:right}
   .card-body{padding:0 0 12px 20px}
   @media(max-width:650px){
@@ -164,7 +164,7 @@
     .summary-section{padding:4px 6px;gap:0 5px;grid-template-columns:repeat(2,auto)}
     .summary-section-title{font-size:13px}.summary-metric,.summary-score{font-size:11px;gap:3px}
     .summary-section .summary-metric:last-child{grid-column:auto}.summary-time-box{padding:5px 8px}
-    .summary-time-box{min-width:0}.summary-time-box .summary-label{font-size:11px;overflow-wrap:anywhere}.summary-time-box .summary-number{font-size:12px}.card-body{padding-left:12px}.card-head{gap:7px}
+    .summary-time-box{min-width:0}.summary-time-box .summary-label{font-size:11px;overflow-wrap:anywhere}.summary-time-box .summary-number{font-size:12px}.card-body{padding-left:12px}.card-head{column-gap:7px}
   }
 
   /* one group per scenario class: its [DisplayName], or the class name */
@@ -178,8 +178,10 @@
   .group-head .gc .k{ color:var(--bar-skip); }
   .group.collapsed .group-body{ display:none; }
   .card.collapsed .card-body{ display:none; }
-  .card-body .where{ font-size:12px; color:var(--muted); margin:0 0 2px; overflow-wrap:anywhere; }
-  .card-body .where .mth{ color:var(--faint); }
+  .card-head .where{grid-column:3/-1;font-size:11px;line-height:1.2;color:var(--muted);overflow-wrap:anywhere}
+  .card.collapsed .card-head .where{display:none}
+  .report-meta{display:inline-flex;align-items:baseline;gap:6px;min-width:0;font:12px/1.6 var(--sans);color:var(--muted)}
+  .report-meta-dot{flex:none}.leading-ellipsis{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}.leading-ellipsis>span{direction:ltr;unicode-bidi:isolate}
   .dur{ font:13px/1 var(--mono); color:var(--muted); }
 
   .pill{
@@ -200,35 +202,42 @@
   .drill.open{ display:block; }
   .step-list{ display:flex; flex-direction:column; border-top:1px solid var(--border); }
   .step-entry{
+    display:grid;grid-template-columns:12px 12px max-content minmax(0,1fr) max-content;column-gap:9px;
     border-bottom:1px solid var(--border); padding:10px 4px 12px; scroll-margin-top:18px;
     transition:box-shadow .15s ease, background .15s ease;
   }
   .step-entry.status-failed{ background:color-mix(in srgb, var(--fail-bg) 55%, transparent); }
   .step-entry.focus{ box-shadow:0 0 0 2px var(--accent); }
-  .step-head{display:flex;align-items:baseline;gap:9px;min-width:0}
-  .step-head .sx{font:600 12px/1.4 var(--mono);padding:3px 6px;width:42px;min-width:42px;text-align:right;flex:none}
-  .sx.number-passed{background:#285c3c;color:#eef8f0}
-  .sx.number-failed{background:#8d2b36;color:#fff0f2}
-  .sx.number-skipped{background:light-dark(#e6bb54,#d8ae4c);color:light-dark(#3f3010,#241c09)}
+  .step-head{display:grid;grid-template-columns:subgrid;grid-column:1/-1;align-items:center;column-gap:9px;min-width:0}
+  .step-head .sx{font:600 12px/1.4 var(--mono);padding:3px 6px;width:calc(3ch + 12px);min-width:calc(3ch + 12px);text-align:right;background:#0d1420;color:#dde8f7}
   .step-head .dn{font-weight:500;font-size:14px;flex:1;min-width:0;overflow-wrap:anywhere}
+  .step-lifecycle .dn{color:var(--muted);font-style:italic}
   .phase-given{color:var(--ph-given)}.phase-when{color:var(--ph-when)}.phase-then{color:var(--ph-then)}
-  .phase-given,.phase-when,.phase-then{text-decoration-line:underline;text-decoration-color:currentColor;text-underline-offset:3px;text-decoration-thickness:1.5px}
-  .step-head .dm{font:12px/1.4 var(--sans);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap;flex:none}
+  .phase-given,.phase-when,.phase-then{text-decoration-line:underline;text-decoration-color:currentColor;text-underline-offset:2px;text-decoration-thickness:1px}
+  .step-head .dm{display:flex;align-items:center;justify-content:flex-end;gap:8px;font:12px/1.4 var(--sans);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+  .step-offset{color:var(--faint)}
   .resource-mention{display:inline;white-space:normal}
   .message-resource{font:inherit;color:inherit;background:none;border:0;border-bottom:1px dotted var(--muted);padding:0;cursor:pointer;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}
   .message-resource:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
   .message-resource.hl{background:var(--ink);color:var(--surface)}
+  .resource-hover{position:fixed;z-index:100;display:block;width:fit-content;min-width:min(220px,calc(100vw - 24px));max-width:min(400px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;padding:10px;background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);box-shadow:0 6px 24px #0003;font:12px/1.4 var(--sans);text-align:left;white-space:normal}
+  .resource-hover-title{display:flex;align-items:baseline;gap:6px;white-space:nowrap;font-weight:600;font-size:13px}
+  .resource-hover-type{max-width:50%;flex:none;overflow:hidden;text-overflow:ellipsis}
+  .resource-hover-id{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font:12px var(--mono)}
+  .resource-hover pre{max-height:200px;overflow:auto;margin:8px 0;padding:8px;background:var(--surface-2);font:12px/1.45 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+  .resource-hover-empty,.resource-hover-truncated{display:block;margin:8px 0;color:var(--muted)}
+  .resource-hover-actions{display:flex;gap:6px;margin-top:8px}
+  .resource-hover-actions button{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--ink);padding:4px 8px;font:inherit;cursor:pointer}
+  .resource-hover-actions button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}.resource-hover-actions button:disabled{opacity:.5;cursor:default}
   .resource-activity-hit{background:var(--surface-hover)}
-  .event-data pre{max-width:70ch;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-2);padding:8px;color:var(--ink);font:12px/1.5 var(--mono)}
-  .step-notes{margin:5px 0 0 69px}
-  .step-note{margin:3px 0;color:var(--muted);font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
-  .step-head .stw{color:var(--muted);font-size:9px;width:9px;flex:none;transform:rotate(-90deg)}
+  .step-notes{grid-column:4/-1;margin:1px 0 0;min-width:0}
+  .step-note{margin:0;color:var(--muted);font-size:12px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere}
+  .step-head .stw{transform:rotate(-90deg)}
   .step-entry.open .step-head .stw{transform:none}
   .step-entry.has-body .step-head{cursor:pointer}
   .step-expander{border:0;background:none;padding:3px 0;color:var(--muted);font:inherit;cursor:pointer;flex:none}
-  .step-expander .stw{display:block}
   .step-expander:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
-  .step-body{display:none;margin:8px 0 0 69px}
+  .step-body{grid-column:4/-1;display:none;margin:8px 0 0;min-width:0}
   .step-entry.open .step-body{display:block}
   .sec{margin-top:10px}.sec h4{margin:0 0 6px;font-size:12px;font-weight:500;color:var(--muted)}
   .logs{margin:7px 0 0;padding:0;list-style:none}
@@ -239,8 +248,7 @@
   .resource-events caption{text-align:left;color:var(--muted);margin-bottom:5px}
   .resource-events th{font-weight:500;color:var(--muted)}.resource-events th,.resource-events td{padding:5px 9px 5px 0;border-bottom:1px solid var(--border);vertical-align:top}
   .resource-events td{overflow-wrap:anywhere}.event-time{white-space:nowrap;font-variant-numeric:tabular-nums}
-  .event-data summary{cursor:pointer;color:var(--muted);white-space:nowrap}
-  @media(max-width:650px){.step-head{gap:6px;flex-wrap:wrap}.step-head .dn{flex-basis:calc(100% - 67px)}.step-head .dm{margin-left:55px}.step-notes,.step-body{margin-left:20px}}
+  @media(max-width:650px){.step-entry{column-gap:6px}.step-head{column-gap:6px;row-gap:1px}.step-head .dm{grid-column:4/-1;justify-content:flex-start}}
   .att{ margin:4px 0; }
   .att > summary{ cursor:pointer; font-size:12px; color:var(--ink); }
   .att > summary .an{ font-weight:600; }
@@ -483,7 +491,7 @@
   .report-views,.report-view{flex:1;min-width:0;min-height:0;display:flex;overflow:hidden}
   .report-views>[hidden]{display:none}
   .tests-narrative{flex:1;min-width:0;overflow:auto;overscroll-behavior:contain;padding:12px 20px 24px}
-  .tests-class-name{font-size:13px;font-weight:500;color:var(--muted);margin:0 0 8px}
+  .tests-class-name{display:flex;align-items:baseline;gap:6px;min-width:0;font-size:13px;font-weight:500;color:var(--muted);margin:0 0 8px}.tests-class-label{flex:none;font-size:15px;font-weight:600;color:var(--ink)}.tests-class-name .report-meta{font-size:11px}
   .tests-narrative .group{margin:10px 0 18px}
   .coverage-scope-children{display:flex;gap:6px;flex-wrap:wrap;width:100%;max-height:76px;overflow:auto}
   .coverage-scope-children .coverage-child{width:auto;padding:4px 7px;background:var(--surface-2);border:0;font:12px var(--sans)}
@@ -1524,13 +1532,19 @@
       const label=svgEl("text",{x:32,y:36,"text-anchor":"middle",fill:"var(--ink)","font-size":14});label.textContent=String(total);svg.appendChild(label);
       chart.appendChild(svg);chart.appendChild(legend);return chart;
     }
+    function reportIdentifierHtml(value,fullName,className){
+      if(!value)return "";
+      return '<span class="report-meta"><span class="report-meta-dot" aria-hidden="true">&middot;</span><span class="leading-ellipsis '+className+'" title="'+esc(fullName)+'"><span dir="ltr">'+esc(value)+'</span></span></span>';
+    }
     function buildTestsReport(run,render){
       const narrative=el("div","tests-narrative");
       const scenarios=run.scenarios || [];
       if(!scenarios.length)narrative.appendChild(coverageText("p","coverage-empty","No scenarios in this run."));
       for(const group of groupByClass(scenarios)){
         const section=el("section","group");
-        section.appendChild(coverageText("h2","tests-class-name",group.label));
+        const heading=el("h2","tests-class-name");
+        heading.innerHTML='<span class="tests-class-label">'+esc(group.label)+'</span>'+reportIdentifierHtml(group.type,group.type,"group-type");
+        section.appendChild(heading);
         for(const sc of group.scenarios)section.appendChild(render(sc));
         narrative.appendChild(section);
       }
@@ -2726,8 +2740,9 @@
       if(!workspace)head.tabIndex=0;
       head.setAttribute("role",workspace ? "heading" : "button");
       if(workspace)head.setAttribute("aria-level","2");
-      head.innerHTML='<span class="tw" aria-hidden="true">▼</span><span class="scenario-status '+esc(sc.status)+'" role="img" aria-label="'+esc(sc.status)+'"></span>'+
-        '<span class="name">'+esc(sc.displayName)+'</span><span class="dur">'+fmtDur(sc.durationMs)+'</span>';
+      head.innerHTML='<span class="tw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span><span class="scenario-status '+esc(sc.status)+'" role="img" aria-label="'+esc(sc.status)+'"></span>'+
+        '<span class="name"><span class="scenario-title">'+esc(sc.displayName)+'</span>'+reportIdentifierHtml(shortName(sc.methodName),sc.methodName,"scenario-method")+'</span><span class="dur">'+fmtDur(sc.durationMs)+'</span>';
+      if(sc.waitedMs>0)head.innerHTML+='<div class="where">Queued'+(sc.waitedFor ? ' for '+esc(sc.waitedFor) : '')+' · '+fmtDur(sc.waitedMs)+'</div>';
       const toggle = () => { head.setAttribute("aria-expanded", String(!isExpanded(sc))); setExpanded(sc, !isExpanded(sc)); };
       if(!workspace){
       head.setAttribute("aria-expanded", String(isExpanded(sc)));
@@ -2739,11 +2754,8 @@
       }
       card.appendChild(head);
 
-      // body: the full "where", any wait, then the steps
+      // body: scenario steps, indented beneath the heading
       const body = el("div", "card-body");
-      body.innerHTML =
-        '<div class="where"><span class="mth mono">' + esc(sc.methodName) + "</span></div>" +
-        (sc.waitedMs > 0 ? '<div class="where">waited ' + fmtDur(sc.waitedMs) + " for " + esc(sc.waitedFor || "") + "</div>" : "");
       card.appendChild(body);
 
       // activity diagram (frame + centred spine + initial/final; interior nodes come in later tasks)
@@ -2859,13 +2871,106 @@
         if (!resource) return esc(part.text);
         const identity=(resource.qualifiedType || resource.type) + ": " + resource.key;
         return '<span class="resource-mention"><button type="button" class="message-resource" data-message-resource="' +
-          esc(resource.id) + '" aria-label="Highlight ' + esc(identity) + '" aria-pressed="false">' + esc(part.text) + '</button>' +
+          esc(resource.id) + '"' + (part.data!=null ? ' data-resource-data="'+esc(part.data)+'" data-resource-truncated="'+String(Boolean(part.dataTruncated))+'"' : '') + ' aria-label="Highlight ' + esc(identity) + '" aria-pressed="false">' + esc(part.text) + '</button>' +
           '</span>';
       }).join("");
     }
+    function closeResourceHover(){
+      const active=bindResourceHover.active;if(!active)return;
+      clearTimeout(active.timer);active.card.remove();active.chip.removeAttribute("aria-describedby");
+      bindResourceHover.active=null;
+    }
+    async function copyResourceText(value){
+      try{if(typeof navigator!=="undefined" && navigator.clipboard?.writeText){await navigator.clipboard.writeText(value);return;}}catch{}
+      const input=el("textarea");input.value=value;input.style.position="fixed";input.style.left="-9999px";
+      document.body.appendChild(input);
+      try{input.select();if(!document.execCommand?.("copy"))throw new Error("Clipboard unavailable");}finally{input.remove();}
+    }
+    function formatResourceSnapshot(value){
+      if(value===null)return null;
+      try{JSON.parse(value);}catch{return value;}
+      // Remove unused serializer tracking IDs from the view, keeping exact numeric tokens and raw copying.
+      // Shared/cyclic graphs retain their IDs so $ref still has an identifiable target.
+      const tokens=value.match(/"(?:\\.|[^"\\])*"|[^\s]/g) || [];
+      const isKey=(token,index,name)=>token[0]==='"' && tokens[index+1]===":" && JSON.parse(token)===name;
+      if(!tokens.some((token,index)=>isKey(token,index,"$ref"))){
+        const visible=[];
+        for(let index=0;index<tokens.length;index++){
+          if(isKey(tokens[index],index,"$id") && tokens[index+2]?.[0]==='"'){
+            if(visible.at(-1)===","){visible.pop();index+=2;}
+            else index+=tokens[index+3]==="," ? 3 : 2;
+          }else visible.push(tokens[index]);
+        }
+        value=visible.join("");
+      }
+      let output="",depth=0,quoted=false,escaped=false,previous="";
+      const indent=()=>"  ".repeat(depth);
+      for(let index=0;index<value.length;index++){
+        const character=value[index];
+        if(quoted){
+          output+=character;
+          if(escaped)escaped=false;else if(character==="\\")escaped=true;else if(character==='"'){quoted=false;previous='"';}
+          continue;
+        }
+        if(/\s/.test(character))continue;
+        if(character==='"'){quoted=true;output+=character;}
+        else if(character==="{" || character==="["){
+          output+=character;depth++;
+          let next=index+1;while(next<value.length && /\s/.test(value[next]))next++;
+          if(value[next]!=="}" && value[next]!=="]")output+="\n"+indent();
+        }else if(character==="}" || character==="]"){
+          depth--;if(previous!=="{" && previous!=="[")output+="\n"+indent();output+=character;
+        }else if(character===",")output+=",\n"+indent();
+        else if(character===":")output+=": ";
+        else output+=character;
+        previous=character;
+      }
+      return output;
+    }
+    function bindResourceHover(root,sc){
+      const show=ev=>{
+        if(bindResourceHover.active && ev.target.closest?.(".resource-hover")===bindResourceHover.active.card){clearTimeout(bindResourceHover.active.timer);return;}
+        const chip=ev.target.closest && ev.target.closest("[data-message-resource],.res-chip");if(!chip)return;
+        const matches=(sc.resources || []).filter(r=>chip.dataset.messageResource!==undefined ? r.id===chip.dataset.messageResource : r.type+":"+r.key===chip.dataset.res);
+        if(matches.length!==1)return;
+        const active=bindResourceHover.active;
+        if(active?.chip===chip){clearTimeout(active.timer);return;}
+        closeResourceHover();
+        const resource=matches[0],captured=chip.getAttribute("data-resource-data");
+        const truncated=chip.getAttribute("data-resource-truncated")==="true";
+        const display=formatResourceSnapshot(captured);
+        const card=el("span","resource-hover"),id="resource-hover-"+(++messageInspectorSequence);
+        card.id=id;card.setAttribute("role","dialog");card.setAttribute("aria-label","Resource details");
+        card.innerHTML='<span class="resource-hover-title" title="'+esc(resource.type+' · '+resource.key)+'"><span class="resource-hover-type">'+esc(resource.type)+'</span><span class="report-meta-dot"> · </span><span class="resource-hover-id">'+esc(resource.key)+'</span></span>'+
+          (captured===null ? '<span class="resource-hover-empty">No captured data</span>' : '<pre>'+esc(display)+'</pre>')+
+          (truncated ? '<span class="resource-hover-truncated">Captured data is truncated</span>' : '')+
+          '<span class="resource-hover-actions"><button type="button" data-resource-copy="id">Copy ID</button><button type="button" data-resource-copy="data">Copy data</button></span>';
+        const copyId=card.querySelector('[data-resource-copy="id"]'),copyData=card.querySelector('[data-resource-copy="data"]');
+        copyData.disabled=captured===null;
+        for(const [button,value] of [[copyId,String(resource.key)],[copyData,captured]])button.addEventListener("click",async event=>{
+          event.stopPropagation();if(value===null)return;
+          try{await copyResourceText(value);button.textContent="Copied";}catch{button.textContent="Copy failed";}
+        });
+        card.addEventListener("click",event=>event.stopPropagation());
+        chip.parentElement.appendChild(card);chip.setAttribute("aria-describedby",id);
+        bindResourceHover.active={chip,card,timer:null};
+        const rect=chip.getBoundingClientRect?.() || {left:12,top:12,bottom:32},width=card.offsetWidth || 400,height=card.offsetHeight || 240;
+        card.style.left=Math.max(12,Math.min(rect.left,(window.innerWidth || 1024)-width-12))+"px";
+        const below=rect.bottom+6;
+        card.style.top=Math.max(12,below+height>(window.innerHeight || 768)-12 ? rect.top-height-6 : below)+"px";
+      };
+      const leave=ev=>{
+        const active=bindResourceHover.active;if(!active)return;
+        const next=ev.relatedTarget;
+        if(next && (next===active.chip || next.closest?.(".resource-hover")===active.card))return;
+        clearTimeout(active.timer);active.timer=setTimeout(closeResourceHover,80);
+      };
+      root.addEventListener("mouseover",show);root.addEventListener("focusin",show);
+      root.addEventListener("mouseout",leave);root.addEventListener("focusout",leave);
+    }
     function bindResourceMessages(root,sc){
       if(root.dataset.resourceBound)return;
-      root.dataset.resourceBound="true";
+      root.dataset.resourceBound="true";bindResourceHover(root,sc);
       const clear=()=>{
         const active=bindResourceMessages.active;
         if(!active)return;
@@ -2878,8 +2983,8 @@
         bindResourceMessages.active=null;
       };
       if(!bindResourceMessages.listening){
-        document.addEventListener("click",()=>clear());
-        document.addEventListener("keydown",ev=>{if(ev.key==="Escape")clear();});
+        document.addEventListener("click",()=>{clear();closeResourceHover();});
+        document.addEventListener("keydown",ev=>{if(ev.key==="Escape"){clear();closeResourceHover();}});
         bindResourceMessages.listening=true;
       }
       root.addEventListener("click",ev=>{
@@ -2908,7 +3013,7 @@
         for(const entry of root.querySelectorAll(".step-entry"))if(related.has(entry.dataset.step))entry.classList.add("res-hit");
       });
       root.addEventListener("keydown",ev=>{
-        if(ev.key==="Escape")clear();
+        if(ev.key==="Escape"){clear();closeResourceHover();}
         if(ev.target.closest && ev.target.closest("[data-message-resource],.res-chip"))ev.stopPropagation();
       });
     }
@@ -2944,11 +3049,10 @@
       for(const [index,s] of sc.steps.entries()){
         let b="";
         if(s.effects && s.effects.length){
-          b+='<div class="resource-events-wrap"><table class="resource-events"><caption>Resource events</caption><thead><tr><th scope="col">Action</th><th scope="col">Resource</th><th scope="col">From step start</th><th scope="col">Data</th></tr></thead><tbody>'+s.effects.map(e=>{
-            const reference=e.resourceId ? messageHtml({parts:[{text:e.type+":"+e.key,resourceId:e.resourceId}]},sc) : resChip(e.type,e.key);
+          b+='<div class="resource-events-wrap"><table class="resource-events"><caption>Resource events</caption><thead><tr><th scope="col">Action</th><th scope="col">Resource</th><th scope="col">From step start</th></tr></thead><tbody>'+s.effects.map(e=>{
+            const reference=e.resourceId ? messageHtml({parts:[{text:e.type+":"+e.key,resourceId:e.resourceId,data:e.data}]},sc) : resChip(e.type,e.key);
             const offset=Number(e.offsetMs)-Number(s.offsetMs || 0);
-            return '<tr'+(e.resourceId ? ' data-resource-activity="'+esc(e.resourceId)+'"' : '')+'><td>'+esc(e.verb)+'</td><td>'+reference+'</td><td class="event-time">'+(Number.isFinite(offset) ? (offset>=0 ? '+' : '')+fmtMs(offset) : '—')+'</td><td>'+
-              (e.data==null ? '' : '<details class="event-data"><summary>Captured data</summary><pre>'+esc(e.data)+'</pre></details>')+'</td></tr>';
+            return '<tr'+(e.resourceId ? ' data-resource-activity="'+esc(e.resourceId)+'"' : '')+'><td>'+esc(e.verb)+'</td><td>'+reference+'</td><td class="event-time">'+(Number.isFinite(offset) ? (offset>=0 ? '+' : '')+fmtMs(offset) : '—')+'</td></tr>';
           }).join('')+'</tbody></table></div>';
         }
         if(s.skipReason)b+='<p class="skipnote">'+esc(s.skipReason)+'</p>';
@@ -2959,14 +3063,15 @@
         }
         if(s.traceId)b+='<details class="step-trace"><summary>Trace</summary><pre class="att-body">'+esc(s.traceId)+(s.spanId ? '\nSpan '+esc(s.spanId) : '')+'</pre></details>';
         if(s.attachments?.length)b+='<div class="sec">'+s.attachments.map(a=>'<details class="att"><summary><span class="an">'+esc(a.name)+'</span><span class="asz">'+attSize(a.value)+'</span></summary><pre class="att-body">'+esc(a.value)+'</pre></details>').join('')+'</div>';
-        const phase=String(s.phase || '').toLowerCase(), number=s.label || (Number.isFinite(s.index) ? s.index+1 : index+1);
+        const phase=String(s.phase || '').toLowerCase(), number=s.label === "" ? "0" : (s.label ?? (Number.isFinite(s.index) ? s.index+1 : index+1));
         const status=['passed','failed','skipped'].includes(s.status) ? s.status : 'skipped';
-        const cls='step-entry status-'+s.status+' ph-'+phase+(b ? ' has-body' : '')+(b && s.status==='failed' ? ' open' : '');
+        const cls='step-entry status-'+s.status+' ph-'+phase+(s.isLifecycle ? ' step-lifecycle' : '')+(b ? ' has-body' : '')+(b && s.status==='failed' ? ' open' : '');
         const bodyId=b ? 'step-details-'+(++stepDetailSequence) : '';
         h+='<div class="'+cls+'" data-step="'+esc(s.stepId)+'"><div class="step-head">'+
-          (b ? '<button type="button" class="step-expander" aria-label="Toggle details for step '+esc(number)+'" aria-expanded="'+String(s.status==='failed')+'" aria-controls="'+bodyId+'"><span class="stw" aria-hidden="true">▼</span></button>' : '<span class="stw" aria-hidden="true"></span>')+
-          '<span class="sx number-'+status+'" aria-label="Step '+esc(number)+', '+esc(s.status)+'">#'+esc(number)+'</span>'+
-          '<span class="dn">'+stepTitleHtml(s,sc)+'</span><span class="dm">'+fmtDur(s.durationMs)+'</span></div>'+stepNotesHtml(s.notes,s.noteMessages,sc)+
+          (b ? '<button type="button" class="step-expander" aria-label="Toggle details for step '+esc(number)+'" aria-expanded="'+String(s.status==='failed')+'" aria-controls="'+bodyId+'"><span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span></button>' : '<span class="stw" aria-hidden="true"></span>')+
+          '<span class="scenario-status '+status+'" role="img" aria-label="'+esc(s.status)+'"></span>'+
+          '<span class="sx" aria-label="Step '+esc(number)+', '+esc(s.status)+'">#'+esc(number)+'</span>'+
+          '<span class="dn">'+stepTitleHtml(s,sc)+'</span><span class="dm">'+(Number.isFinite(s.offsetMs) ? '<span class="step-offset" title="Time from scenario start">+'+fmtDur(s.offsetMs)+'</span>' : '')+'<span class="step-duration" title="Step duration">'+fmtDur(s.durationMs)+'</span></span></div>'+stepNotesHtml(s.notes,s.noteMessages,sc)+
           (b ? '<div class="step-body" id="'+bodyId+'">'+b+'</div>' : '')+'</div>';
       }
       p.innerHTML=h+'</div>';bindResourceMessages(p,sc);

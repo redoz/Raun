@@ -25,7 +25,7 @@ public sealed class ResourceContext
     readonly string _stepDisplayName;
     ResourceLedger? _ledger;
     int _nodeIndex;
-    Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?>? _observer;
+    Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?>? _observer;
 
     /// <summary>Creates a tracer bound to one step, resolving identities via <paramref name="resolver"/>.</summary>
     public ResourceContext(
@@ -137,7 +137,7 @@ public sealed class ResourceContext
 
     /// <summary>Notifies <see cref="ScenarioContext"/> of each recorded effect, or of a refused claim
     /// (non-null exception), so the resource story reaches the step's log and span in order.</summary>
-    internal void AttachObserver(Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?> observer)
+    internal void AttachObserver(Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?> observer)
         => _observer = observer;
 
     ValueTask Record(LifecycleVerb verb, ResourceIdentity identity, object? data)
@@ -150,11 +150,12 @@ public sealed class ResourceContext
         }
         catch (ResourceConflictException ex)
         {
-            _observer?.Invoke(verb, identity, ex);
+            _observer?.Invoke(verb, identity, ex, null);
             throw;
         }
 
-        _observer?.Invoke(verb, identity, null);
+        var snapshot = ResourcePresentation.Capture(data);
+        _observer?.Invoke(verb, identity, null, snapshot);
 
         lock (_lock)
         {
@@ -165,7 +166,12 @@ public sealed class ResourceContext
                 // so later same-step calls don't reset the clock.
                 ResourceEffect existing = _effects[idx];
                 LifecycleVerb stronger = verb.Precedence() > existing.Verb.Precedence() ? verb : existing.Verb;
-                _effects[idx] = existing with { Verb = stronger, Data = data ?? existing.Data };
+                _effects[idx] = existing with
+                {
+                    Verb = stronger, Data = data ?? existing.Data,
+                    DataSnapshot = data is null ? existing.DataSnapshot : snapshot,
+                    DataSnapshotCaptured = true,
+                };
             }
             else
             {
@@ -175,6 +181,8 @@ public sealed class ResourceContext
                     Verb = verb,
                     Identity = identity,
                     Data = data,
+                    DataSnapshot = snapshot,
+                    DataSnapshotCaptured = true,
                     StepId = _stepId,
                     StepDisplayName = _stepDisplayName,
                     Timestamp = _timeProvider.GetUtcNow(),

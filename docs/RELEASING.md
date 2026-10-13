@@ -175,3 +175,12 @@ indented scenario steps, status-colored step numbers and phase verbs. Notes stay
 expanded steps show resource events before separately collapsed logs. Resource references
 highlight their usage directly. Coverage retains drilldown, band filtering and source snippets.
 Report interaction checks run in CI and the release workflow before packing.
+
+## 0.3.0 beta 9 scope
+
+Step titles can reference their successful return with `{$return:id ?? name}` while preserving
+input snapshots and fallback text on failure or a null return. Resource types honor DisplayName;
+references retain full recording-time JSON snapshots, with hover inspection and Copy ID/Data.
+The report restores step start offsets, uses separate status indicators and compact step numbers,
+and presents Setup as zero with muted lifecycle titles. Resource data expanders are replaced by
+hover inspection. The two scenario-spacing experiments were reverted before release.

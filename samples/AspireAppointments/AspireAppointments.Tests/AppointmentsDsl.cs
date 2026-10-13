@@ -30,7 +30,15 @@ public sealed class AppointmentsWorld : IScenarioWorld<AppointmentsWorld>
 /// <summary>Arrange steps.</summary>
 public sealed class AppointmentsGiven : Given<AppointmentsWorld>
 {
-    [StepName("the API is reachable")]
+    [StepName("Given patient {$return:id ?? name} can reach the API")]
+    [return: Created]
+    public async Task<Patient> PatientCanReachApi(string name)
+    {
+        await World.Api.As(Actor.Patient).ListAsync();
+        return new Patient(name);
+    }
+
+    [StepName("Given the API is reachable")]
     public async Task<AppointmentDto[]> ApiIsReachable() =>
         await World.Api.As(Actor.Patient).ListAsync();
 }
@@ -38,11 +46,11 @@ public sealed class AppointmentsGiven : Given<AppointmentsWorld>
 /// <summary>Actions against the API, each as the actor it names.</summary>
 public sealed class AppointmentsWhen : When<AppointmentsWorld>
 {
-    [StepName("an admin books {patient} into {slot}")]
+    [StepName("When an admin books {patient:id} into {slot}")]
     [return: Created]
-    public async Task<AppointmentDto> AdminBooks(string patient, string slot)
+    public async Task<AppointmentDto> AdminBooks([Read] Patient patient, string slot)
     {
-        var response = await World.Api.As(Actor.Admin).CreateAsync(patient, slot);
+        var response = await World.Api.As(Actor.Admin).CreateAsync(patient.Name, slot);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException($"booking failed: {response.StatusCode}");
@@ -55,14 +63,14 @@ public sealed class AppointmentsWhen : When<AppointmentsWorld>
         return created;
     }
 
-    [StepName("a patient tries to book {patient} into {slot}")]
-    public async Task<HttpStatusCode> PatientTriesToBook(string patient, string slot)
+    [StepName("When a patient tries to book {patient:id} into {slot}")]
+    public async Task<HttpStatusCode> PatientTriesToBook([Read] Patient patient, string slot)
     {
-        var response = await World.Api.As(Actor.Patient).CreateAsync(patient, slot);
+        var response = await World.Api.As(Actor.Patient).CreateAsync(patient.Name, slot);
         return response.StatusCode;
     }
 
-    [StepName("an admin clears the schedule")]
+    [StepName("When an admin clears the schedule")]
     public async Task AdminClearsSchedule()
     {
         var response = await World.Api.As(Actor.Admin).ClearAsync();
@@ -76,26 +84,26 @@ public sealed class AppointmentsWhen : When<AppointmentsWorld>
 /// <summary>Assertions, read back through the API.</summary>
 public sealed class AppointmentsThen : Then<AppointmentsWorld>
 {
-    [StepName("the patient can read appointment {appointment:id}")]
-    public async Task PatientCanRead([Read] AppointmentDto appointment)
+    [StepName("Then the patient ({patient:id}) can read appointment {appointment:id}")]
+    public async Task PatientCanRead([Read] Patient patient, [Read] AppointmentDto appointment)
     {
-        Context.Log($"Using {appointment} to test patient access.");
+        Context.Log($"Using {appointment} to test access for {patient:id}.");
         // The SECOND identity in the same scenario: booked as an admin, read back as a patient.
         var read = await World.Api.As(Actor.Patient).GetAsync(appointment.Id);
-        if (read is null || read.Patient != appointment.Patient)
+        if (read is null || read.Patient != patient.Name)
         {
             throw new InvalidOperationException(
                 $"appointment {appointment.Id} did not read back as booked");
         }
     }
 
-    [StepName("the attempt was rejected as {status}")]
+    [StepName("Then the attempt was rejected as {status}")]
     public Task AttemptWasRejected(HttpStatusCode status)
         => status == HttpStatusCode.Forbidden
             ? Task.CompletedTask
             : throw new InvalidOperationException($"expected Forbidden, got {status}");
 
-    [StepName("the schedule is empty")]
+    [StepName("Then the schedule is empty")]
     public async Task ScheduleIsEmpty()
     {
         var remaining = await World.Api.As(Actor.Patient).ListAsync();

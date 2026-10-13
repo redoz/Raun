@@ -233,7 +233,7 @@ public sealed class HtmlReportSinkTests : IDisposable
         var html = await File.ReadAllTextAsync(path);
         Assert.Contains("\"waitedMs\": 250", html, StringComparison.Ordinal);
         Assert.Contains("\"waitedFor\": \"ExclusiveDb\"", html, StringComparison.Ordinal);
-        Assert.Contains("waited ", html, StringComparison.Ordinal); // the header line's template text
+        Assert.Contains("Queued", html, StringComparison.Ordinal); // the header line's template text
     }
 
     private sealed class TestTimeProviderUtc(DateTimeOffset now) : TimeProvider
