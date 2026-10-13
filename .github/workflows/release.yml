@@ -39,6 +39,14 @@ jobs:
           dotnet pack src/Raun.Coverage/Raun.Coverage.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
           dotnet pack src/Raun.Mtp/Raun.Mtp.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
           dotnet pack src/Raun.Aspire/Raun.Aspire.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
+          # A non-packable project exits successfully without writing a package.
+          # Catch that before publishing any part of a release.
+          for package in Raun Raun.Coverage Raun.Mtp Raun.Aspire; do
+            if ! compgen -G "artifacts/$package.[0-9]*.nupkg" > /dev/null; then
+              echo "Missing package: $package" >&2
+              exit 1
+            fi
+          done
 
       - name: NuGet.org login
         id: nuget_login
