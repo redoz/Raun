@@ -54,12 +54,12 @@ Interfaces:
 - [x] Run the existing 73 report interaction checks and pack all four projects.
 - [x] Inspect nuspec dependency direction; manually restore/build/run scratch MTP and Aspire consumers without coverage and one opted-in consumer. Inspect project.assets.json and output for absence/presence of workspace analysis and BuildHost-netcore assets. Use existing collector coverage execution to check report enrichment.
 - [x] Obtain fresh staff review of integration ownership, startup, and real package evidence; fix material findings.
-- [ ] Commit/push, wait for hosted CI, tag the next beta and verify release publication.
-- [ ] Save exact evidence and close finding 6 in docs/reviews/2026-10-14-raun-staff-review.md; keep the separate intermittent cancellation follow-up visible.
+- [x] Commit/push, wait for hosted CI, tag the next beta and verify release publication.
+- [x] Save exact evidence and close finding 6 in docs/reviews/2026-10-14-raun-staff-review.md; keep the separate intermittent cancellation follow-up visible.
 
 Execution evidence: existing pipeline tests moved unchanged; no new tests added. Manual packed
 MTP/Aspire consumers have no heavy analysis graph or BuildHost; opted-in consumer has both and
 generated activation. All three bootstraps ran --help successfully. Existing Aspire Coverlet run
 passed 16 tests and enriched report status available; its collector scope supplied no eligible
 module hits, recorded in report diagnostics. Staff review cleared source after all transitive locks
-were force-refreshed. Final local gate: 1,418 passed / 5 skipped / 0 failed; zero-warning build; 73 report checks. Publication remains.
+were force-refreshed. Final local gate: 1,418 passed / 5 skipped / 0 failed; zero-warning build; 73 report checks. Published beta.24 from 7cad733; CI 38629066244 and release 38629663072 passed. Finding 6 is closed.

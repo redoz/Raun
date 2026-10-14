@@ -189,7 +189,7 @@ Work in finding order, one item at a time. Findings 2 and 3 need a shared lifecy
 - [x] **3. Bound teardown independently.** Fixed in beta.21; resolution evidence below. Use the lifecycle policy from 2. Define cleanup deadlines, cancellation, and what happens to callbacks that ignore cancellation. Verify hanging and throwing callbacks, subsequent cleanup behavior, callback-specific reporting, and bounded run completion. Preserve ownership guarantees when cleanup itself survives its deadline.
 - [x] **4. Dispose scenario scopes asynchronously.** Fixed in beta.22; resolution evidence below. Verify async-only scoped services on successful, failed, and cancelled scenarios. Prove disposal occurs once, after teardown and after any surviving work is handled under the agreed policy. Define and test how disposal failures are reported.
 - [x] **5. Dispatch resource keys through the interface contract.** Fixed in beta.23; resolution evidence below. First reproduce an explicit static `IResource<T>.KeyFor` implementation. Verify interface dispatch and matching object/typed-key identities in claims, lineage, and reports; preserve existing public implementations and fallback identity behavior.
-- [ ] **6. Make coverage an optional leaf integration.** User chose the leaf-package direction; [written design](../superpowers/specs/2026-10-14-optional-coverage-leaf-design.md) is pending approval. This is a packaging change, not a confirmed runtime defect. Inspect the consumer dependency graph and record alternatives, compatibility costs, and the decision. If separated, verify a consumer without coverage avoids its compiler/MSBuild dependencies and an opted-in consumer retains coverage behavior. If retained, document the rationale and mark this item resolved by decision.
+- [x] **6. Make coverage an optional leaf integration.** Fixed in beta.24; approved [design](../superpowers/specs/2026-10-14-optional-coverage-leaf-design.md), package verification, and release evidence below. This is a packaging change, not a confirmed runtime defect. Inspect the consumer dependency graph and record alternatives, compatibility costs, and the decision. If separated, verify a consumer without coverage avoids its compiler/MSBuild dependencies and an opted-in consumer retains coverage behavior. If retained, document the rationale and mark this item resolved by decision.
 
 For each item before marking it complete:
 
@@ -209,7 +209,7 @@ Ordinary observed values are captured per execution; stack-bound arguments retai
 
 The staff reviewer reviewed the implementation and corrections and found no remaining source-level blocker. Final local verification: zero-warning Release solution build; 1,346 passed, 5 skipped, 0 failed; 35 new behavioral cases; all four packages packed successfully. Target release: v0.3.0-beta.14.
 
-Finding 6 remains open; findings 2–5 are resolved below. Feature opportunities remain recommendations, not an implementation commitment.
+All six original findings are resolved below. The separate intermittent cancellation verification follow-up remains open. Feature opportunities remain recommendations, not an implementation commitment.
 
 ### Nullable-resource follow-up
 
@@ -282,7 +282,7 @@ run 38615622457 and release run 38616221469 passed. All four beta.21 packages we
 and uploaded to the GitHub release. NuGet indexing was pending at the immediate publication check.
 Implementation commit: `71d1dae`.
 
-Findings 4 and 5 were open at beta.21 and are resolved below. Finding 6 remains open.
+Findings 4–6 were open at beta.21 and are resolved below.
 
 ## Resolution of finding 4 (2026-10-14)
 
@@ -329,8 +329,45 @@ packages were pushed to NuGet and uploaded to the GitHub release. NuGet indexing
 immediate publication check. The intermittent cancellation failure observed in the first local gate
 is recorded separately below; it was not claimed repaired by this change.
 
-Finding 6 is the only remaining original finding: optional coverage leaf packaging. Its written
-design is saved and awaits user review before implementation.
+Finding 6 was the remaining original finding at beta.23; its optional leaf packaging is resolved below.
+
+## Resolution of finding 6 (2026-10-14)
+
+Released in [v0.3.0-beta.24](https://github.com/redoz/Raun/releases/tag/v0.3.0-beta.24).
+Implementation commit: `7cad733`.
+Design: [Optional coverage leaf](../superpowers/specs/2026-10-14-optional-coverage-leaf-design.md).
+Plan: [Optional coverage leaf](../superpowers/plans/2026-10-14-optional-coverage-leaf.md).
+
+Raun.Coverage is now an optional leaf depending on Raun.Mtp and Raun. Neither MTP nor Aspire depends
+on coverage. Existing collector delivery, source configuration, session coordination, custom middleware,
+and Coverlet enrichment now live in the leaf. Core report models and presentation remain lightweight.
+MTP owns the optional integration through a small application-scoped factory/lifetime contract, with
+no reflection or assembly scanning. Bootstrap owns disposal through exceptional exits too.
+
+Generated entry points explicitly enable coverage when the leaf's integration symbol is available.
+Custom Main programs opt in with builder.UseClassifiedCoverage(); middleware registration also enables
+it and preserves per-builder ordering/isolation. README documents package/collector opt-in and custom
+bootstrap examples. The middleware source API retains its namespace, but its assembly moves to the
+leaf, so consumers must rebuild. All transitive locks, including the Linux Aspire sample lock, were
+refreshed; the reviewer verified the initially stale lock graphs were repaired.
+
+Per user instruction, no new tests or committed consumer fixtures were added. Existing pipeline tests
+were moved unchanged to the coverage test project. Manual scratch consumers restored real packed
+packages and built/bootstrapped successfully: MTP-only and Aspire-only assets contain no coverage leaf,
+Roslyn workspace/MSBuild locator analysis dependencies, or BuildHost-netcore directory; an opted-in
+consumer has the analysis graph, build host, and generated registration. Packed nuspecs show exactly
+the new dependency direction. The existing Aspire Coverlet run passed 16 tests and enriched the report
+with coverage status available; collector diagnostics reported zero eligible source-module hits, so
+this proves delivery/enrichment rather than positive source-hit accuracy.
+
+Final verification: locked restore; zero-warning Release solution build; 1,418 existing tests passed,
+5 skipped, 0 failed (1,423 total); all 73 report interaction checks passed; all four packages assembled.
+Fresh staff review found no remaining blockers. Hosted CI 38629066244 and release 38629663072 passed.
+All four beta.24 packages were pushed to NuGet and uploaded to the GitHub release. NuGet indexing was
+pending at the immediate post-publication check.
+
+All six original findings are closed. The separate intermittent cancellation classification follow-up
+below remains unresolved; feature opportunities are recommendations, not committed implementation.
 
 ## Verification follow-up: intermittent cancellation classification
 

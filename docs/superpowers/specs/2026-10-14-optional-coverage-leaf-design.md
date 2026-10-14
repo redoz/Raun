@@ -1,7 +1,7 @@
 # Optional coverage leaf package
 
 Date: 2026-10-14
-Status: design and native plan approved; implemented; final verification/release pending
+Status: approved, implemented, reviewed, and released in v0.3.0-beta.24
 Scope: staff-review finding 6, after independent completion of findings 4 and 5.
 
 ## Goal
@@ -64,3 +64,7 @@ coverage diagnostics, and awaited delivery in either report/artifact order.
 Run locked restore, zero-warning full solution build/tests, all report checks, all four package checks,
 and fresh staff review. Commit and push, wait for hosted CI, publish the next beta, and record exact
 verification/publication evidence in the staff-review checklist before closing finding 6.
+
+Release evidence: implementation 7cad733; hosted CI 38629066244 and release 38629663072 passed.
+No new tests added; 1,418 existing tests passed, 5 skipped, 73 report checks passed. Manual packaged
+consumer graphs and generated/custom bootstraps verified; collector delivery enriched the report.
