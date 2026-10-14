@@ -2,7 +2,7 @@
 
 Created: 2026-10-14
 Revised: 2026-10-15
-Status: interface-first model approved in chat; revised written design proposed for review
+Status: revised written design approved; interface-first implementation plan awaiting review
 Scope: canonical identity feature opportunity. No release unless explicitly requested.
 
 ## Intent
