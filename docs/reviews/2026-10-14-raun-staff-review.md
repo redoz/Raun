@@ -187,9 +187,9 @@ Work in finding order, one item at a time. Findings 2 and 3 need a shared lifecy
 - [x] **1. Evaluate arguments once.** Fixed in beta.14 and beta.15; regression coverage and reviewer clearance recorded below.
 - [x] **2. Own timed-out work until execution actually ends.** Fixed in beta.20; resolution evidence below. Record the noncooperative-work policy and alternatives in a design spec. Verify cooperative cancellation, cancellation-ignoring bodies, and late resource creation. Prove that scopes and exclusive resource ownership cannot be released while surviving work can still use them; prove the chosen policy terminates or reports surviving work explicitly. Do not equate a timeout result with a stopped task.
 - [x] **3. Bound teardown independently.** Fixed in beta.21; resolution evidence below. Use the lifecycle policy from 2. Define cleanup deadlines, cancellation, and what happens to callbacks that ignore cancellation. Verify hanging and throwing callbacks, subsequent cleanup behavior, callback-specific reporting, and bounded run completion. Preserve ownership guarantees when cleanup itself survives its deadline.
-- [ ] **4. Dispose scenario scopes asynchronously.** Next item. Verify async-only scoped services on successful, failed, and cancelled scenarios. Prove disposal occurs once, after teardown and after any surviving work is handled under the agreed policy. Define and test how disposal failures are reported.
-- [ ] **5. Dispatch resource keys through the interface contract.** First reproduce an explicit static `IResource<T>.KeyFor` implementation. Verify interface dispatch and matching object/typed-key identities in claims, lineage, and reports; preserve existing public implementations and fallback identity behavior.
-- [ ] **6. Decide whether coverage should be an optional integration.** This is a packaging decision, not a confirmed runtime defect. Inspect the consumer dependency graph and record alternatives, compatibility costs, and the decision. If separated, verify a consumer without coverage avoids its compiler/MSBuild dependencies and an opted-in consumer retains coverage behavior. If retained, document the rationale and mark this item resolved by decision.
+- [x] **4. Dispose scenario scopes asynchronously.** Fixed in beta.22; resolution evidence below. Verify async-only scoped services on successful, failed, and cancelled scenarios. Prove disposal occurs once, after teardown and after any surviving work is handled under the agreed policy. Define and test how disposal failures are reported.
+- [x] **5. Dispatch resource keys through the interface contract.** Fixed in beta.23; resolution evidence below. First reproduce an explicit static `IResource<T>.KeyFor` implementation. Verify interface dispatch and matching object/typed-key identities in claims, lineage, and reports; preserve existing public implementations and fallback identity behavior.
+- [ ] **6. Make coverage an optional leaf integration.** User chose the leaf-package direction; [written design](../superpowers/specs/2026-10-14-optional-coverage-leaf-design.md) is pending approval. This is a packaging change, not a confirmed runtime defect. Inspect the consumer dependency graph and record alternatives, compatibility costs, and the decision. If separated, verify a consumer without coverage avoids its compiler/MSBuild dependencies and an opted-in consumer retains coverage behavior. If retained, document the rationale and mark this item resolved by decision.
 
 For each item before marking it complete:
 
@@ -209,7 +209,7 @@ Ordinary observed values are captured per execution; stack-bound arguments retai
 
 The staff reviewer reviewed the implementation and corrections and found no remaining source-level blocker. Final local verification: zero-warning Release solution build; 1,346 passed, 5 skipped, 0 failed; 35 new behavioral cases; all four packages packed successfully. Target release: v0.3.0-beta.14.
 
-Findings 4–6 remain open; findings 2 and 3 are resolved below. Feature opportunities remain recommendations, not an implementation commitment.
+Finding 6 remains open; findings 2–5 are resolved below. Feature opportunities remain recommendations, not an implementation commitment.
 
 ### Nullable-resource follow-up
 
@@ -282,8 +282,64 @@ run 38615622457 and release run 38616221469 passed. All four beta.21 packages we
 and uploaded to the GitHub release. NuGet indexing was pending at the immediate publication check.
 Implementation commit: `71d1dae`.
 
-Findings 4–6 remain open. Finding 4 (async scenario scope disposal) is next; interface key dispatch
-and the coverage packaging decision follow separately.
+Findings 4 and 5 were open at beta.21 and are resolved below. Finding 6 remains open.
+
+## Resolution of finding 4 (2026-10-14)
+
+Released in [v0.3.0-beta.22](https://github.com/redoz/Raun/releases/tag/v0.3.0-beta.22).
+Implementation commit: `d09c347`.
+
+RunLoop now uses asynchronous scenario scope ownership and awaits disposal in both executed scenarios
+and formatting scopes for scenarios skipped after preflight failure. Synchronous services and providers
+without scope factories retain their existing semantics. Disposal remains after scheduler teardown;
+exclusive resource admission and run completion wait until disposal actually finishes. Async-only
+scoped services dispose exactly once on successful, failed, and cancelled scenarios.
+
+Disposal errors follow the existing framework-fault path: stop further admission, drain running
+siblings, publish RunFinished, then propagate the exception. The scheduler has already reported
+teardown before disposal starts, so disposal exceptions do not rewrite the teardown result. This
+policy was approved in chat and is documented in README. Scope disposal has no separate deadline;
+the bounded cleanup callback policy applies to callbacks, not DI container disposal.
+
+Evidence: five initial behavioral cases failed before the fix, including the DI exception for
+async-only services; all six final cases pass, including skipped-scenario formatting scope disposal.
+Barrier tests prove admission/return retention and sibling draining on disposal failure. Staff review
+found no material blockers. Local verification: 1,412 passed, 5 skipped, 0 failed (1,417 total),
+zero-warning Release solution build, 73 report checks, and all four packages packed. Hosted CI
+38618274097 and beta.22 release 38619109162 passed; all four packages were published.
+
+## Resolution of finding 5 (2026-10-14)
+
+Released in [v0.3.0-beta.23](https://github.com/redoz/Raun/releases/tag/v0.3.0-beta.23).
+Implementation commit: `a8818d7`.
+
+ResourceIdentityResolver now invokes KeyFor through a constrained IResource<T> generic delegate,
+following the existing label-dispatch mechanism. Explicit static implementations work for reference
+and value types. A public lookalike method cannot override the interface implementation. The contract
+still takes priority over registered selectors; runtime-computed identities and fallback behavior
+for types without the contract are preserved. The per-type delegate cache remains the dispatch owner.
+README mentions explicit interface support.
+
+Evidence: all six new cases failed before the fix and passed afterward. They cover registered selector
+priority, public lookalikes, explicit value types, object/key claim conflicts in both orders, lineage,
+and unified report resources. Staff review found no material blockers. Final local verification:
+1,418 passed, 5 skipped, 0 failed (1,423 total), zero-warning Release build, all 73 report checks,
+and all four packages packed. Hosted CI 38619385548 and release 38619984907 passed. All four beta.23
+packages were pushed to NuGet and uploaded to the GitHub release. NuGet indexing was pending at the
+immediate publication check. The intermittent cancellation failure observed in the first local gate
+is recorded separately below; it was not claimed repaired by this change.
+
+Finding 6 is the only remaining original finding: optional coverage leaf packaging. Its written
+design is saved and awaits user review before implementation.
+
+## Verification follow-up: intermittent cancellation classification
+
+During finding 5's first full local gate, StepClassTests.A_cancelled_scenario_still_disposes_its_world
+reported Failed where Skipped was expected. The existing status and disposal-journal assertions remain
+intact; an Assert.Null on the hanging step's exception now exposes the cause if this recurs. The
+isolated test, all 25 StepClassTests, and the repeated full suite passed. Hosted finding 5 CI also passed.
+The cause is not established; this is retained as an unresolved verification follow-up rather than
+claimed repaired or attributed to key dispatch. No cancellation production change was made for it.
 
 ## User follow-ups for later
 
