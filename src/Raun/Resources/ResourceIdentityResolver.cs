@@ -22,6 +22,46 @@ public sealed class ResourceIdentityResolver
     private readonly ConcurrentDictionary<Type, Func<object, ResourceKey>> _selectors = new();
     private readonly ConcurrentDictionary<Type, Func<object, ResourceKey>?> _keyForInvokers = new();
 
+    private readonly ConcurrentDictionary<Type, Func<object, string?>> _labels = new();
+    private readonly ConcurrentDictionary<Type, Func<object, string?>> _labelInvokers = new();
+
+    /// <summary>Registers a label selector. The last registration for a type wins.</summary>
+    public void Label<T>(Func<T, string?> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        _labels[typeof(T)] = instance => selector((T)instance);
+    }
+
+    internal string ResolveLabel(ResourceIdentity identity, object instance)
+    {
+        if (_labels.TryGetValue(identity.Type, out var selector)
+            && selector(instance) is { } registered && !string.IsNullOrWhiteSpace(registered))
+        {
+            return registered;
+        }
+
+        var label = _labelInvokers.GetOrAdd(identity.Type, BuildLabelInvoker)(instance);
+        return string.IsNullOrWhiteSpace(label) ? ResourcePresentation.Display(identity) : label;
+    }
+
+    private static bool HasContract(Type type)
+        => Array.Exists(type.GetInterfaces(), i => i.IsGenericType
+            && i.GetGenericTypeDefinition() == typeof(IResource<>) && i.GenericTypeArguments[0] == type);
+
+    private static Func<object, string?> BuildLabelInvoker(Type type)
+    {
+        if (!HasContract(type))
+        {
+            return _ => null;
+        }
+
+        // Dispatch through the interface, including its default and explicit implementations.
+        return typeof(ResourceIdentityResolver).GetMethod(nameof(InvokeLabel), BindingFlags.NonPublic | BindingFlags.Static)!
+            .MakeGenericMethod(type).CreateDelegate<Func<object, string?>>();
+    }
+
+    private static string? InvokeLabel<T>(object value) where T : IResource<T> => T.LabelFor((T)value);
+
     /// <summary>
     /// Registers a key selector for <typeparamref name="T"/> (chain link 2), for types that can't
     /// carry a <c>KeyFor</c>. The last registration for a type wins.

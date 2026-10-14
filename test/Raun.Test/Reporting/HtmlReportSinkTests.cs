@@ -64,6 +64,26 @@ public sealed class HtmlReportSinkTests : IDisposable
     }
 
     [Fact]
+    public async Task Unicode_stays_readable_and_captured_text_cannot_close_the_json_script()
+    {
+        var path = Path.Combine(_dir, "unicode.html");
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        var def = Def();
+        const string message = "Åsa + Zoë </script><script>alert(1)</script>";
+        await sink.PublishAsync(new ScenarioStarted(def));
+        await sink.PublishAsync(new StepFinished(def, new StepResult
+        {
+            Node = def.Nodes[0], DisplayName = message, Status = StepStatus.Passed, StartedAt = T0,
+            Logs = [message],
+        }));
+        await sink.PublishAsync(new RunFinished());
+        var html = await File.ReadAllTextAsync(path);
+        Assert.Contains("Åsa + Zoë", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("</script><script>alert(1)</script>", html, StringComparison.Ordinal);
+        Assert.Contains("\\u003C/script>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Empty_run_still_writes_a_valid_report()
     {
         var path = Path.Combine(_dir, "raun-report.html");

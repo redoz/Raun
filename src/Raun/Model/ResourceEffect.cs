@@ -15,6 +15,9 @@ public sealed record ResourceEffect
     /// <summary>Optional data snapshot shown in the trace (e.g. the resource instance).</summary>
     public object? Data { get; init; }
 
+    /// <summary>Human-readable label frozen when the effect was recorded.</summary>
+    public string? Label { get; init; }
+
     /// <summary>Full raw JSON frozen when the resource was recorded, rather than when a report is generated.</summary>
     public string? DataSnapshot { get; init; }
 

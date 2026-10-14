@@ -12,6 +12,7 @@ namespace AppointmentTests;
 public sealed record Patient(string Name, string? City = null) : IResource<Patient>
 {
     public static ResourceKey KeyFor(Patient instance) => instance.Name;
+    public static string? LabelFor(Patient instance) => instance.Name;
 }
 
 // Same idea for a slot: Id is the identity, Held is state a hold step flips.

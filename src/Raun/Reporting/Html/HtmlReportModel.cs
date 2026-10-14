@@ -98,6 +98,8 @@ internal sealed record ReportAttachment
 
 internal sealed record ReportEffect
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Label { get; init; }
     public string? ResourceId { get; init; }
     public required string Verb { get; init; }
     public required string Type { get; init; }

@@ -3050,7 +3050,7 @@
         let b="";
         if(s.effects && s.effects.length){
           b+='<div class="resource-events-wrap"><table class="resource-events"><caption>Resource events</caption><thead><tr><th scope="col">Action</th><th scope="col">Resource</th><th scope="col">From step start</th></tr></thead><tbody>'+s.effects.map(e=>{
-            const reference=e.resourceId ? messageHtml({parts:[{text:e.type+":"+e.key,resourceId:e.resourceId,data:e.data}]},sc) : resChip(e.type,e.key);
+            const reference=e.resourceId ? messageHtml({parts:[{text:e.label || e.type+":"+e.key,resourceId:e.resourceId,data:e.data}]},sc) : resChip(e.type,e.key);
             const offset=Number(e.offsetMs)-Number(s.offsetMs || 0);
             return '<tr'+(e.resourceId ? ' data-resource-activity="'+esc(e.resourceId)+'"' : '')+'><td>'+esc(e.verb)+'</td><td>'+reference+'</td><td class="event-time">'+(Number.isFinite(offset) ? (offset>=0 ? '+' : '')+fmtMs(offset) : '—')+'</td></tr>';
           }).join('')+'</tbody></table></div>';

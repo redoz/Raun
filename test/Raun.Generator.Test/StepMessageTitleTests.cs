@@ -67,6 +67,20 @@ public class StepMessageTitleTests
         """;
 
     [Fact]
+    public async Task Generated_titles_and_notes_use_the_type_label()
+    {
+        var source = Source.Replace("public override string ToString() => \"data-\" + Key;",
+            "public static string? LabelFor(Seed seed) => \"Label \" + seed.Key; public override string ToString() => \"data-\" + Key;", StringComparison.Ordinal);
+        var generated = GeneratorHarness.Run(source);
+        generated.AssertCompiles();
+        var results = await Scenario(generated, "Story").RunAsync();
+        var observe = results.Single(result => result.Node.OperationName == "Observe");
+        Assert.Equal("Observe Label one one data-two", observe.DisplayName);
+        Assert.Equal("Bare Label one one data-two", observe.Notes[0]);
+        Assert.Equal("one", References(observe.TitleMessage).First().Resource!.Value.Key.Value);
+    }
+
+    [Fact]
     public async Task Typed_notes_and_titles_preserve_resources_without_changing_the_graph()
     {
         var generated = GeneratorHarness.Run(Source);

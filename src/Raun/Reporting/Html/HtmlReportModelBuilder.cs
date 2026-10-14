@@ -198,6 +198,7 @@ internal sealed class HtmlReportModelBuilder
                     {
                         ResourceId = ResourceId(e.Identity),
                         Verb = e.Verb.ToString(),
+                        Label = e.Label,
                         Type = ResourcePresentation.Name(e.Identity.Type),
                         Key = e.Identity.Key.ToString(),
                         OffsetMs = Ms(e.Timestamp - start),

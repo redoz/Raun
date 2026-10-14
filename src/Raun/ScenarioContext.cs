@@ -85,13 +85,13 @@ public sealed class ScenarioContext
     /// <summary>Binds this step to its span. Called by the scheduler.</summary>
     internal void AttachActivity(System.Diagnostics.Activity? activity) => _activity = activity;
 
-    private void OnResource(LifecycleVerb verb, ResourceIdentity identity, ResourceConflictException? conflict, string? snapshot)
+    private void OnResource(LifecycleVerb verb, ResourceIdentity identity, ResourceConflictException? conflict, string? snapshot, string? label)
     {
         var content = conflict is null
-            ? new StepMessage([new StepMessagePart($"[resource] {verb} "), new StepMessagePart(ResourcePresentation.Display(identity), identity) { Snapshot = snapshot }])
+            ? new StepMessage([new StepMessagePart($"[resource] {verb} "), new StepMessagePart(label ?? ResourcePresentation.Display(identity), identity) { Snapshot = snapshot, Label = label }])
             : new StepMessage([
                 new StepMessagePart($"[resource] conflict: Step '{conflict.StepDisplayName}' ({conflict.Verb}) and step '{conflict.OtherStepDisplayName}' ({conflict.OtherVerb}) both touch "),
-                new StepMessagePart(ResourcePresentation.Display(identity), identity) { Snapshot = snapshot },
+                new StepMessagePart(label ?? ResourcePresentation.Display(identity), identity) { Snapshot = snapshot, Label = label },
                 new StepMessagePart(" and nothing orders them; add a dependency between them or declare one access as [Read]."),
             ]);
         Append(content);

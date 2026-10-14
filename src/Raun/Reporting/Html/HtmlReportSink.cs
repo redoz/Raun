@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Encodings.Web;
 using System.Text.Json.Nodes;
 using Raun.Reporting.Coverage;
 using Raun.Reporting;
@@ -20,7 +21,12 @@ public sealed class HtmlReportSink : RunEventSink
     private const string ResourceName = "Raun.Reporting.Html.report-template.html";
 
     private static readonly JsonSerializerOptions SerializerOptions =
-        new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        new()
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        };
 
     private readonly string _path;
     private readonly TimeProvider _timeProvider;
@@ -95,7 +101,7 @@ public sealed class HtmlReportSink : RunEventSink
         var payload = JsonNode.Parse(html.Substring(start, end - start)) as JsonObject
             ?? throw new InvalidDataException("The Raun report payload must be an object.");
         payload["coverage"] = JsonSerializer.SerializeToNode(coverage, SerializerOptions);
-        var enriched = string.Concat(html.AsSpan(0, start), payload.ToJsonString(SerializerOptions), html.AsSpan(end));
+        var enriched = string.Concat(html.AsSpan(0, start), EscapeEmbeddedJson(payload.ToJsonString(SerializerOptions)), html.AsSpan(end));
         await HtmlReportWriter.WriteAsync(path, enriched, cancellationToken).ConfigureAwait(false);
     }
 
@@ -112,7 +118,7 @@ public sealed class HtmlReportSink : RunEventSink
         try
         {
             await previous.ConfigureAwait(false);
-            var json = JsonSerializer.Serialize(model, SerializerOptions);
+            var json = EscapeEmbeddedJson(JsonSerializer.Serialize(model, SerializerOptions));
             var html = LoadTemplate().Replace(JsonToken, json, StringComparison.Ordinal);
             await HtmlReportWriter.WriteAsync(_path, html, cancellationToken).ConfigureAwait(false);
         }
@@ -122,6 +128,9 @@ public sealed class HtmlReportSink : RunEventSink
             completion.TrySetResult();
         }
     }
+
+    // Unicode stays readable; only HTML markup needs escaping at the script boundary.
+    private static string EscapeEmbeddedJson(string json) => json.Replace("<", "\\u003C", StringComparison.Ordinal);
 
     private static string LoadTemplate()
     {

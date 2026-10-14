@@ -25,7 +25,7 @@ public sealed class ResourceContext
     readonly string _stepDisplayName;
     ResourceLedger? _ledger;
     int _nodeIndex;
-    Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?>? _observer;
+    Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?>? _observer;
 
     /// <summary>Creates a tracer bound to one step, resolving identities via <paramref name="resolver"/>.</summary>
     public ResourceContext(
@@ -59,6 +59,9 @@ public sealed class ResourceContext
     /// types you can't annotate with <c>[ResourceKey]</c>/<c>KeyFor</c>.
     /// </summary>
     public void Identify<T>(Func<T, ResourceKey> selector) => _resolver.Identify(selector);
+
+    /// <summary>Registers a label selector for resource references.</summary>
+    public void Label<T>(Func<T, string?> selector) => _resolver.Label(selector);
 
     /// <summary>Records bringing a new <paramref name="resource"/> into existence (exclusive).</summary>
     public ValueTask Create<T>(T resource)
@@ -137,7 +140,7 @@ public sealed class ResourceContext
 
     /// <summary>Notifies <see cref="ScenarioContext"/> of each recorded effect, or of a refused claim
     /// (non-null exception), so the resource story reaches the step's log and span in order.</summary>
-    internal void AttachObserver(Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?> observer)
+    internal void AttachObserver(Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?> observer)
         => _observer = observer;
 
     ValueTask Record(LifecycleVerb verb, ResourceIdentity identity, object? data)
@@ -150,12 +153,13 @@ public sealed class ResourceContext
         }
         catch (ResourceConflictException ex)
         {
-            _observer?.Invoke(verb, identity, ex, null);
+            _observer?.Invoke(verb, identity, ex, null, null);
             throw;
         }
 
         var snapshot = ResourcePresentation.Capture(data);
-        _observer?.Invoke(verb, identity, null, snapshot);
+        var label = data is null ? ResourcePresentation.Display(identity) : _resolver.ResolveLabel(identity, data);
+        _observer?.Invoke(verb, identity, null, snapshot, label);
 
         lock (_lock)
         {
@@ -171,6 +175,7 @@ public sealed class ResourceContext
                     Verb = stronger, Data = data ?? existing.Data,
                     DataSnapshot = data is null ? existing.DataSnapshot : snapshot,
                     DataSnapshotCaptured = true,
+                    Label = data is null ? existing.Label : label,
                 };
             }
             else
@@ -183,6 +188,7 @@ public sealed class ResourceContext
                     Data = data,
                     DataSnapshot = snapshot,
                     DataSnapshotCaptured = true,
+                    Label = label,
                     StepId = _stepId,
                     StepDisplayName = _stepDisplayName,
                     Timestamp = _timeProvider.GetUtcNow(),

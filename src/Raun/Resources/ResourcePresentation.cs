@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Encodings.Web;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -9,6 +10,7 @@ internal static class ResourcePresentation
 {
     private static readonly JsonSerializerOptions SnapshotOptions = new()
     {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         IncludeFields = true,
         ReferenceHandler = ReferenceHandler.Preserve,
     };

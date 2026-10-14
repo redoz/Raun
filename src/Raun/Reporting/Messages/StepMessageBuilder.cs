@@ -77,19 +77,21 @@ public sealed class StepMessageBuilder
                     // Default public identity/key structs cannot form usable report references.
                     return new(declaredType.Name);
                 }
+                var label = value is ResourceIdentity ? ResourcePresentation.Display(resource)
+                    : _context.Resolver.ResolveLabel(resource, value);
                 if (string.IsNullOrEmpty(format))
                 {
-                    return new(ResourcePresentation.Display(resource), resource);
+                    return new(label, resource) { Label = label };
                 }
                 if (string.Equals(format, "id", StringComparison.Ordinal))
                 {
-                    return new(resource.Key.ToString(), resource);
+                    return new(resource.Key.ToString(), resource) { Label = label };
                 }
                 if (string.Equals(format, "data", StringComparison.Ordinal))
                 {
                     if (value is ResourceIdentity)
                     {
-                        return new(ResourcePresentation.Display(resource), resource);
+                        return new(ResourcePresentation.Display(resource), resource) { Label = label };
                     }
                     var data = ResourcePresentation.Data(value);
                     var truncated = data.Length > 16_384;
@@ -100,7 +102,7 @@ public sealed class StepMessageBuilder
                     {
                         inline = Prefix(inline, 159) + "…";
                     }
-                    return new(inline, resource, data, truncated);
+                    return new(inline, resource, data, truncated) { Label = label };
                 }
             }
 

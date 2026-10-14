@@ -14,4 +14,7 @@ public interface IResource<TSelf>
 {
     /// <summary>Projects the resource key for <paramref name="instance"/>.</summary>
     static abstract ResourceKey KeyFor(TSelf instance);
+
+    /// <summary>Optional human-readable label, captured at each resource reference.</summary>
+    static virtual string? LabelFor(TSelf instance) => null;
 }
