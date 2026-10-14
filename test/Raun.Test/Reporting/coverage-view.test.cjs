@@ -402,7 +402,7 @@ test('header summary buttons contain separate logic and collector totals and con
   const header=context.api.buildRunHeader(report), nodes=descendants(header);
   const tests=nodes.find(n=>n.tag==='button' && n.dataset.view==='tests'), coverage=nodes.find(n=>n.tag==='button' && n.dataset.view==='coverage');
   assert.ok(tests);assert.ok(coverage);
-  assert.match(descendants(tests).map(n=>n.textContent || '').join(' '),/Tests.*Passed.*4.*Failed.*1.*Skipped.*2/);
+  assert.match(descendants(tests).map(n=>n.textContent || '').join(' '),/Scenarios.*Passed.*4.*Failed.*1.*Skipped.*2/);
   assert.match(descendants(coverage).map(n=>n.textContent || '').join(' '),/Coverage.*Logical.*33%.*Total.*56%/);
   const changes=[];
   const tabHost=nodes.find(n=>n.id==='report-tabs');

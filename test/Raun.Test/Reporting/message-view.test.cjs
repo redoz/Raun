@@ -6,7 +6,7 @@ const esc=value=>String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt
 const decode=text=>text.replaceAll('&quot;','"').replaceAll('&#39;',"'").replaceAll('&lt;','<').replaceAll('&gt;','>').replaceAll('&amp;','&');
 // Small deterministic DOM harness: runs real template builders and bubbling listeners, never a browser.
 class Node {
- constructor(tag){this.tag=tag;this.children=[];this.attributes={};this.dataset={};this.listeners={};this.hidden=false;this.style={setProperty(){},getPropertyValue(){return '';}};}
+ constructor(tag){this.tag=tag;this.children=[];this.attributes={};this.dataset={};this.listeners={};this.hidden=false;this.style={removeProperty(){},setProperty(){},getPropertyValue(){return '';}};}
  set className(v){this.attributes.class=v;} get className(){return this.attributes.class||'';}
  get classList(){const node=this;return {contains:x=>node.className.split(' ').includes(x),add:x=>{if(!node.classList.contains(x))node.className+=' '+x;},remove:x=>node.className=node.className.split(' ').filter(c=>c!==x).join(' '),toggle(x,force){const on=force ?? !node.classList.contains(x);if(on)this.add(x);else this.remove(x);return on;}};}
  set id(value){this.setAttribute('id',value);} get id(){return this.getAttribute('id');}
@@ -14,8 +14,10 @@ class Node {
  setAttribute(k,v){this.attributes[k]=String(v);if(k==='hidden')this.hidden=true;if(k.startsWith('data-'))this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=String(v);}
  removeAttribute(k){delete this.attributes[k];}
  getAttribute(k){if(k.startsWith('data-'))return this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]??null;return this.attributes[k]??null;}
- appendChild(n){n.parentElement=this;this.children.push(n);return n;} append(...nodes){nodes.forEach(n=>this.appendChild(n));}
+ appendChild(n){if(n.parentElement)n.parentElement.children=n.parentElement.children.filter(child=>child!==n);n.parentElement=this;this.children.push(n);return n;} append(...nodes){nodes.forEach(n=>this.appendChild(n));}
  replaceChildren(...nodes){this.children=[];this.append(...nodes);} remove(){if(this.parentElement)this.parentElement.children=this.parentElement.children.filter(n=>n!==this);}
+ getBoundingClientRect(){return {x:0,y:0,left:0,top:0,right:0,bottom:0,width:0,height:0};}
+ showPopover(){this.popoverOpen=true;}
  addEventListener(k,h){(this.listeners[k]??=[]).push(h);} focus(){this.focused=true;} scrollIntoView(){this.scrolled=true;}
  getComputedTextLength(){return (this.textContent || '').length*5;}
  matches(selector){return selector.split(',').some(s=>{s=s.trim();if(s.includes(' > ')){const [parent,child]=s.split(' > ');return this.matches(child)&&this.parentElement?.matches(parent);}
@@ -35,11 +37,12 @@ class Node {
 const el=(tag,cls)=>{const n=new Node(tag);n.className=cls||'';return n;};
 const svgEl=(tag,attrs)=>{const n=el(tag);for(const [k,v] of Object.entries(attrs||{}))n.setAttribute(k,v);return n;};
 const documentEvents={};
-const document={documentElement:el('html'),body:el('body'),createElement:el,createTextNode:text=>Object.assign(el('#text'),{textContent:text}),addEventListener:(name,handler)=>(documentEvents[name]??=[]).push(handler)};
+const browserLayout={ResizeObserver:class {observe(){} disconnect(){}},requestAnimationFrame(){}};
+const document={fonts:{ready:{then(){}}},documentElement:el('html'),body:el('body'),createElement:el,createTextNode:text=>Object.assign(el('#text'),{textContent:text}),addEventListener:(name,handler)=>(documentEvents[name]??=[]).push(handler)};
 const dispatchDocument=(name,target,key)=>{const ev={target,key,preventDefault(){this.prevented=true;}};for(const handler of documentEvents[name]||[])handler(ev);return ev;};
-const scope=vm.createContext({document,el,svgEl,window:{},setTimeout,clearTimeout,getComputedStyle:()=>({getPropertyValue:()=>''}),typeColor:()=>'',keyColor:()=>'',fmtMs:n=>Number(n).toFixed(1)+' ms',fmtDur:n=>n+' ms',SHOW_DIAGRAM:false,PHCOLOR:{},VCOLOR:{},Blob,typeSlot:()=>0,hashOf:()=>1,KEY_SLOTS:7,catVar:()=>'',expansionFor:()=>new Map(),labelColor:()=>'',contrastInk:()=>'',placeVerbLabels(){},RESOURCE_LINE:/^(\+[\d.]+s )?\[resource\] (\w+) ([^:\s]+):(.*)$/});
+const scope=vm.createContext({...browserLayout,document,el,svgEl,window:{},setTimeout,clearTimeout,getComputedStyle:()=>({getPropertyValue:()=>''}),typeColor:()=>'',keyColor:()=>'',fmtMs:n=>Number(n).toFixed(1)+' ms',fmtDur:n=>n+' ms',SHOW_DIAGRAM:false,PHCOLOR:{},VCOLOR:{},Blob,typeSlot:()=>0,hashOf:()=>1,KEY_SLOTS:7,catVar:()=>'',expansionFor:()=>new Map(),labelColor:()=>'',contrastInk:()=>'',placeVerbLabels(){},RESOURCE_LINE:/^(\+[\d.]+s )?\[resource\] (\w+) ([^:\s]+):(.*)$/});
 vm.runInContext(template.slice(template.indexOf('    const esc ='),template.indexOf('    const el ='))+'\nthis.actualEsc=esc;',scope);
-vm.runInContext(template.slice(template.indexOf('    const AD_W ='),template.indexOf('    const shortName =')),scope);
+vm.runInContext(template.slice(template.indexOf('    const expandedFor ='),template.indexOf('    const shortName =')),scope);
 vm.runInContext(template.slice(template.indexOf('    const shortName ='),template.indexOf('    const collapsedGroups =')),scope);
 vm.runInContext(template.match(/    let messageInspectorSequence = 0;/)[0]+'\n'+template.match(/    let stepDetailSequence = 0;/)[0],scope);
 const start=template.indexOf('function resourceToken');
@@ -47,8 +50,6 @@ if(start>=0) vm.runInContext(template.slice(start,template.indexOf('function att
 vm.runInContext(template.slice(template.indexOf('function stepNotesHtml'),template.indexOf('function renderAll')),scope);
 vm.runInContext(template.slice(template.indexOf('function keyColor'),template.indexOf('    // one delegated handler:')),scope);
 vm.runInContext(template.slice(template.indexOf('function attSize'),template.indexOf('  </script>',template.indexOf('function buildScenarioDrill'))),scope);
-vm.runInContext(template.slice(template.indexOf('function buildObjectFlow'),template.indexOf('    // ---- verb-label placement ladder')),scope);
-vm.runInContext(template.slice(template.indexOf('function cardBox'),template.indexOf('    // renderScenario(sc)')),scope);
 const resource={id:'r0-0',type:'Seed',qualifiedType:'Ns.Seed',key:'key:/"<&',events:[]};
 const scenario={resources:[resource],steps:[]};
 const message=text=>({text,parts:[{text,resourceId:resource.id,data:'<script>\nold',dataTruncated:true}]});
@@ -105,10 +106,10 @@ test('structured text retains literal order and does not resolve IDs from anothe
  assert.equal(scope.messageHtml(m,{resources:[other]}),'before &lt;id between data after');
 });
 
-test('resource references in title note logs and events select the same usage without scrolling',()=>{
+test('resource references in title note and logs select the same usage without scrolling',()=>{
  const current=step('s',message('key'));current.effects=[{verb:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:3,data:'old'}];
  const p=scope.buildScenarioDrill({...scenario,steps:[current]}),entry=p.querySelector('.step-entry');
- const chips=p.querySelectorAll('[data-message-resource]');assert.equal(chips.length,4);
+ const chips=p.querySelectorAll('[data-message-resource]');assert.equal(chips.length,3);assert.equal(p.querySelector('.resource-events'),null);
  for(const chip of chips){
   chip.dispatch('click');assert.equal(entry.classList.contains('res-hit'),true);
   assert.equal(entry.scrolled,undefined);assert.equal(entry.classList.contains('open'),false);
@@ -123,23 +124,8 @@ test('legacy strings and known lifecycle regex remain supported without inferrin
  assert.equal(scope.actualEsc('"\' <&>'),'&quot;&#39; &lt;&amp;&gt;');
 });
 
-test('real flow layout, cards and edges retain distinct opaque IDs for equal labels',()=>{
- const steps=[{...step('create',message('x')),phase:'Given',lane:0,index:0},{...step('read',message('x')),phase:'When',lane:0,index:1,offsetMs:10}];
- const resources=['r0-0','r0-1'].map(id=>({...resource,id,events:[{verb:'Create',stepId:'create',offsetMs:0},{verb:'Read',stepId:'read',offsetMs:10}]}));
- const sc={scenarioId:'first',steps,resources},layout=scope.layoutScenario(sc),flow=scope.buildObjectFlow(sc,layout,()=>{});
- assert.deepEqual(Array.from(layout.flows,f=>f.resourceId),['r0-0','r0-1']);
- assert.deepEqual(Array.from(flow.cards,c=>c.resourceId).sort(),['r0-0','r0-1']);
- assert.deepEqual([...new Set(Array.from(flow.edges,e=>e.resourceId))].sort(),['r0-0','r0-1']);
- assert.deepEqual([...new Set(flow.g.querySelectorAll('[data-obj]').map(n=>n.dataset.obj))].sort(),['r0-0','r0-1']);
-});
-test('collapsed flow cards preserve their full set of actual IDs',()=>{
- const steps=[{...step('create',message('x')),phase:'Given',lane:0,index:0}];
- for(const count of [5,13]){
-  const ids=Array.from({length:count},(_,i)=>'r0-'+i),resources=ids.map(id=>({...resource,id,events:[{verb:'Create',stepId:'create',offsetMs:0}]}));
-  const sc={scenarioId:'first',steps,resources},flow=scope.buildObjectFlow(sc,scope.layoutScenario(sc),()=>{});
-  assert.deepEqual(Array.from(flow.cards[0].resourceIds||[]),ids);
-  assert.deepEqual(Array.from(flow.edges[0].resourceIds||[]),ids);
- }
+test('retired activity and object graph renderers are removed',()=>{
+ for(const symbol of ['SHOW_DIAGRAM','buildActivityDiagram','buildObjectFlow','layoutScenario','adForkView','applySun','.actdiag{'])assert.equal(template.includes(symbol),false,symbol);
 });
 
 test('plain canonical log entries retain the existing known lifecycle regex path and timer',()=>{
@@ -153,8 +139,8 @@ test('complete report script renders typed messages on first paint in declaratio
  const summary=el('div');summary.id='run-summary';body.appendChild(summary);
  const model=el('script');model.id='model';body.appendChild(model);
  model.textContent=JSON.stringify({summary:{passed:1,failed:0,skipped:0,totalMs:1},generatedAtUtc:'2026-10-13T00:00:00Z',scenarios:[{...scenario,scenarioId:'first',methodName:'N.First',displayName:'First',durationMs:1,status:'passed',steps:[step('s',message('key'))]}]});
- const document={body,documentElement:root,createElement:el,createElementNS:(_,tag)=>el(tag),createTextNode:text=>Object.assign(el('#text'),{textContent:text}),getElementById:id=>root.querySelectorAll('[id]').find(n=>n.id===id),querySelectorAll:s=>root.querySelectorAll(s),addEventListener(){}};
- const context=vm.createContext({document,window:{matchMedia:()=>({matches:true})},location:{search:'?theme=light'},URLSearchParams,getComputedStyle:()=>({getPropertyValue:()=>''}),Blob,CSS:{escape:x=>x}});
+ const document={fonts:{ready:{then(){}}},body,documentElement:root,createElement:el,createElementNS:(_,tag)=>el(tag),createTextNode:text=>Object.assign(el('#text'),{textContent:text}),getElementById:id=>root.querySelectorAll('[id]').find(n=>n.id===id),querySelectorAll:s=>root.querySelectorAll(s),addEventListener(){}};
+ const context=vm.createContext({...browserLayout,document,window:{matchMedia:()=>({matches:true})},location:{search:'?theme=light'},URLSearchParams,getComputedStyle:()=>({getPropertyValue:()=>''}),Blob,CSS:{escape:x=>x}});
  const code=template.slice(template.indexOf('  <script>')+'  <script>'.length,template.lastIndexOf('  </script>'));
  assert.doesNotThrow(()=>vm.runInContext(code,context));
  assert.equal(report.querySelectorAll('[data-message-resource]').length,3);
@@ -213,21 +199,17 @@ test('resource activation highlights usage and Escape or outside click clears wi
  assert.equal(entry.classList.contains('open'),false);
 });
 
-test('expanded step shows resource event table before independently collapsed logs and preserves note',()=>{
+test('expanded steps show logs directly and preserve notes without duplicate resource events',()=>{
  const current=step('s',message('Seed:key'));current.offsetMs=100;
  current.effects=[{verb:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:103,data:'<old>'}];
  const p=scope.buildScenarioDrill({...scenario,steps:[current]});
  const entry=p.querySelector('.step-entry');entry.querySelector('.step-expander').dispatch('click');
  assert.equal(entry.classList.contains('open'),true);
- const body=entry.querySelector('.step-body'),table=body.querySelector('table'),logs=body.querySelector('details.step-logs');
- assert.ok(table,'resource events are tabular');assert.ok(logs,'logs have their own disclosure');
- assert.equal(logs.getAttribute('open'),null);
- assert.ok(p.innerHTML.indexOf('<table')<p.innerHTML.indexOf('step-logs'));
- assert.ok(p.querySelector('.step-note'));assert.match(p.innerHTML,/&lt;old&gt;/);
- assert.match(nodeText(table),/Read/);assert.match(nodeText(table),/\+3\.0 ms/);
- assert.deepEqual(table.querySelectorAll('th').map(nodeText),['Action','Resource','From step start']);
- assert.equal(table.querySelector('details'),null);
- assert.equal(table.querySelector('[data-message-resource]').getAttribute('data-resource-data'),'<old>');
+ const body=entry.querySelector('.step-body');
+ assert.ok(body.querySelector('div.step-logs'),'logs appear without a second disclosure');
+ assert.equal(body.querySelector('details.step-logs'),null);
+ assert.equal(body.querySelector('table'),null,'resource evidence is rendered by the matrix');
+ assert.ok(p.querySelector('.step-note'));
 });
 
 test('phase coloring uses matching authored prefix once with chevron before status',()=>{
@@ -351,8 +333,8 @@ test('scenario and group headings keep compact identifiers alongside the display
  const summary=el('div');summary.id='run-summary';body.appendChild(summary);
  const model=el('script');model.id='model';body.appendChild(model);
  model.textContent=JSON.stringify({summary:{passed:1,failed:0,skipped:0,totalMs:1},generatedAtUtc:'2026-10-13T00:00:00Z',scenarios:[current]});
- const document={body,documentElement:root,createElement:el,createElementNS:(_,tag)=>el(tag),createTextNode:text=>Object.assign(el('#text'),{textContent:text}),getElementById:id=>root.querySelectorAll('[id]').find(n=>n.id===id),querySelectorAll:s=>root.querySelectorAll(s),addEventListener(){}};
- const context=vm.createContext({document,window:{matchMedia:()=>({matches:true})},location:{search:'?theme=light'},URLSearchParams,getComputedStyle:()=>({getPropertyValue:()=>''}),Blob,CSS:{escape:x=>x}});
+ const document={fonts:{ready:{then(){}}},body,documentElement:root,createElement:el,createElementNS:(_,tag)=>el(tag),createTextNode:text=>Object.assign(el('#text'),{textContent:text}),getElementById:id=>root.querySelectorAll('[id]').find(n=>n.id===id),querySelectorAll:s=>root.querySelectorAll(s),addEventListener(){}};
+ const context=vm.createContext({...browserLayout,document,window:{matchMedia:()=>({matches:true})},location:{search:'?theme=light'},URLSearchParams,getComputedStyle:()=>({getPropertyValue:()=>''}),Blob,CSS:{escape:x=>x}});
  const code=template.slice(template.indexOf('  <script>')+'  <script>'.length,template.lastIndexOf('  </script>'));
  vm.runInContext(code,context);
  const group=app.querySelector('.tests-class-name');

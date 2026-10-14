@@ -36,6 +36,17 @@ jobs:
       - name: Report interaction tests
         run: node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs
 
+      - name: Install report browser test tools
+        working-directory: test/Browser
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Resource matrix browser tests
+        run: |
+          dotnet run --project samples/AppointmentTests/AppointmentTests.csproj -c Release --no-build -- --report-html --results-directory "$PWD/artifacts/matrix-sample"
+          node test/Browser/resource-matrix.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
+
       - name: Pack
         run: |
           dotnet pack src/Raun/Raun.csproj -c Release --no-build -o artifacts -p:ContinuousIntegrationBuild=true
