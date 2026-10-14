@@ -19,7 +19,7 @@ internal static class ResourcePresentation
         => type.GetCustomAttribute<DisplayNameAttribute>(inherit: true)?.DisplayName is { Length: > 0 } name
             ? name : type.Name;
 
-    internal static string Display(ResourceIdentity resource) => $"{Name(resource.Type)}:{resource.Key}";
+    internal static string Display(ResourceIdentity resource) => $"{resource.Kind.DisplayName}:{resource.Key}";
 
     internal static string Data(object value)
     {

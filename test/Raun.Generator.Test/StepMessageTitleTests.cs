@@ -251,7 +251,7 @@ public class StepMessageTitleTests
         var results = await new ScenarioScheduler().RunAsync(definition, services);
         var note = Assert.Single(results.Single(result => result.Node.OperationName == "Opaque").NoteMessages);
         Assert.Equal("Notes data configured configured", note.Text);
-        Assert.Equal(new[] { "BaseSeed", "IView" }, References(note).Select(part => part.Resource!.Value.Type.Name));
+        Assert.Equal(new[] { "BaseSeed", "IView" }, References(note).Select(part => part.Resource!.Value.Kind.Type!.Name));
         Assert.All(References(note), part => Assert.Equal("configured", part.Resource!.Value.Key.Value));
     }
 
@@ -274,10 +274,10 @@ public class StepMessageTitleTests
         var results = await new ScenarioScheduler().RunAsync(definition, services);
         var baseTitle = results.Single(result => result.Node.OperationName == "Base").TitleMessage;
         Assert.Equal("Base BaseSeed:configured base", baseTitle.Text);
-        Assert.Equal("BaseSeed", Assert.Single(References(baseTitle)).Resource!.Value.Type.Name);
+        Assert.Equal("BaseSeed", Assert.Single(References(baseTitle)).Resource!.Value.Kind.Type!.Name);
         var viewTitle = results.Single(result => result.Node.OperationName == "View").TitleMessage;
         Assert.Equal("View IView:configured", viewTitle.Text);
-        Assert.Equal("IView", Assert.Single(References(viewTitle)).Resource!.Value.Type.Name);
+        Assert.Equal("IView", Assert.Single(References(viewTitle)).Resource!.Value.Kind.Type!.Name);
         var opaqueTitle = results.Single(result => result.Node.OperationName == "Opaque").TitleMessage;
         Assert.Equal("Opaque data", opaqueTitle.Text);
         Assert.Empty(References(opaqueTitle));

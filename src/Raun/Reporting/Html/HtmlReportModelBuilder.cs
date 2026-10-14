@@ -199,7 +199,7 @@ internal sealed class HtmlReportModelBuilder
                         ResourceId = ResourceId(e.Identity),
                         Verb = e.Verb.ToString(),
                         Label = e.Label,
-                        Type = ResourcePresentation.Name(e.Identity.Type),
+                        Type = e.Identity.Kind.DisplayName,
                         Key = e.Identity.Key.ToString(),
                         OffsetMs = Ms(e.Timestamp - start),
                         Data = e.DataSnapshotCaptured ? e.DataSnapshot : e.Data?.ToString(),
@@ -218,9 +218,9 @@ internal sealed class HtmlReportModelBuilder
             {
                 foreach (var relation in r.Lineage)
                 {
-                    var subjectType = ResourcePresentation.Name(relation.Subject.Type);
+                    var subjectType = relation.Subject.Kind.DisplayName;
                     var subjectKey = relation.Subject.Key.ToString();
-                    var targetType = ResourcePresentation.Name(relation.Target.Type);
+                    var targetType = relation.Target.Kind.DisplayName;
                     var targetKey = relation.Target.Key.ToString();
                     if (!seenRelations.Add((relation.Subject, relation.Target)))
                     {
@@ -245,8 +245,8 @@ internal sealed class HtmlReportModelBuilder
             var resources = identities.Select(pair => new ReportResource
             {
                 Id = pair.Value,
-                QualifiedType = pair.Key.Type.FullName ?? pair.Key.Type.Name,
-                Type = ResourcePresentation.Name(pair.Key.Type),
+                QualifiedType = pair.Key.Kind.QualifiedName,
+                Type = pair.Key.Kind.DisplayName,
                 Key = pair.Key.Key.ToString(),
                 Events = events[pair.Key].Select(e => new ReportResourceEvent
                 {

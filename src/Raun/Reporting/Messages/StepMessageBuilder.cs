@@ -72,7 +72,7 @@ public sealed class StepMessageBuilder
         {
             if (identity is { } resource)
             {
-                if (resource.Type is null || resource.Key.Value is null)
+                if (!resource.Kind.IsValid || resource.Key.Value is null)
                 {
                     // Default public identity/key structs cannot form usable report references.
                     return new(declaredType.Name);

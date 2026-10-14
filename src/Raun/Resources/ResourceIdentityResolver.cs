@@ -34,13 +34,13 @@ public sealed class ResourceIdentityResolver
 
     internal string ResolveLabel(ResourceIdentity identity, object instance)
     {
-        if (_labels.TryGetValue(identity.Type, out var selector)
+        if (identity.Type is { } sourceType && _labels.TryGetValue(sourceType, out var selector)
             && selector(instance) is { } registered && !string.IsNullOrWhiteSpace(registered))
         {
             return registered;
         }
 
-        var label = _labelInvokers.GetOrAdd(identity.Type, BuildLabelInvoker)(instance);
+        var label = identity.Type is { } type ? _labelInvokers.GetOrAdd(type, BuildLabelInvoker)(instance) : null;
         return string.IsNullOrWhiteSpace(label) ? ResourcePresentation.Display(identity) : label;
     }
 

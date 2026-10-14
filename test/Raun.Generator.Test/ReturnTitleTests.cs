@@ -201,7 +201,7 @@ public class ReturnTitleTests
         }
         else
         {
-            Assert.Equal(resourceType, Assert.Single(title.Parts, part => part.Resource.HasValue).Resource!.Value.Type.Name);
+            Assert.Equal(resourceType, Assert.Single(title.Parts, part => part.Resource.HasValue).Resource!.Value.Kind.Type!.Name);
         }
     }
 
