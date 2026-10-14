@@ -60,7 +60,8 @@ public static class RaunAspire
                     configure: options.ApplyTestApplication,
                     services: provider,
                     preflight: ctx => StartAsync<TAppHost>(holder, options, ctx),
-                    maxParallelScenarios: options.MaxParallelScenarios).ConfigureAwait(false);
+                    maxParallelScenarios: options.MaxParallelScenarios,
+                    maxParallelSteps: options.MaxParallelSteps).ConfigureAwait(false);
             }
         }
         finally

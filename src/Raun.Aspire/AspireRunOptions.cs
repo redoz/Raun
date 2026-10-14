@@ -31,6 +31,9 @@ public sealed class AspireRunOptions
     /// </summary>
     public int MaxParallelScenarios { get; set; }
 
+    /// <summary>Maximum active steps per scenario; 0 means unbounded. --max-parallel-steps overrides this default.</summary>
+    public int MaxParallelSteps { get; set; }
+
     /// <summary>
     /// Names resources that must report healthy before any scenario runs. Additive: calling it twice
     /// waits for the union.

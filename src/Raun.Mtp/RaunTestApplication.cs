@@ -12,7 +12,7 @@ namespace Raun.Mtp;
 /// <remarks>
 /// <para>
 /// This is the escape-hatch API. By default the Raun source generator emits a <c>Program.cs</c>
-/// whose <c>Main</c> calls <see cref="RunAsync(string[], Action{ITestApplicationBuilder}?, bool, IServiceProvider?, Func{ScenarioContext,Task}?, int)"/>, giving
+/// whose <c>Main</c> calls <see cref="RunAsync(string[], Action{ITestApplicationBuilder}?, bool, IServiceProvider?, Func{ScenarioContext,Task}?, int, int)"/>, giving
 /// "just add the package" UX. Setting the MSBuild property <c>&lt;RaunGenerateProgram&gt;false&lt;/RaunGenerateProgram&gt;</c>
 /// suppresses that emission so a consumer can write their own <c>Program.cs</c> and call this method
 /// directly, taking full control of the host (custom MTP extensions, builder configuration, etc.)
@@ -51,9 +51,9 @@ public static class RaunTestApplication
     /// <param name="maxParallelScenarios">
     /// The suite's default degree of scenario parallelism: how many scenarios may run at once.
     /// <c>0</c> (the default) means the processor count; <c>1</c> runs scenarios one after another.
-    /// <c>--max-parallel-scenarios &lt;n&gt;</c> overrides it per run. Steps inside a scenario stay
-    /// unbounded. Scenarios that contend for the same thing declare it with <c>[Uses&lt;T&gt;]</c>.
+    /// <c>--max-parallel-scenarios &lt;n&gt;</c> overrides it per run. The separate step limit controls concurrency within each scenario. Scenarios that contend for the same thing declare it with <c>[Uses&lt;T&gt;]</c>.
     /// </param>
+    /// <param name="maxParallelSteps">Maximum active steps per scenario; 0 means unbounded. --max-parallel-steps overrides this code default.</param>
     /// <returns>The process exit code to return from <c>Main</c>.</returns>
     public static async Task<int> RunAsync(
         string[] args,
@@ -61,9 +61,11 @@ public static class RaunTestApplication
         bool simulateTime = false,
         IServiceProvider? services = null,
         Func<ScenarioContext, Task>? preflight = null,
-        int maxParallelScenarios = 0)
+        int maxParallelScenarios = 0,
+        int maxParallelSteps = 0)
     {
         ArgumentNullException.ThrowIfNull(args);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxParallelSteps);
 
         var builder = await TestApplication.CreateBuilderAsync(args).ConfigureAwait(false);
 
@@ -93,7 +95,7 @@ public static class RaunTestApplication
                 new RaunBannerCapability(),
                 new RaunGracefulStopCapability(stopSignal)),
             (_, serviceProvider) => new RaunTestFramework(
-                serviceProvider, simulateTime, services, preflight, maxParallelScenarios, stopSignal, coverage));
+                serviceProvider, simulateTime, services, preflight, maxParallelScenarios, stopSignal, coverage, maxParallelSteps));
 
         using var app = await builder.BuildAsync().ConfigureAwait(false);
         var exitCode = await app.RunAsync().ConfigureAwait(false);

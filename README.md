@@ -338,6 +338,13 @@ Scenario scopes are disposed asynchronously after teardown, including async-only
 Resource admission waits for disposal to finish. Disposal failures surface as framework errors after
 already-running scenarios drain; they do not change an already-reported teardown result.
 Use isolated test data. Start an existing suite with `--max-parallel-scenarios 1`.
+Clamp independent steps with `--max-parallel-steps 8`. This limit applies **per scenario**, not to the
+whole run; four active scenarios with eight steps each can run up to 32 steps concurrently.
+`0` (default) leaves steps unbounded; `1` runs one step at a time within each scenario. Dependencies
+and resource-conflict rules still apply. Work started inside a step is outside this scheduler limit.
+Set the code default with `RaunTestApplication.RunAsync(args, maxParallelSteps: 8)`,
+`RunLoop(..., maxParallelSteps: 8)`, or `AspireRunOptions.MaxParallelSteps`. The CLI value overrides it.
+Rebuild previously compiled hosts when upgrading to this beta; the bootstrap/runtime APIs gained a parameter.
 Declare shared infrastructure with resource tokens:
 
 ```csharp

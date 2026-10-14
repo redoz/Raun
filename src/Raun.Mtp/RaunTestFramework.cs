@@ -55,6 +55,7 @@ public class RaunTestFramework :
     private readonly Func<ScenarioContext, Task>? _preflight;
     private readonly bool _simulateTime;
     private readonly int _maxParallelScenarios;
+    private readonly int _maxParallelSteps;
     private readonly RunStopSignal? _stopSignal;
     private readonly IRaunCoverageIntegration? _coverage;
 
@@ -97,6 +98,15 @@ public class RaunTestFramework :
         int maxParallelScenarios)
         : this(services, simulateTime, userServices, preflight) => _maxParallelScenarios = maxParallelScenarios;
 
+    /// <summary>Production ctor with separate scenario and per-scenario step limits.</summary>
+    public RaunTestFramework(IServiceProvider services, bool simulateTime, IServiceProvider? userServices,
+        Func<ScenarioContext, Task>? preflight, int maxParallelScenarios, int maxParallelSteps)
+        : this(services, simulateTime, userServices, preflight, maxParallelScenarios)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxParallelSteps);
+        _maxParallelSteps = maxParallelSteps;
+    }
+
     /// <summary>Production ctor including the platform's graceful-stop signal, so
     /// <c>--maximum-failed-tests</c> can stop the loop from admitting further scenarios.</summary>
     internal RaunTestFramework(
@@ -106,8 +116,9 @@ public class RaunTestFramework :
         Func<ScenarioContext, Task>? preflight,
         int maxParallelScenarios,
         RunStopSignal? stopSignal,
-        IRaunCoverageIntegration? coverage = null)
-        : this(services, simulateTime, userServices, preflight, maxParallelScenarios)
+        IRaunCoverageIntegration? coverage = null,
+        int maxParallelSteps = 0)
+        : this(services, simulateTime, userServices, preflight, maxParallelScenarios, maxParallelSteps)
     {
         _stopSignal = stopSignal;
         _coverage = coverage;
@@ -318,7 +329,8 @@ public class RaunTestFramework :
             maxParallelScenarios: ScenarioParallelism.Resolve(_services, _maxParallelScenarios),
             stopSignal: _stopSignal,
             cancellationGracePeriod: CancellationGrace.Resolve(_services),
-            cleanupTimeout: CleanupTimeout.Resolve(_services));
+            cleanupTimeout: CleanupTimeout.Resolve(_services),
+            maxParallelSteps: StepParallelism.Resolve(_services, _maxParallelSteps));
         await loop.RunAsync(selector, bus, cancellationToken).ConfigureAwait(false);
 
         if (bus.Failures.Count > 0)

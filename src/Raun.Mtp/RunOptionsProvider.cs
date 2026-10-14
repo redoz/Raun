@@ -11,6 +11,7 @@ namespace Raun.Mtp;
 /// </summary>
 internal sealed class RunOptionsProvider : ICommandLineOptionsProvider
 {
+    internal const string MaxParallelStepsOption = "max-parallel-steps";
     internal const string MaxParallelScenariosOption = "max-parallel-scenarios";
 
     public string Uid => "raun.mtp.run";
@@ -25,6 +26,9 @@ internal sealed class RunOptionsProvider : ICommandLineOptionsProvider
         new CommandLineOption(MaxParallelScenariosOption,
             "Maximum scenarios running at once. 0 means the processor count; 1 runs scenarios one after another. Overrides the suite's code default.",
             ArgumentArity.ExactlyOne, isHidden: false),
+        new CommandLineOption(MaxParallelStepsOption,
+            "Maximum steps running at once per scenario. 0 means unbounded; 1 runs steps one at a time within each scenario. Overrides the suite's code default.",
+            ArgumentArity.ExactlyOne, isHidden: false),
         new CommandLineOption(CancellationGrace.Option,
             "Milliseconds allowed for work to stop after cancellation before terminating the whole test host. Default: 60000. 0 means no grace.",
             ArgumentArity.ExactlyOne, isHidden: false),
@@ -36,7 +40,9 @@ internal sealed class RunOptionsProvider : ICommandLineOptionsProvider
     public Task<ValidationResult> ValidateOptionArgumentsAsync(CommandLineOption commandOption, string[] arguments)
         => commandOption.Name == MaxParallelScenariosOption && !ScenarioParallelism.TryParse(arguments, out _)
             ? ValidationResult.InvalidTask($"'--{MaxParallelScenariosOption}' requires an integer of 0 or more.")
-            : commandOption.Name == CancellationGrace.Option && !CancellationGrace.TryParse(arguments, out _)
+            : commandOption.Name == MaxParallelStepsOption && !StepParallelism.TryParse(arguments, out _)
+                ? ValidationResult.InvalidTask($"'--{MaxParallelStepsOption}' requires an integer of 0 or more.")
+                : commandOption.Name == CancellationGrace.Option && !CancellationGrace.TryParse(arguments, out _)
                 ? ValidationResult.InvalidTask($"'--{CancellationGrace.Option}' requires an integer from 0 through {int.MaxValue}.")
                 : commandOption.Name == CleanupTimeout.Option && !CleanupTimeout.TryParse(arguments, out _)
                     ? ValidationResult.InvalidTask($"'--{CleanupTimeout.Option}' requires an integer from 1 through {int.MaxValue}.")

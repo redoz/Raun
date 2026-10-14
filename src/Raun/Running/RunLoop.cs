@@ -47,12 +47,16 @@ public sealed class RunLoop
     private readonly IServiceProvider? services;
     private readonly Func<ScenarioContext, Task>? preflight;
     private readonly int maxParallelScenarios;
+    private readonly int maxParallelSteps;
     private readonly RunStopSignal? stopSignal;
     private readonly TimeSpan cancellationGracePeriod;
     private readonly TimeSpan cleanupTimeout;
 
-    /// <summary>How many scenarios may run at once. Steps inside a scenario stay unbounded.</summary>
+    /// <summary>How many scenarios may run at once.</summary>
     public int MaxParallelScenarios => maxParallelScenarios;
+
+    /// <summary>Maximum active steps per scenario; 0 means unbounded.</summary>
+    public int MaxParallelSteps => maxParallelSteps;
 
     /// <param name="scenarioSource">Supplies the registered scenarios to consider for the run.</param>
     /// <param name="runScenario">
@@ -76,8 +80,7 @@ public sealed class RunLoop
     /// </param>
     /// <param name="maxParallelScenarios">
     /// How many scenarios may run at once. <c>0</c> (the default) means <see cref="Environment.ProcessorCount"/>;
-    /// <c>1</c> runs scenarios one after another. Steps inside a scenario stay unbounded, so the
-    /// number of concurrently running steps is at most this times the widest scenario.
+    /// <c>1</c> runs scenarios one after another. The separate per-scenario step limit controls fan-out within each scenario.
     /// </param>
     /// <param name="stopSignal">
     /// Set by the host when it wants the run to wind down (under Microsoft.Testing.Platform, the
@@ -86,6 +89,7 @@ public sealed class RunLoop
     /// does when a scenario faults. <see langword="null"/> (the default) means no stop can be requested.
     /// </param>
     /// <param name="cancellationGracePeriod">Real-time cancellation grace before terminating the test host; defaults to 60 seconds. Custom runners own their own cancellation policy.</param>
+    /// <param name="maxParallelSteps">Maximum active steps per scenario; 0 means unbounded. Custom runners own their step limits.</param>
     /// <param name="cleanupTimeout">Finite positive deadline per cleanup callback; defaults to 60 seconds. Custom runners own their cleanup policy.</param>
     public RunLoop(
         Func<IEnumerable<ScenarioDefinition>> scenarioSource,
@@ -96,15 +100,18 @@ public sealed class RunLoop
         int maxParallelScenarios = 0,
         RunStopSignal? stopSignal = null,
         TimeSpan? cancellationGracePeriod = null,
-        TimeSpan? cleanupTimeout = null)
+        TimeSpan? cleanupTimeout = null,
+        int maxParallelSteps = 0)
     {
         ArgumentNullException.ThrowIfNull(scenarioSource);
         ArgumentOutOfRangeException.ThrowIfNegative(maxParallelScenarios);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxParallelSteps);
         this.scenarioSource = scenarioSource;
         this.simulateTime = simulateTime;
         this.services = services;
         this.preflight = preflight;
         this.maxParallelScenarios = maxParallelScenarios == 0 ? Environment.ProcessorCount : maxParallelScenarios;
+        this.maxParallelSteps = maxParallelSteps;
         this.runScenario = runScenario ?? DefaultRunScenario;
         this.stopSignal = stopSignal;
         this.cancellationGracePeriod = cancellationGracePeriod ?? ScenarioScheduler.DefaultCancellationGracePeriod;
@@ -519,7 +526,7 @@ public sealed class RunLoop
         IServiceProvider? scenarioServices,
         IReadOnlySet<int>? targets,
         CancellationToken cancellationToken)
-        => await new ScenarioScheduler(simulatedTime: simulateTime, cancellationGracePeriod: cancellationGracePeriod, cleanupTimeout: cleanupTimeout).RunAsync(
+        => await new ScenarioScheduler(maxParallelism: maxParallelSteps, simulatedTime: simulateTime, cancellationGracePeriod: cancellationGracePeriod, cleanupTimeout: cleanupTimeout).RunAsync(
             definition,
             services: scenarioServices,
             observer: observer,

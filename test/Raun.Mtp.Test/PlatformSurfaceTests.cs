@@ -41,6 +41,7 @@ public class PlatformSurfaceTests
         Assert.Contains("--filter-uid", result.StdOut, StringComparison.Ordinal);
         Assert.Contains("--cancellation-grace-ms", result.StdOut, StringComparison.Ordinal);
         Assert.Contains("--cleanup-timeout-ms", result.StdOut, StringComparison.Ordinal);
+        Assert.Contains("--max-parallel-steps", result.StdOut, StringComparison.Ordinal);
     }
 
     [Fact]
