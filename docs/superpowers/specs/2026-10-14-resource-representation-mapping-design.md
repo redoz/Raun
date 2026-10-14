@@ -79,12 +79,19 @@ alternates must be closed types accessible from the registration code; unsupport
 contracts produce actionable diagnostics rather than disappearing. New manifests remain separate
 from scenario-library discovery, whose existing support limits are unchanged.
 
-One immutable declaration catalog uses the existing generated registration/ScenarioRegistry boundary;
-there is no second competing runtime identity resolver. A resolver materializes declaration defaults
-before applying explicit fluent configuration and before its first identity resolution. Registration
-of the same owner/alternate pair is idempotent across library and host manifests. Two distinct owners
-claiming the same alternate type are diagnosed; a late/dynamic conflicting declaration also fails
-explicitly, never picks whichever registration happened first.
+Manifests expose immutable declaration data. Each generated ScenarioDefinition carries its assembly's
+complete imported defaults in an optional, default-empty ResourceMappings member. The scheduler
+applies those defaults to the scenario resolver before formatting, argument preparation, or Setup;
+preflight-skipped formatting uses the same defaults. Existing generated definitions remain valid.
+The existing scenario registry still registers definitions; do not add an unqualified process-global
+reverse index of DTO types that could leak mappings between independently compiled applications.
+
+A supplied resolver retains its explicit fluent configuration. Applying matching declaration defaults
+is idempotent, including repeated scenarios and library imports; explicit same-group extractors win.
+New/conflicting defaults after resolution cannot silently mutate a frozen resolver. Generated defaults
+are complete before execution, so ordinary shared-provider scenarios do not discover additional
+mappings mid-run. Two distinct owners claiming the same alternate type are diagnosed; runtime
+conflicts fail explicitly, never choose whichever registration happened first.
 
 ## Fluent custom-host escape hatch
 
