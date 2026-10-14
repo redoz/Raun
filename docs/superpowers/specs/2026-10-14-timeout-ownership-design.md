@@ -1,7 +1,7 @@
 # Timeout ownership and process termination
 
 Date: 2026-10-14
-Status: implemented and locally verified; target release v0.3.0-beta.18
+Status: implemented and locally verified; target release v0.3.0-beta.19
 Scope: staff-review finding 2. Finding 3 will reuse this policy in a separate change.
 
 ## Intent and agreed policy
@@ -75,3 +75,8 @@ process termination with a fail-closed fallback, bypassing managed shutdown hand
 Local Release build: zero warnings/errors. Whole solution: 1,379 passed, 5 skipped, 0 failed (1,384 total).
 All 73 report interaction checks pass; all four packages pack successfully. There are 31 additional
 regression cases. Finding 3 (independent teardown deadlines) remains open.
+
+Hosted beta.18 verification exposed a fixture build-configuration issue: project references outside
+Raun.slnx defaulted to Debug during a Release solution build. After cleaning the local Release fixture,
+the same missing-fixture test failure was reproduced. TimeoutHost is now explicitly in the solution;
+beta.19 supersedes the unpublished beta.18 tag with this build correction.

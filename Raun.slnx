@@ -8,6 +8,7 @@
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/Raun.Test/Raun.Test.csproj" />
+    <Project Path="test/Fixtures/TimeoutHost/TimeoutHost.csproj" />
     <Project Path="test/Raun.Coverage.Test/Raun.Coverage.Test.csproj" />
     <Project Path="test/Raun.Generator.Test/Raun.Generator.Test.csproj" />
     <Project Path="test/Raun.Mtp.Test/Raun.Mtp.Test.csproj" />
