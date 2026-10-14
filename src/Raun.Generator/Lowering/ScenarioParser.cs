@@ -2067,7 +2067,7 @@ internal sealed class ScenarioParser
         // The lowered argument bound to the parameter at `position`, or null when the call left it out.
         ExpressionSyntax? ArgumentFor(string parameterName, int position)
             => CallArguments.IndexOf(written, parameterName, position) is var i and >= 0
-                ? ResourceKeyBinding.Apply(method.Parameters[position], lowered[i].Expression.WithoutTrivia())
+                ? ResourceArgumentValue(method.Parameters[position], lowered[i].Expression.WithoutTrivia())
                 : null;
 
         // A producer's lineage target: Subject.Return is the step's own value; a parameter name is
@@ -2153,6 +2153,23 @@ internal sealed class ScenarioParser
         }
 
         return claims;
+    }
+
+    private static ExpressionSyntax ResourceArgumentValue(IParameterSymbol parameter, ExpressionSyntax value)
+    {
+        if (AttributeReader.ResourceKeyType(parameter) is not null)
+        {
+            return ResourceKeyBinding.Apply(parameter, value);
+        }
+        if (parameter.Type is { IsReferenceType: true, NullableAnnotation: NullableAnnotation.Annotated })
+        {
+            // Nullable step inputs remain nullable at invocation. A recorded resource must exist:
+            // validate that precondition before calling the resource API's notnull generic methods.
+            return BinaryExpression(SyntaxKind.CoalesceExpression, value,
+                ThrowExpression(ObjectCreationExpression(Names.Global("System", "ArgumentNullException"))
+                    .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(parameter.Name))))))));
+        }
+        return value;
     }
 
     /// <summary>The step's own return value inside the emitted lambda.</summary>

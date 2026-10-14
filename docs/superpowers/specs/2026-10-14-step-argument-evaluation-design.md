@@ -17,7 +17,7 @@ Calls containing by-reference or ref-struct inputs use a stack-bound path inside
 
 Preparation is synchronous, as supported arguments cannot await. It is measured as step execution; like synchronous operation prefixes it cannot be forcibly preempted. This patch does not attempt to solve the separately recorded noncooperative timeout policy.
 
-Preserve implicit conversions, nullable values, contextual lambdas/initializers, named evaluation order, generic calls, optional-title eligibility, constant discovery names, input claims before the call, and return-dependent claims afterward. Preserve source mapping on the argument preparation statements.
+Nullable captured reference resources are validated before generic resource recording; invocation retains the original nullable parameter contract. Preserve implicit conversions, nullable values, contextual lambdas/initializers, named evaluation order, generic calls, optional-title eligibility, constant discovery names, input claims before the call, and return-dependent claims afterward. Preserve source mapping on the argument preparation statements.
 
 ## Alternatives
 

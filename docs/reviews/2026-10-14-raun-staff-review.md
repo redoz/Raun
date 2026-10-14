@@ -189,3 +189,9 @@ Ordinary observed values are captured per execution; stack-bound arguments retai
 The staff reviewer reviewed the implementation and corrections and found no remaining source-level blocker. Final local verification: zero-warning Release solution build; 1,346 passed, 5 skipped, 0 failed; 35 new behavioral cases; all four packages packed successfully. Target release: v0.3.0-beta.14.
 
 Findings 2–6 remain open. Feature opportunities remain recommendations, not an implementation commitment.
+
+### Nullable-resource follow-up
+
+A final nullable-resource check found CS8714 in generated claims for nullable reference parameters. The generator now validates the captured reference with a null guard before calling the resource API's notnull generic methods; the step invocation keeps its nullable signature and value. Two behavioral cases prove successful recording and null rejection before the claim/body, without warning suppression or factory reevaluation.
+
+The staff reviewer cleared this follow-up. Final verification: 1,348 passed, 5 skipped, 0 failed; zero-warning Release build; 37 new behavioral cases in total. Beta.15 supersedes beta.14 for this correction.
