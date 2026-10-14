@@ -2,7 +2,7 @@
 
 Created: 2026-10-14
 Revised: 2026-10-15
-Status: revised written design approved; interface-first implementation plan awaiting review
+Status: approved and implemented; final verification and staff review in progress
 Scope: canonical identity feature opportunity. No release unless explicitly requested.
 
 ## Intent

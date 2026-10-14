@@ -215,16 +215,10 @@ public sealed record Appointment(Patient Patient, Slot Slot) : IResource<Appoint
 
 Keys contain strings (`ResourceKey` wraps a string); the patient example keeps its stable ID separate from its display name.
 
-`LabelFor` is optional. Register selectors for external types through `Context.Resources` or a DI-supplied `ResourceIdentityResolver`:
-
-```csharp
-Context.Resources.Identify<PatientDto>(patient => patient.Id);
-Context.Resources.Label<PatientDto>(patient => patient.Name);
-```
-
-Label selection uses the registered selector, then `LabelFor`, then `DisplayName:key`.
-Null or blank labels use the next option. `[DisplayName("Patient")]` names the type, not an instance.
-Raun does not call `ToString()` to choose a label. Labels never change resource identity.
+`LabelFor` is optional. Labels never change resource identity. Explicit `Label<T>` selectors take
+priority, followed by an alternate's label contract, the source type's own `LabelFor`, and finally
+`DisplayName:key`. Null or blank labels use the next option. `[DisplayName("Patient")]` names the
+resource kind. Raun does not call `ToString()` to choose a label.
 
 | Format in a title, interpolated log, or note | Text |
 | --- | --- |
@@ -237,6 +231,85 @@ Key-only references keep the identity and link, with no object snapshot. Hover o
 to inspect or copy its snapshot.
 Labels and snapshots are captured at the reference; later changes do not rewrite them.
 Use synthetic test data: Raun does not redact reports or artifacts.
+
+## Alternate resource representations
+
+A domain object, EF row, and API response can represent the same patient. Declare their keys on the
+resource owner; the external types need no changes, mapping attributes, or startup configuration:
+
+```csharp
+public sealed record Patient(string Id, string Name) :
+    IResource<Patient>,
+    IResourceAlternate<PatientRow>,
+    IResourceAlternate<PatientResponse>
+{
+    public static ResourceKey KeyFor(Patient patient) => patient.Id;
+    public static string? LabelFor(Patient patient) => patient.Name;
+
+    static ResourceKey IResourceAlternate<PatientRow>.KeyFor(PatientRow row) => row.Id;
+    static string? IResourceAlternate<PatientRow>.LabelFor(PatientRow row) => row.Name;
+    static ResourceKey IResourceAlternate<PatientResponse>.KeyFor(PatientResponse response) => response.PatientId;
+    static string? IResourceAlternate<PatientResponse>.LabelFor(PatientResponse response) => response.DisplayName;
+}
+```
+
+All three resolve to **Patient + key**. Their resource roles share conflict detection, lineage, and
+report links. `[Read, ResourceKey<Patient>] string patientId` and `Context.Resources.Load<PatientRow>(key)`
+refer to that same identity. Keys returned by each extractor must agree; key-only references already
+contain the canonical key and cannot transform it without an object. Distinct resource kinds can
+use the same key without colliding.
+
+If there is no domain object, use an empty owner with only alternate contracts:
+
+```csharp
+public sealed class PatientResource : IResourceAlternate<PatientRow>
+{
+    public static ResourceKey KeyFor(PatientRow row) => row.Id;
+    public static string? LabelFor(PatientRow row) => row.Name; // optional
+}
+```
+
+The owner is never instantiated and needs no `KeyFor(PatientResource)`. Its key-only parameters use
+`ResourceKey<PatientResource>`. A type implementing only the non-generic `IResource` marker can also
+name a key-only kind.
+
+Raun's generator discovers closed, accessible contracts, including owners in referenced libraries
+built with the Raun generator. A mapping library can contain no scenarios, and its owner can be
+internal. Conflicting owners for the same representation are compile errors. Labels use the declared
+source representation; snapshots serialize the original runtime object. A row's label method never
+receives a domain object, and later response data never rewrites earlier title or log snapshots.
+
+For a custom host, fluent mappings provide the configuration escape hatch:
+
+```csharp
+var identities = new ResourceIdentityResolver();
+identities.Identify<Patient>()
+    .With<PatientRow>(row => row.Id)
+    .With<PatientResponse>(response => response.PatientId);
+identities.Label<PatientRow>(row => row.Name);
+
+// Or a named kind without a CLR owner:
+// identities.Identify("patient").With<Patient>().With<PatientRow>(row => row.Id);
+
+await using var services = new ServiceCollection().AddSingleton(identities).BuildServiceProvider();
+return await RaunTestApplication.RunAsync(args, services: services);
+```
+
+Put this in your `Program.cs` with `<RaunGenerateProgram>false</RaunGenerateProgram>` and
+`using Microsoft.Extensions.DependencyInjection;`. In an Aspire host, register the configured resolver
+inside `aspire.Services(services => services.AddSingleton(identities))` in the `RaunAspire.RunAsync`
+configuration callback. The generated host needs neither change.
+
+`With<T>()` reuses `IResource<T>.KeyFor`; `With<T>(selector)` supplies an explicit mapped extractor.
+Matching generated defaults preserve explicit fluent extractors and label selectors. The older
+`Identify<T>(selector)` registers an unmapped selector below the type's own `IResource<T>.KeyFor`.
+It remains available through `Context.Resources`, alongside `Label<T>`.
+
+Configure groups and mapped extractors before the first successful identity resolution; they then
+freeze so stored claims and references stay consistent. Reapplying identical defaults is harmless.
+Typed groups merge, named kinds win over typed kinds, and distinct named groups cannot merge.
+Named kinds use ordinal, case-sensitive names. `ResourceIdentity.Kind` covers both forms;
+its legacy `Type` property is null for named kinds. Rebuild consumers when upgrading to this API.
 
 ## Resource roles and conflicts
 
