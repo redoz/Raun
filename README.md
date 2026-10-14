@@ -332,6 +332,9 @@ Pass `Context.CancellationToken` to asynchronous work so it can stop.
 ## Concurrent scenarios and shared capacity
 
 Scenarios run concurrently, up to the processor count by default. Each gets its own DI scope and trace.
+Scenario scopes are disposed asynchronously after teardown, including async-only scoped services.
+Resource admission waits for disposal to finish. Disposal failures surface as framework errors after
+already-running scenarios drain; they do not change an already-reported teardown result.
 Use isolated test data. Start an existing suite with `--max-parallel-scenarios 1`.
 Declare shared infrastructure with resource tokens:
 

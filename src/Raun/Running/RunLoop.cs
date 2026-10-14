@@ -338,29 +338,39 @@ public sealed class RunLoop
         using var scenarioActivity = StartScenarioActivity(definition, runContext, runId, waited: TimeSpan.Zero, waitedFor: null);
         scenarioActivity?.SetTag(RaunTelemetry.Attributes.TestSuiteRunStatus, "skipped");
 
-        using var scope = services?.GetService(typeof(IServiceScopeFactory)) is IServiceScopeFactory factory
-            ? factory.CreateScope()
-            : null;
-        var formatting = ScenarioContext.CreateMessageFormattingContext(scope?.ServiceProvider ?? services);
-        var results = new List<StepResult>(definition.Nodes.Count);
-        foreach (var node in definition.Nodes)
+        var scope = services?.GetService(typeof(IServiceScopeFactory)) is IServiceScopeFactory factory
+            ? factory.CreateAsyncScope()
+            : (AsyncServiceScope?)null;
+        try
         {
-            var titleMessage = StepNotes.FormatTitle(node, formatting);
-            var result = new StepResult
+            var formatting = ScenarioContext.CreateMessageFormattingContext(scope?.ServiceProvider ?? services);
+            var results = new List<StepResult>(definition.Nodes.Count);
+            foreach (var node in definition.Nodes)
             {
-                Node = node,
-                DisplayName = titleMessage.Text,
-                TitleMessage = titleMessage,
-                Status = StepStatus.Skipped,
-                StartedAt = default,
-                SkipReason = Preflight.FailedSkipReason,
-                NoteMessages = StepNotes.FormatMessages(node, formatting),
-            };
-            results.Add(result);
-            await bus.PublishAsync(new StepFinished(definition, result)).ConfigureAwait(false);
-        }
+                var titleMessage = StepNotes.FormatTitle(node, formatting);
+                var result = new StepResult
+                {
+                    Node = node,
+                    DisplayName = titleMessage.Text,
+                    TitleMessage = titleMessage,
+                    Status = StepStatus.Skipped,
+                    StartedAt = default,
+                    SkipReason = Preflight.FailedSkipReason,
+                    NoteMessages = StepNotes.FormatMessages(node, formatting),
+                };
+                results.Add(result);
+                await bus.PublishAsync(new StepFinished(definition, result)).ConfigureAwait(false);
+            }
 
-        await bus.PublishAsync(new ScenarioFinished(definition, results)).ConfigureAwait(false);
+            await bus.PublishAsync(new ScenarioFinished(definition, results)).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (scope is { } ownedScope)
+            {
+                await ownedScope.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     private async ValueTask<IReadOnlyList<StepResult>> RunOneAsync(
@@ -391,8 +401,8 @@ public sealed class RunLoop
         // scheduler runs teardown as the last thing inside it, and a cleanup may hold something
         // resolved from this scope.
         var scope = services?.GetService(typeof(IServiceScopeFactory)) is IServiceScopeFactory factory
-            ? factory.CreateScope()
-            : null;
+            ? factory.CreateAsyncScope()
+            : (AsyncServiceScope?)null;
 
         try
         {
@@ -414,7 +424,10 @@ public sealed class RunLoop
         }
         finally
         {
-            scope?.Dispose();
+            if (scope is { } ownedScope)
+            {
+                await ownedScope.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 
