@@ -198,4 +198,4 @@ The staff reviewer cleared this follow-up. Final verification: 1,348 passed, 5 s
 
 ## User follow-ups for later
 
-- Resource effects tables: right-align the time column and reserve a consistent fixed width for the verb in the first column, so effect rows line up across steps and scenarios. Requested 2026-10-14; deferred, not yet implemented.
+- Resource effects tables: right-align the time column and reserve a consistent fixed width for the verb in the first column, so effect rows line up across steps and scenarios. Requested and implemented 2026-10-14: fixed-width action and time columns, right-aligned time header and values.
