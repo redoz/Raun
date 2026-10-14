@@ -39,6 +39,7 @@ public class PlatformSurfaceTests
         Assert.Contains("--treenode-filter", result.StdOut, StringComparison.Ordinal);
         Assert.Contains("--maximum-failed-tests", result.StdOut, StringComparison.Ordinal);
         Assert.Contains("--filter-uid", result.StdOut, StringComparison.Ordinal);
+        Assert.Contains("--cancellation-grace-ms", result.StdOut, StringComparison.Ordinal);
     }
 
     [Fact]

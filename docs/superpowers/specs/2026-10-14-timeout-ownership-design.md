@@ -1,7 +1,7 @@
 # Timeout ownership and process termination
 
 Date: 2026-10-14
-Status: policy reviewed in chat; default grace revised to 60 seconds at the user's request; implementation not started
+Status: implemented and locally verified; target release v0.3.0-beta.18
 Scope: staff-review finding 2. Finding 3 will reuse this policy in a separate change.
 
 ## Intent and agreed policy
@@ -62,3 +62,16 @@ Use TaskCompletionSource barriers to prove ordering, with finite test-level dead
 ## Review notes
 
 The policy was selected by the user in chat. The user selected the 60-second default; the CLI name is `--cancellation-grace-ms`. Process termination intentionally sacrifices complete reports and cleanup when safe cooperative draining fails. Hard termination must be tested outside the unit-test process. Finding 3 remains open until cleanup itself has an independently bounded policy.
+
+## Implementation verification
+
+The independent scenario watchdog, immediate asynchronous token propagation, first-cause classification,
+real scope/admission retention, CLI override, and forced host termination are implemented. The final
+staff review found no remaining source blockers for finding 2. Regression evidence includes red/green
+premature-cleanup, both host/timeout orderings, step-before-scenario timeout, same-scan propagation,
+and a child whose managed ProcessExit handler blocked Environment.Exit. Production now uses forced
+process termination with a fail-closed fallback, bypassing managed shutdown handlers.
+
+Local Release build: zero warnings/errors. Whole solution: 1,379 passed, 5 skipped, 0 failed (1,384 total).
+All 73 report interaction checks pass; all four packages pack successfully. There are 31 additional
+regression cases. Finding 3 (independent teardown deadlines) remains open.

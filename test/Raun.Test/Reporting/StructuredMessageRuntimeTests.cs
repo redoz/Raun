@@ -205,6 +205,7 @@ public sealed class StructuredMessageRuntimeTests
                 await context.Resources.Create(resource);
                 context.AddAttachment("proof", "value");
                 context.OnTeardown(cleanup => { cleanup.Log($"{resource}"); return Task.CompletedTask.Note($"{resource:id}"); });
+                using var registration = context.CancellationToken.Register(() => completion.TrySetCanceled(context.CancellationToken));
                 var task = completion.Task.Note($"{resource:data}");
                 resource.Data = "changed";
                 return await task;
@@ -220,7 +221,7 @@ public sealed class StructuredMessageRuntimeTests
             ScenarioId = "timeout", DisplayName = "timeout", MethodName = "Messages.Timeout", Nodes = [node, teardown], Timeout = TimeSpan.FromMilliseconds(100),
         };
         var results = await new ScenarioScheduler().RunAsync(definition);
-        completion.SetResult(null);
+        completion.TrySetResult(null);
         Assert.Equal(1, calls);
         Assert.Equal(StepStatus.Failed, results[0].Status);
         Assert.Equal("before", results[0].TitleMessage.Text);

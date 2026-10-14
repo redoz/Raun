@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Raun\Raun.csproj" />
+    <ProjectReference Include="..\Fixtures\TimeoutHost\TimeoutHost.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <!-- Snapshot assertions, shared by the projects that take snapshots. Snapshot files of generated

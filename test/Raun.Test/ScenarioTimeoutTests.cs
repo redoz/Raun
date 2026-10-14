@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Raun.Model;
 using Raun.Scheduling;
 using Xunit;
@@ -7,8 +6,7 @@ namespace Raun.Test;
 
 /// <summary>
 /// The scenario-wide timeout from <c>[Scenario(Timeout = …)]</c>. Unlike a per-step timeout it has to
-/// survive a step body that never observes its cancellation token — the scheduler stops <em>waiting</em>
-/// for such a step rather than trusting it to stop — and it has to leave a failure behind, not a skip,
+/// retain ownership until a cancelled body stops, and leave a failure behind, not a skip,
 /// so the run reports red. Teardown still runs, because a timed-out scenario is the case where leaked
 /// resources hurt most.
 /// </summary>
@@ -59,32 +57,45 @@ public class ScenarioTimeoutTests
     }
 
     [Fact]
-    public async Task A_scenario_timeout_fails_the_running_step_without_waiting_for_it()
+    public async Task A_scenario_timeout_keeps_ownership_until_the_body_stops()
     {
-        var cleanedUp = false;
+        var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cleanup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lateCleanup = false;
         var def = Def(
-            TimeSpan.FromMilliseconds(200),
+            TimeSpan.FromMilliseconds(100),
             Node(0, async (_, ctx) =>
             {
-                ctx.OnTeardown(Cleanup.Required, () => { cleanedUp = true; return Task.CompletedTask; });
-                await Task.Delay(TimeSpan.FromSeconds(10));   // deliberately ignores ctx.CancellationToken
+                using var registration = ctx.CancellationToken.Register(() => canceled.TrySetResult());
+                ctx.OnTeardown(Cleanup.Required, () => { cleanup.TrySetResult(); return Task.CompletedTask; });
+                await release.Task;
+                ctx.OnTeardown(Cleanup.Required, () => { lateCleanup = true; return Task.CompletedTask; });
                 return null;
             }),
             Node(1, (_, _) => Task.FromResult<object?>(null), dependsOn: [0]),
             TeardownNode(2));
 
-        var started = Stopwatch.GetTimestamp();
-        var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
-        var elapsed = Stopwatch.GetElapsedTime(started);
-
-        Assert.True(elapsed < TimeSpan.FromSeconds(5), $"scenario waited {elapsed} for a step it had timed out");
+        var run = new ScenarioScheduler().RunAsync(def);
+        try
+        {
+            await canceled.Task.WaitAsync(Generous);
+            await Task.WhenAny(cleanup.Task, Task.Delay(100));
+            Assert.False(cleanup.Task.IsCompleted, "cleanup ran while the timed-out body was alive");
+            Assert.False(run.IsCompleted, "scenario released ownership while its body was alive");
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+        var results = await WithTimeout(run);
         Assert.Equal(StepStatus.Failed, results[0].Status);
         Assert.IsType<TimeoutException>(results[0].Exception);
-        Assert.Contains("timeout", results[0].Exception!.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(StepStatus.Skipped, results[1].Status);
         Assert.Equal(ScenarioScheduler.TimedOutSkipReason, results[1].SkipReason);
         Assert.Equal(StepStatus.Passed, results[2].Status);
-        Assert.True(cleanedUp, "teardown did not run after the scenario timed out");
+        Assert.True(cleanup.Task.IsCompleted);
+        Assert.True(lateCleanup, "cleanup registered during cancellation grace was lost");
     }
 
     [Fact]

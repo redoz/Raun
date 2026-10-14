@@ -317,7 +317,8 @@ public class RaunTestFramework :
             services: _userServices,
             preflight: _preflight,
             maxParallelScenarios: ScenarioParallelism.Resolve(_services, _maxParallelScenarios),
-            stopSignal: _stopSignal);
+            stopSignal: _stopSignal,
+            cancellationGracePeriod: CancellationGrace.Resolve(_services));
         await loop.RunAsync(selector, bus, cancellationToken).ConfigureAwait(false);
 
         if (bus.Failures.Count > 0)

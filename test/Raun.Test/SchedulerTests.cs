@@ -425,7 +425,7 @@ public class SchedulerTests
     public async Task Step_exceeding_its_timeout_fails_with_timeout_exception()
     {
         var def = Def(Node(0,
-            async (_, _) => { await Task.Delay(Generous); return null; },
+            async (_, ctx) => { await Task.Delay(Generous, ctx.CancellationToken); return null; },
             timeout: TimeSpan.FromMilliseconds(40)));
 
         var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));

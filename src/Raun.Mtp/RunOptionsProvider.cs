@@ -25,12 +25,17 @@ internal sealed class RunOptionsProvider : ICommandLineOptionsProvider
         new CommandLineOption(MaxParallelScenariosOption,
             "Maximum scenarios running at once. 0 means the processor count; 1 runs scenarios one after another. Overrides the suite's code default.",
             ArgumentArity.ExactlyOne, isHidden: false),
+        new CommandLineOption(CancellationGrace.Option,
+            "Milliseconds allowed for work to stop after cancellation before terminating the whole test host. Default: 60000. 0 means no grace.",
+            ArgumentArity.ExactlyOne, isHidden: false),
     ];
 
     public Task<ValidationResult> ValidateOptionArgumentsAsync(CommandLineOption commandOption, string[] arguments)
         => commandOption.Name == MaxParallelScenariosOption && !ScenarioParallelism.TryParse(arguments, out _)
             ? ValidationResult.InvalidTask($"'--{MaxParallelScenariosOption}' requires an integer of 0 or more.")
-            : ValidationResult.ValidTask;
+            : commandOption.Name == CancellationGrace.Option && !CancellationGrace.TryParse(arguments, out _)
+                ? ValidationResult.InvalidTask($"'--{CancellationGrace.Option}' requires an integer from 0 through {int.MaxValue}.")
+                : ValidationResult.ValidTask;
 
     public Task<ValidationResult> ValidateCommandLineOptionsAsync(ICommandLineOptions commandLineOptions)
         => ValidationResult.ValidTask;

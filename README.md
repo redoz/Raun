@@ -307,6 +307,17 @@ Every scenario has a `Teardown` node. Cleanup runs in reverse dependency order; 
 Required cleanup still runs after failure, cancellation, or timeout.
 
 Set limits in milliseconds: `[Scenario("booking", Timeout = 30000)]` or `[StepName("When booking", TimeoutMs = 5000)]`.
+A timeout requests cancellation and allows **60 seconds of grace** for the operation to stop. During grace,
+Raun retains its services and resource ownership and waits before cleanup. Work that stops during grace
+still reports the original timeout failure. Host cancellation uses the same grace period, with cooperative
+cancellation reported as skipped.
+
+Override grace per run with `--cancellation-grace-ms 60000` (`0` allows no grace), or pass
+`cancellationGracePeriod` to `ScenarioScheduler` / `RunLoop` when hosting the runtime directly.
+If work or its cancellation callbacks remain alive after grace, Raun **terminates the entire test-host
+process**, including other scenarios. This bypasses managed shutdown handlers: required cleanup may not
+run, external resources may remain, and HTML/TRX reports or buffered logs may be incomplete. Grace is
+measured in real time, including when step timing is simulated.
 Pass `Context.CancellationToken` to asynchronous work so it can stop.
 
 ## Concurrent scenarios and shared capacity

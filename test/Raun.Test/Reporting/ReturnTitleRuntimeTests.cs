@@ -161,7 +161,11 @@ public sealed class ReturnTitleRuntimeTests
         {
             Index = 0, StepId = "timed", Phase = "Given", OperationName = "timed", DisplayNameTemplate = "fallback", DependsOn = [],
             Timeout = scenarioTimeout ? null : TimeSpan.FromMilliseconds(100),
-            Invoke = (_, _) => pending.Task,
+            Invoke = async (_, ctx) =>
+            {
+                using var registration = ctx.CancellationToken.Register(() => pending.TrySetCanceled(ctx.CancellationToken));
+                return await pending.Task;
+            },
             FormatCompletedTitleMessage = (_, _, _) => { completed = true; return StepMessage.FromText("completed"); },
         };
         var definition = new ScenarioDefinition
@@ -170,7 +174,7 @@ public sealed class ReturnTitleRuntimeTests
             Timeout = scenarioTimeout ? TimeSpan.FromMilliseconds(100) : null,
         };
         var result = Assert.Single(await new ScenarioScheduler().RunAsync(definition));
-        pending.SetResult(null);
+        pending.TrySetResult(null);
         Assert.Equal(StepStatus.Failed, result.Status);
         Assert.IsType<TimeoutException>(result.Exception);
         Assert.Equal("fallback", result.DisplayName);

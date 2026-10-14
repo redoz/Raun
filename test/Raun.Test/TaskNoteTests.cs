@@ -68,13 +68,17 @@ public sealed class TaskNoteTests
     public async Task Scenario_timeout_keeps_runtime_notes_already_recorded()
     {
         var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var node = NoteNode(0, (_, _) => completion.Task.Note("Already recorded"));
+        var node = NoteNode(0, async (_, context) =>
+        {
+            using var registration = context.CancellationToken.Register(() => completion.TrySetCanceled(context.CancellationToken));
+            return await completion.Task.Note("Already recorded");
+        });
         var definition = new ScenarioDefinition
         {
             ScenarioId = "notes", DisplayName = "notes", MethodName = "Notes.Run", Nodes = [node], Timeout = TimeSpan.FromMilliseconds(100),
         };
         var result = Assert.Single(await new ScenarioScheduler().RunAsync(definition));
-        completion.SetResult(null);
+        completion.TrySetResult(null);
         Assert.Equal(StepStatus.Failed, result.Status);
         Assert.Equal(["Already recorded"], result.Notes);
     }
