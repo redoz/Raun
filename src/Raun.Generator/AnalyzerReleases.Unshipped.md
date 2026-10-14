@@ -27,3 +27,4 @@ RAUN020 | Raun.Usage | Error | Scenario does not fit its class
 RAUN021 | Raun.Usage | Error | Step class belongs to another world
 RAUN022 | Raun.Usage | Warning | Step class holds mutable state
 RAUN023 | Raun.Usage | Error | No step title matches the supplied arguments
+RAUN024 | Raun.Usage | Error | Resource key parameter must be a string or ResourceKey

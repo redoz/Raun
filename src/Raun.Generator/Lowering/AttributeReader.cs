@@ -107,6 +107,20 @@ internal static class AttributeReader
         return null;
     }
 
+    /// <summary>The resource type represented by an explicitly annotated key parameter.</summary>
+    public static ITypeSymbol? ResourceKeyType(IParameterSymbol parameter)
+    {
+        foreach (var attribute in parameter.GetAttributes())
+        {
+            if (attribute.AttributeClass is { Name: "ResourceKeyAttribute", Arity: 1 } type
+                && type.ContainingNamespace.ToDisplayString() == "Raun")
+            {
+                return type.TypeArguments[0];
+            }
+        }
+        return null;
+    }
+
     /// <summary>
     /// The resource role declared on <paramref name="parameter"/> (<c>[Read]/[Edited]/[Deleted]</c>),
     /// as the runtime <c>ResourceContext</c> verb name, or null when none.

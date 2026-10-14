@@ -78,10 +78,21 @@ public sealed class ResourceContext
         where T : notnull
         => Record(LifecycleVerb.Load, _resolver.Resolve(resource), resource);
 
+    /// <summary>Records a shared use of an existing resource by identity, without an instance.</summary>
+    public ValueTask Read(ResourceIdentity identity)
+        => Record(LifecycleVerb.Read, identity, data: null);
+
     /// <summary>Records a shared use of an in-scope <paramref name="resource"/>.</summary>
     public ValueTask Read<T>(T resource)
         where T : notnull
         => Record(LifecycleVerb.Read, _resolver.Resolve(resource), resource);
+
+    /// <summary>Records a durable reference to a resource by identity, plus lineage from each subject.</summary>
+    public ValueTask Reference(ResourceIdentity target, params object[] subjects)
+    {
+        RecordLineage(LifecycleVerb.Reference, target, subjects);
+        return Record(LifecycleVerb.Reference, target, data: null);
+    }
 
     /// <summary>Records the produced resource keeping a durable reference to <paramref name="resource"/> (shared),
     /// plus a lineage relation from each subject to it.</summary>
@@ -91,6 +102,13 @@ public sealed class ResourceContext
         var target = _resolver.Resolve(resource);
         RecordLineage(LifecycleVerb.Reference, target, subjects);
         return Record(LifecycleVerb.Reference, target, resource);
+    }
+
+    /// <summary>Records consuming a resource by identity, plus lineage from each subject.</summary>
+    public ValueTask Consume(ResourceIdentity target, params object[] subjects)
+    {
+        RecordLineage(LifecycleVerb.Consume, target, subjects);
+        return Record(LifecycleVerb.Consume, target, data: null);
     }
 
     /// <summary>Records consuming/using-up <paramref name="resource"/> into the produced resource (shared),
@@ -103,10 +121,18 @@ public sealed class ResourceContext
         return Record(LifecycleVerb.Consume, target, resource);
     }
 
+    /// <summary>Records a mutation of an existing resource by identity (exclusive, without an instance).</summary>
+    public ValueTask Edit(ResourceIdentity identity)
+        => Record(LifecycleVerb.Edit, identity, data: null);
+
     /// <summary>Records a mutation of an existing <paramref name="resource"/> (exclusive).</summary>
     public ValueTask Edit<T>(T resource)
         where T : notnull
         => Record(LifecycleVerb.Edit, _resolver.Resolve(resource), resource);
+
+    /// <summary>Records removing a resource by identity (exclusive, without an instance).</summary>
+    public ValueTask Delete(ResourceIdentity identity)
+        => Record(LifecycleVerb.Delete, identity, data: null);
 
     /// <summary>Records removing a <paramref name="resource"/> (exclusive).</summary>
     public ValueTask Delete<T>(T resource)
@@ -124,7 +150,8 @@ public sealed class ResourceContext
         {
             foreach (var subject in subjects)
             {
-                var subjectIdentity = _resolver.Resolve(subject.GetType(), subject);
+                var subjectIdentity = subject is ResourceIdentity identity
+                    ? identity : _resolver.Resolve(subject.GetType(), subject);
                 _lineage.Add(new ResourceLineageRelation { Subject = subjectIdentity, Target = target, Kind = kind });
             }
         }

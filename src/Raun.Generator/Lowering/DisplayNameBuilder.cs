@@ -102,6 +102,13 @@ internal static class DisplayNameBuilder
                 parameterType = NullableType(parameterType);
             }
             var boundArgument = CastExpression(parameterType, ParenthesizedExpression(argument));
+            if (path.Members.Count == 0 && AttributeReader.ResourceKeyType(path.Parameter) is not null)
+            {
+                message.Append(ResourceKeyBinding.Apply(path.Parameter, boundArgument), path.Format);
+                reservedFormat = true;
+                constant.Append('{').Append(placeholderText).Append('}');
+                continue;
+            }
             message.Append(path.Walk(boundArgument), path.Format);
             reservedFormat |= path.Format is "id" or "data";
             if (path!.Members.Count > 0)

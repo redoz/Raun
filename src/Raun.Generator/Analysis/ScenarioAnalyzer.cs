@@ -28,6 +28,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.UnhandledException,
         Descriptors.UnboundPlaceholder,
         Descriptors.MissingResourceRole,
+        Descriptors.InvalidResourceKeyParameter,
         Descriptors.InvalidLineageSubject,
         Descriptors.StepContextInCleanup,
         Descriptors.ContendedResourceKind,
@@ -426,7 +427,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     {
         var method = (MethodDeclarationSyntax)context.Node;
         if (context.SemanticModel.GetDeclaredSymbol(method) is IMethodSymbol symbol
-            && HasAttribute(symbol, "StepNameAttribute"))
+            && (HasAttribute(symbol, "StepNameAttribute") || symbol.Parameters.Any(parameter => AttributeReader.ResourceKeyType(parameter) is not null)))
         {
             AnalyzeStepName(context, symbol);
             AnalyzeStepResources(context, symbol);
@@ -566,7 +567,14 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
 
         foreach (var parameter in method.Parameters)
         {
-            if (IsResourceType(parameter.Type)
+            if (AttributeReader.ResourceKeyType(parameter) is not null
+                && parameter.Type.SpecialType != SpecialType.System_String
+                && parameter.Type.ToDisplayString(SymbolHelpers.NoGlobal) != "Raun.ResourceKey")
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Descriptors.InvalidResourceKeyParameter,
+                    parameter.Locations.FirstOrDefault(), parameter.Name, parameter.Type.ToDisplayString()));
+            }
+            if ((IsResourceType(parameter.Type) || AttributeReader.ResourceKeyType(parameter) is not null)
                 && AttributeReader.ParameterRole(parameter) is null
                 && !coveredByLineage.Contains(parameter.Name))
             {

@@ -183,6 +183,21 @@ For effects inside a step, use `await Context.Resources.Create(value)` or `Load`
 Parallel steps must not change the same resource. Raun detects conflicts at compile time where possible, and at run time by key.
 A run-time conflict fails the step; it does not wait for a lock.
 
+When a step takes a resource's key instead of the object, annotate the parameter with
+`[ResourceKey<TResource>]`. Combine it with the same access role:
+
+```csharp
+[StepName("delete {patientId}")]
+public Task Delete([Deleted, ResourceKey<Patient>] string patientId)
+    => DeletePatientById(patientId);
+```
+
+The string is the key of `Patient`, so its effects, conflicts, lineage, and title links refer to the
+same resource as a `Patient` instance with that key. Key-only references display `Patient:key` and
+carry no object snapshot. `ResourceKey` parameters are also supported. The annotation requires an
+access role (or a producer's `References`/`Consumes` declaration); other parameter types report `RAUN024`.
+Null keys fail the step before any resource claim is recorded.
+
 ## Notes, logs, and attachments
 
 Attach explanations to `Task` or `Task<T>` with `.Note("why")` or `.Note($"why {patient}")`.

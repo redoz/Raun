@@ -1926,7 +1926,7 @@ internal sealed class ScenarioParser
         // The lowered argument bound to the parameter at `position`, or null when the call left it out.
         ExpressionSyntax? ArgumentFor(string parameterName, int position)
             => CallArguments.IndexOf(written, parameterName, position) is var i and >= 0
-                ? lowered[i].Expression.WithoutTrivia()
+                ? ResourceKeyBinding.Apply(method.Parameters[position], lowered[i].Expression.WithoutTrivia())
                 : null;
 
         // A producer's lineage target: Subject.Return is the step's own value; a parameter name is

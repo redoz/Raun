@@ -156,6 +156,13 @@ internal static class Descriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor InvalidResourceKeyParameter = new(
+        "RAUN024",
+        "Resource key parameter must be a string or ResourceKey",
+        "Parameter '{0}' has [ResourceKey<TResource>] but its type is '{1}'; resource key parameters must be string or Raun.ResourceKey",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
     public static readonly DiagnosticDescriptor NoMatchingStepTitle = new(
         "RAUN023",
         "No step title matches the supplied arguments",
@@ -204,7 +211,7 @@ internal static class Descriptors
     {
         UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
-        UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle,
+        UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle, InvalidResourceKeyParameter,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,
         StepContextInCleanup, ContendedResourceKind, InertContendedResourceUse, ScenarioNotGenerated,
     }.ToDictionary(d => d.Id);
