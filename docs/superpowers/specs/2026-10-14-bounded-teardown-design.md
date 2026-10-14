@@ -1,7 +1,7 @@
 # Bounded teardown callbacks
 
 Date: 2026-10-14
-Status: approved in chat; implemented and locally verified; release pending
+Status: implemented, reviewed, and released in v0.3.0-beta.21
 Scope: staff-review finding 3. Findings 4–6 stay open.
 
 ## Approved behavior
@@ -60,3 +60,7 @@ full tests, report checks, fresh review, green hosted CI, then the next beta and
 Local verification: 1,406 passed, 5 skipped, 0 failed (1,411 total); zero-warning Release solution
 build; 73 report checks; all four packages packed. The 26 added cases cover runtime deadlines,
 CLI configuration, and child-process termination. Staff review found no material blockers.
+
+Hosted CI 38615622457 and release 38616221469 passed for implementation commit 71d1dae.
+All four beta.21 packages were published; NuGet indexing was pending at the immediate check.
+Finding 3 is checked off in the saved staff review. Findings 4–6 remain open.

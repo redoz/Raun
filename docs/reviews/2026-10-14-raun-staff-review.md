@@ -186,8 +186,8 @@ Work in finding order, one item at a time. Findings 2 and 3 need a shared lifecy
 
 - [x] **1. Evaluate arguments once.** Fixed in beta.14 and beta.15; regression coverage and reviewer clearance recorded below.
 - [x] **2. Own timed-out work until execution actually ends.** Fixed in beta.20; resolution evidence below. Record the noncooperative-work policy and alternatives in a design spec. Verify cooperative cancellation, cancellation-ignoring bodies, and late resource creation. Prove that scopes and exclusive resource ownership cannot be released while surviving work can still use them; prove the chosen policy terminates or reports surviving work explicitly. Do not equate a timeout result with a stopped task.
-- [ ] **3. Bound teardown independently.** Next item. Use the lifecycle policy from 2. Define cleanup deadlines, cancellation, and what happens to callbacks that ignore cancellation. Verify hanging and throwing callbacks, subsequent cleanup behavior, callback-specific reporting, and bounded run completion. Preserve ownership guarantees when cleanup itself survives its deadline.
-- [ ] **4. Dispose scenario scopes asynchronously.** Verify async-only scoped services on successful, failed, and cancelled scenarios. Prove disposal occurs once, after teardown and after any surviving work is handled under the agreed policy. Define and test how disposal failures are reported.
+- [x] **3. Bound teardown independently.** Fixed in beta.21; resolution evidence below. Use the lifecycle policy from 2. Define cleanup deadlines, cancellation, and what happens to callbacks that ignore cancellation. Verify hanging and throwing callbacks, subsequent cleanup behavior, callback-specific reporting, and bounded run completion. Preserve ownership guarantees when cleanup itself survives its deadline.
+- [ ] **4. Dispose scenario scopes asynchronously.** Next item. Verify async-only scoped services on successful, failed, and cancelled scenarios. Prove disposal occurs once, after teardown and after any surviving work is handled under the agreed policy. Define and test how disposal failures are reported.
 - [ ] **5. Dispatch resource keys through the interface contract.** First reproduce an explicit static `IResource<T>.KeyFor` implementation. Verify interface dispatch and matching object/typed-key identities in claims, lineage, and reports; preserve existing public implementations and fallback identity behavior.
 - [ ] **6. Decide whether coverage should be an optional integration.** This is a packaging decision, not a confirmed runtime defect. Inspect the consumer dependency graph and record alternatives, compatibility costs, and the decision. If separated, verify a consumer without coverage avoids its compiler/MSBuild dependencies and an opted-in consumer retains coverage behavior. If retained, document the rationale and mark this item resolved by decision.
 
@@ -209,7 +209,7 @@ Ordinary observed values are captured per execution; stack-bound arguments retai
 
 The staff reviewer reviewed the implementation and corrections and found no remaining source-level blocker. Final local verification: zero-warning Release solution build; 1,346 passed, 5 skipped, 0 failed; 35 new behavioral cases; all four packages packed successfully. Target release: v0.3.0-beta.14.
 
-Findings 3–6 remain open; finding 2 is resolved below. Feature opportunities remain recommendations, not an implementation commitment.
+Findings 4–6 remain open; findings 2 and 3 are resolved below. Feature opportunities remain recommendations, not an implementation commitment.
 
 ### Nullable-resource follow-up
 
@@ -231,7 +231,7 @@ The first cancellation cause remains authoritative, including overlapping host, 
 cancellation. Configure grace through ScenarioScheduler/RunLoop or `--cancellation-grace-ms`.
 
 Consequences are documented in README: forced termination can leave cleanup unrun, external resources
-behind, and reports/logs incomplete. Finding 3 remains open: teardown itself has no independent deadline.
+behind, and reports/logs incomplete. Finding 3 was open at beta.20; its independent teardown deadlines are resolved below.
 Finding 4's asynchronous scope disposal, finding 5's interface key dispatch, and finding 6's coverage
 packaging decision also remain open.
 
@@ -251,6 +251,39 @@ Commits: `2a5e627` repairs runtime ownership; `aca559e` fixes the fixture's solu
 `93772ec` proves probe entry under loaded runners and adds cancellation-before-invocation coverage.
 Beta.18 and beta.19 tags did not publish packages because their verification gates caught fixture issues;
 beta.20 is the verified release containing the fixes.
+
+## Resolution of finding 3 (2026-10-14)
+
+Released in [v0.3.0-beta.21](https://github.com/redoz/Raun/releases/tag/v0.3.0-beta.21).
+Design: [Bounded teardown callbacks](../superpowers/specs/2026-10-14-bounded-teardown-design.md).
+
+Each selected cleanup gets an independent 60-second deadline, then cancellation and the existing
+60-second grace. The callback and its cancellation handlers must actually stop before subsequent
+cleanup, scenario scope disposal, or resource admission can proceed. If either survives grace, the
+watchdog kills the entire test host. Supervision starts before synchronous callback invocation.
+The cleanup deadline is configurable through ScenarioScheduler/RunLoop or `--cleanup-timeout-ms`;
+finite positive values are required. README documents the policy and forced-termination consequences.
+
+Every callback receives a fresh immutable context/token, independent of the scenario and earlier
+cleanup cancellation. Context views share the teardown node's logs, notes, attachments, activity,
+metadata, and resource observer. Cooperative deadline expiry produces a callback-specific timeout
+and lets later required cleanup run; existing ordering, optional policies, and throwing-cleanup
+continuation are preserved. Errors identify the registering step and registration sequence.
+
+Evidence: deadline and token behavior failed before the repair. Barrier tests prove callback-handler
+draining, scope/exclusive-admission retention, captured-token stability, ambient-context identity,
+and shared rich output/resource effects. Child hosts prove async, synchronous, and cancellation-handler
+hangs terminate without starting subsequent cleanup, while cooperative expiry continues required
+cleanup and reports a failed teardown. The staff reviewer found no material blockers.
+
+Verification: zero-warning Release solution build; 1,406 passed, 5 skipped, 0 failed (1,411 total);
+26 added cases; all 73 report interaction checks passed; all four packages assembled. Hosted CI
+run 38615622457 and release run 38616221469 passed. All four beta.21 packages were pushed to NuGet
+and uploaded to the GitHub release. NuGet indexing was pending at the immediate publication check.
+Implementation commit: `71d1dae`.
+
+Findings 4–6 remain open. Finding 4 (async scenario scope disposal) is next; interface key dispatch
+and the coverage packaging decision follow separately.
 
 ## User follow-ups for later
 
