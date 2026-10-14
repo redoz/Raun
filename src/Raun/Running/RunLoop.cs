@@ -49,6 +49,7 @@ public sealed class RunLoop
     private readonly int maxParallelScenarios;
     private readonly RunStopSignal? stopSignal;
     private readonly TimeSpan cancellationGracePeriod;
+    private readonly TimeSpan cleanupTimeout;
 
     /// <summary>How many scenarios may run at once. Steps inside a scenario stay unbounded.</summary>
     public int MaxParallelScenarios => maxParallelScenarios;
@@ -85,6 +86,7 @@ public sealed class RunLoop
     /// does when a scenario faults. <see langword="null"/> (the default) means no stop can be requested.
     /// </param>
     /// <param name="cancellationGracePeriod">Real-time cancellation grace before terminating the test host; defaults to 60 seconds. Custom runners own their own cancellation policy.</param>
+    /// <param name="cleanupTimeout">Finite positive deadline per cleanup callback; defaults to 60 seconds. Custom runners own their cleanup policy.</param>
     public RunLoop(
         Func<IEnumerable<ScenarioDefinition>> scenarioSource,
         RunScenario? runScenario = null,
@@ -93,7 +95,8 @@ public sealed class RunLoop
         Func<ScenarioContext, Task>? preflight = null,
         int maxParallelScenarios = 0,
         RunStopSignal? stopSignal = null,
-        TimeSpan? cancellationGracePeriod = null)
+        TimeSpan? cancellationGracePeriod = null,
+        TimeSpan? cleanupTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(scenarioSource);
         ArgumentOutOfRangeException.ThrowIfNegative(maxParallelScenarios);
@@ -106,6 +109,8 @@ public sealed class RunLoop
         this.stopSignal = stopSignal;
         this.cancellationGracePeriod = cancellationGracePeriod ?? ScenarioScheduler.DefaultCancellationGracePeriod;
         CancellationWatchdog.ValidateGrace(this.cancellationGracePeriod);
+        this.cleanupTimeout = cleanupTimeout ?? ScenarioScheduler.DefaultCleanupTimeout;
+        ScenarioScheduler.ValidateCleanupTimeout(this.cleanupTimeout);
     }
 
     /// <summary>
@@ -501,7 +506,7 @@ public sealed class RunLoop
         IServiceProvider? scenarioServices,
         IReadOnlySet<int>? targets,
         CancellationToken cancellationToken)
-        => await new ScenarioScheduler(simulatedTime: simulateTime, cancellationGracePeriod: cancellationGracePeriod).RunAsync(
+        => await new ScenarioScheduler(simulatedTime: simulateTime, cancellationGracePeriod: cancellationGracePeriod, cleanupTimeout: cleanupTimeout).RunAsync(
             definition,
             services: scenarioServices,
             observer: observer,

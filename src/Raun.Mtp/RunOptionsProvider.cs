@@ -28,6 +28,9 @@ internal sealed class RunOptionsProvider : ICommandLineOptionsProvider
         new CommandLineOption(CancellationGrace.Option,
             "Milliseconds allowed for work to stop after cancellation before terminating the whole test host. Default: 60000. 0 means no grace.",
             ArgumentArity.ExactlyOne, isHidden: false),
+        new CommandLineOption(CleanupTimeout.Option,
+            "Milliseconds allowed for each cleanup before requesting its own cancellation. Default: 60000. Must be positive; cancellation grace applies afterward.",
+            ArgumentArity.ExactlyOne, isHidden: false),
     ];
 
     public Task<ValidationResult> ValidateOptionArgumentsAsync(CommandLineOption commandOption, string[] arguments)
@@ -35,7 +38,9 @@ internal sealed class RunOptionsProvider : ICommandLineOptionsProvider
             ? ValidationResult.InvalidTask($"'--{MaxParallelScenariosOption}' requires an integer of 0 or more.")
             : commandOption.Name == CancellationGrace.Option && !CancellationGrace.TryParse(arguments, out _)
                 ? ValidationResult.InvalidTask($"'--{CancellationGrace.Option}' requires an integer from 0 through {int.MaxValue}.")
-                : ValidationResult.ValidTask;
+                : commandOption.Name == CleanupTimeout.Option && !CleanupTimeout.TryParse(arguments, out _)
+                    ? ValidationResult.InvalidTask($"'--{CleanupTimeout.Option}' requires an integer from 1 through {int.MaxValue}.")
+                    : ValidationResult.ValidTask;
 
     public Task<ValidationResult> ValidateCommandLineOptionsAsync(ICommandLineOptions commandLineOptions)
         => ValidationResult.ValidTask;

@@ -318,7 +318,8 @@ public class RaunTestFramework :
             preflight: _preflight,
             maxParallelScenarios: ScenarioParallelism.Resolve(_services, _maxParallelScenarios),
             stopSignal: _stopSignal,
-            cancellationGracePeriod: CancellationGrace.Resolve(_services));
+            cancellationGracePeriod: CancellationGrace.Resolve(_services),
+            cleanupTimeout: CleanupTimeout.Resolve(_services));
         await loop.RunAsync(selector, bus, cancellationToken).ConfigureAwait(false);
 
         if (bus.Failures.Count > 0)

@@ -164,7 +164,7 @@ public class TeardownTests
     }
 
     [Fact]
-    public async Task The_teardown_context_is_the_teardown_node_with_the_scenario_services_and_no_cancellation()
+    public async Task The_teardown_context_has_services_and_fresh_cancellation_independent_of_the_scenario()
     {
         var services = new StubServices();
         using var cts = new CancellationTokenSource();
@@ -189,7 +189,7 @@ public class TeardownTests
         Assert.Equal("Teardown", handed.StepDisplayName);
         Assert.Same(services, handed.Services);
         Assert.False(handed.CancellationToken.IsCancellationRequested);
-        Assert.False(handed.CancellationToken.CanBeCanceled);
+        Assert.True(handed.CancellationToken.CanBeCanceled);
     }
 
     [Fact]

@@ -30,6 +30,30 @@ var node = new ScenarioNode
     Invoke = async (_, ctx) =>
     {
         Console.WriteLine("BODY");
+        if (mode.StartsWith("cleanup-", StringComparison.Ordinal))
+        {
+            ctx.OnTeardown(Cleanup.Required, () =>
+            {
+                Console.WriteLine("NEXT_CLEANUP");
+                return Task.CompletedTask;
+            });
+            ctx.OnTeardown(Cleanup.Required, async cleanup =>
+            {
+                Console.WriteLine("CLEANUP_ENTERED");
+                using var cleanupRegistration = cleanup.CancellationToken.Register(() =>
+                {
+                    Console.WriteLine("CLEANUP_CANCELED");
+                    if (mode == "cleanup-callback") Thread.Sleep(Timeout.Infinite);
+                });
+                if (mode == "cleanup-synchronous") Thread.Sleep(Timeout.Infinite);
+                if (mode is "cleanup-cooperative" or "cleanup-callback")
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cleanup.CancellationToken);
+                }
+                else await new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously).Task;
+            });
+            return null;
+        }
         using var registration = ctx.CancellationToken.Register(() =>
         {
             Console.WriteLine("CANCELED");
@@ -64,9 +88,11 @@ var definition = new ScenarioDefinition
     Timeout = mode == "scenario" ? TimeSpan.FromSeconds(mode == "slow-startup" ? 0.1 : 5) : null,
     Nodes = [node, teardown],
 };
-var results = await new ScenarioScheduler(cancellationGracePeriod: mode == "already-canceled" ? TimeSpan.Zero : TimeSpan.FromSeconds(2))
+var results = await new ScenarioScheduler(cancellationGracePeriod: mode == "already-canceled" ? TimeSpan.Zero : TimeSpan.FromSeconds(2),
+    cleanupTimeout: TimeSpan.FromSeconds(5))
     .RunAsync(definition, cancellationToken: host.Token);
 Console.WriteLine($"RESULT:{results[0].Status}");
+Console.WriteLine($"TEARDOWN:{results[1].Status}");
 // Prove completed operations cannot leave a watchdog that kills a later healthy host.
 await Task.Delay(2500);
 Console.WriteLine("COMPLETED");

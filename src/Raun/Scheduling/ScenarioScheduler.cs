@@ -16,10 +16,14 @@ public sealed class ScenarioScheduler
     /// <summary>Default real-time grace after cancellation: 60 seconds.</summary>
     public static TimeSpan DefaultCancellationGracePeriod => CancellationWatchdog.DefaultGrace;
 
+    /// <summary>Default independent deadline for each cleanup callback: 60 seconds.</summary>
+    public static TimeSpan DefaultCleanupTimeout => TimeSpan.FromSeconds(60);
+
     private readonly int _maxParallelism;
     private readonly TimeProvider _timeProvider;
     private readonly bool _simulatedTime;
     private readonly TimeSpan _cancellationGracePeriod;
+    private readonly TimeSpan _cleanupTimeout;
 
     /// <param name="maxParallelism">Maximum steps running at once; 0 (default) means unbounded.</param>
     /// <param name="timeProvider">Clock for step <see cref="StepResult.StartedAt"/> stamps and step
@@ -32,19 +36,31 @@ public sealed class ScenarioScheduler
     /// clock via <see cref="ScenarioContext.SimulateElapsed"/>. When false (the default) timing is
     /// real and byte-for-byte unchanged.</param>
     /// <param name="cancellationGracePeriod">Real time allowed after cancellation before terminating the test host; defaults to 60 seconds.</param>
+    /// <param name="cleanupTimeout">Finite positive real-time deadline per cleanup callback; defaults to 60 seconds.</param>
     public ScenarioScheduler(
         int maxParallelism = 0,
         TimeProvider? timeProvider = null,
         bool simulatedTime = false,
-        TimeSpan? cancellationGracePeriod = null)
+        TimeSpan? cancellationGracePeriod = null,
+        TimeSpan? cleanupTimeout = null)
     {
         _maxParallelism = maxParallelism;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _simulatedTime = simulatedTime;
         _cancellationGracePeriod = cancellationGracePeriod ?? CancellationWatchdog.DefaultGrace;
         CancellationWatchdog.ValidateGrace(_cancellationGracePeriod);
+        _cleanupTimeout = cleanupTimeout ?? DefaultCleanupTimeout;
+        ValidateCleanupTimeout(_cleanupTimeout);
     }
 
+
+    internal static void ValidateCleanupTimeout(TimeSpan cleanupTimeout)
+    {
+        if (cleanupTimeout <= TimeSpan.Zero || cleanupTimeout.TotalMilliseconds > int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(cleanupTimeout), cleanupTimeout, "Cleanup timeout must be positive and at most Int32.MaxValue milliseconds.");
+        }
+    }
 
     /// <summary>Skip reason recorded on steps a filtered run left out entirely.</summary>
     public const string NotSelectedSkipReason = "not selected";
@@ -532,8 +548,8 @@ public sealed class ScenarioScheduler
             // One context for the teardown node. Cleanups log and attach through it — the step that
             // registered them has long since been reported — and it is the ambient
             // ScenarioContext.Current while they run, so domain code below a cleanup attributes its
-            // lines here. Its token is None on purpose: cleanups run after cancellation so nothing
-            // leaks. It is NOT attached to the conflict ledger: teardown runs after every other node is
+            // lines here. Callback views get fresh independent deadline tokens, so cancellation of
+            // the scenario cannot suppress cleanup. It is NOT attached to the conflict ledger: teardown runs after every other node is
             // terminal, so it is ordered after all of them, and a cleanup's Delete must never be refused
             // as a conflict with the step that created the thing.
             var teardownContext = new ScenarioContext(
@@ -550,6 +566,7 @@ public sealed class ScenarioScheduler
             var stopwatch = Stopwatch.StartNew();
             List<Exception>? errors = null;
 
+            using var cleanupWatchdog = new CancellationWatchdog(_cancellationGracePeriod, CancellationToken.None);
             ScenarioContext.SetCurrent(teardownContext);
             try
             {
@@ -562,16 +579,44 @@ public sealed class ScenarioScheduler
                         continue;
                     }
 
-                    try
+#pragma warning disable CA2000 // This using owns the CTS; its nested watchdog handle drains callbacks before disposal.
+                    using (var cleanupCts = new CancellationTokenSource())
+#pragma warning restore CA2000
                     {
-                        await entry.Cleanup(teardownContext).ConfigureAwait(false);
-                        teardownContext.Log($"cleaned up: {owner}");
-                    }
-                    catch (Exception ex)
-                    {
-                        // Recorded, never rethrown here: aborting would leak everything behind it.
-                        (errors ??= []).Add(ex);
-                        teardownContext.Log($"cleanup FAILED: {owner} — {ex.Message}");
+                        var identity = $"cleanup registration #{entry.Sequence} from step '{owner}' in scenario '{definition.DisplayName}'";
+                        using var cleanupWatch = cleanupWatchdog.Watch(cleanupCts, _cleanupTimeout, identity);
+                        var callbackContext = teardownContext.WithCancellationToken(cleanupCts.Token);
+                        ScenarioContext.SetCurrent(callbackContext);
+                        try
+                        {
+                            try
+                            {
+                                await entry.Cleanup(callbackContext).ConfigureAwait(false);
+                            }
+                            finally
+                            {
+                                await cleanupWatch.CompleteAsync().ConfigureAwait(false);
+                            }
+                            if (cleanupWatch.TimedOut)
+                            {
+                                throw new TimeoutException($"{identity} exceeded its timeout of {_cleanupTimeout}.");
+                            }
+                            teardownContext.Log($"cleaned up: {owner}");
+                        }
+                        catch (Exception ex)
+                        {
+                            // Advance only after actual callback/cancellation work has stopped.
+                            Exception error = cleanupWatch.TimedOut
+                                ? new TimeoutException($"{identity} exceeded its timeout of {_cleanupTimeout}.", ex)
+                                : new InvalidOperationException($"{identity} failed: {ex.Message}", ex);
+                            (errors ??= []).Add(error);
+                            teardownContext.Log($"cleanup FAILED: {owner} [registration #{entry.Sequence}] — {error.Message}");
+                        }
+                        finally
+                        {
+                            await cleanupWatch.CompleteAsync().ConfigureAwait(false);
+                            ScenarioContext.SetCurrent(teardownContext);
+                        }
                     }
                 }
             }

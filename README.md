@@ -312,6 +312,15 @@ Raun retains its services and resource ownership and waits before cleanup. Work 
 still reports the original timeout failure. Host cancellation uses the same grace period, with cooperative
 cancellation reported as skipped.
 
+Each selected cleanup also has its own **60-second deadline**, independent of the scenario timeout.
+Its `ScenarioContext.CancellationToken` is fresh for that callback. When the deadline expires, Raun
+requests cancellation and applies the same grace period. Cleanup that stops during grace records a
+callback-specific timeout failure; later callbacks still receive fresh tokens and run in the existing
+reverse dependency/registration order. Scope disposal and resource release wait until cleanup stops.
+Override the positive callback deadline with `--cleanup-timeout-ms 60000`, or pass `cleanupTimeout`
+to `ScenarioScheduler` / `RunLoop`. A callback that survives grace terminates the host before later
+cleanup can run. These are per-callback limits, not one shared budget for the whole teardown.
+
 Override grace per run with `--cancellation-grace-ms 60000` (`0` allows no grace), or pass
 `cancellationGracePeriod` to `ScenarioScheduler` / `RunLoop` when hosting the runtime directly.
 If work or its cancellation callbacks remain alive after grace, Raun **terminates the entire test-host

@@ -67,6 +67,34 @@ public class TimeoutProcessTests
         Assert.Empty(result.Error);
     }
 
+    [Theory]
+    [InlineData("cleanup-asynchronous")]
+    [InlineData("cleanup-synchronous")]
+    [InlineData("cleanup-callback")]
+    public async Task Uncooperative_cleanup_terminates_before_subsequent_cleanup(string mode)
+    {
+        var result = await RunAsync(mode);
+        Assert.Contains("CLEANUP_ENTERED", result.Output, StringComparison.Ordinal);
+        Assert.True(result.ExitCode != 0, $"Expected hard stop after cleanup entry. Output: {result.Output}; Error: {result.Error}");
+        Assert.Contains("CLEANUP_CANCELED", result.Output, StringComparison.Ordinal);
+        Assert.Contains("cleanup registration #1", result.Error, StringComparison.Ordinal);
+        Assert.Contains("Terminating the test host", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("NEXT_CLEANUP", result.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("COMPLETED", result.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cooperative_cleanup_deadline_reports_failure_and_attempts_later_cleanup()
+    {
+        var result = await RunAsync("cleanup-cooperative");
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("TEARDOWN:Failed", result.Output, StringComparison.Ordinal);
+        Assert.Contains("CLEANUP_CANCELED", result.Output, StringComparison.Ordinal);
+        Assert.Contains("NEXT_CLEANUP", result.Output, StringComparison.Ordinal);
+        Assert.Contains("COMPLETED", result.Output, StringComparison.Ordinal);
+        Assert.Empty(result.Error);
+    }
+
     private static async Task<(int ExitCode, string Output, string Error)> RunAsync(string mode)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);

@@ -77,6 +77,28 @@ public sealed class ScenarioContext
         Resources.AttachObserver(OnResource);
     }
 
+    // A cleanup gets an immutable token view, while all output still belongs to one teardown node.
+    // Share the resource observer rather than attaching it again (which would duplicate events).
+    private ScenarioContext(ScenarioContext source, CancellationToken cancellationToken)
+    {
+        StepId = source.StepId;
+        StepDisplayName = source.StepDisplayName;
+        CancellationToken = cancellationToken;
+        Services = source.Services;
+        TimeProvider = source.TimeProvider;
+        MessageFormatting = source.MessageFormatting;
+        Resources = source.Resources;
+        Scenario = source.Scenario;
+        _scenarioStart = source._scenarioStart;
+        _activity = source._activity;
+        _notes = source._notes;
+        _logs = source._logs;
+        _attachments = source._attachments;
+    }
+
+    internal ScenarioContext WithCancellationToken(CancellationToken cancellationToken)
+        => new(this, cancellationToken);
+
     /// <summary>The step's span, or null when nothing is listening to <see cref="RaunTelemetry.Source"/>.
     /// Add your own tags to it if you like; Raun already records the step's identity, outcome, log
     /// lines, and resource events.</summary>
@@ -153,7 +175,7 @@ public sealed class ScenarioContext
         Resources.SetDisplayName(displayName);
     }
 
-    /// <summary>Cancellation for the scenario (scenario/step timeout or external cancel).</summary>
+    /// <summary>Cancellation for this invocation. Cleanup callbacks have their own independent deadline token.</summary>
     public CancellationToken CancellationToken { get; }
 
     /// <summary>Optional per-scenario service provider for DI; may be null.</summary>
