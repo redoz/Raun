@@ -47,17 +47,26 @@ internal static class TypeSyntaxFactory
     /// <summary>The fully-qualified syntax for <paramref name="type"/>.</summary>
     /// <exception cref="NotSupportedException">The type has no representable form here (pointers,
     /// function pointers); the generator reports it as RAUN000 rather than emitting nonsense.</exception>
-    public static TypeSyntax From(ITypeSymbol type)
-        => type switch
+    public static TypeSyntax From(ITypeSymbol type) => Build(type, includeNullability: false);
+
+    /// <summary>Preserves nullable annotations recursively for bound argument captures.</summary>
+    public static TypeSyntax FromAnnotated(ITypeSymbol type) => Build(type, includeNullability: true);
+
+    private static TypeSyntax Build(ITypeSymbol type, bool includeNullability)
+    {
+        var syntax = type switch
         {
-            IArrayTypeSymbol array => FromArray(array),
+            IArrayTypeSymbol array => FromArray(array, includeNullability),
             IDynamicTypeSymbol => IdentifierName("dynamic"),
             ITypeParameterSymbol parameter => IdentifierName(Name(parameter.Name)),
-            INamedTypeSymbol named => FromNamed(named),
+            INamedTypeSymbol named => FromNamed(named, includeNullability),
             _ => throw new NotSupportedException(
                 "cannot build syntax for " + type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                     + " (" + type.Kind + ")"),
         };
+        return includeNullability && type is { IsReferenceType: true, NullableAnnotation: NullableAnnotation.Annotated }
+            ? NullableType(syntax) : syntax;
+    }
 
     /// <summary>
     /// <c>a.b.c</c> for a namespace symbol — the unrooted form a using directive takes, built from the
@@ -101,7 +110,7 @@ internal static class TypeSyntaxFactory
         return name;
     }
 
-    private static TypeSyntax FromNamed(INamedTypeSymbol named)
+    private static TypeSyntax FromNamed(INamedTypeSymbol named, bool includeNullability)
     {
         if (Keywords.TryGetValue(named.SpecialType, out var keyword))
         {
@@ -112,23 +121,23 @@ internal static class TypeSyntaxFactory
         if (named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
             && named.TypeArguments.Length == 1)
         {
-            return NullableType(From(named.TypeArguments[0]));
+            return NullableType(Build(named.TypeArguments[0], includeNullability));
         }
 
         if (named.IsTupleType)
         {
-            return FromTuple(named);
+            return FromTuple(named, includeNullability);
         }
 
-        return QualifiedFor(named);
+        return QualifiedFor(named, includeNullability);
     }
 
     /// <summary>(A, B) / (A first, B second) — element names only when the source spelled them.</summary>
-    private static TupleTypeSyntax FromTuple(INamedTypeSymbol tuple)
+    private static TupleTypeSyntax FromTuple(INamedTypeSymbol tuple, bool includeNullability)
     {
         var elements = tuple.TupleElements.Select(element =>
         {
-            var declared = TupleElement(From(element.Type));
+            var declared = TupleElement(Build(element.Type, includeNullability));
             return element.IsExplicitlyNamedTupleElement
                 ? declared.WithIdentifier(Name(element.Name))
                 : declared;
@@ -138,8 +147,12 @@ internal static class TypeSyntaxFactory
     }
 
     /// <summary>T[], T[][], T[,] — every rank of a nested array collapses onto one element type.</summary>
-    private static ArrayTypeSyntax FromArray(IArrayTypeSymbol array)
+    private static ArrayTypeSyntax FromArray(IArrayTypeSymbol array, bool includeNullability)
     {
+        if (includeNullability)
+        {
+            return ArrayType(Build(array.ElementType, true)).WithRankSpecifiers(SingletonList(RankOf(array)));
+        }
         var ranks = new List<ArrayRankSpecifierSyntax> { RankOf(array) };
         var element = array.ElementType;
         while (element is IArrayTypeSymbol nested)
@@ -156,19 +169,19 @@ internal static class TypeSyntaxFactory
             Enumerable.Repeat((ExpressionSyntax)OmittedArraySizeExpression(), array.Rank)));
 
     /// <summary>global::Ns.Outer&lt;T&gt;.Inner — containing types, then the namespace chain.</summary>
-    private static NameSyntax QualifiedFor(INamedTypeSymbol named)
+    private static NameSyntax QualifiedFor(INamedTypeSymbol named, bool includeNullability)
     {
-        var simple = SimpleFor(named);
+        var simple = SimpleFor(named, includeNullability);
         return named.ContainingType is { } container
-            ? QualifiedName(QualifiedFor(container), simple)
+            ? QualifiedName(QualifiedFor(container, includeNullability), simple)
             : Rooted(named.ContainingNamespace, simple);
     }
 
-    private static SimpleNameSyntax SimpleFor(INamedTypeSymbol named)
+    private static SimpleNameSyntax SimpleFor(INamedTypeSymbol named, bool includeNullability)
         => named.TypeArguments.Length == 0
             ? IdentifierName(Name(named.Name))
             : GenericName(Name(named.Name))
-                .WithTypeArgumentList(TypeArgumentList(SeparatedList(named.TypeArguments.Select(From))));
+                .WithTypeArgumentList(TypeArgumentList(SeparatedList(named.TypeArguments.Select(argument => Build(argument, includeNullability)))));
 
     /// <summary>Prefixes <paramref name="simple"/> with <c>global::</c> and the namespace chain.</summary>
     private static NameSyntax Rooted(INamespaceSymbol? containing, SimpleNameSyntax simple)

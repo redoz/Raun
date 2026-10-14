@@ -52,15 +52,24 @@ namespace Raun.Generated
                 {
                     0
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "jane@acme.com";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ResourceDemo.ResourceGiven>().UserExists("jane@acme.com");
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ResourceDemo.ResourceGiven>().UserExists(__inputs.GetArgument<string>(0));
 #line hidden
                     await __ctx.Resources.Create(__r);
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("user ").AppendFormatted(((string)("jane@acme.com"))).AppendLiteral(" exists").Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("user ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "jane@acme.com", true)))).AppendLiteral(" exists").Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
@@ -78,11 +87,20 @@ namespace Raun.Generated
                     0,
                     1
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    global::ResourceDemo.User __arg0 = __inputs.Get<global::ResourceDemo.User>(1);
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
 #line hidden
-                    await __ctx.Resources.Edit(__inputs.Get<global::ResourceDemo.User>(1));
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ResourceDemo.ResourceWhen>().Suspend(__inputs.Get<global::ResourceDemo.User>(1));
+                    await __ctx.Resources.Edit(__inputs.GetArgument<global::ResourceDemo.User>(0));
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ResourceDemo.ResourceWhen>().Suspend(__inputs.GetArgument<global::ResourceDemo.User>(0));
 #line hidden
                     await __ctx.Resources.Edit(__r);
 #line hidden
@@ -105,11 +123,20 @@ namespace Raun.Generated
                     0,
                     2
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    global::ResourceDemo.User __arg0 = __inputs.Get<global::ResourceDemo.User>(2);
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
 #line hidden
-                    await __ctx.Resources.Read(__inputs.Get<global::ResourceDemo.User>(2));
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ResourceDemo.ResourceThen>().CannotSignIn(__inputs.Get<global::ResourceDemo.User>(2));
+                    await __ctx.Resources.Read(__inputs.GetArgument<global::ResourceDemo.User>(0));
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ResourceDemo.ResourceThen>().CannotSignIn(__inputs.GetArgument<global::ResourceDemo.User>(0));
 #line hidden
                     return (object? )null;
                 }

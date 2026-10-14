@@ -52,13 +52,22 @@ namespace Raun.Generated
                 {
                     0
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "ok";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("ok");
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("ok"))).Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "ok", true)))).Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
@@ -96,13 +105,22 @@ namespace Raun.Generated
                     "case Rejected",
                     "default"
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "no";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("no");
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("no"))).Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "no", true)))).Build()
             };
             nodes[3] = new global::Raun.Model.ScenarioNode
             {
@@ -124,13 +142,22 @@ namespace Raun.Generated
                 {
                     new global::Raun.Model.Guard(2, 0)
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "fast";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("fast");
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("fast"))).Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "fast", true)))).Build()
             };
             nodes[4] = new global::Raun.Model.ScenarioNode
             {
@@ -205,13 +232,22 @@ namespace Raun.Generated
                     "is Pending",
                     "else"
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "x";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit("x");
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeWhen>().Submit(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)("x"))).Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("submitting order ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "x", true)))).Build()
             };
             nodes[7] = new global::Raun.Model.ScenarioNode
             {
@@ -234,14 +270,23 @@ namespace Raun.Generated
                 {
                     new global::Raun.Model.Guard(6, 0)
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = ((global::OutcomeDemo.Accepted)__inputs.Get<global::OutcomeDemo.Outcome>(5)).Shipment;
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeThen>().Shipped(((global::OutcomeDemo.Accepted)__inputs.Get<global::OutcomeDemo.Outcome>(5)).Shipment);
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::OutcomeDemo.OutcomeThen>().Shipped(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "shipment " + ((string)(((global::OutcomeDemo.Accepted)__inputs.Get<global::OutcomeDemo.Outcome>(5)).Shipment)) + " scheduled",
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("shipment ").AppendFormatted(((string)(((global::OutcomeDemo.Accepted)__inputs.Get<global::OutcomeDemo.Outcome>(5)).Shipment))).AppendLiteral(" scheduled").Build()
+                FormatDisplayName = static __inputs => "shipment " + ((string)(__inputs.GetArgument<string>(0))) + " scheduled",
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("shipment ").AppendFormatted(((string)(__inputs.GetArgument<string>(0)))).AppendLiteral(" scheduled").Build()
             };
             nodes[8] = new global::Raun.Model.ScenarioNode
             {

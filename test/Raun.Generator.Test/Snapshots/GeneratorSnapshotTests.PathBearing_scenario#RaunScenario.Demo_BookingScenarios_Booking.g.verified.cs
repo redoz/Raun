@@ -52,14 +52,24 @@ namespace Raun.Generated
                 {
                     0
                 },
+                PrepareArguments = static __inputs =>
+                {
+#line (80, 29) - (80, 56) 20 "Scenario.cs"
+                    string __arg0 = "Jane";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
 #line (80, 29) - (80, 56) 20 "Scenario.cs"
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentGiven>().PatientExists("Jane");
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentGiven>().PatientExists(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("patient ").AppendFormatted(((string)("Jane"))).AppendLiteral(" exists").Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("patient ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "Jane", true)))).AppendLiteral(" exists").Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {

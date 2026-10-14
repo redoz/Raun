@@ -56,13 +56,22 @@ namespace Raun.Generated
                 {
                     0
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "Jane";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.CustomerSteps>().Exists("Jane");
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.CustomerSteps>().Exists(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("customer ").AppendFormatted(((string)("Jane"))).AppendLiteral(" exists").Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("customer ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "Jane", true)))).AppendLiteral(" exists").Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode
             {
@@ -80,14 +89,23 @@ namespace Raun.Generated
                     0,
                     1
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    global::Clinic.Customer __arg0 = __inputs.Get<global::Clinic.Customer>(1);
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ExistingAppointments>().Existing(__inputs.Get<global::Clinic.Customer>(1));
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ExistingAppointments>().Existing(__inputs.GetArgument<global::Clinic.Customer>(0));
 #line hidden
                     return (object? )__r;
                 },
-                FormatDisplayName = static __inputs => "" + ((global::Clinic.Customer)(__inputs.Get<global::Clinic.Customer>(1))) + " has an appointment",
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Customer)(__inputs.Get<global::Clinic.Customer>(1)))).AppendLiteral(" has an appointment").Build()
+                FormatDisplayName = static __inputs => "" + ((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true))) + " has an appointment",
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true)))).AppendLiteral(" has an appointment").Build()
             };
             nodes[3] = new global::Raun.Model.ScenarioNode
             {
@@ -105,13 +123,22 @@ namespace Raun.Generated
                     0,
                     2
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "notification";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.StubSteps>().Accepts("notification");
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.StubSteps>().Accepts(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )null;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the ").AppendFormatted(((string)("notification"))).AppendLiteral(" stub accepts").Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "notification", true)))).AppendLiteral(" stub accepts").Build()
             };
             nodes[4] = new global::Raun.Model.ScenarioNode
             {
@@ -129,13 +156,22 @@ namespace Raun.Generated
                     0,
                     2
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "calendar";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.StubSteps>().Accepts("calendar");
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.StubSteps>().Accepts(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )null;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the ").AppendFormatted(((string)("calendar"))).AppendLiteral(" stub accepts").Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "calendar", true)))).AppendLiteral(" stub accepts").Build()
             };
             nodes[5] = new global::Raun.Model.ScenarioNode
             {
@@ -156,14 +192,25 @@ namespace Raun.Generated
                     3,
                     4
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    global::Clinic.Customer __arg0 = __inputs.Get<global::Clinic.Customer>(1);
+                    global::Clinic.Appointment __arg1 = __inputs.Get<global::Clinic.Appointment>(2);
+#line hidden
+                    return new object? []
+                    {
+                        __arg0,
+                        __arg1
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.AppointmentActions>().Cancel(__inputs.Get<global::Clinic.Customer>(1), __inputs.Get<global::Clinic.Appointment>(2));
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.AppointmentActions>().Cancel(__inputs.GetArgument<global::Clinic.Customer>(0), __inputs.GetArgument<global::Clinic.Appointment>(1));
 #line hidden
                     return (object? )__r;
                 },
-                FormatDisplayName = static __inputs => "" + ((global::Clinic.Customer)(__inputs.Get<global::Clinic.Customer>(1))) + " cancels " + ((global::Clinic.Appointment)(__inputs.Get<global::Clinic.Appointment>(2))),
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Customer)(__inputs.Get<global::Clinic.Customer>(1)))).AppendLiteral(" cancels ").AppendFormatted(((global::Clinic.Appointment)(__inputs.Get<global::Clinic.Appointment>(2)))).Build()
+                FormatDisplayName = static __inputs => "" + ((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true))) + " cancels " + ((global::Clinic.Appointment)(__inputs.GetArgument<global::Clinic.Appointment>(1, () => __inputs.Get<global::Clinic.Appointment>(2), true))),
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true)))).AppendLiteral(" cancels ").AppendFormatted(((global::Clinic.Appointment)(__inputs.GetArgument<global::Clinic.Appointment>(1, () => __inputs.Get<global::Clinic.Appointment>(2), true)))).Build()
             };
             nodes[6] = new global::Raun.Model.ScenarioNode
             {
@@ -181,14 +228,23 @@ namespace Raun.Generated
                     0,
                     5
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    global::Clinic.Appointment __arg0 = __inputs.Get<global::Clinic.Appointment>(5);
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ClinicThen>().IsCancelled(__inputs.Get<global::Clinic.Appointment>(5));
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ClinicThen>().IsCancelled(__inputs.GetArgument<global::Clinic.Appointment>(0));
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "" + ((global::Clinic.Appointment)(__inputs.Get<global::Clinic.Appointment>(5))) + " is cancelled",
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Appointment)(__inputs.Get<global::Clinic.Appointment>(5)))).AppendLiteral(" is cancelled").Build()
+                FormatDisplayName = static __inputs => "" + ((global::Clinic.Appointment)(__inputs.GetArgument<global::Clinic.Appointment>(0, () => __inputs.Get<global::Clinic.Appointment>(5), true))) + " is cancelled",
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Appointment)(__inputs.GetArgument<global::Clinic.Appointment>(0, () => __inputs.Get<global::Clinic.Appointment>(5), true)))).AppendLiteral(" is cancelled").Build()
             };
             nodes[7] = new global::Raun.Model.ScenarioNode
             {
@@ -206,13 +262,22 @@ namespace Raun.Generated
                     0,
                     5
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "notification";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ClinicThen>().StubWasSetUp("notification");
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ClinicThen>().StubWasSetUp(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )null;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the ").AppendFormatted(((string)("notification"))).AppendLiteral(" stub was set up").Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "notification", true)))).AppendLiteral(" stub was set up").Build()
             };
             nodes[8] = new global::Raun.Model.ScenarioNode
             {
@@ -230,13 +295,22 @@ namespace Raun.Generated
                     0,
                     5
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "calendar";
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ClinicThen>().StubWasSetUp("calendar");
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ClinicThen>().StubWasSetUp(__inputs.GetArgument<string>(0));
 #line hidden
                     return (object? )null;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the ").AppendFormatted(((string)("calendar"))).AppendLiteral(" stub was set up").Build()
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "calendar", true)))).AppendLiteral(" stub was set up").Build()
             };
             nodes[9] = new global::Raun.Model.ScenarioNode
             {
@@ -257,14 +331,23 @@ namespace Raun.Generated
                     7,
                     8
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    global::Clinic.Customer __arg0 = __inputs.Get<global::Clinic.Customer>(1);
+#line hidden
+                    return new object? []
+                    {
+                        __arg0
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ClinicEventually>().CalendarIsFree(__inputs.Get<global::Clinic.Customer>(1));
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Clinic.ClinicWorld>>(0).Steps<global::Clinic.ClinicEventually>().CalendarIsFree(__inputs.GetArgument<global::Clinic.Customer>(0));
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "the calendar is free for " + ((global::Clinic.Customer)(__inputs.Get<global::Clinic.Customer>(1))),
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the calendar is free for ").AppendFormatted(((global::Clinic.Customer)(__inputs.Get<global::Clinic.Customer>(1)))).Build()
+                FormatDisplayName = static __inputs => "the calendar is free for " + ((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true))),
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the calendar is free for ").AppendFormatted(((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true)))).Build()
             };
             nodes[10] = new global::Raun.Model.ScenarioNode
             {

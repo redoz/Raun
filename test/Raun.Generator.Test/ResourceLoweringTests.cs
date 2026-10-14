@@ -158,7 +158,7 @@ public class ResourceLoweringTests
         result.AssertCompiles();
         var source = result.GeneratedSource;
 
-        var paramClaim = source.IndexOf("__ctx.Resources.Edit(__inputs.Get<global::ResourceDemo.User>(1))", StringComparison.Ordinal);
+        var paramClaim = source.IndexOf("__ctx.Resources.Edit(__inputs.GetArgument<global::ResourceDemo.User>(0))", StringComparison.Ordinal);
         var call = source.IndexOf("Steps<global::ResourceDemo.ResourceWhen>().Suspend(", StringComparison.Ordinal);
         var returnClaim = source.IndexOf("__ctx.Resources.Edit(__r)", StringComparison.Ordinal);
 

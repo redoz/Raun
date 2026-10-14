@@ -147,6 +147,7 @@ public class StepMessageTitleTests
         {
             Index = 0, DependsOn = [], StepId = "manual", Phase = "Given", OperationName = "manual",
             DisplayNameTemplate = original.DisplayNameTemplate, FormatTitleMessage = original.FormatTitleMessage,
+            PrepareArguments = original.PrepareArguments,
             Invoke = static (_, _) => Task.FromResult<object?>(null),
         };
         var definition = new ScenarioDefinition { ScenarioId = "manual", DisplayName = "manual", MethodName = "manual", Nodes = new[] { manual } };

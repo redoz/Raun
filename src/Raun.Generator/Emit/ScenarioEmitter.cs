@@ -316,6 +316,16 @@ internal static class ScenarioEmitter
                 branch.ArmLabels.Select(label => (ExpressionSyntax)Lit(label)))));
         }
 
+        if (step.PrepareArgumentsExpression is { } preparation)
+        {
+            if (preparation is SimpleLambdaExpressionSyntax { Block: { } block } capture)
+            {
+                preparation = capture.WithBlock(block.WithStatements(List(block.Statements.Select(statement =>
+                    statement.WithLeadingTrivia(statement is ReturnStatementSyntax ? HiddenTrivia() : LineMappedTrivia(step))))));
+            }
+            members.Add(Set("PrepareArguments", preparation));
+        }
+
         members.Add(Set("Invoke", step.CaseBinding is { } binding
             ? CaseInvokeLambda(binding)
             : BuildInvokeLambda(step)));
@@ -375,7 +385,8 @@ internal static class ScenarioEmitter
                 .WithExpressionBody(TaskFromResult(LiteralExpression(SyntaxKind.NullLiteralExpression)));
         }
 
-        var awaitExpr = AwaitExpression(call);
+        var stackBound = step.InlineArgumentStatements.Count > 0;
+        var awaitExpr = AwaitExpression(stackBound ? IdentifierName("__operationTask") : (ExpressionSyntax)call);
 
         StatementSyntax callStmt;
         StatementSyntax returnStmt;
@@ -413,9 +424,47 @@ internal static class ScenarioEmitter
         // names the step's own return (__r) can only follow the call. Relative order is kept within
         // each half, so the effect stream still reads parameters first, then return.
         var bodyStatements = new List<StatementSyntax>();
-        bodyStatements.AddRange(step.ResourceClaims.Where(c => !MentionsReturn(c)).Select(ResourceCallStatement));
+        bodyStatements.AddRange(step.InlineArgumentStatements.Select(statement => statement.WithLeadingTrivia(LineMappedTrivia(step))));
+        if (step.InlineTitleExpression is { } inlineTitle)
+        {
+            // Formatting remains evidence only. Values/locations were already evaluated above.
+            inlineTitle = ReplaceName(inlineTitle, "__formatting", MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName("__ctx"), IdentifierName("ArgumentTitleFormatting")));
+            var capture = ExpressionStatement(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName("__ctx"), IdentifierName("CaptureArgumentTitle")))
+                .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(inlineTitle)))));
+            bodyStatements.Add(TryStatement(Block(capture), SingletonList(CatchClause().WithBlock(Block())), null));
+        }
+        bodyStatements.AddRange(step.ResourceClaims.Where(c => !MentionsReturn(c)).Select(claim => ResourceCallStatement(claim, stackBound)));
+        var postClaims = step.ResourceClaims.Where(MentionsReturn).ToList();
+        if (stackBound)
+        {
+            // ResourceContext's input verbs synchronously record claims and return completed
+            // ValueTasks. Finish them before invoking: stack locations cannot survive an await.
+            bodyStatements.Add(LocalDeclarationStatement(VariableDeclaration(IdentifierName("var"))
+                .WithVariables(SingletonSeparatedList(VariableDeclarator("__operationTask")
+                    .WithInitializer(EqualsValueClause(call))))).WithLeadingTrivia(LineMappedTrivia(step)));
+            foreach (var declaration in step.InlineArgumentStatements.OfType<LocalDeclarationStatementSyntax>()
+                .Where(declaration => declaration.Declaration.Type is RefTypeSyntax))
+            {
+                var name = declaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!postClaims.Any(claim => ReadsName(claim.Expression, name) || claim.SubjectExpressions.Any(expression => ReadsName(expression, name))))
+                {
+                    continue;
+                }
+                var after = IdentifierName(name + "After");
+                bodyStatements.Add(LocalDeclarationStatement(VariableDeclaration(IdentifierName("var"))
+                    .WithVariables(SingletonSeparatedList(VariableDeclarator(after.Identifier)
+                        .WithInitializer(EqualsValueClause(IdentifierName(name)))))));
+                postClaims = postClaims.Select(claim => claim with
+                {
+                    Expression = ReplaceName(claim.Expression, name, after),
+                    SubjectExpressions = claim.SubjectExpressions.Select(expression => ReplaceName(expression, name, after)).ToArray(),
+                }).ToList();
+            }
+        }
         bodyStatements.Add(callStmt);
-        bodyStatements.AddRange(step.ResourceClaims.Where(MentionsReturn).Select(ResourceCallStatement));
+        bodyStatements.AddRange(postClaims.Select(claim => ResourceCallStatement(claim)));
         bodyStatements.Add(returnStmt);
 
         return InvokeLambda()
@@ -472,7 +521,7 @@ internal static class ScenarioEmitter
     /// <c>ResourceContext</c> method name; the expression is the parameter argument (in terms of
     /// <c>__inputs</c>) or <c>__r</c> for a return role.
     /// </summary>
-    private static StatementSyntax ResourceCallStatement(ResourceRoleClaim claim)
+    private static ExpressionStatementSyntax ResourceCallStatement(ResourceRoleClaim claim, bool synchronous = false)
     {
         var arguments = new List<ArgumentSyntax> { Argument(claim.Expression) };
         foreach (var subject in claim.SubjectExpressions)
@@ -490,8 +539,20 @@ internal static class ScenarioEmitter
                 IdentifierName(claim.Verb)))
             .WithArgumentList(ArgumentList(SeparatedList(arguments)));
 
-        return ExpressionStatement(AwaitExpression(call)).WithLeadingTrivia(HiddenTrivia());
+        ExpressionSyntax operation = synchronous
+            ? InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, call, IdentifierName("GetAwaiter"))),
+                IdentifierName("GetResult")))
+            : AwaitExpression(call);
+        return ExpressionStatement(operation).WithLeadingTrivia(HiddenTrivia());
     }
+
+    private static bool ReadsName(ExpressionSyntax expression, string name)
+        => expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(identifier => identifier.Identifier.ValueText == name);
+
+    private static ExpressionSyntax ReplaceName(ExpressionSyntax expression, string name, ExpressionSyntax value)
+        => expression.ReplaceNodes(expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+            .Where(identifier => identifier.Identifier.ValueText == name), (_, _) => value);
 
     private static SyntaxTriviaList HiddenTrivia()
         => TriviaList(Trivia(LineDirectiveTrivia(Token(SyntaxKind.HiddenKeyword), isActive: true)), EndOfLine("\n"));

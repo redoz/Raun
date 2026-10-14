@@ -22,7 +22,7 @@ public sealed class ResourceContext
     readonly ResourceIdentityResolver _resolver;
     readonly TimeProvider _timeProvider;
     readonly string _stepId;
-    readonly string _stepDisplayName;
+    string _stepDisplayName;
     ResourceLedger? _ledger;
     int _nodeIndex;
     Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?>? _observer;
@@ -40,6 +40,11 @@ public sealed class ResourceContext
         _stepDisplayName = stepDisplayName;
         _resolver = resolver;
         _timeProvider = timeProvider;
+    }
+
+    internal void SetDisplayName(string displayName)
+    {
+        lock (_lock) { _stepDisplayName = displayName; }
     }
 
     /// <summary>Effects recorded by this step's verbs, in first-seen order (one per identity).</summary>

@@ -120,7 +120,38 @@ public sealed class ScenarioContext
     public ScenarioInfo Scenario { get; private set; } = ScenarioInfo.Unknown;
 
     /// <summary>Formatted display name of the running step.</summary>
-    public string StepDisplayName { get; }
+    public string StepDisplayName { get; private set; }
+
+    internal StepMessage? ArgumentTitleMessage { get; private set; }
+    private Action<StepMessage>? _argumentTitleObserver;
+    internal void AttachArgumentTitleObserver(Action<StepMessage> observer) => _argumentTitleObserver = observer;
+
+    /// <summary>Invariant title formatting services for generated stack-bound argument code.</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public MessageFormattingContext ArgumentTitleFormatting
+        => new(MessageFormatting.Resolver, System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Records the frozen argument title from generated code with stack-bound inputs.
+    /// Its starting notification uses the symbolic template; terminal reporting uses this title.</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public void CaptureArgumentTitle(StepMessage title)
+    {
+        ArgumentNullException.ThrowIfNull(title);
+        ArgumentTitleMessage = title;
+        SetDisplayName(title.Text);
+        if (_activity is not null)
+        {
+            _activity.DisplayName = title.Text;
+            _activity.SetTag(RaunTelemetry.Attributes.TestCaseName, title.Text);
+        }
+        _argumentTitleObserver?.Invoke(title);
+    }
+
+    internal void SetDisplayName(string displayName)
+    {
+        StepDisplayName = displayName;
+        Resources.SetDisplayName(displayName);
+    }
 
     /// <summary>Cancellation for the scenario (scenario/step timeout or external cancel).</summary>
     public CancellationToken CancellationToken { get; }

@@ -97,6 +97,10 @@ public sealed class ScenarioNode
     /// </summary>
     public required Func<IStepInputs, ScenarioContext, Task<object?>> Invoke { get; init; }
 
+    /// <summary>Captures supplied arguments once when the node launches, before title formatting,
+    /// claims, and invocation. Never called for discovery or skipped nodes. Failures fail this step.</summary>
+    public Func<IStepInputs, object?[]>? PrepareArguments { get; init; }
+
     /// <summary>
     /// Optional runtime formatter for the display name when the template binds to runtime values
     /// (a prior step's output). When null, <see cref="DisplayNameTemplate"/> is used verbatim.

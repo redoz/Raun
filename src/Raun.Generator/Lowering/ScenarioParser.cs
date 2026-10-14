@@ -1810,7 +1810,52 @@ internal sealed class ScenarioParser
         }
 
         var written = invocation.ArgumentList.Arguments;
-        var lowered = lowering.Arguments.Select(a => a.Node).ToList();
+        var expressions = lowering.Arguments.Select(a => a.Node).ToList();
+        var declarations = new List<StatementSyntax>();
+        var captured = new List<ExpressionSyntax>();
+        var titleArguments = new List<ArgumentSyntax>();
+        var lowered = new List<ArgumentSyntax>();
+        for (var a = 0; a < expressions.Count; a++)
+        {
+            var type = _model.GetTypeInfo(written[a].Expression).ConvertedType!;
+            var inferred = ContainsAnonymousType(type);
+            var syntax = inferred ? IdentifierName("var") : TypeSyntaxFactory.FromAnnotated(type);
+            var name = IdentifierName("__arg" + a.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            declarations.Add(LocalDeclarationStatement(VariableDeclaration(syntax)
+                .WithVariables(SingletonSeparatedList(VariableDeclarator(name.Identifier)
+                    .WithInitializer(EqualsValueClause(expressions[a].Expression))))));
+            captured.Add(name);
+            SimpleNameSyntax getter = inferred ? IdentifierName("GetArgument") : GenericName(Identifier("GetArgument"))
+                .WithTypeArgumentList(TypeArgumentList(SingletonSeparatedList(syntax)));
+            var read = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName("__inputs"), getter))
+                .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(Num(a)))));
+            if (inferred)
+            {
+                // The lambda is a type witness only; captured inputs never call it, and unstarted
+                // inputs throw. This preserves anonymous generic inference without a nameable type.
+                read = read.WithArgumentList(read.ArgumentList.AddArguments(
+                    Argument(ParenthesizedLambdaExpression().WithExpressionBody(expressions[a].Expression))));
+            }
+            lowered.Add(expressions[a].WithExpression(read));
+            // Skipped titles may reuse constants or an existing producer value. Never evaluate
+            // an argument factory, projection, or user conversion to manufacture a skipped value.
+            var safeFallback = !inferred && !_model.GetConversion(written[a].Expression).IsUserDefined
+                && (_model.GetConstantValue(written[a].Expression).HasValue
+                    || written[a].Expression is IdentifierNameSyntax && lowering.Arguments[a].Reads.Count > 0
+                    || expressions[a].Expression is LiteralExpressionSyntax);
+            var titleRead = safeFallback ? read.WithArgumentList(read.ArgumentList.AddArguments(
+                Argument(ParenthesizedLambdaExpression().WithExpressionBody(expressions[a].Expression)),
+                Argument(LiteralExpression(SyntaxKind.TrueLiteralExpression)))) : read;
+            titleArguments.Add(expressions[a].WithExpression(titleRead));
+        }
+        declarations.Add(ReturnStatement(ArrayCreationExpression(
+            ArrayType(NullableType(PredefinedType(Token(SyntaxKind.ObjectKeyword))))
+                .WithRankSpecifiers(SingletonList(ArrayRankSpecifier(
+                    SingletonSeparatedList<ExpressionSyntax>(OmittedArraySizeExpression())))))
+            .WithInitializer(InitializerExpression(SyntaxKind.ArrayInitializerExpression, SeparatedList(captured)))));
+        var prepareArguments = expressions.Count == 0 ? null : SimpleLambdaExpression(Parameter(Identifier("__inputs")))
+            .WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword))).WithBlock(Block(declarations));
         var invokeCall = BuildCall(
             invocation,
             member.WithExpression(call.Receiver),
@@ -1819,7 +1864,61 @@ internal sealed class ScenarioParser
         var resourceClaims = BuildResourceClaims(written, method, resultType is not null, lowered);
         AddUses(method.GetAttributes());
 
-        var (template, formatExpr, titleExpr, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, lowered);
+        var (template, formatExpr, titleExpr, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, titleArguments, expressions);
+        var needsCapture = ReadsCapturedArguments(titleExpr)
+            || resourceClaims.Any(claim => ReadsCapturedArguments(claim.Expression)
+                || claim.SubjectExpressions.Any(ReadsCapturedArguments));
+        if (!needsCapture)
+        {
+            // With no input metadata consumers the original call already evaluates once. Keep
+            // that path, including by-reference locations and values that cannot be boxed.
+            invokeCall = BuildCall(invocation, member.WithExpression(call.Receiver), lowering.TypeArguments?.Node, expressions);
+            prepareArguments = null;
+        }
+
+        var inlineArguments = new List<StatementSyntax>();
+        ExpressionSyntax? inlineTitle = null;
+        var passingKinds = written.Select((argument, position) => PassingKind(argument, expressions[position].Expression)).ToArray();
+        if (needsCapture && (passingKinds.Any(kind => kind != RefKind.None)
+                || written.Any(argument => _model.GetTypeInfo(argument.Expression).ConvertedType?.IsRefLikeType == true)))
+        {
+            var localArguments = new List<ArgumentSyntax>();
+            for (var a = 0; a < expressions.Count; a++)
+            {
+                var type = _model.GetTypeInfo(written[a].Expression).ConvertedType!;
+                TypeSyntax syntax = ContainsAnonymousType(type) ? IdentifierName("var") : TypeSyntaxFactory.FromAnnotated(type);
+                var value = expressions[a].Expression;
+                var byReference = passingKinds[a] != RefKind.None;
+                if (written[a].RefKindKeyword.IsKind(SyntaxKind.OutKeyword)
+                    && (written[a].Expression is DeclarationExpressionSyntax
+                        || _model.GetOperation(written[a].Expression) is Microsoft.CodeAnalysis.Operations.IDiscardOperation))
+                {
+                    value = PostfixUnaryExpression(SyntaxKind.SuppressNullableWarningExpression, DefaultExpression(syntax));
+                }
+                else if (byReference)
+                {
+                    // Keep the location itself, including factory/index evaluation, exactly once.
+                    var referenceType = RefType(syntax);
+                    if (passingKinds[a] is RefKind.In or RefKind.RefReadOnlyParameter)
+                    {
+                        referenceType = referenceType.WithReadOnlyKeyword(Token(SyntaxKind.ReadOnlyKeyword));
+                    }
+                    syntax = referenceType;
+                    value = RefExpression(value);
+                }
+                var name = IdentifierName("__arg" + a.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                inlineArguments.Add(LocalDeclarationStatement(VariableDeclaration(syntax)
+                    .WithVariables(SingletonSeparatedList(VariableDeclarator(name.Identifier)
+                        .WithInitializer(EqualsValueClause(value))))));
+                localArguments.Add(expressions[a].WithExpression(name));
+            }
+            invokeCall = BuildCall(invocation, member.WithExpression(call.Receiver), lowering.TypeArguments?.Node, localArguments);
+            resourceClaims = BuildResourceClaims(written, method, resultType is not null, localArguments);
+            (template, _, inlineTitle, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, localArguments, expressions);
+            prepareArguments = null;
+            titleExpr = null;
+            formatExpr = null;
+        }
 
         var step = new ParsedStep
         {
@@ -1832,6 +1931,9 @@ internal sealed class ScenarioParser
                 ? PredefinedType(Token(SyntaxKind.ObjectKeyword))
                 : TypeSyntaxFactory.From(resultType),
             InvokeCall = invokeCall,
+            PrepareArgumentsExpression = prepareArguments,
+            InlineArgumentStatements = inlineArguments,
+            InlineTitleExpression = inlineTitle,
             DisplayNameTemplate = template,
             FormatExpression = formatExpr,
             TitleExpression = titleExpr,
@@ -1851,6 +1953,45 @@ internal sealed class ScenarioParser
         _steps.Add(step);
         return step;
     }
+
+    private RefKind PassingKind(ArgumentSyntax argument, ExpressionSyntax lowered)
+    {
+        if (argument.RefKindKeyword.IsKind(SyntaxKind.RefKeyword)) { return RefKind.Ref; }
+        if (argument.RefKindKeyword.IsKind(SyntaxKind.OutKeyword)) { return RefKind.Out; }
+        if (argument.RefKindKeyword.IsKind(SyntaxKind.InKeyword)) { return RefKind.In; }
+        if (_model.GetOperation(argument) is not Microsoft.CodeAnalysis.Operations.IArgumentOperation
+            { Parameter.RefKind: RefKind.In or RefKind.RefReadOnlyParameter })
+        {
+            return RefKind.None;
+        }
+        var info = _model.GetTypeInfo(argument.Expression);
+        if (!SymbolEqualityComparer.Default.Equals(info.Type, info.ConvertedType)) { return RefKind.None; }
+        // A re-hosted producer Get is a value temporary, even when its authored local was a location.
+        return IsAddressable(_model.GetOperation(argument.Expression)) && lowered is not CastExpressionSyntax
+            ? RefKind.In : RefKind.None;
+    }
+
+    private static bool IsAddressable(IOperation? operation) => operation switch
+    {
+        Microsoft.CodeAnalysis.Operations.IFieldReferenceOperation field => field.Field.IsStatic
+            || field.Instance?.Type?.IsValueType != true || IsAddressable(field.Instance),
+        Microsoft.CodeAnalysis.Operations.IArrayElementReferenceOperation => true,
+        Microsoft.CodeAnalysis.Operations.IPropertyReferenceOperation property => property.Property.ReturnsByRef || property.Property.ReturnsByRefReadonly,
+        Microsoft.CodeAnalysis.Operations.IInvocationOperation invocation => invocation.TargetMethod.ReturnsByRef || invocation.TargetMethod.ReturnsByRefReadonly,
+        // Producer locals are re-hosted as Get<T> return values, not assignable struct receivers.
+        _ => false,
+    };
+
+    private static bool ReadsCapturedArguments(SyntaxNode? expression)
+        => expression?.DescendantNodesAndSelf().OfType<MemberAccessExpressionSyntax>()
+            .Any(member => member.Name.Identifier.ValueText == "GetArgument") == true;
+
+    private static bool ContainsAnonymousType(ITypeSymbol type) => type switch
+    {
+        INamedTypeSymbol named => named.IsAnonymousType || named.TypeArguments.Any(ContainsAnonymousType),
+        IArrayTypeSymbol array => ContainsAnonymousType(array.ElementType),
+        _ => false,
+    };
 
     /// <summary>
     /// How a step-output local is read inside an emitted step: a scalar is
@@ -1911,7 +2052,7 @@ internal sealed class ScenarioParser
     /// <summary>
     /// Lowers the method's resource role attributes into <see cref="ResourceRoleClaim"/>s: one per
     /// role-bearing parameter (its lowered argument expression), then one for a return role when the
-    /// step yields a value (using <c>__r</c>). Claims read the SAME lowered arguments as the call, so a
+    /// step yields a value (using <c>__r</c>). Claims read the SAME captured argument values as the call, so a
     /// claim names exactly the value the step receives. Empty when the method declares no roles ⇒ the
     /// emitter inserts nothing.
     /// </summary>

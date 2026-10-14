@@ -128,8 +128,9 @@ Supported baseline today: the .NET 10 SDK 10.0.300 or later. Adding an older bas
 ## Generator ↔ runtime contract
 
 The generated code targets only data: `ScenarioDefinition` / `ScenarioNode` object initializers,
-`Guard`, `ContendedResourceUse`, `IStepInputs.Get<T>`, `ScenarioRegistry.Register`, and the
-`ResourceContext` verbs by name. The generator and the runtime travel in one package, so a single
+`Guard`, `ContendedResourceUse`, `IStepInputs.Get<T>` / `GetArgument<T>`, `ScenarioRegistry.Register`, and the
+`ResourceContext` verbs by name. Argument-aware nodes also use optional `PrepareArguments` and
+`ScenarioContext` title-capture helpers for stack-bound arguments. The generator and the runtime travel in one package, so a single
 project never sees skew between them. A scenario *library* does: its generated code is compiled
 against the `Raun` it referenced, and an application that consumes the library may resolve a newer
 `Raun`. Older generated code against a newer runtime must therefore keep working. Rules:

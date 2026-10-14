@@ -67,6 +67,7 @@ public sealed class ScenarioScheduler
         CancellationToken cancellationToken = default)
     {
         definition.Validate();
+        observer = observer is null ? null : new SerializedObserver(observer);
 
         var nodes = definition.Nodes;
         var count = nodes.Count;
@@ -319,10 +320,12 @@ public sealed class ScenarioScheduler
                     {
                         pending.Remove(i);
                         status[i] = StepStatus.Running;
-                        var titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs);
+                        var titleMessage = node.PrepareArguments is null
+                            ? StepNotes.FormatTitle(node, messageFormatting, inputs)
+                            : StepMessage.FromText(node.DisplayNameTemplate);
                         titleMessages[i] = titleMessage;
                         var displayName = titleMessage.Text;
-                        if (observer is not null)
+                        if (observer is not null && node.PrepareArguments is null)
                         {
                             await observer.OnStepStartingAsync(
                                 new StepContext { Node = node, DisplayName = displayName })
@@ -342,7 +345,7 @@ public sealed class ScenarioScheduler
                         }
 
                         running[RunNodeAsync(
-                            definition, node, inputs, services, titleMessage, messageFormatting, scenarioStart, startOffset, teardownLog, ledger, scenarioStartRef, stepContexts, scenarioToken)] = i;
+                            definition, node, inputs, services, titleMessage, messageFormatting, scenarioStart, startOffset, teardownLog, ledger, scenarioStartRef, stepContexts, observer, titleMessages, scenarioToken)] = i;
                         progressed = true;
                     }
                 }
@@ -886,6 +889,8 @@ public sealed class ScenarioScheduler
         ResourceLedger ledger,
         ScenarioStart scenarioStartRef,
         ScenarioContext?[]? stepContexts,
+        IStepObserver? observer,
+        StepMessage?[] titleMessages,
         CancellationToken scenarioToken)
     {
         // In simulated mode each step runs on its own clock seeded at base + start offset, so the
@@ -912,6 +917,7 @@ public sealed class ScenarioScheduler
             context.AddNote(note);
         }
 
+        context.AttachArgumentTitleObserver(title => titleMessages[node.Index] = title);
         context.AttachScenario(definition.Info);
         context.AttachTeardown(teardownLog, node.Index);
         context.AttachLedger(ledger, node.Index);
@@ -930,6 +936,37 @@ public sealed class ScenarioScheduler
 
         try
         {
+            Exception? preparationFailure = null;
+            if (node.PrepareArguments is { } prepare)
+            {
+                try
+                {
+                    scenarioToken.ThrowIfCancellationRequested();
+                    inputs = new PreparedInputs(inputs, prepare(inputs));
+                    titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs);
+                    titleMessages[node.Index] = titleMessage;
+                    displayName = titleMessage.Text;
+                    context.SetDisplayName(displayName);
+                    if (activity is not null)
+                    {
+                        activity.DisplayName = displayName;
+                        activity.SetTag(RaunTelemetry.Attributes.TestCaseName, displayName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    preparationFailure = ex;
+                }
+            }
+            if (observer is not null && node.PrepareArguments is not null)
+            {
+                await observer.OnStepStartingAsync(new StepContext { Node = node, DisplayName = displayName })
+                    .ConfigureAwait(false);
+            }
+            if (preparationFailure is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(preparationFailure);
+            }
             object? output;
             if (node.Timeout is { } timeout)
             {
@@ -962,6 +999,7 @@ public sealed class ScenarioScheduler
 
             stopwatch.Stop();
             activity?.SetTag(RaunTelemetry.Attributes.TestCaseResultStatus, "pass");
+            titleMessage = context.ArgumentTitleMessage ?? titleMessage;
             var completedTitle = StepNotes.FormatCompletedTitle(node, titleMessage, output, messageFormatting);
             return new NodeOutcome(
                 new StepResult
@@ -1006,8 +1044,8 @@ public sealed class ScenarioScheduler
                 new StepResult
                 {
                     Node = node,
-                    DisplayName = displayName,
-                    TitleMessage = titleMessage,
+                    DisplayName = context.ArgumentTitleMessage?.Text ?? displayName,
+                    TitleMessage = context.ArgumentTitleMessage ?? titleMessage,
                     Status = statusValue,
                     StartedAt = startedAt,
                     Duration = Elapsed(),
@@ -1094,6 +1132,41 @@ public sealed class ScenarioScheduler
     }
 
     private readonly record struct NodeOutcome(StepResult Result, object? Output);
+
+    // Prepared nodes can yield during starting callbacks. Serialize starts and finishes together,
+    // preserving IStepObserver's contract without holding any scenario-global execution lock.
+    private sealed class SerializedObserver(IStepObserver inner) : IStepObserver
+    {
+        private readonly object _gate = new();
+        private Task _last = Task.CompletedTask;
+        public Task OnStepStartingAsync(StepContext context) => DeliverAsync(() => inner.OnStepStartingAsync(context));
+        public Task OnStepFinishedAsync(StepResult result) => DeliverAsync(() => inner.OnStepFinishedAsync(result));
+        private async Task DeliverAsync(Func<Task> deliver)
+        {
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task previous;
+            lock (_gate)
+            {
+                previous = _last;
+                _last = release.Task;
+            }
+            try
+            {
+                await previous.ConfigureAwait(false);
+                await deliver().ConfigureAwait(false);
+            }
+            finally
+            {
+                release.SetResult();
+            }
+        }
+    }
+
+    private sealed class PreparedInputs(IStepInputs producers, object?[] arguments) : IStepInputs
+    {
+        public T Get<T>(int producerIndex) => producers.Get<T>(producerIndex);
+        public T GetArgument<T>(int argumentIndex, Func<T>? unavailable = null, bool allowUnavailable = false) => (T)arguments[argumentIndex]!;
+    }
 
     /// <summary>
     /// The producer outputs a step's body reads. A slot is readable only once its node has passed;

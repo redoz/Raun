@@ -76,13 +76,24 @@ namespace Raun.Generated
                     0,
                     1
                 },
+                PrepareArguments = static __inputs =>
+                {
+                    string __arg0 = "fallback";
+                    global::ReturnTitles.Seed __arg1 = __inputs.Get<global::ReturnTitles.Seed>(1);
+#line hidden
+                    return new object? []
+                    {
+                        __arg0,
+                        __arg1
+                    };
+                },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ReturnTitles.Steps>().Produce(name: "fallback", input: __inputs.Get<global::ReturnTitles.Seed>(1));
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ReturnTitles.Steps>().Produce(name: __inputs.GetArgument<string>(0), input: __inputs.GetArgument<global::ReturnTitles.Seed>(1));
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("Input ").AppendFormatted(((global::ReturnTitles.Seed)(__inputs.Get<global::ReturnTitles.Seed>(1))), format: "id").AppendLiteral("; output ").AppendFormatted(((string)("fallback"))).AppendLiteral("; again ").AppendFormatted(((string)("fallback"))).Build(),
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("Input ").AppendFormatted(((global::ReturnTitles.Seed)(__inputs.GetArgument<global::ReturnTitles.Seed>(1, () => __inputs.Get<global::ReturnTitles.Seed>(1), true))), format: "id").AppendLiteral("; output ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "fallback", true)))).AppendLiteral("; again ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "fallback", true)))).Build(),
                 FormatCompletedTitleMessage = static (__title, __output, __formatting) =>
                 {
                     if (__output is null || __title.Parts.Count != 6)

@@ -242,6 +242,9 @@ internal sealed record ParsedStep
     private readonly EquatableArray<ResourceRoleClaim> _resourceClaims;
     private readonly Syn<TypeSyntax> _resultType = new(PredefinedType(Token(SyntaxKind.ObjectKeyword)));
     private readonly Syn<InvocationExpressionSyntax> _invokeCall;
+    private readonly Syn<ExpressionSyntax> _prepareArguments;
+    private readonly Syn<ExpressionSyntax> _inlineTitle;
+    private readonly EquatableArray<Syn<StatementSyntax>> _inlineArguments;
     private readonly Syn<ExpressionSyntax> _formatExpression;
     private readonly Syn<ExpressionSyntax> _titleExpression;
     private readonly Syn<ExpressionSyntax> _completedTitleExpression;
@@ -276,6 +279,26 @@ internal sealed record ParsedStep
     {
         get => _invokeCall.Node;
         init => _invokeCall = value;
+    }
+
+    /// <summary>Captures bound argument values once, in authored order, when this step launches.</summary>
+    public ExpressionSyntax? PrepareArgumentsExpression
+    {
+        get => _prepareArguments.Node;
+        init => _prepareArguments = value;
+    }
+
+    /// <summary>Stack-bound arguments captured inside Invoke, before its first await.</summary>
+    public IReadOnlyList<StatementSyntax> InlineArgumentStatements
+    {
+        get => new SynList<StatementSyntax>(_inlineArguments);
+        init => _inlineArguments = SynList<StatementSyntax>.Wrap(value);
+    }
+
+    public ExpressionSyntax? InlineTitleExpression
+    {
+        get => _inlineTitle.Node;
+        init => _inlineTitle = value;
     }
 
     /// <summary>Display name with constant placeholders already substituted.</summary>

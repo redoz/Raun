@@ -35,7 +35,8 @@ internal static class DisplayNameBuilder
         SemanticModel model,
         IMethodSymbol method,
         SeparatedSyntaxList<ArgumentSyntax> written,
-        IReadOnlyList<ArgumentSyntax> lowered)
+        IReadOnlyList<ArgumentSyntax> lowered,
+        IReadOnlyList<ArgumentSyntax>? originalLowered = null)
     {
         var template = StepTemplateSelector.Select(method, written) ?? method.Name;
         var tokens = TemplateTokenizer.Tokenize(template);
@@ -94,13 +95,7 @@ internal static class DisplayNameBuilder
             var argument = defaultParameter is null ? lowered[index].Expression.WithoutTrivia() : DefaultArgument(defaultParameter);
             // Bind the value as the called method does before accessing members or inferring the
             // formatter's generic type. The producer may return a more concrete type than this parameter.
-            var parameterType = TypeSyntaxFactory.From(path!.Parameter!.Type);
-            // This cast must retain the called parameter's nullability: an explicitly supplied
-            // null is a valid title value for a nullable parameter.
-            if (path.Parameter.Type is { IsReferenceType: true, NullableAnnotation: NullableAnnotation.Annotated })
-            {
-                parameterType = NullableType(parameterType);
-            }
+            var parameterType = TypeSyntaxFactory.FromAnnotated(path!.Parameter!.Type);
             var boundArgument = CastExpression(parameterType, ParenthesizedExpression(argument));
             if (path.Members.Count == 0 && AttributeReader.ResourceKeyType(path.Parameter) is not null)
             {
@@ -131,7 +126,7 @@ internal static class DisplayNameBuilder
                 constant.Append(formatted ?? "");
                 format.Append(formatted ?? "");
             }
-            else if (path.Format is null && TryFoldLiterals(argument, out folded))
+            else if (path.Format is null && TryFoldLiterals(defaultParameter is null ? (originalLowered ?? lowered)[index].Expression : argument, out folded))
             {
                 constant.Append(folded!);
                 format.Append(folded!);
