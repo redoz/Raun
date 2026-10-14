@@ -181,6 +181,14 @@
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )"
         }
       },
+      "raun.mtp": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
+          "Microsoft.Testing.Platform": "[2.5.1, )",
+          "Raun": "[1.0.0, )"
+        }
+      },
       "Microsoft.CodeAnalysis.CSharp": {
         "type": "CentralTransitive",
         "requested": "[5.9.0, )",
@@ -214,6 +222,12 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12"
         }
+      },
+      "Microsoft.Testing.Platform": {
+        "type": "CentralTransitive",
+        "requested": "[2.5.1, )",
+        "resolved": "2.5.1",
+        "contentHash": "FAMaFFWnULW+hDHMb40Qzhcgz9cAU2/EtgRCBNX/DdQoKo0sPG2EiY+w7bQdl/BgHnf/DbpXLbf5Xy0o15M8NA=="
       }
     }
   }

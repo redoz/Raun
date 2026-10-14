@@ -21,11 +21,11 @@
          exclude="Build,Analyzers", and a consumer of Raun.Mtp would get neither Raun's generator
          nor its props. -->
     <ProjectReference Include="..\Raun\Raun.csproj" PrivateAssets="none" />
-    <ProjectReference Include="../Raun.Coverage/Raun.Coverage.csproj" PrivateAssets="none" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Raun.Mtp.Test" />
+    <InternalsVisibleTo Include="Raun.Coverage" />
   </ItemGroup>
 
   <ItemGroup>

@@ -272,6 +272,15 @@
           "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.9.0, )",
           "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.9.0, )",
           "Microsoft.Extensions.FileSystemGlobbing": "[10.0.12, )",
+          "Raun": "[1.0.0, )",
+          "Raun.Mtp": "[1.0.0, )"
+        }
+      },
+      "raun.mtp": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
+          "Microsoft.Testing.Platform": "[2.5.1, )",
           "Raun": "[1.0.0, )"
         }
       },

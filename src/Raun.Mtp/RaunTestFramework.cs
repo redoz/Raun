@@ -15,7 +15,6 @@ using Microsoft.Testing.Platform.Requests;
 using Microsoft.Testing.Platform.Services;
 using Microsoft.Testing.Platform.TestHost;
 using Raun.Model;
-using Raun.Mtp.Coverage;
 using Raun.Reporting;
 using Raun.Reporting.Html;
 using Raun.Running;
@@ -57,7 +56,7 @@ public class RaunTestFramework :
     private readonly bool _simulateTime;
     private readonly int _maxParallelScenarios;
     private readonly RunStopSignal? _stopSignal;
-    private readonly CoverageSessionCoordinator? _coverage;
+    private readonly IRaunCoverageIntegration? _coverage;
 
     /// <summary>Parameterless ctor for tests and the default registration path.</summary>
     public RaunTestFramework() { }
@@ -107,7 +106,7 @@ public class RaunTestFramework :
         Func<ScenarioContext, Task>? preflight,
         int maxParallelScenarios,
         RunStopSignal? stopSignal,
-        CoverageSessionCoordinator? coverage = null)
+        IRaunCoverageIntegration? coverage = null)
         : this(services, simulateTime, userServices, preflight, maxParallelScenarios)
     {
         _stopSignal = stopSignal;

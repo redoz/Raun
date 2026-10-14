@@ -2,9 +2,6 @@ using Microsoft.Testing.Platform.Builder;
 using Microsoft.Testing.Platform.Capabilities.TestFramework;
 using Microsoft.Testing.Platform.Helpers;
 using Raun.Running;
-using Raun.Coverage;
-using Raun.Reporting.Coverage;
-using Raun.Mtp.Coverage;
 using Microsoft.Testing.Platform.Services;
 
 namespace Raun.Mtp;
@@ -72,32 +69,7 @@ public static class RaunTestApplication
 
         configure?.Invoke(builder);
 
-        var invocationDirectory = Directory.GetCurrentDirectory();
-        var factories = CoverageRegistration.For(builder).Factories.ToArray();
-        var sourceConfiguration = new CoverageSourceConfiguration();
-        using var coverage = new CoverageSessionCoordinator((file, token) => sourceConfiguration.Error is { } error
-            ? Task.FromResult(new ReportCoverage { Status = "unavailable", Diagnostics = [error] })
-            : ClassifiedCoverageAnalyzer.AnalyzeAsync(file.FullName, invocationDirectory, sourceConfiguration.Scope, factories, token));
-        builder.TestHost.AddDataConsumer(services =>
-        {
-            var options = services.GetCommandLineOptions();
-            var enabled = options.IsOptionSet("report-html") && (options.IsOptionSet("coverage") || options.IsOptionSet("coverlet"));
-            if (enabled) { sourceConfiguration.Initialize(services, invocationDirectory); }
-            return new CoverageArtifactConsumer(coverage, enabled);
-        });
-
-        CoverletReportEnricher? coverletReport = null;
-        builder.TestHostControllers.AddProcessLifetimeHandler(services =>
-        {
-            var options = services.GetCommandLineOptions();
-            var reportPath = options.IsOptionSet("coverlet") ? HtmlReport.HtmlReportPath.Resolve(services) : null;
-            if (reportPath is not null) { sourceConfiguration.Initialize(services, invocationDirectory); }
-            return coverletReport = new CoverletReportEnricher(
-                () => (services.GetService(typeof(ITestCoverageResult)) as ITestCoverageResult)?.Reports ?? [], reportPath,
-                (file, token) => sourceConfiguration.Error is { } error
-                    ? Task.FromResult(new ReportCoverage { Status = "unavailable", Diagnostics = [error] })
-                    : ClassifiedCoverageAnalyzer.AnalyzeAsync(file.FullName, invocationDirectory, sourceConfiguration.Scope, factories, token));
-        });
+        using var coverage = CoverageIntegrationExtensions.Create(builder);
 
         builder.CommandLine.AddProvider(() => new HtmlReport.HtmlReportOptionsProvider());
         builder.CommandLine.AddProvider(() => new RunOptionsProvider());
@@ -125,8 +97,7 @@ public static class RaunTestApplication
 
         using var app = await builder.BuildAsync().ConfigureAwait(false);
         var exitCode = await app.RunAsync().ConfigureAwait(false);
-        if (coverletReport is not null) { await coverletReport.EnrichAsync().ConfigureAwait(false); }
-        await coverage.DrainAsync().ConfigureAwait(false);
+        if (coverage is not null) { await coverage.CompleteAsync().ConfigureAwait(false); }
         return exitCode;
     }
 }

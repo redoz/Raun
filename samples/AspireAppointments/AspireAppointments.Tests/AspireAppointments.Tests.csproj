@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Raun.Aspire\Raun.Aspire.csproj" />
+    <ProjectReference Include="../../../src/Raun.Coverage/Raun.Coverage.csproj" PrivateAssets="none" />
     <ProjectReference Include="..\..\..\src\Raun.Generator\Raun.Generator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <!-- Gives DistributedApplicationTestingBuilder the generated Projects.* type for the AppHost. -->

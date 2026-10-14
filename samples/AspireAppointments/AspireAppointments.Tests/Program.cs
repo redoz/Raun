@@ -8,6 +8,7 @@ using OpenTelemetry;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Raun;
+using Raun.Mtp;
 
 // The entry point is real, readable code — no generated Main, nothing hidden. This is where the
 // AppHost is described, where you say what must be healthy before scenarios run, where the suite's
@@ -34,6 +35,7 @@ return await RaunAspire.RunAsync<Projects.AspireAppointments_AppHost>(args, aspi
     // inside the run as the "Preflight" node, so both are timed and reported.
     aspire.ConfigureTestApplication(b =>
     {
+        b.UseClassifiedCoverage();
         b.AddCodeCoverageProvider();
         b.AddCoverletExtensionProvider();
     });

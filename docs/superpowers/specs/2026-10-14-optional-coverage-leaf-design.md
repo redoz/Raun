@@ -1,7 +1,7 @@
 # Optional coverage leaf package
 
 Date: 2026-10-14
-Status: approved in chat; implementation plan pending review
+Status: design and native plan approved; implemented; final verification/release pending
 Scope: staff-review finding 6, after independent completion of findings 4 and 5.
 
 ## Goal

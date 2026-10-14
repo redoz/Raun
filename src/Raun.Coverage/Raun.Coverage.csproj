@@ -9,7 +9,8 @@
     <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
     <!-- MSBuildLocator loads MSBuild and StringTools from the installed SDK together. -->
     <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
-    <ProjectReference Include="../Raun/Raun.csproj" />
+    <ProjectReference Include="../Raun/Raun.csproj" PrivateAssets="none" />
+    <ProjectReference Include="../Raun.Mtp/Raun.Mtp.csproj" PrivateAssets="none" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" GeneratePathProperty="true" ExcludeAssets="contentFiles" />
     <PackageReference Include="Microsoft.Build.Locator" PrivateAssets="build;buildTransitive;analyzers" />

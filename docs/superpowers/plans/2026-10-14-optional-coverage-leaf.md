@@ -29,11 +29,11 @@ Interfaces:
 - Leaf public builder.UseClassifiedCoverage() on existing Raun.Mtp.CoverageBuilderExtensions, idempotent per builder. UseBranchClassificationMiddleware also enables it while keeping factory order and isolation.
 - Leaf internal ClassifiedCoverageIntegration owns coordinator, config, artifact consumer and Coverlet enrichment; Attach delegates; Complete enriches then drains; Dispose releases coordinator.
 
-- [ ] Remove MTP -> Coverage reference; add Coverage -> MTP with build/analyzer flow preserved. Add MTP friend access for Raun.Coverage to use existing report-path and diagnostics internals without expanding public APIs.
-- [ ] Move the six existing pipeline files and their existing tests, preserving artifact filtering, correlation, diagnostics, and delivery behavior.
-- [ ] Replace analysis bootstrap code with optional factory creation and owned integration lifetime. Pass only the interface to RaunTestFramework; keep report placeholders conditional on collector/integration availability.
-- [ ] Implement leaf activation and wrapper with same analysis/settings behavior. Verify idempotence/isolation in code review and existing middleware test.
-- [ ] Run focused existing coverage tests and build after locked files are regenerated; inspect warnings rather than suppressing valid rules.
+- [x] Remove MTP -> Coverage reference; add Coverage -> MTP with build/analyzer flow preserved. Add MTP friend access for Raun.Coverage to use existing report-path and diagnostics internals without expanding public APIs.
+- [x] Move the six existing pipeline files and their existing tests, preserving artifact filtering, correlation, diagnostics, and delivery behavior.
+- [x] Replace analysis bootstrap code with optional factory creation and owned integration lifetime. Pass only the interface to RaunTestFramework; keep report placeholders conditional on collector/integration availability.
+- [x] Implement leaf activation and wrapper with same analysis/settings behavior. Verify idempotence/isolation in code review and existing middleware test.
+- [x] Run focused existing coverage tests and build after locked files are regenerated; inspect warnings rather than suppressing valid rules.
 
 ### Task 2: Preserve package opt-in for generated/custom entry points
 
@@ -43,16 +43,23 @@ Interfaces:
 - EntryPointEmitter.Emit(bool classifiedCoverage = false) emits RunAsync(args) without the leaf, or an explicit configure callback calling global::Raun.Mtp.CoverageBuilderExtensions.UseClassifiedCoverage(builder) when the optional symbol resolves.
 - Custom Main registers builder.UseClassifiedCoverage() in configure; it separately registers its existing collector extensions.
 
-- [ ] Extend incremental entry-point selection with optional coverage-symbol detection while preserving disabled/bootstrap-absent behavior.
-- [ ] Add explicit leaf project reference and activation to the Aspire coverage sample; leave core-only consumers without leaf references.
-- [ ] Update README package opt-in, custom bootstrap, collectors, and middleware examples; document dependency direction and compatibility cost.
-- [ ] Run existing generator snapshots/platform/coverage tests; review any changed existing snapshots without adding new tests.
+- [x] Extend incremental entry-point selection with optional coverage-symbol detection while preserving disabled/bootstrap-absent behavior.
+- [x] Add explicit leaf project reference and activation to the Aspire coverage sample; leave core-only consumers without leaf references.
+- [x] Update README package opt-in, custom bootstrap, collectors, and middleware examples; document dependency direction and compatibility cost.
+- [x] Run existing generator snapshots/platform/coverage tests; review any changed existing snapshots without adding new tests.
 
 ### Task 3: Verify distribution, publish, and close finding 6
 
-- [ ] Restore Raun.slnx in locked mode; zero-warning Release build and full solution test run.
-- [ ] Run the existing 73 report interaction checks and pack all four projects.
-- [ ] Inspect nuspec dependency direction; manually restore/build/run scratch MTP and Aspire consumers without coverage and one opted-in consumer. Inspect project.assets.json and output for absence/presence of workspace analysis and BuildHost-netcore assets. Use existing collector coverage execution to check report enrichment.
-- [ ] Obtain fresh staff review of integration ownership, startup, and real package evidence; fix material findings.
+- [x] Restore Raun.slnx in locked mode; zero-warning Release build and full solution test run.
+- [x] Run the existing 73 report interaction checks and pack all four projects.
+- [x] Inspect nuspec dependency direction; manually restore/build/run scratch MTP and Aspire consumers without coverage and one opted-in consumer. Inspect project.assets.json and output for absence/presence of workspace analysis and BuildHost-netcore assets. Use existing collector coverage execution to check report enrichment.
+- [x] Obtain fresh staff review of integration ownership, startup, and real package evidence; fix material findings.
 - [ ] Commit/push, wait for hosted CI, tag the next beta and verify release publication.
 - [ ] Save exact evidence and close finding 6 in docs/reviews/2026-10-14-raun-staff-review.md; keep the separate intermittent cancellation follow-up visible.
+
+Execution evidence: existing pipeline tests moved unchanged; no new tests added. Manual packed
+MTP/Aspire consumers have no heavy analysis graph or BuildHost; opted-in consumer has both and
+generated activation. All three bootstraps ran --help successfully. Existing Aspire Coverlet run
+passed 16 tests and enriched report status available; its collector scope supplied no eligible
+module hits, recorded in report diagnostics. Staff review cleared source after all transitive locks
+were force-refreshed. Final local gate: 1,418 passed / 5 skipped / 0 failed; zero-warning build; 73 report checks. Publication remains.

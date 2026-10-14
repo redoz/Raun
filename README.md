@@ -391,6 +391,14 @@ Coverlet or Microsoft Code Coverage records which code ran.
 Raun.Coverage maps those execution hits to source branches and classifies their purpose.
 The report shows coverage for logical branches and for all branches.
 
+Classified coverage is optional. Add a `Raun.Coverage` package reference alongside a compatible collector.
+`Raun.Mtp` and `Raun.Aspire` do not depend on coverage or its Roslyn/MSBuild analysis assets.
+Generated entry points enable the integration when the leaf package is referenced. For a custom `Main`,
+register `builder.UseClassifiedCoverage()` in `RaunTestApplication.RunAsync`'s `configure` callback
+(or Aspire's `ConfigureTestApplication`), using namespace `Raun.Mtp`.
+Middleware registration also enables the integration. The middleware API retains its source namespace
+but now ships in `Raun.Coverage`; rebuild consumers when upgrading this beta.
+
 Register a compatible collector for the report's Coverage view.
 Use `--report-html --coverage --coverage-output-format xml`, or `--report-html --coverlet --coverlet-output-format json`.
 Raun classifies branches as argument checks, error handling, null propagation, logging, or logic.

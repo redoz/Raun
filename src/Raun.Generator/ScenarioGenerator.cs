@@ -122,14 +122,16 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
         var generateProgram = wantsProgram.Combine(hasBootstrap)
             .Select(static (pair, _) => pair.Left && pair.Right);
 
-        context.RegisterSourceOutput(generateProgram, static (spc, generate) =>
+        var hasClassifiedCoverage = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName("Raun.Mtp.CoverageBuilderExtensions")?.GetMembers("UseClassifiedCoverage").Length > 0);
+        context.RegisterSourceOutput(generateProgram.Combine(hasClassifiedCoverage), static (spc, options) =>
         {
-            if (!generate)
+            if (!options.Left)
             {
                 return;
             }
 
-            var (source, error) = GeneratorSafety.SafeEmit(EntryPointEmitter.Emit);
+            var (source, error) = GeneratorSafety.SafeEmit(() => EntryPointEmitter.Emit(options.Right));
             if (error is not null)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(Descriptors.UnhandledException, Location.None, error));
