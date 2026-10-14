@@ -258,7 +258,11 @@ Preflight runs once and reports as a test node. Failure skips all scenarios.
 The TRX example needs `Microsoft.Testing.Extensions.TrxReport` and `using Microsoft.Testing.Extensions;`; enable it with `--report-trx`.
 The generated entry point does not register optional extensions.
 
-Register a compatible Microsoft coverage or Coverlet provider for the report's Coverage view.
+Coverlet or Microsoft Code Coverage records which code ran.
+Raun.Coverage maps those execution hits to source branches and classifies their purpose.
+The report shows coverage for logical branches and for all branches.
+
+Register a compatible collector for the report's Coverage view.
 Use `--report-html --coverage --coverage-output-format xml`, or `--report-html --coverlet --coverlet-output-format json`.
 Raun classifies branches as argument checks, error handling, null propagation, logging, or logic.
 Add project rules with `builder.UseBranchClassificationMiddleware(() => new ProjectRule())` and `IBranchClassificationMiddleware` from `Raun.Coverage`.
