@@ -180,6 +180,27 @@ Preferred sequence: fix argument/lifecycle contracts; expose concurrency and met
 
 All findings above describe e814ece. Later fixes must be verified separately; this document is historical review evidence, not a claim about subsequent versions.
 
+## Remediation checklist
+
+Work in finding order, one item at a time. Findings 2 and 3 need a shared lifecycle policy; record that policy while tackling 2, then implement and verify 3 against it. Keep each finding open until its acceptance checks are complete. Feature opportunities above are outside this checklist.
+
+- [x] **1. Evaluate arguments once.** Fixed in beta.14 and beta.15; regression coverage and reviewer clearance recorded below.
+- [ ] **2. Own timed-out work until execution actually ends.** Next item. Record the noncooperative-work policy and alternatives in a design spec. Verify cooperative cancellation, cancellation-ignoring bodies, and late resource creation. Prove that scopes and exclusive resource ownership cannot be released while surviving work can still use them; prove the chosen policy terminates or reports surviving work explicitly. Do not equate a timeout result with a stopped task.
+- [ ] **3. Bound teardown independently.** Use the lifecycle policy from 2. Define cleanup deadlines, cancellation, and what happens to callbacks that ignore cancellation. Verify hanging and throwing callbacks, subsequent cleanup behavior, callback-specific reporting, and bounded run completion. Preserve ownership guarantees when cleanup itself survives its deadline.
+- [ ] **4. Dispose scenario scopes asynchronously.** Verify async-only scoped services on successful, failed, and cancelled scenarios. Prove disposal occurs once, after teardown and after any surviving work is handled under the agreed policy. Define and test how disposal failures are reported.
+- [ ] **5. Dispatch resource keys through the interface contract.** First reproduce an explicit static `IResource<T>.KeyFor` implementation. Verify interface dispatch and matching object/typed-key identities in claims, lineage, and reports; preserve existing public implementations and fallback identity behavior.
+- [ ] **6. Decide whether coverage should be an optional integration.** This is a packaging decision, not a confirmed runtime defect. Inspect the consumer dependency graph and record alternatives, compatibility costs, and the decision. If separated, verify a consumer without coverage avoids its compiler/MSBuild dependencies and an opted-in consumer retains coverage behavior. If retained, document the rationale and mark this item resolved by decision.
+
+For each item before marking it complete:
+
+- [ ] Add behavioral regression evidence for the original failure (or dependency/consumer evidence for 6).
+- [ ] Implement the smallest complete fix; document any changed public behavior or configuration.
+- [ ] Run relevant tests, report interaction checks when affected, and a zero-warning solution build plus the full solution tests before release.
+- [ ] Review the final change, including interactions with earlier lifecycle fixes; record any remaining limitations.
+- [ ] Record the resolution, verification evidence, commit, and release in this document; then check off the finding.
+
+The per-item checks are a reusable completion gate, not separate outstanding findings. Repeat them for each open finding.
+
 ## Resolution of finding 1 (2026-10-14)
 
 Argument evaluation is repaired, with a design recorded in
@@ -198,4 +219,4 @@ The staff reviewer cleared this follow-up. Final verification: 1,348 passed, 5 s
 
 ## User follow-ups for later
 
-- Resource effects tables: right-align the time column and reserve a consistent fixed width for the verb in the first column, so effect rows line up across steps and scenarios. Requested and implemented 2026-10-14: fixed-width action and time columns, right-aligned time header and values.
+- Resource effects tables: right-align the time column and reserve a consistent fixed width for the verb in the first column, so effect rows line up across steps and scenarios. Requested and implemented 2026-10-14: fixed-width action and time columns, right-aligned time header and values (beta.16); expanded details aligned with the step status squircle (beta.17).
