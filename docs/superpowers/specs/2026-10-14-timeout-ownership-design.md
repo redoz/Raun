@@ -1,7 +1,7 @@
 # Timeout ownership and process termination
 
 Date: 2026-10-14
-Status: proposed for written-spec review; implementation not started
+Status: policy reviewed in chat; default grace revised to 60 seconds at the user's request; implementation not started
 Scope: staff-review finding 2. Finding 3 will reuse this policy in a separate change.
 
 ## Intent and agreed policy
@@ -25,13 +25,13 @@ The invoke delegate can also execute synchronously before returning a Task. A wa
 5. If relevant work remains alive at grace expiry, write a concise fatal diagnostic naming the scenario/step, timeout, and grace period, then terminate the process with a nonzero exit code. Do not wait for observers, report sinks, cancellation callbacks, or cleanup to acknowledge this action. Diagnostic failure must not prevent termination.
 6. Host cancellation follows the same ownership rule: request cancellation, drain within grace, then terminate if work ignores it. Cooperative host cancellation keeps its existing skipped outcome. An already cancelled run with no launched work does not terminate the process.
 
-The grace deadline must be supervised independently of the scheduler continuation and must already be armed when cancellation callbacks run. Supervision ends only after the underlying work has actually completed. A timeout wrapper returning is insufficient when its invocation is still alive. Concurrent step/scenario watchdogs must be idempotent and must not extend an earlier hard deadline.
+The grace deadline must be supervised independently of the scheduler continuation and must already be armed when cancellation callbacks run. Use a background watchdog thread per active scenario, shared by its operations, so a blocked scheduler or exhausted worker pool cannot indefinitely delay the hard deadline. Use monotonic real time for deadlines. Cancellation callbacks themselves are owned work: body completion does not permit release while its cancellation callbacks are still alive. Supervision ends only after the underlying work has actually completed. A timeout wrapper returning is insufficient when its invocation is still alive. Concurrent step/scenario watchdogs must be idempotent and must not extend an earlier hard deadline.
 
 No timeout is enabled merely by adding a grace setting. Grace only applies after an existing timeout or host cancellation fires. On the fatal path, HTML/TRX output and buffered logs may be incomplete, required cleanup does not run, and external resources may remain. This is an intentional consequence of bounded process termination; the parent test runner receives a failed/crashed host rather than a successful run.
 
 ## Configuration and ownership
 
-Proposed default grace: 5 seconds. Expose a finite nonnegative grace duration through ScenarioScheduler and RunLoop, and `--cancellation-grace-ms` through the existing MTP run-options provider. Zero means no grace. Reject negative, infinite, and unsupported timer durations. CLI overrides the runtime default for an MTP run. Keep one runtime policy authority; MTP only resolves options and passes them through.
+Default grace: 60 seconds from the cancellation request. Expose a finite nonnegative grace duration through ScenarioScheduler and RunLoop, and `--cancellation-grace-ms` through the existing MTP run-options provider. Zero means no grace. Reject negative, infinite, and unsupported timer durations. CLI overrides the runtime default for an MTP run. Keep one runtime policy authority; MTP only resolves options and passes them through.
 
 Use the default fatal action in production and exercise it in child-process tests. Any internal testing seam for the fatal action must not permit normal release of ownership if a substituted action returns; it must fail closed. Do not add a public user callback that can silently resume execution after the hard deadline.
 
@@ -61,4 +61,4 @@ Use TaskCompletionSource barriers to prove ordering, with finite test-level dead
 
 ## Review notes
 
-The policy was selected by the user in chat. The 5-second default and CLI name are concrete proposals for review. Process termination intentionally sacrifices complete reports and cleanup when safe cooperative draining fails. Hard termination must be tested outside the unit-test process. Finding 3 remains open until cleanup itself has an independently bounded policy.
+The policy was selected by the user in chat. The user selected the 60-second default; the CLI name is `--cancellation-grace-ms`. Process termination intentionally sacrifices complete reports and cleanup when safe cooperative draining fails. Hard termination must be tested outside the unit-test process. Finding 3 remains open until cleanup itself has an independently bounded policy.
