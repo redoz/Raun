@@ -404,3 +404,41 @@ test('skipped and not-taken step numbers and names are struck through without re
   assert.ok(name.querySelector('[data-message-resource]'));
  }
 });
+
+test('successful lifecycle rows without a body reveal metadata from both their name and a keyboard-accessible control',()=>{
+ const current={...step('setup',{}),label:'0',isLifecycle:true,displayName:'Setup',titleMessage:undefined,
+  notes:[],noteMessages:[],logs:[],logMessages:[],effects:[]};
+ const view=scope.buildScenarioDrill({...scenario,steps:[current]}),entry=view.querySelector('.step-entry');
+ const control=entry.querySelector('.lifecycle-toggle');
+ assert.ok(control);assert.equal(control.tag,'button');
+ assert.equal(control.getAttribute('aria-expanded'),'false');
+ assert.equal(entry.querySelector('.step-body'),null);
+ entry.querySelector('.dn').dispatch('click');
+ assert.equal(entry.classList.contains('open'),true);
+ assert.equal(control.getAttribute('aria-expanded'),'true');
+ assert.equal(nodeText(entry.querySelector('.sx')),'#0');
+ assert.ok(entry.querySelector('.scenario-status.passed'));
+ control.dispatch('click');
+ assert.equal(entry.classList.contains('open'),false);
+ assert.equal(control.getAttribute('aria-expanded'),'false');
+});
+
+test('lifecycle disclosure retains its body and failed lifecycle rows stay fully revealed',()=>{
+ const rows=[{...step('teardown',{}),label:'2',isLifecycle:true,displayName:'Teardown',titleMessage:undefined,logs:['Cleanup finished'],logMessages:[]},
+  {...step('failed',{}),label:'0',isLifecycle:true,status:'failed',displayName:'Setup',titleMessage:undefined,exception:'Startup failed'}];
+ const view=scope.buildScenarioDrill({...scenario,steps:rows}),entries=view.querySelectorAll('.step-entry');
+ entries[0].querySelector('.step-expander').dispatch('click');
+ assert.equal(entries[0].classList.contains('open'),true);
+ assert.match(nodeText(entries[0].querySelector('.step-body')),/Cleanup finished/);
+ assert.equal(entries[1].classList.contains('open'),true);
+ assert.ok(entries[1].querySelector('.scenario-status.failed'));
+ assert.equal(entries[1].querySelector('.lifecycle-toggle'),null);
+ assert.match(nodeText(entries[1].querySelector('.step-body')),/Startup failed/);
+});
+
+test('ordinary steps named Setup do not acquire compact lifecycle controls',()=>{
+ const current={...step('ordinary',{}),displayName:'Setup',titleMessage:undefined,notes:[],noteMessages:[],logs:[],logMessages:[],effects:[]};
+ const entry=scope.buildScenarioDrill({...scenario,steps:[current]}).querySelector('.step-entry');
+ assert.equal(entry.classList.contains('step-lifecycle'),false);
+ assert.equal(entry.querySelector('.lifecycle-toggle'),null);
+});

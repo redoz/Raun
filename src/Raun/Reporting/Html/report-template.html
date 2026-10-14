@@ -214,6 +214,12 @@
   .step-head .sx{font:600 12px/1.4 var(--mono);padding:3px 6px;width:calc(3ch + 12px);min-width:calc(3ch + 12px);text-align:right;background:#0d1420;color:#dde8f7}
   .step-head .dn{font-weight:500;font-size:14px;flex:1;min-width:0;overflow-wrap:anywhere}
   .step-lifecycle .dn{color:var(--muted);font-style:italic}
+  .step-lifecycle.status-passed:not(.open){padding-top:2px;padding-bottom:3px}
+  .step-lifecycle.status-passed:not(.open) .step-head>.scenario-status,
+  .step-lifecycle.status-passed:not(.open) .step-head>.sx,
+  .step-lifecycle.status-passed:not(.open) .step-head>.dm{visibility:hidden}
+  .step-lifecycle.status-passed:not(.open) .dn{font-size:12px}
+  .step-lifecycle.status-passed .step-head{cursor:pointer}
   .phase-given{color:var(--ph-given)}.phase-when{color:var(--ph-when)}.phase-then{color:var(--ph-then)}
   .phase-given,.phase-when,.phase-then{text-decoration-line:underline;text-decoration-color:currentColor;text-underline-offset:2px;text-decoration-thickness:1px}
   .step-head .dm{display:flex;align-items:center;justify-content:flex-end;gap:8px;font:12px/1.4 var(--sans);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
@@ -237,8 +243,8 @@
   .step-head .stw{transform:rotate(-90deg)}
   .step-entry.open .step-head .stw{transform:none}
   .step-entry.has-body .step-head{cursor:pointer}
-  .step-expander{border:0;background:none;padding:3px 0;color:var(--muted);font:inherit;cursor:pointer;flex:none}
-  .step-expander:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+  .step-expander,.lifecycle-toggle{border:0;background:none;padding:3px 0;color:var(--muted);font:inherit;cursor:pointer;flex:none}
+  .step-expander:focus-visible,.lifecycle-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
   .step-body{grid-column:4/-1;display:none;margin:8px 0 0;min-width:0}
   .step-entry.open .step-body{display:block}
   .sec{margin-top:10px}.sec h4{margin:0 0 6px;font-size:12px;font-weight:500;color:var(--muted)}
@@ -455,8 +461,8 @@
   .coverage-flow{min-width:700px;margin:0;min-height:0;flex:1;display:flex;flex-direction:column}
   .coverage-flow figcaption{margin:0 0 4px;font-size:11px}
   .coverage-flow svg{width:100%;height:100%;min-height:0;flex:1}
-  .coverage-flow text{font-size:16px}
-  .coverage-flow .coverage-flow-heading{font-size:14px}
+  .coverage-flow text{font-size:12px}
+  .coverage-flow .coverage-flow-heading{font-size:11px}
   .coverage-evidence-note{margin:0;font-size:11px}
   .coverage-children{min-height:0;overflow:hidden}
   .coverage-findings{height:100%;min-height:0;grid-template-columns:minmax(210px,var(--coverage-list-size,28%)) 8px minmax(0,1fr);gap:0;border:0}
@@ -2794,7 +2800,7 @@
         for (const entry of drill.querySelectorAll(".step-entry"))
           entry.classList.toggle("focus", entry.dataset.step === stepId);
         const entry = drill.querySelector('.step-entry[data-step="' + stepId + '"]');
-        if (entry && entry.classList.contains("has-body")){entry.classList.add("open");entry.querySelector(".step-expander").setAttribute("aria-expanded","true");}
+        if (entry && (entry.classList.contains("has-body") || entry.querySelector(".lifecycle-toggle"))){entry.classList.add("open");entry.querySelector(".step-expander,.lifecycle-toggle").setAttribute("aria-expanded","true");}
         if (entry && scroll) entry.scrollIntoView({ block: "nearest" });
         return true;
       }
@@ -3085,8 +3091,11 @@
         const status=['passed','failed','skipped'].includes(s.status) ? s.status : 'skipped';
         const cls='step-entry status-'+s.status+' ph-'+phase+(s.isLifecycle ? ' step-lifecycle' : '')+(b ? ' has-body' : '')+(b && s.status==='failed' ? ' open' : '');
         const bodyId=b ? 'step-details-'+(++stepDetailSequence) : '';
+        const lifecycleToggle=s.isLifecycle && s.status==='passed';
+        const control=b ? 'step-expander' : 'lifecycle-toggle';
+        const controlLabel=b ? 'Toggle details for step '+number : 'Toggle metadata for '+s.displayName;
         h+='<div class="'+cls+'" data-step="'+esc(s.stepId)+'"><div class="step-head">'+
-          (b ? '<button type="button" class="step-expander" aria-label="Toggle details for step '+esc(number)+'" aria-expanded="'+String(s.status==='failed')+'" aria-controls="'+bodyId+'"><span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span></button>' : '<span class="stw" aria-hidden="true"></span>')+
+          (b || lifecycleToggle ? '<button type="button" class="'+control+'" aria-label="'+esc(controlLabel)+'" aria-expanded="'+String(s.status==='failed')+'"'+(bodyId ? ' aria-controls="'+bodyId+'"' : '')+'><span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span></button>' : '<span class="stw" aria-hidden="true"></span>')+
           '<span class="scenario-status '+status+'" role="img" aria-label="'+esc(s.status)+'"></span>'+
           '<span class="sx" aria-label="Step '+esc(number)+', '+esc(s.status)+'">'+strike('#'+esc(number))+'</span>'+
           '<span class="dn">'+strike(stepTitleHtml(s,sc))+'</span><span class="dm">'+(Number.isFinite(s.offsetMs) ? '<span class="step-offset" title="Time from scenario start">+'+fmtDur(s.offsetMs)+'</span>' : '')+'<span class="step-duration" title="Step duration">'+fmtDur(s.durationMs)+'</span></span></div>'+stepNotesHtml(s.notes,s.noteMessages,sc)+
@@ -3095,10 +3104,10 @@
       p.innerHTML=h+'</div>';bindResourceMessages(p,sc);
       p.addEventListener("click",ev=>{
         if(!ev.target.closest || ev.target.closest(".res-chip,.resource-mention,details"))return;
-        const head=ev.target.closest(".step-entry.has-body > .step-head");if(!head)return;
+        const head=ev.target.closest(".step-entry.has-body > .step-head,.step-entry.step-lifecycle.status-passed > .step-head");if(!head)return;
         const control=ev.target.closest("button,a[href],input,select,textarea,summary");
-        if(control && !control.classList.contains("step-expander"))return;
-        head.querySelector(".step-expander").setAttribute("aria-expanded",String(head.parentElement.classList.toggle("open")));
+        if(control && !control.classList.contains("step-expander") && !control.classList.contains("lifecycle-toggle"))return;
+        head.querySelector(".step-expander,.lifecycle-toggle").setAttribute("aria-expanded",String(head.parentElement.classList.toggle("open")));
       });
       return p;
     }
