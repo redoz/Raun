@@ -1,7 +1,7 @@
 # Optional coverage leaf package
 
 Date: 2026-10-14
-Status: proposed for user review
+Status: approved in chat; implementation plan pending review
 Scope: staff-review finding 6, after independent completion of findings 4 and 5.
 
 ## Goal
@@ -53,9 +53,9 @@ Samples that exercise coverage opt in explicitly; core-only samples/fixtures dem
 ## Verification and completion
 
 Preserve existing coverage pipeline behavioral tests, moving ownership to the coverage test project
-when necessary. Add registration isolation/idempotence/lifetime tests and entry-point snapshots with
-and without the optional integration. Pack real packages and restore/build/run separate consumer
-fixtures with and without the leaf. Inspect project.assets.json and output: a plain MTP/Aspire consumer
+when necessary. Per the user instruction, add no new tests or committed consumer fixtures.
+Use the existing suite and manually restore/build/run scratch consumers with and without the leaf
+after packing real packages. Inspect project.assets.json and output: a plain MTP/Aspire consumer
 must have no Raun.Coverage, Roslyn workspace/MSBuild analysis packages, or BuildHost-netcore output;
 an opted-in consumer must have required build-host assets and working collector-to-report enrichment.
 Retain collector correlation, duplicate artifact suppression, custom middleware ordering, unavailable
