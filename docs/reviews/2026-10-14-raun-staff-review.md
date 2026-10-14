@@ -185,8 +185,8 @@ All findings above describe e814ece. Later fixes must be verified separately; th
 Work in finding order, one item at a time. Findings 2 and 3 need a shared lifecycle policy; record that policy while tackling 2, then implement and verify 3 against it. Keep each finding open until its acceptance checks are complete. Feature opportunities above are outside this checklist.
 
 - [x] **1. Evaluate arguments once.** Fixed in beta.14 and beta.15; regression coverage and reviewer clearance recorded below.
-- [ ] **2. Own timed-out work until execution actually ends.** Next item. Record the noncooperative-work policy and alternatives in a design spec. Verify cooperative cancellation, cancellation-ignoring bodies, and late resource creation. Prove that scopes and exclusive resource ownership cannot be released while surviving work can still use them; prove the chosen policy terminates or reports surviving work explicitly. Do not equate a timeout result with a stopped task.
-- [ ] **3. Bound teardown independently.** Use the lifecycle policy from 2. Define cleanup deadlines, cancellation, and what happens to callbacks that ignore cancellation. Verify hanging and throwing callbacks, subsequent cleanup behavior, callback-specific reporting, and bounded run completion. Preserve ownership guarantees when cleanup itself survives its deadline.
+- [x] **2. Own timed-out work until execution actually ends.** Fixed in beta.20; resolution evidence below. Record the noncooperative-work policy and alternatives in a design spec. Verify cooperative cancellation, cancellation-ignoring bodies, and late resource creation. Prove that scopes and exclusive resource ownership cannot be released while surviving work can still use them; prove the chosen policy terminates or reports surviving work explicitly. Do not equate a timeout result with a stopped task.
+- [ ] **3. Bound teardown independently.** Next item. Use the lifecycle policy from 2. Define cleanup deadlines, cancellation, and what happens to callbacks that ignore cancellation. Verify hanging and throwing callbacks, subsequent cleanup behavior, callback-specific reporting, and bounded run completion. Preserve ownership guarantees when cleanup itself survives its deadline.
 - [ ] **4. Dispose scenario scopes asynchronously.** Verify async-only scoped services on successful, failed, and cancelled scenarios. Prove disposal occurs once, after teardown and after any surviving work is handled under the agreed policy. Define and test how disposal failures are reported.
 - [ ] **5. Dispatch resource keys through the interface contract.** First reproduce an explicit static `IResource<T>.KeyFor` implementation. Verify interface dispatch and matching object/typed-key identities in claims, lineage, and reports; preserve existing public implementations and fallback identity behavior.
 - [ ] **6. Decide whether coverage should be an optional integration.** This is a packaging decision, not a confirmed runtime defect. Inspect the consumer dependency graph and record alternatives, compatibility costs, and the decision. If separated, verify a consumer without coverage avoids its compiler/MSBuild dependencies and an opted-in consumer retains coverage behavior. If retained, document the rationale and mark this item resolved by decision.
@@ -209,13 +209,48 @@ Ordinary observed values are captured per execution; stack-bound arguments retai
 
 The staff reviewer reviewed the implementation and corrections and found no remaining source-level blocker. Final local verification: zero-warning Release solution build; 1,346 passed, 5 skipped, 0 failed; 35 new behavioral cases; all four packages packed successfully. Target release: v0.3.0-beta.14.
 
-Findings 2–6 remain open. Feature opportunities remain recommendations, not an implementation commitment.
+Findings 3–6 remain open; finding 2 is resolved below. Feature opportunities remain recommendations, not an implementation commitment.
 
 ### Nullable-resource follow-up
 
 A final nullable-resource check found CS8714 in generated claims for nullable reference parameters. The generator now validates the captured reference with a null guard before calling the resource API's notnull generic methods; the step invocation keeps its nullable signature and value. Two behavioral cases prove successful recording and null rejection before the claim/body, without warning suppression or factory reevaluation.
 
 The staff reviewer cleared this follow-up. Final verification: 1,348 passed, 5 skipped, 0 failed; zero-warning Release build; 37 new behavioral cases in total. Beta.15 supersedes beta.14 for this correction.
+
+## Resolution of finding 2 (2026-10-14)
+
+Released in [v0.3.0-beta.20](https://github.com/redoz/Raun/releases/tag/v0.3.0-beta.20).
+Design: [Timeout ownership and process termination](../superpowers/specs/2026-10-14-timeout-ownership-design.md).
+Implementation plan: [Timeout ownership](../superpowers/plans/2026-10-14-timeout-ownership.md).
+
+Raun now requests cancellation and retains actual invocation and cancellation-callback ownership for
+60 seconds by default. Cleanup, scope disposal, and contended-resource admission wait until work stops.
+The independent watchdog supervises synchronous invocation and argument preparation too. If work
+survives grace, it forcibly terminates the entire test host, bypassing managed shutdown handlers.
+The first cancellation cause remains authoritative, including overlapping host, step, and scenario
+cancellation. Configure grace through ScenarioScheduler/RunLoop or `--cancellation-grace-ms`.
+
+Consequences are documented in README: forced termination can leave cleanup unrun, external resources
+behind, and reports/logs incomplete. Finding 3 remains open: teardown itself has no independent deadline.
+Finding 4's asynchronous scope disposal, finding 5's interface key dispatch, and finding 6's coverage
+packaging decision also remain open.
+
+Evidence: the premature-cleanup probe failed before the repair and passed after it. Barrier tests prove
+scope and exclusive admission retention, callback lifetime, late cleanup registration, and cancellation
+ordering. Real child hosts prove noncooperative async/synchronous/preparation/callback termination,
+blocked ProcessExit bypass, initially cancelled zero-grace non-entry, and successful watchdog disarming.
+Existing rich title/note/effect/cleanup assertions were preserved when legacy orphaning probes were
+made cancellation-aware. The final staff review found no remaining source blockers.
+
+Verification: zero-warning Release solution build; 1,380 passed, 5 skipped, 0 failed (1,385 total);
+32 additional behavioral cases; all 73 report interaction checks passed; all four packages assembled.
+Hosted CI run 38600542209 and release run 38601130858 passed; all four beta.20 packages were published
+and uploaded to the GitHub release. NuGet indexing was pending at the immediate post-publication check.
+
+Commits: `2a5e627` repairs runtime ownership; `aca559e` fixes the fixture's solution configuration;
+`93772ec` proves probe entry under loaded runners and adds cancellation-before-invocation coverage.
+Beta.18 and beta.19 tags did not publish packages because their verification gates caught fixture issues;
+beta.20 is the verified release containing the fixes.
 
 ## User follow-ups for later
 

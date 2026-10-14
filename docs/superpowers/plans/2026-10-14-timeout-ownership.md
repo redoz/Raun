@@ -63,7 +63,7 @@
 - [x] Document the 60-second default, CLI override, whole-host termination, and potentially incomplete reports/cleanup. Keep teardown-bounding finding 3 explicitly open.
 - [x] Obtain final fresh review of ownership, supervision, races, and child-process evidence. Address actionable findings before marking finding 2 complete.
 - [x] Run `dotnet build Raun.slnx -c Release` with zero warnings, `dotnet test Raun.slnx -c Release`, and `node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs`; pack all four projects and verify package versions.
-- [ ] Record red/green evidence, residual limitations, commit and beta release in the saved review. Commit/push and publish the next beta under the existing authorization; verify the release workflow. Check off finding 2 only after this gate passes.
+- [x] Record red/green evidence, residual limitations, commit and beta release in the saved review. Commit/push and publish the next beta under the existing authorization; verify the release workflow. Check off finding 2 only after this gate passes.
 
 ## Execution recommendation
 
@@ -82,3 +82,5 @@ saved-review resolution remain the final pending step for beta.20.
 The fixture must be a solution project as well as a non-assembly project reference: solution builds otherwise remove the Release configuration from the out-of-solution dependency. Clean-fixture reproduction confirmed this; the solution now includes TimeoutHost.
 
 Hard-stop probes explicitly prove body/preparation entry, with five-second entry deadlines and two-second grace to separate scheduler startup from noncooperative execution under CI load. Completed-host probes stay alive beyond grace to prove watchdog disarming.
+
+Publication complete: beta.20, CI38600542209 and Release38601130858 both succeeded. All four packages published; finding2 checked off in the saved review. Findings3–6 remain open.

@@ -1,7 +1,7 @@
 # Timeout ownership and process termination
 
 Date: 2026-10-14
-Status: implemented and locally verified; target release v0.3.0-beta.20
+Status: released as v0.3.0-beta.20; local and hosted verification passed
 Scope: staff-review finding 2. Finding 3 will reuse this policy in a separate change.
 
 ## Intent and agreed policy
@@ -87,3 +87,5 @@ prove termination of live work. The child probes now use five-second entry deadl
 grace, and explicit BODY/PREPARATION entry assertions. A separate deterministic delayed-preparation
 case verifies safe non-entry completion within grace. Beta.20 is the next publication target; neither
 beta.18 nor beta.19 published packages.
+
+Published beta.20 after hosted CI run 38600542209 and release run 38601130858 passed. All four packages are attached to the release. Saved review finding 2 is complete; finding 3 is next.
