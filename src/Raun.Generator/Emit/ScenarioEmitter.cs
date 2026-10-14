@@ -33,8 +33,8 @@ internal static class ScenarioEmitter
     public const string RegistryHintName = "RaunScenarios.g.cs";
 
     /// <summary>One scenario's file: its builder method, under the usings its own source file carried.</summary>
-    public static string EmitScenario(ParsedScenario scenario)
-        => Render([scenario], [BuildScenarioBuilder(scenario)]);
+    public static string EmitScenario(ParsedScenario scenario, bool hasResourceMappings = false)
+        => Render([scenario], [BuildScenarioBuilder(scenario, hasResourceMappings)]);
 
     /// <summary>The registry file: <c>CreateAll</c> and the module initializer that registers every
     /// scenario. Built from the scenario names alone, never from what a step does.</summary>
@@ -166,7 +166,7 @@ internal static class ScenarioEmitter
             .WithBody(Block(statements));
     }
 
-    private static MethodDeclarationSyntax BuildScenarioBuilder(ParsedScenario scenario)
+    private static MethodDeclarationSyntax BuildScenarioBuilder(ParsedScenario scenario, bool hasResourceMappings)
     {
         // var nodes = new global::Raun.Model.ScenarioNode[N];
         var arrayExpr = ArrayCreationExpression(
@@ -236,6 +236,11 @@ internal static class ScenarioEmitter
             members.Add(Set("Uses", ArrayOf(
                 Names.Global("Raun", "ContendedResourceUse"),
                 scenario.Uses.Select(UseEntry))));
+        }
+
+        if (hasResourceMappings)
+        {
+            members.Add(Set("ResourceMappings", MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, Names.Global("Raun", "Generated", "RaunResourceDefaults"), IdentifierName("Mappings"))));
         }
 
         var definition = ObjectCreationExpression(ScenarioDefinitionType)

@@ -71,7 +71,7 @@ public sealed class ResourceContext
     /// <summary>Records bringing a new <paramref name="resource"/> into existence (exclusive).</summary>
     public ValueTask Create<T>(T resource)
         where T : notnull
-        => Record(LifecycleVerb.Create, _resolver.Resolve(resource), resource);
+        => Record(LifecycleVerb.Create, _resolver.Resolve(resource), resource, typeof(T));
 
     /// <summary>Records fetching an existing resource of type <typeparamref name="T"/> by key (shared, no instance).</summary>
     public ValueTask Load<T>(ResourceKey key)
@@ -81,7 +81,7 @@ public sealed class ResourceContext
     /// <summary>Records fetching an existing resource instance (shared, with data snapshot).</summary>
     public ValueTask Load<T>(T resource)
         where T : notnull
-        => Record(LifecycleVerb.Load, _resolver.Resolve(resource), resource);
+        => Record(LifecycleVerb.Load, _resolver.Resolve(resource), resource, typeof(T));
 
     /// <summary>Records a shared use of an existing resource by identity, without an instance.</summary>
     public ValueTask Read(ResourceIdentity identity)
@@ -90,7 +90,7 @@ public sealed class ResourceContext
     /// <summary>Records a shared use of an in-scope <paramref name="resource"/>.</summary>
     public ValueTask Read<T>(T resource)
         where T : notnull
-        => Record(LifecycleVerb.Read, _resolver.Resolve(resource), resource);
+        => Record(LifecycleVerb.Read, _resolver.Resolve(resource), resource, typeof(T));
 
     /// <summary>Records a durable reference to a resource by identity, plus lineage from each subject.</summary>
     public ValueTask Reference(ResourceIdentity target, params object[] subjects)
@@ -106,7 +106,7 @@ public sealed class ResourceContext
     {
         var target = _resolver.Resolve(resource);
         RecordLineage(LifecycleVerb.Reference, target, subjects);
-        return Record(LifecycleVerb.Reference, target, resource);
+        return Record(LifecycleVerb.Reference, target, resource, typeof(T));
     }
 
     /// <summary>Records consuming a resource by identity, plus lineage from each subject.</summary>
@@ -123,7 +123,7 @@ public sealed class ResourceContext
     {
         var target = _resolver.Resolve(resource);
         RecordLineage(LifecycleVerb.Consume, target, subjects);
-        return Record(LifecycleVerb.Consume, target, resource);
+        return Record(LifecycleVerb.Consume, target, resource, typeof(T));
     }
 
     /// <summary>Records a mutation of an existing resource by identity (exclusive, without an instance).</summary>
@@ -133,7 +133,7 @@ public sealed class ResourceContext
     /// <summary>Records a mutation of an existing <paramref name="resource"/> (exclusive).</summary>
     public ValueTask Edit<T>(T resource)
         where T : notnull
-        => Record(LifecycleVerb.Edit, _resolver.Resolve(resource), resource);
+        => Record(LifecycleVerb.Edit, _resolver.Resolve(resource), resource, typeof(T));
 
     /// <summary>Records removing a resource by identity (exclusive, without an instance).</summary>
     public ValueTask Delete(ResourceIdentity identity)
@@ -142,10 +142,11 @@ public sealed class ResourceContext
     /// <summary>Records removing a <paramref name="resource"/> (exclusive).</summary>
     public ValueTask Delete<T>(T resource)
         where T : notnull
-        => Record(LifecycleVerb.Delete, _resolver.Resolve(resource), resource);
+        => Record(LifecycleVerb.Delete, _resolver.Resolve(resource), resource, typeof(T));
 
     void RecordLineage(LifecycleVerb kind, ResourceIdentity target, object[] subjects)
     {
+        target = _resolver.Normalize(target);
         if (subjects is null || subjects.Length == 0)
         {
             return;
@@ -156,7 +157,7 @@ public sealed class ResourceContext
             foreach (var subject in subjects)
             {
                 var subjectIdentity = subject is ResourceIdentity identity
-                    ? identity : _resolver.Resolve(subject.GetType(), subject);
+                    ? _resolver.Normalize(identity) : _resolver.Resolve(subject.GetType(), subject);
                 _lineage.Add(new ResourceLineageRelation { Subject = subjectIdentity, Target = target, Kind = kind });
             }
         }
@@ -175,8 +176,9 @@ public sealed class ResourceContext
     internal void AttachObserver(Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?> observer)
         => _observer = observer;
 
-    ValueTask Record(LifecycleVerb verb, ResourceIdentity identity, object? data)
+    ValueTask Record(LifecycleVerb verb, ResourceIdentity identity, object? data, Type? sourceType = null)
     {
+        identity = _resolver.Normalize(identity);
         // The ledger first: a refused claim is a ResourceConflictException that fails the step, and it
         // records no effect — the exception carries the identity instead.
         try
@@ -190,7 +192,7 @@ public sealed class ResourceContext
         }
 
         var snapshot = ResourcePresentation.Capture(data);
-        var label = data is null ? ResourcePresentation.Display(identity) : _resolver.ResolveLabel(identity, data);
+        var label = data is null ? ResourcePresentation.Display(identity) : _resolver.ResolveLabel(identity, sourceType ?? data.GetType(), data);
         _observer?.Invoke(verb, identity, null, snapshot, label);
 
         lock (_lock)

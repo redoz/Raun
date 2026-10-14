@@ -78,7 +78,7 @@ public sealed class StepMessageBuilder
                     return new(declaredType.Name);
                 }
                 var label = value is ResourceIdentity ? ResourcePresentation.Display(resource)
-                    : _context.Resolver.ResolveLabel(resource, value);
+                    : _context.Resolver.ResolveLabel(resource, declaredType, value);
                 if (string.IsNullOrEmpty(format))
                 {
                     return new(label, resource) { Label = label };

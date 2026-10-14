@@ -17,6 +17,15 @@ public sealed class ResourceRepresentationMappingTests
     }
 
     [Fact]
+    public void Generic_identity_resolution_normalizes_supplied_identity_values()
+    {
+        var resolver = new ResourceIdentityResolver();
+        resolver.ApplyMappings([ResourceMapping.Alternate<Patient, Row>()]);
+        var identity = new ResourceIdentity(typeof(Row), "42");
+        Assert.Equal(new ResourceIdentity(typeof(Patient), "42"), resolver.Resolve(identity));
+    }
+
+    [Fact]
     public void Fluent_selectors_override_same_group_defaults_but_not_legacy_contracts()
     {
         var resolver = new ResourceIdentityResolver();

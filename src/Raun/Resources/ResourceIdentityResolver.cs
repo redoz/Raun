@@ -99,6 +99,10 @@ public sealed class ResourceIdentityResolver
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(instance);
+        if (instance is ResourceIdentity supplied && (type == typeof(ResourceIdentity) || Nullable.GetUnderlyingType(type) == typeof(ResourceIdentity)))
+        {
+            return Normalize(supplied);
+        }
         var snapshot = _groups.Snapshot(type);
         var key = snapshot.Key is { } extractor ? extractor(instance) : ResolveKey(type, instance);
         var identity = new ResourceIdentity(snapshot.Kind, key);

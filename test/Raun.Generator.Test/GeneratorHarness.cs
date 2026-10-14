@@ -109,14 +109,14 @@ public static class GeneratorHarness
             .ToImmutableArray();
     }
 
-    public static GeneratorResult Run(string source, string assemblyName = "ScenarioTests")
+    public static GeneratorResult Run(string source, string assemblyName = "ScenarioTests", params MetadataReference[] additionalReferences)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
         var tree = CSharpSyntaxTree.ParseText(source, parseOptions);
         var compilation = CSharpCompilation.Create(
             assemblyName + "_" + Guid.NewGuid().ToString("N"),
             [tree],
-            References,
+            References.AddRange(additionalReferences),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
 
@@ -135,10 +135,10 @@ public static class GeneratorHarness
         emitDiagnostics = emit.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToImmutableArray();
         if (emit.Success)
         {
-            assembly = Assembly.Load(ms.ToArray());
+            assembly = System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(ms.ToArray()));
         }
 
-        return new GeneratorResult(genDiagnostics, emitDiagnostics, generatedSource, assembly);
+        return new GeneratorResult(genDiagnostics, emitDiagnostics, generatedSource, assembly) { Image = [.. ms.ToArray()] };
     }
 
     /// <summary>Runs the generator over source and returns the driver, for Verify snapshots. By
@@ -377,6 +377,8 @@ public sealed record GeneratorResult(
     string GeneratedSource,
     Assembly? Assembly)
 {
+    public ImmutableArray<byte> Image { get; init; } = [];
+
     public void AssertCompiles()
     {
         Assert.True(

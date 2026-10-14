@@ -188,7 +188,7 @@ public class ReturnTitleTests
             var parameter = System.Linq.Expressions.Expression.Parameter(type);
             var selector = System.Linq.Expressions.Expression.Lambda(typeof(Func<,>).MakeGenericType(type, typeof(ResourceKey)),
                 System.Linq.Expressions.Expression.Constant((ResourceKey)"configured"), parameter).Compile();
-            typeof(ResourceIdentityResolver).GetMethod(nameof(ResourceIdentityResolver.Identify))!.MakeGenericMethod(type)
+            typeof(ResourceIdentityResolver).GetMethods().Single(method => method.Name == nameof(ResourceIdentityResolver.Identify) && method.IsGenericMethod && method.GetParameters().Length == 1).MakeGenericMethod(type)
                 .Invoke(resolver, new[] { selector });
         }
         using var services = new ServiceCollection().AddSingleton(resolver).BuildServiceProvider();

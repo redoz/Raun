@@ -244,10 +244,14 @@ public sealed class ScenarioContext
     internal MessageFormattingContext MessageFormatting { get; }
 
     internal static MessageFormattingContext CreateMessageFormattingContext(
-        IServiceProvider? services, ResourceIdentityResolver? resolver = null)
-        => new(resolver
+        IServiceProvider? services, ResourceIdentityResolver? resolver = null, IReadOnlyList<ResourceMapping>? resourceMappings = null)
+    {
+        var selected = resolver
             ?? services?.GetService(typeof(ResourceIdentityResolver)) as ResourceIdentityResolver
-            ?? new ResourceIdentityResolver());
+            ?? new ResourceIdentityResolver();
+        if (resourceMappings is not null) { selected.ApplyMappings(resourceMappings); }
+        return new(selected);
+    }
 
     private void Append(StepMessage message)
     {

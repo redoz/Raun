@@ -140,7 +140,7 @@ public class StepMessageTitleTests
         var original = Scenario(generated, "Registered").Nodes.Single(node => node.OperationName == "Registered");
         var resolver = new ResourceIdentityResolver();
         var plain = generated.Assembly!.GetType("Messages.Plain")!;
-        typeof(ResourceIdentityResolver).GetMethod(nameof(ResourceIdentityResolver.Identify))!.MakeGenericMethod(plain)
+        typeof(ResourceIdentityResolver).GetMethods().Single(method => method.Name == nameof(ResourceIdentityResolver.Identify) && method.IsGenericMethod && method.GetParameters().Length == 1).MakeGenericMethod(plain)
             .Invoke(resolver, new[] { Selector(plain) });
         using var services = new ServiceCollection().AddSingleton(resolver).BuildServiceProvider();
         var manual = new ScenarioNode
@@ -314,7 +314,7 @@ public class StepMessageTitleTests
         foreach (var name in new[] { "BaseSeed", "IView" })
         {
             var type = generated.Assembly!.GetType("DeclaredMessages." + name)!;
-            typeof(ResourceIdentityResolver).GetMethod(nameof(ResourceIdentityResolver.Identify))!.MakeGenericMethod(type)
+            typeof(ResourceIdentityResolver).GetMethods().Single(method => method.Name == nameof(ResourceIdentityResolver.Identify) && method.IsGenericMethod && method.GetParameters().Length == 1).MakeGenericMethod(type)
                 .Invoke(resolver, new[] { Selector(type) });
         }
 

@@ -58,6 +58,9 @@ public sealed class ScenarioDefinition
     /// </summary>
     public IReadOnlyList<ContendedResourceUse> Uses { get; init; } = [];
 
+    /// <summary>Complete generated resource defaults for this application.</summary>
+    public IReadOnlyList<ResourceMapping> ResourceMappings { get; init; } = [];
+
     /// <summary>The graph nodes in source order.</summary>
     public required IReadOnlyList<ScenarioNode> Nodes { get; init; }
 

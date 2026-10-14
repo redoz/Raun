@@ -1,0 +1,95 @@
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Raun.Generator.Analysis;
+using Raun.Generator.Syntax;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+
+namespace Raun.Generator.Emit;
+
+internal static class ResourceMappingEmitter
+{
+    private static NameSyntax MappingType => Names.Global("Raun", "ResourceMapping");
+    private static TypeSyntax MappingList => Names.Generic(Names.Global("System", "Collections", "Generic"), "IReadOnlyList", MappingType);
+
+    internal static string Emit(ResourceMappingDiscovery mappings, string assemblyIdentity)
+    {
+        using var hash = SHA256.Create();
+        var suffix = string.Concat(hash.ComputeHash(Encoding.UTF8.GetBytes(assemblyIdentity)).Take(12)
+            .Select(b => b.ToString("x2", CultureInfo.InvariantCulture)));
+        var manifestName = "RaunResourceMappings_" + suffix;
+        var types = new List<MemberDeclarationSyntax>();
+        if (mappings.Local.Count > 0)
+        {
+            var members = new List<MemberDeclarationSyntax>
+            {
+                ConstructorDeclaration(manifestName).AddModifiers(Token(SyntaxKind.PrivateKeyword)).WithBody(Block()),
+                Constant("MappingProtocol", LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(1))),
+                Constant("MappingCount", LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(mappings.Local.Count))),
+            };
+            for (var i = 0; i < mappings.Local.Count; i++)
+            {
+                var declaration = mappings.Local[i];
+                members.Add(Constant("Owner" + i, Text(DocumentationCommentId.CreateReferenceId(declaration.Owner)!)));
+                members.Add(Constant("OwnerAssembly" + i, Text(declaration.Owner.ContainingAssembly.Identity.ToString())));
+                members.Add(Constant("Source" + i, Text(DocumentationCommentId.CreateReferenceId(declaration.Source)!)));
+                members.Add(Constant("SourceAssembly" + i, Text(ResourceMappingDiscovery.TypeAssembly(declaration.Source).Identity.ToString())));
+            }
+            var values = mappings.Local.Select(declaration => (ExpressionSyntax)Call(
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, MappingType,
+                    GenericName("Alternate").WithTypeArgumentList(TypeArgumentList(SeparatedList(new[]
+                    {
+                        TypeSyntaxFor(declaration.Owner), TypeSyntaxFor(declaration.Source),
+                    }))))));
+            var array = ArrayCreationExpression(ArrayType(MappingType).AddRankSpecifiers(
+                ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(OmittedArraySizeExpression()))))
+                .WithInitializer(InitializerExpression(SyntaxKind.ArrayInitializerExpression, SeparatedList(values)));
+            members.Add(Field("Mappings", Call(Member(Names.Global("System", "Array"), "AsReadOnly"), array), isPublic: false));
+            members.Add(MethodDeclaration(MappingList, "GetMappings").AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword))
+                .WithExpressionBody(ArrowExpressionClause(IdentifierName("Mappings"))).WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            types.Add(ClassDeclaration(manifestName).AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.SealedKeyword))
+                .AddBaseListTypes(SimpleBaseType(Names.Global("Raun", "IResourceMappingManifest"))).WithMembers(List(members)));
+        }
+        var statements = new List<StatementSyntax>
+        {
+            LocalDeclarationStatement(VariableDeclaration(IdentifierName("var"))
+                .AddVariables(VariableDeclarator("mappings").WithInitializer(EqualsValueClause(
+                    ObjectCreationExpression(Names.Generic(Names.Global("System", "Collections", "Generic"), "List", MappingType))
+                        .WithArgumentList(ArgumentList()))))),
+        };
+        if (mappings.Local.Count > 0) { statements.Add(AddRange(IdentifierName(manifestName))); }
+        statements.AddRange(mappings.Imports.Select(imported => AddRange(TypeSyntaxFor(imported))));
+        statements.Add(ReturnStatement(Call(Member(IdentifierName("mappings"), "AsReadOnly"))));
+        types.Add(ClassDeclaration("RaunResourceDefaults").AddModifiers(Token(SyntaxKind.InternalKeyword), Token(SyntaxKind.StaticKeyword))
+            .AddMembers(Field("Mappings", Call(IdentifierName("Create")), isPublic: false, isInternal: true),
+                MethodDeclaration(MappingList, "Create").AddModifiers(Token(SyntaxKind.PrivateKeyword), Token(SyntaxKind.StaticKeyword))
+                    .WithBody(Block(statements))));
+        return CompilationUnit().AddMembers(NamespaceDeclaration(Names.Dotted("Raun", "Generated")).WithMembers(List(types)))
+            .WithLeadingTrivia(Comment("// <auto-generated/>"), EndOfLine("\n"),
+                Trivia(NullableDirectiveTrivia(Token(SyntaxKind.EnableKeyword), isActive: true)), EndOfLine("\n"))
+            .NormalizeWhitespace(eol: "\n").ToFullString() + "\n";
+    }
+
+    private static TypeSyntax TypeSyntaxFor(ITypeSymbol type) => TypeSyntaxFactory.From(type);
+    private static LiteralExpressionSyntax Text(string text) => LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(text));
+    private static MemberAccessExpressionSyntax Member(ExpressionSyntax target, string name)
+        => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, target, IdentifierName(name));
+    private static InvocationExpressionSyntax Call(ExpressionSyntax target, params ExpressionSyntax[] args)
+        => InvocationExpression(target).WithArgumentList(ArgumentList(SeparatedList(args.Select(Argument))));
+    private static ExpressionStatementSyntax AddRange(ExpressionSyntax manifest)
+        => ExpressionStatement(Call(Member(IdentifierName("mappings"), "AddRange"), Call(Member(manifest, "GetMappings"))));
+    private static FieldDeclarationSyntax Constant(string name, ExpressionSyntax value)
+        => FieldDeclaration(VariableDeclaration(value is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.NumericLiteralExpression)
+                ? PredefinedType(Token(SyntaxKind.IntKeyword)) : PredefinedType(Token(SyntaxKind.StringKeyword)))
+            .AddVariables(VariableDeclarator(name).WithInitializer(EqualsValueClause(value))))
+            .AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.ConstKeyword));
+    private static FieldDeclarationSyntax Field(string name, ExpressionSyntax value, bool isPublic, bool isInternal = false)
+        => FieldDeclaration(VariableDeclaration(MappingList).AddVariables(VariableDeclarator(name).WithInitializer(EqualsValueClause(value))))
+            .AddModifiers(Token(isPublic ? SyntaxKind.PublicKeyword : isInternal ? SyntaxKind.InternalKeyword : SyntaxKind.PrivateKeyword),
+                Token(SyntaxKind.StaticKeyword), Token(SyntaxKind.ReadOnlyKeyword));
+}

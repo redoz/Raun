@@ -620,7 +620,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     private static bool IsResourceType(ITypeSymbol type)
         => type.AllInterfaces.Any(i =>
             i.ContainingNamespace?.ToDisplayString(SymbolHelpers.NoGlobal) == "Raun"
-            && ((i.Name == "IResource" && i.Arity == 1) || i.Name == "IResourceIdentity"));
+            && ((i.Name == "IResource" || i.Name == "IResourceAlternate") || i.Name == "IResourceIdentity"));
 
     private static bool HasAttribute(IMethodSymbol method, string attributeName)
         => method.GetAttributes().Any(a =>

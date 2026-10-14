@@ -205,11 +205,21 @@ internal static class Descriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor InvalidResourceAlternate = new(
+        "RAUN025", "Resource alternate declaration is unsupported",
+        "Resource owner '{0}' cannot declare alternate '{1}'; use closed types accessible to assembly-level generated code",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ConflictingResourceAlternate = new(
+        "RAUN026", "Resource alternate has conflicting owners",
+        "Resource representation '{0}' has multiple owners: {1}; declare one canonical owner",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
-        UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
+        InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
         UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle, InvalidResourceKeyParameter,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,

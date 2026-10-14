@@ -28,3 +28,5 @@ RAUN021 | Raun.Usage | Error | Step class belongs to another world
 RAUN022 | Raun.Usage | Warning | Step class holds mutable state
 RAUN023 | Raun.Usage | Error | No step title matches the supplied arguments
 RAUN024 | Raun.Usage | Error | Resource key parameter must be a string or ResourceKey
+RAUN025 | Raun.Usage | Error | Resource alternate declaration must use closed accessible types
+RAUN026 | Raun.Usage | Error | Resource alternate has conflicting owners

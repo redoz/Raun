@@ -99,7 +99,7 @@ public sealed class ScenarioScheduler
         var results = new StepResult?[count];
         var outputs = new object?[count];
         var inputs = new StepInputs(outputs, status);
-        var messageFormatting = ScenarioContext.CreateMessageFormattingContext(services);
+        var messageFormatting = ScenarioContext.CreateMessageFormattingContext(services, resourceMappings: definition.ResourceMappings);
         var titleMessages = new StepMessage?[count];
 
         // The arm each passed condition node selected, decided once when it passed; -1 = no arm.

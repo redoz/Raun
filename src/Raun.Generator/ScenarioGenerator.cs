@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using Raun.Generator.Diagnostics;
 using Raun.Generator.Emit;
+using Raun.Generator.Analysis;
 using Raun.Generator.Lowering;
 
 namespace Raun.Generator;
@@ -22,6 +23,16 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        var mappings = context.CompilationProvider.Select(static (compilation, _) =>
+            (Data: ResourceMappingDiscovery.Discover(compilation), Assembly: compilation.Assembly.Identity.ToString()));
+        var mappingDiagnostics = mappings.SelectMany(static (mapping, _) => mapping.Data.Diagnostics);
+        context.RegisterSourceOutput(mappingDiagnostics, static (spc, diagnostic) => spc.ReportDiagnostic(diagnostic));
+        var mappingSource = mappings.SelectMany(static (mapping, _) => mapping.Data.HasMappings
+            ? new[] { ResourceMappingEmitter.Emit(mapping.Data, mapping.Assembly) } : System.Array.Empty<string>());
+        context.RegisterSourceOutput(mappingSource, static (spc, source) =>
+            spc.AddSource("RaunResourceMappings.g.cs", SourceText.From(source, Encoding.UTF8)));
+        var hasMappings = mappings.Select(static (mapping, _) => mapping.Data.HasMappings);
+
         var scenarios = context.SyntaxProvider
             .ForAttributeWithMetadataName(
                 "Raun.ScenarioAttribute",
@@ -31,8 +42,11 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
 
         // One output per scenario: an edit re-emits that scenario's file and leaves its neighbours
         // alone. Its diagnostics are reported here too, where the scenario they name is.
-        context.RegisterSourceOutput(scenarios, static (spc, result) =>
+        context.RegisterSourceOutput(scenarios.Combine(hasMappings), static (spc, pair) =>
         {
+            var result = pair.Left;
+            var hasResourceMappings = pair.Right;
+
             if (result is not { } r)
             {
                 return;
@@ -50,7 +64,7 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
                 return;
             }
 
-            var (source, error) = GeneratorSafety.SafeEmit(() => ScenarioEmitter.EmitScenario(scenario));
+            var (source, error) = GeneratorSafety.SafeEmit(() => ScenarioEmitter.EmitScenario(scenario, hasResourceMappings));
             if (error is not null)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(Descriptors.UnhandledException, Location.None, error));
