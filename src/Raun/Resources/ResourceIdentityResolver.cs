@@ -10,7 +10,7 @@ namespace Raun;
 /// <list type="number">
 /// <item><description><see cref="IResource{TSelf}"/>'s static-abstract <c>KeyFor</c> — the runtime
 /// form of a <c>[ResourceKey]</c>/<c>[Resource(Key)]</c> annotation (hand-written or generator-emitted).</description></item>
-/// <item><description>A registered selector (<see cref="Identify{T}"/>), for types you can't annotate.</description></item>
+/// <item><description>A registered selector (<c>Identify&lt;T&gt;(selector)</c>), for types you can't annotate.</description></item>
 /// <item><description><see cref="IResourceIdentity"/>, for runtime-computed keys.</description></item>
 /// <item><description>Whole-record value equality (via <see cref="object.ToString"/>), the fallback
 /// for immutable identity-only records.</description></item>
@@ -19,6 +19,18 @@ namespace Raun;
 /// </summary>
 public sealed class ResourceIdentityResolver
 {
+    private readonly ResourceIdentityGroups _groups = new();
+
+    public ResourceIdentification Identify<T>() => new(this, new ResourceKind(typeof(T)));
+    public ResourceIdentification Identify(string kind) => new(this, new ResourceKind(kind));
+    public void ApplyMappings(IReadOnlyList<ResourceMapping> mappings)
+    {
+        ArgumentNullException.ThrowIfNull(mappings);
+        _groups.Apply(mappings);
+    }
+    public ResourceIdentity Normalize(ResourceIdentity identity) => _groups.Normalize(identity);
+    internal void AddRepresentation(ResourceKind kind, Type source, Func<object, ResourceKey> key) => _groups.Add(kind, source, key);
+
     private readonly ConcurrentDictionary<Type, Func<object, ResourceKey>> _selectors = new();
     private readonly ConcurrentDictionary<Type, Func<object, ResourceKey>?> _keyForInvokers = new();
 
@@ -33,14 +45,19 @@ public sealed class ResourceIdentityResolver
     }
 
     internal string ResolveLabel(ResourceIdentity identity, object instance)
+        => ResolveLabel(identity, instance.GetType(), instance);
+
+    internal string ResolveLabel(ResourceIdentity identity, Type sourceType, object instance)
     {
-        if (identity.Type is { } sourceType && _labels.TryGetValue(sourceType, out var selector)
+        if (_labels.TryGetValue(sourceType, out var selector)
             && selector(instance) is { } registered && !string.IsNullOrWhiteSpace(registered))
         {
             return registered;
         }
 
-        var label = identity.Type is { } type ? _labelInvokers.GetOrAdd(type, BuildLabelInvoker)(instance) : null;
+        var alternateLabel = _groups.Snapshot(sourceType).Label?.Invoke(instance);
+        if (!string.IsNullOrWhiteSpace(alternateLabel)) { return alternateLabel; }
+        var label = _labelInvokers.GetOrAdd(sourceType, BuildLabelInvoker)(instance);
         return string.IsNullOrWhiteSpace(label) ? ResourcePresentation.Display(identity) : label;
     }
 
@@ -75,14 +92,18 @@ public sealed class ResourceIdentityResolver
     /// <summary>Resolves the identity of <paramref name="instance"/> using its static type.</summary>
     public ResourceIdentity Resolve<T>(T instance)
         where T : notnull
-        => new(typeof(T), ResolveKey(typeof(T), instance));
+        => Resolve(typeof(T), instance);
 
     /// <summary>Resolves the identity of <paramref name="instance"/> for a runtime <paramref name="type"/>.</summary>
     public ResourceIdentity Resolve(Type type, object instance)
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(instance);
-        return new(type, ResolveKey(type, instance));
+        var snapshot = _groups.Snapshot(type);
+        var key = snapshot.Key is { } extractor ? extractor(instance) : ResolveKey(type, instance);
+        var identity = new ResourceIdentity(snapshot.Kind, key);
+        if (key.Value is not null) { _groups.CompleteResolution(snapshot.Revision); }
+        return identity;
     }
 
     /// <summary>Resolves only explicit resource contracts or selectors on the declared type.</summary>
@@ -94,10 +115,11 @@ public sealed class ResourceIdentityResolver
         if ((type == typeof(ResourceIdentity) || Nullable.GetUnderlyingType(type) == typeof(ResourceIdentity))
             && instance is ResourceIdentity supplied)
         {
-            identity = supplied;
+            identity = Normalize(supplied);
             return true;
         }
-        if (_keyForInvokers.GetOrAdd(type, BuildKeyForInvoker) is not null
+        if (_groups.Snapshot(type).Key is not null
+            || _keyForInvokers.GetOrAdd(type, BuildKeyForInvoker) is not null
             || _selectors.ContainsKey(type)
             || typeof(IResourceIdentity).IsAssignableFrom(type))
         {
