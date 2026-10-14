@@ -1,7 +1,7 @@
 # Resource representation mappings
 
 Date: 2026-10-14
-Status: written design approved with feedback; With naming and attribute/startup additions proposed for review
+Status: approved with With naming; attribute proposal explicitly rejected 2026-10-15; fluent-only implementation planning
 Scope: canonical identity feature opportunity. No release unless explicitly requested.
 
 ## Intent and accepted API
@@ -31,7 +31,7 @@ precedence: IResource<T>.KeyFor still wins over that legacy selector. New explic
 provides both the representation mapping and key extraction and takes precedence for that source.
 With<T>() requires IResource<T> and reuses interface dispatch, including explicit implementations.
 Identify<T>() itself does not require T to implement IResource; existing behavior for T is preserved
-unless an With<T>(...) registration supplies a new extractor. Generic group builders return themselves
+unless a With<T>(...) registration supplies a new extractor. Generic group builders return themselves
 for chaining. ResourceContext forwards the fluent APIs to its scenario resolver, as it already does
 for Identify<T>(selector); shared resolver registration through consumer DI is the recommended setup.
 
@@ -41,7 +41,8 @@ Fluent declarations live in the test executable's startup before running Raun. R
 ResourceIdentityResolver instance in the consumer service provider, then pass that provider through
 RaunTestApplication.RunAsync(args, services: provider), or Aspire's existing Services configuration.
 The resolver belongs to application configuration, not an individual request/DTO. No type changes are
-needed. The existing generated Main need not be replaced when assembly attributes suffice.
+needed. Consumers use a custom Main to supply the configured provider (RaunGenerateProgram=false),
+or configure it through Aspire's existing Services callback. Generated Main keeps its current behavior.
 
 ```csharp
 var identities = new ResourceIdentityResolver();
@@ -55,45 +56,6 @@ await using var provider = new ServiceCollection()
 
 return await RaunTestApplication.RunAsync(args, services: provider);
 ```
-
-## Attribute declarations for types users do not own
-
-Provide assembly-level defaults in a normal C# file in the test project. The source type is an
-attribute type argument, so consumers need not annotate EF entities, generated DTOs, or vendor types.
-Typed declaration order mirrors Identify<TResource>().With<TRepresentation>(...).
-
-```csharp
-[assembly: ResourceMapping<Patient, PatientRow>(nameof(PatientRow.Id))]
-[assembly: ResourceMapping<Patient, PatientResponse>(nameof(PatientResponse.PatientId))]
-```
-
-The named form has one representation type argument:
-
-```csharp
-[assembly: ResourceMapping<PatientRow>("patient", nameof(PatientRow.Id))]
-[assembly: ResourceMapping<PatientResponse>("patient", nameof(PatientResponse.PatientId))]
-[assembly: ResourceMapping<Patient>("patient")] // uses IResource<Patient>.KeyFor
-```
-
-A supplied member is an accessible instance property or field returning string or ResourceKey.
-Missing members, inaccessible getters, unsupported member types, and selector-free representations
-without IResource<TSelf> report compiler diagnostics. A selector-free mapping reuses static interface
-dispatch. Arbitrary computed keys stay in fluent delegates; attributes do not carry executable code.
-Null keys remain invalid and do not record claims.
-
-Start with assembly declarations, which unambiguously express application defaults. Do not add
-parameter/method/class precedence or infer membership from individual uses. Those would let one
-representation acquire competing meanings without a clear application configuration owner.
-
-The generator emits immutable mapping descriptors and registers them through the existing generated
-manifest/ScenarioRegistry path. New resolvers materialize those defaults before identity resolution;
-there is no assembly scanning or second mutable global mapping service. Assembly attributes work with
-both generated Main and custom startup. Additional fluent registration occurs after defaults: a same
-group's explicit delegate may replace its extractor, while contradictory groups are errors rather
-than silent overrides. Default registration is complete before user startup executes.
-
-Both declaration forms feed the same resolver configuration and validation. Changing declarations
-must not change runtime identity semantics or create another conflict/report implementation.
 
 ## Identity and compatibility
 
@@ -119,9 +81,11 @@ chain. Typed group references are resolved to the terminal kind at identity reso
 PatientRow to Patient and Patient to "patient" composes in either declaration order. Do not use CLR
 inheritance or matching display names to infer membership.
 
-One source type has one group. Repeated same-group registration may replace its explicit extractor;
-contradictory assignment to unrelated named groups throws during configuration. Reject genuine alias
-cycles, while redundant declarations that already describe the same group remain harmless. A mapping
+Group declarations form equivalence sets. Joining typed groups merges their existing members;
+joining a typed group with a named group retains the named kind. Joining two different named kinds
+throws before configuration is changed. For two typed roots, the Identify<T>() target names the merged
+group. Union roots rather than creating cyclic aliases; reciprocal/redundant declarations are harmless.
+Repeated same-group registration may replace a representation's explicit extractor before freezing. A mapping
 does not invoke or convert a representation into another DTO. Keys must be the canonical key values;
 there is no key transformation for key-only references because no source object exists there.
 
@@ -156,8 +120,8 @@ metadata distinguishes named versus CLR kinds, while opaque report IDs remain th
 ## Generator and analyzer
 
 Keep mappings runtime configuration, so third-party types need no attributes or new interface. No
-IResource<TRepresentation,TResource> contract is introduced. Assembly mapping attributes emit the
-same mapping descriptors used by fluent configuration, with member/contract validation. The analyzer cannot infer arbitrary
+IResource<TRepresentation,TResource> contract is introduced. No mapping attributes or assembly-level
+mapping registration are added. The analyzer cannot infer arbitrary
 registration delegates and must not pretend that unrelated source types cannot collide at runtime.
 Preserve existing dependency/static conflict analysis; the canonical runtime ledger is authoritative
 for cross-representation conflicts. Existing role annotations on external representation parameters
@@ -166,6 +130,8 @@ resolver; no additional named-key attribute is necessary for this feature.
 
 ## Alternatives and why they lose
 
+- Mapping attributes: explicitly rejected by the user. Keep one fluent configuration surface with
+  application/DI ownership; do not add attribute discovery or generated default registration.
 - Require IResource<TRepresentation,TCanonical>: rejected because consumers often cannot change types,
   and the fluent mapping is sufficient without adding a second resource contract.
 - Require a canonical marker class: rejected because an existing domain type or named kind is enough.
@@ -185,8 +151,7 @@ representation dedup order. Verify registration precedence, idempotent membershi
 composition, contradictory groups/cycles, and rejection after resolution. Compile/execute generated
 claims and titles with the configured resolver and retain existing snapshots/guard/merge assertions.
 
-Verify attribute diagnostics and generated descriptors, and parity with fluent mappings for owned
-and third-party types. Document both fluent forms, assembly attributes, generated-Main defaults,
-custom-Main/Aspire DI setup, and configuration ownership in README. Run focused checks, locked restore,
+Document both fluent forms, unchanged IResource key extraction, custom-Main/Aspire DI setup,
+and configuration ownership in README. Run focused checks, locked restore,
 zero-warning solution build, full solution tests, existing report checks, and package assembly. Obtain
 one final staff review. Commit and push within the existing authorization; do not create a release.
