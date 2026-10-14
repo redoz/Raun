@@ -112,7 +112,7 @@ public sealed class HtmlReportSinkTests : IDisposable
     }
 
     [Fact]
-    public async Task Report_embeds_the_serif_font_and_links_no_external_assets()
+    public async Task Report_omits_graph_fonts_and_links_no_external_assets()
     {
         var path = Path.Combine(_dir, "raun-report.html");
         var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
@@ -124,10 +124,10 @@ public sealed class HtmlReportSinkTests : IDisposable
         await sink.PublishAsync(new RunFinished());
 
         var html = await File.ReadAllTextAsync(path);
-        // Source Serif 4 embedded as base64 woff2 (no CDN/web-font)
-        Assert.Contains("@font-face", html, StringComparison.Ordinal);
-        Assert.Contains("Source Serif 4", html, StringComparison.Ordinal);
-        Assert.Contains("data:font/woff2;base64,", html, StringComparison.Ordinal);
+        // The retired graph was the only consumer of the embedded serif fonts.
+        Assert.DoesNotContain("@font-face", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Source Serif 4", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data:font/woff2;base64,", html, StringComparison.Ordinal);
         // self-contained: no external asset references
         Assert.DoesNotContain("fonts.googleapis.com", html, StringComparison.Ordinal);
         Assert.DoesNotContain("@import", html, StringComparison.Ordinal);
@@ -136,7 +136,7 @@ public sealed class HtmlReportSinkTests : IDisposable
     }
 
     [Fact]
-    public async Task Renders_the_activity_diagram_and_drops_the_old_overlay()
+    public async Task Renders_the_resource_matrix_without_retired_graph_renderers()
     {
         var path = Path.Combine(_dir, "raun-report.html");
         var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
@@ -148,17 +148,17 @@ public sealed class HtmlReportSinkTests : IDisposable
         await sink.PublishAsync(new RunFinished());
 
         var html = await File.ReadAllTextAsync(path);
-        Assert.Contains("class=\"actdiag\"", html, StringComparison.Ordinal);   // new SVG diagram
-        Assert.Contains("buildActivityDiagram", html, StringComparison.Ordinal);
+        Assert.Contains("resource-matrix", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("buildActivityDiagram", html, StringComparison.Ordinal);
         Assert.DoesNotContain("buildFlowOverlay", html, StringComparison.Ordinal); // old overlay gone
         Assert.DoesNotContain("flow-svg", html, StringComparison.Ordinal);
         // preserved shell (already asserted elsewhere, re-checked here for this render path)
-        Assert.Contains("class=\"drill", html, StringComparison.Ordinal);
+        Assert.Contains("function buildScenarioDrill", html, StringComparison.Ordinal);
         Assert.Contains("data-theme", html, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task The_diagram_is_kept_but_not_rendered_and_resources_become_chips()
+    public async Task The_default_drill_uses_matrix_resources_and_preserves_log_chips()
     {
         var path = Path.Combine(_dir, "raun-report.html");
         var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
@@ -170,10 +170,10 @@ public sealed class HtmlReportSinkTests : IDisposable
         await sink.PublishAsync(new RunFinished());
 
         var html = await File.ReadAllTextAsync(path);
-        // the activity diagram stays in the template but is switched off; the drill opens by default instead
-        Assert.Contains("const SHOW_DIAGRAM = false;", html, StringComparison.Ordinal);
-        Assert.Contains("if (SHOW_DIAGRAM) card.appendChild(buildActivityDiagram(sc, rerender));", html, StringComparison.Ordinal);
-        Assert.Contains("if (!SHOW_DIAGRAM) drill.classList.add(\"open\");", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("SHOW_DIAGRAM", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("buildObjectFlow", html, StringComparison.Ordinal);
+        Assert.Contains("buildResourceMatrix", html, StringComparison.Ordinal);
+        Assert.Contains("drill.classList.add(\"open\");", html, StringComparison.Ordinal);
         // resource mentions in logs and effects render as clickable chips keyed by identity
         Assert.Contains("class=\"res-chip\"", html, StringComparison.Ordinal);
         Assert.Contains("data-res=", html, StringComparison.Ordinal);
