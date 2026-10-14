@@ -68,6 +68,19 @@ public sealed class AppointmentGiven : Given<NoWorld>
 ```
 
 `[StepName]` sets the title. `{$return ?? name}` shows the input until the result is available, then links the returned resource.
+
+For optional parameters, declare multiple `[StepName]` titles. At each call, Raun chooses the title
+whose placeholder parameters are explicitly supplied and which uses the most distinct parameters.
+Named arguments count; omitted defaults do not. Ties use declaration order. Member paths count
+against their root parameter, and a return placeholder's fallback must also be supplied.
+If no declared title matches, `RAUN023` reports an error at the call. Steps without `[StepName]`
+use the method name without an error.
+
+```csharp
+[StepName("create {name}")]
+[StepName("create {name} at {time}")]
+public Task Create(string name, string? time = null) => Task.CompletedTask;
+```
 For the remaining methods, see the [complete step definitions](samples/AppointmentTests/AppointmentDsl.cs).
 
 Use `Steps<T>()` properties inside step classes to group methods, such as `Given.Patients.Exists(...)`.

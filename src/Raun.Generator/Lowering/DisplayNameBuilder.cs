@@ -37,7 +37,7 @@ internal static class DisplayNameBuilder
         SeparatedSyntaxList<ArgumentSyntax> written,
         IReadOnlyList<ArgumentSyntax> lowered)
     {
-        var template = AttributeReader.StepTemplate(method) ?? method.Name;
+        var template = StepTemplateSelector.Select(method, written) ?? method.Name;
         var tokens = TemplateTokenizer.Tokenize(template);
 
         var constant = new StringBuilder();
@@ -94,7 +94,14 @@ internal static class DisplayNameBuilder
             var argument = defaultParameter is null ? lowered[index].Expression.WithoutTrivia() : DefaultArgument(defaultParameter);
             // Bind the value as the called method does before accessing members or inferring the
             // formatter's generic type. The producer may return a more concrete type than this parameter.
-            var boundArgument = CastExpression(TypeSyntaxFactory.From(path!.Parameter!.Type), ParenthesizedExpression(argument));
+            var parameterType = TypeSyntaxFactory.From(path!.Parameter!.Type);
+            // This cast must retain the called parameter's nullability: an explicitly supplied
+            // null is a valid title value for a nullable parameter.
+            if (path.Parameter.Type is { IsReferenceType: true, NullableAnnotation: NullableAnnotation.Annotated })
+            {
+                parameterType = NullableType(parameterType);
+            }
+            var boundArgument = CastExpression(parameterType, ParenthesizedExpression(argument));
             message.Append(path.Walk(boundArgument), path.Format);
             reservedFormat |= path.Format is "id" or "data";
             if (path!.Members.Count > 0)

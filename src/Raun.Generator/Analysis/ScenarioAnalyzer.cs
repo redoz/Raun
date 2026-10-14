@@ -505,14 +505,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeStepName(SyntaxNodeAnalysisContext context, IMethodSymbol method)
     {
-        var attribute = method.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "StepNameAttribute");
-        if (attribute is not { ConstructorArguments.Length: > 0 }
-            || attribute.ConstructorArguments[0].Value is not string template)
-        {
-            return;
-        }
-
-        foreach (var token in TemplateTokenizer.Tokenize(template))
+        foreach (var token in AttributeReader.StepTemplates(method).SelectMany(TemplateTokenizer.Tokenize))
         {
             if (token.IsPlaceholder && !PlaceholderPath.TryBind(method, token.Text, out _, out var reason))
             {

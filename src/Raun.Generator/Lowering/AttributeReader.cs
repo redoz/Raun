@@ -83,15 +83,17 @@ internal static class AttributeReader
             method.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "StepNameAttribute"),
             "TimeoutMs");
 
-    public static string? StepTemplate(IMethodSymbol method)
+    public static IEnumerable<string> StepTemplates(IMethodSymbol method)
     {
-        var attr = method.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "StepNameAttribute");
-        if (attr is { ConstructorArguments.Length: > 0 } && attr.ConstructorArguments[0].Value is string template)
+        foreach (var attribute in method.GetAttributes())
         {
-            return template;
+            if (attribute.AttributeClass?.Name == "StepNameAttribute"
+                && attribute is { ConstructorArguments.Length: > 0 }
+                && attribute.ConstructorArguments[0].Value is string template)
+            {
+                yield return template;
+            }
         }
-
-        return null;
     }
 
     public static string? ClassDisplayName(INamedTypeSymbol type)

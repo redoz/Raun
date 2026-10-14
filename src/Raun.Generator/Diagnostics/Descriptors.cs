@@ -156,6 +156,13 @@ internal static class Descriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor NoMatchingStepTitle = new(
+        "RAUN023",
+        "No step title matches the supplied arguments",
+        "No title for step '{0}' has all its placeholder parameters supplied at this call; supply the missing arguments or add a title using only supplied parameters",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
     public static readonly DiagnosticDescriptor UnfollowableStepReceiver = new(
         "RAUN019",
         "Step receiver cannot be followed",
@@ -197,7 +204,7 @@ internal static class Descriptors
     {
         UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
-        UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState,
+        UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,
         StepContextInCleanup, ContendedResourceKind, InertContendedResourceUse, ScenarioNotGenerated,
     }.ToDictionary(d => d.Id);

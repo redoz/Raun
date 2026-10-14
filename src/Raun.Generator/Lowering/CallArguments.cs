@@ -15,7 +15,7 @@ internal static class CallArguments
     {
         for (var i = 0; i < arguments.Count; i++)
         {
-            if (arguments[i].NameColon?.Name.Identifier.Text == parameterName)
+            if (arguments[i].NameColon?.Name.Identifier.ValueText == parameterName)
             {
                 return i;
             }

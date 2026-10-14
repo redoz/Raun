@@ -1539,6 +1539,12 @@ internal sealed class ScenarioParser
             ok = false;
         }
 
+        if (AttributeReader.StepTemplates(method).Any()
+            && StepTemplateSelector.Select(method, invocation.ArgumentList.Arguments) is null)
+        {
+            Report(Descriptors.NoMatchingStepTitle, invocation, method.Name);
+            ok = false;
+        }
         return ok
             ? new StepCall(invocation, member, phase, method, resultType, lowering, loop, receiver, keyPrefix)
             : null;

@@ -118,16 +118,13 @@ public class ReturnTitleTests
     }
 
     [Fact]
-    public async Task Omitted_optional_fallback_uses_the_declared_default()
+    public async Task Omitted_optional_fallback_requires_a_matching_title()
     {
         var source = SimpleSource("Task<string?>", "Task.FromResult<string?>(null)", "{$return:id ?? name}")
             .Replace("string name, Holder holder", "string name = \"optional\", Holder? holder = null", StringComparison.Ordinal)
             .Replace("name: \"fallback\", holder: new Holder(\"member\", new DateTime(2026, 10, 13))", "", StringComparison.Ordinal);
-        var generated = GeneratorHarness.Run(source);
-        generated.AssertCompiles();
-        var definition = generated.Definitions().Single();
-        Assert.Equal("optional", definition.Nodes[1].DisplayNameTemplate);
-        Assert.Equal("optional", (await definition.RunAsync())[1].DisplayName);
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true);
+        Assert.Equal("RAUN023", Assert.Single(diagnostics).Id);
     }
 
     [Theory]
@@ -143,7 +140,7 @@ public class ReturnTitleTests
     [InlineData("float", "float.NaN", "NaN", "NaN")]
     [InlineData("float", "float.PositiveInfinity", "Infinity", "Infinity")]
     [InlineData("float", "float.NegativeInfinity", "-Infinity", "-Infinity")]
-    public async Task Optional_fallback_defaults_preserve_the_declared_parameter_type(string type, string value, string expected, string discovery)
+    public async Task Explicit_optional_fallback_values_preserve_the_declared_parameter_type(string type, string value, string expected, string discovery)
     {
         var previous = System.Globalization.CultureInfo.CurrentCulture;
         try
@@ -152,7 +149,7 @@ public class ReturnTitleTests
             System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
             var source = SimpleSource("Task<string?>", "Task.FromResult<string?>(null)", "{$return ?? name}")
                 .Replace("string name, Holder holder", type + " name = " + value + ", Holder? holder = null", StringComparison.Ordinal)
-                .Replace("name: \"fallback\", holder: new Holder(\"member\", new DateTime(2026, 10, 13))", "", StringComparison.Ordinal);
+                .Replace("name: \"fallback\", holder: new Holder(\"member\", new DateTime(2026, 10, 13))", "name: " + value, StringComparison.Ordinal);
             var generated = GeneratorHarness.Run(source);
             generated.AssertCompiles();
             Assert.Empty(GeneratorHarness.GeneratedCodeWarnings(source));

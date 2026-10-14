@@ -3,9 +3,11 @@ namespace Raun;
 /// <summary>
 /// Sets the reported display name for a Given/When/Then DSL operation. The template may contain
 /// <c>{parameterName}</c> placeholders that bind to the operation's parameters; the generator
-/// substitutes compile-time constants and emits a runtime formatter for the rest.
+/// substitutes compile-time constants and emits a runtime formatter for the rest. Multiple titles
+/// are allowed: the title using the most distinct explicitly supplied parameters wins, with
+/// declaration order breaking ties. Titles requiring omitted parameters are never selected.
 /// </summary>
-[AttributeUsage(AttributeTargets.Method)]
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
 public sealed class StepNameAttribute : Attribute
 {
     public StepNameAttribute(string template) => Template = template;
