@@ -390,3 +390,17 @@ test('lifecycle rows stay visible with setup zero and explicit muted styling wit
  assert.equal(entries[1].classList.contains('step-lifecycle'),false);
  assert.ok(entries[2].classList.contains('step-lifecycle'));assert.ok(entries[2].querySelector('.scenario-status.failed'));
 });
+
+test('skipped and not-taken step numbers and names are struck through without removing resource links',()=>{
+ const rows=['skipped','not-taken','passed','failed'].map(status=>({...step(status,message('Named resource')),status}));
+ const view=scope.buildScenarioDrill({...scenario,steps:rows});
+ const entries=view.querySelectorAll('.step-entry');
+ for(let i=0;i<entries.length;i++){
+  const number=entries[i].querySelector('.sx'), name=entries[i].querySelector('.dn');
+  assert.equal(Boolean(number.querySelector('s')),i<2);
+  assert.equal(Boolean(name.querySelector('s')),i<2);
+  assert.equal(nodeText(number),'#1');
+  assert.equal(nodeText(name),'Named resource');
+  assert.ok(name.querySelector('[data-message-resource]'));
+ }
+});

@@ -445,3 +445,33 @@ test('interleaved scenario classes preserve canonical registration order',()=>{
  context.api.buildTestsReport({scenarios},sc=>{rendered.push(sc.scenarioId);return el('section','card');});
  assert.deepEqual(rendered,['first','middle','last']);
 });
+
+test('the referenced statement is highlighted precisely within a source line',()=>{
+ const source={path:'C.cs',startLine:234,text:'A(); B(); C();',tokens:[],execution:[],
+  branches:[{start:5,length:4,category:4,outcome:'missed'}]};
+ const view=context.api.buildCoverageSource([source],{from:'kind:4',key:'missed'});
+ const nodes=descendants(view), marked=nodes.filter(n=>n.className==='coverage-branch-match');
+ assert.equal(marked.map(n=>descendants(n).filter(child=>child.className?.startsWith('coverage-syntax-')).map(child=>child.textContent).join('')).join(''),'B();');
+ const target=nodes.find(n=>n.attributes['data-coverage-focus']==='true');
+ assert.equal(target.attributes['data-source-line'],'234');
+});
+
+test('a multiline branch highlights its whole span and labels the branch line rather than the context line',()=>{
+ const text='Before();\nif (flag) {\n  B();\n}\nAfter();';
+ const source={path:'C.cs',startLine:232,text,tokens:[],execution:[],
+  branches:[{start:text.indexOf('if'),length:text.indexOf('After')-text.indexOf('if')-1,category:4,outcome:'missed'}]};
+ const view=context.api.buildCoverageSource([source],{from:'kind:4',key:'missed'}), nodes=descendants(view);
+ const lines=nodes.filter(n=>n.className?.split(' ').includes('coverage-source-match'));
+ assert.deepEqual(lines.map(n=>n.attributes['data-source-line']),['233','234','235']);
+ assert.equal(nodes.find(n=>n.className==='coverage-source-path').textContent,'C.cs:233');
+ const focus=nodes.find(n=>n.attributes['data-coverage-focus']==='true');
+ assert.equal(focus.attributes['data-source-line'],'233');
+});
+
+test('band selection only marks the matching branch span on a shared source line',()=>{
+ const source={path:'C.cs',startLine:234,text:'A(); B();',tokens:[],execution:[],
+  branches:[{start:0,length:4,category:0,outcome:'missed'},{start:5,length:4,category:4,outcome:'missed'}]};
+ const nodes=descendants(context.api.buildCoverageSource([source],{from:'kind:4',key:'missed'}));
+ const marked=nodes.filter(n=>n.className==='coverage-branch-match');
+ assert.equal(marked.map(n=>descendants(n).map(child=>child.textContent || '').join('')).join(''),'B();');
+});

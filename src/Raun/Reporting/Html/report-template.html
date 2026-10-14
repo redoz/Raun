@@ -195,6 +195,8 @@
   /* a branch arm that was not chosen: a decision, not a problem, so neutral rather than amber */
   .pill.not-taken{ color:var(--muted); background:var(--inset); } .pill.not-taken .pd{ background:var(--faint); }
   .step-entry.status-not-taken .dn{ color:var(--muted); }
+  .step-entry .sx s,.step-entry .dn s{text-decoration-thickness:1px}
+  .step-entry .dn s .message-resource{text-decoration-line:line-through;text-decoration-thickness:1px}
 
   /* ---------- DRILL PANEL (scenario-level: every step in run order) ---------- */
   .drill-host{ margin-top:4px; }
@@ -378,7 +380,8 @@
   .coverage-execution-partial{background:rgba(237,161,0,.16);text-decoration:underline;text-decoration-color:var(--skip);text-underline-offset:4px}
   .coverage-source-missed{background:rgba(210,54,54,.14)}
   .coverage-source-missed .coverage-source-number{color:var(--fail-text);font-weight:600}
-  .coverage-source-match{background:rgba(116,168,179,.12)}
+  .coverage-source-match{background:rgba(116,168,179,.12);box-shadow:inset 3px 0 var(--ring)}
+  .coverage-branch-match{background:rgba(116,168,179,.18);box-shadow:inset 0 -2px var(--ring);border-radius:2px}
   .coverage-source-match .coverage-source-number{color:var(--ink);font-weight:600}
   .coverage-source-line.coverage-source-missed{background:rgba(210,54,54,.14)}
   .coverage-source-line.coverage-source-missed .coverage-source-number{color:var(--fail-text)}
@@ -490,7 +493,7 @@
 
   .report-views,.report-view{flex:1;min-width:0;min-height:0;display:flex;overflow:hidden}
   .report-views>[hidden]{display:none}
-  .tests-narrative{flex:1;min-width:0;overflow:auto;overscroll-behavior:contain;padding:12px 20px 24px}
+  .tests-narrative{flex:1;width:100%;max-width:1280px;margin-inline:auto;box-sizing:border-box;min-width:0;overflow:auto;overscroll-behavior:contain;padding:12px 20px 24px}
   .tests-class-name{display:flex;align-items:baseline;gap:6px;min-width:0;font-size:13px;font-weight:500;color:var(--muted);margin:0 0 8px}.tests-class-label{flex:none;font-size:15px;font-weight:600;color:var(--ink)}.tests-class-name .report-meta{font-size:11px}
   .tests-narrative .group{margin:10px 0 18px}
   .coverage-scope-children{display:flex;gap:6px;flex-wrap:wrap;width:100%;max-height:76px;overflow:auto}
@@ -1227,6 +1230,10 @@
       });
       return {level:"run",name:"Whole run",categories:coverageAggregate(types),children};
     }
+    function coverageSourceLine(source,selection){
+      const branch=(source.branches || []).find(branch=>!selection || ("kind:"+branch.category===selection.from && branch.outcome===selection.key));
+      return source.startLine+(branch ? source.text.slice(0,branch.start).split(/\r\n|\r|\n/).length-1 : 0);
+    }
     function buildCoverageSource(sources, selection){
       const panel=el("section","coverage-source");
       panel.appendChild(coverageText("h3","coverage-family","Branch source snippets"));
@@ -1234,14 +1241,17 @@
       if (!sources.length){panel.appendChild(coverageText("p","coverage-caption","Source was not captured for this method."));return panel;}
       for (const source of sources){
         const missedLines=new Set(source.notExecutedLines || []);
-        const location=coverageText("p","coverage-source-path",source.path.split(/[\\/]/).slice(-2).join("/")+":"+source.startLine);location.title=source.path;panel.appendChild(location);
+        const focusLine=coverageSourceLine(source,selection);
+        const location=coverageText("p","coverage-source-path",source.path.split(/[\\/]/).slice(-2).join("/")+":"+coverageSourceLine(source,selection));location.title=source.path;panel.appendChild(location);
         const code=el("div","coverage-source-code"), parts=source.text.split(/(\r\n|\r|\n)/);
         let offset=0, tokenIndex=0;
         for (let index=0;index<parts.length;index+=2){
           const text=parts[index], end=offset+text.length;
-          const references=(source.branches || []).filter(branch=>branch.start>=offset && branch.start<end);
+          const references=(source.branches || []).filter(branch=>branch.start<end && branch.start+branch.length>offset);
           const matches=references.filter(branch=>!selection || ("kind:"+branch.category===selection.from && branch.outcome===selection.key));
           const line=el("div","coverage-source-line"+(matches.length ? " coverage-source-match" : "")+(missedLines.has(source.startLine+index/2) ? " coverage-source-missed" : ""));
+          line.setAttribute("data-source-line",String(source.startLine+index/2));
+          if (matches.length && source.startLine+index/2===focusLine) line.setAttribute("data-coverage-focus","true");
           if (references.length) line.title=references.map(branch=>(branch.category==null ? "Unclassified" : COVERAGE_KINDS[branch.category])+" → "+branch.outcome).join("; ");
           if (missedLines.has(source.startLine+index/2)) line.title=(line.title ? line.title+"; " : "")+"Not executed";
           line.appendChild(coverageText("span","coverage-source-number",String(source.startLine+index/2)));
@@ -1251,7 +1261,7 @@
           for (let t=tokenIndex;t<tokens.length && tokens[t].start<end;t++) lineTokens.push(tokens[t]);
           const ranges=(source.execution || []).filter(range=>range.start<end && range.start+range.length>offset);
           const boundaries=[offset,end];
-          for (const range of [...lineTokens,...ranges]) boundaries.push(Math.max(offset,range.start),Math.min(end,range.start+range.length));
+          for (const range of [...lineTokens,...ranges,...matches]) boundaries.push(Math.max(offset,range.start),Math.min(end,range.start+range.length));
           const cuts=[...new Set(boundaries)].sort((a,b)=>a-b);
           for (let c=0;c<cuts.length-1;c++){
             const start=cuts[c], finish=cuts[c+1];if (finish<=start) continue;
@@ -1261,12 +1271,18 @@
             const covering=ranges.filter(range=>range.start<=start && range.start+range.length>=finish);
             const preciseLength=Math.min(...covering.map(range=>range.length));
             const hits=covering.filter(range=>range.length===preciseLength).map(range=>range.state);
+            let rendered=textNode;
             if (hits.length && kind!=="comment"){
               const state=hits.includes("partial") || (hits.includes("executed") && hits.includes("missed")) ? "partial" : hits.includes("executed") ? "executed" : "missed";
               const mark=el("span","coverage-execution-"+state);
               mark.title=state==="executed" ? "Executed" : state==="missed" ? "Not executed" : "Partly executed";
-              mark.appendChild(textNode);content.appendChild(mark);
-            } else content.appendChild(textNode);
+              mark.appendChild(textNode);rendered=mark;
+            }
+            if (matches.some(branch=>branch.start<=start && branch.start+branch.length>=finish)){
+              const target=el("span","coverage-branch-match");target.title="Referenced branch";
+              target.appendChild(rendered);rendered=target;
+            }
+            content.appendChild(rendered);
           }          line.appendChild(content);code.appendChild(line);offset=end+(parts[index+1]?.length || 0);
         }
         panel.appendChild(code);
@@ -1333,7 +1349,7 @@
         };
         pane.appendChild(choices);pane.appendChild(content);
         for (const source of sources){
-          const choice=coverageText("button","coverage-snippet-choice",source.path.split(/[\\/]/).pop()+":"+source.startLine);
+          const choice=coverageText("button","coverage-snippet-choice",source.path.split(/[\\/]/).pop()+":"+coverageSourceLine(source,selection));
           choice.type="button";choice.addEventListener("click",()=>choose(source,choice));choices.appendChild(choice);
         }
         const chosen=Math.max(0,sources.indexOf(sizes.source));
@@ -3063,6 +3079,8 @@
         }
         if(s.traceId)b+='<details class="step-trace"><summary>Trace</summary><pre class="att-body">'+esc(s.traceId)+(s.spanId ? '\nSpan '+esc(s.spanId) : '')+'</pre></details>';
         if(s.attachments?.length)b+='<div class="sec">'+s.attachments.map(a=>'<details class="att"><summary><span class="an">'+esc(a.name)+'</span><span class="asz">'+attSize(a.value)+'</span></summary><pre class="att-body">'+esc(a.value)+'</pre></details>').join('')+'</div>';
+        const skipped=s.status==='skipped' || s.status==='not-taken';
+        const strike=text=>skipped ? '<s>'+text+'</s>' : text;
         const phase=String(s.phase || '').toLowerCase(), number=s.label === "" ? "0" : (s.label ?? (Number.isFinite(s.index) ? s.index+1 : index+1));
         const status=['passed','failed','skipped'].includes(s.status) ? s.status : 'skipped';
         const cls='step-entry status-'+s.status+' ph-'+phase+(s.isLifecycle ? ' step-lifecycle' : '')+(b ? ' has-body' : '')+(b && s.status==='failed' ? ' open' : '');
@@ -3070,8 +3088,8 @@
         h+='<div class="'+cls+'" data-step="'+esc(s.stepId)+'"><div class="step-head">'+
           (b ? '<button type="button" class="step-expander" aria-label="Toggle details for step '+esc(number)+'" aria-expanded="'+String(s.status==='failed')+'" aria-controls="'+bodyId+'"><span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span></button>' : '<span class="stw" aria-hidden="true"></span>')+
           '<span class="scenario-status '+status+'" role="img" aria-label="'+esc(s.status)+'"></span>'+
-          '<span class="sx" aria-label="Step '+esc(number)+', '+esc(s.status)+'">#'+esc(number)+'</span>'+
-          '<span class="dn">'+stepTitleHtml(s,sc)+'</span><span class="dm">'+(Number.isFinite(s.offsetMs) ? '<span class="step-offset" title="Time from scenario start">+'+fmtDur(s.offsetMs)+'</span>' : '')+'<span class="step-duration" title="Step duration">'+fmtDur(s.durationMs)+'</span></span></div>'+stepNotesHtml(s.notes,s.noteMessages,sc)+
+          '<span class="sx" aria-label="Step '+esc(number)+', '+esc(s.status)+'">'+strike('#'+esc(number))+'</span>'+
+          '<span class="dn">'+strike(stepTitleHtml(s,sc))+'</span><span class="dm">'+(Number.isFinite(s.offsetMs) ? '<span class="step-offset" title="Time from scenario start">+'+fmtDur(s.offsetMs)+'</span>' : '')+'<span class="step-duration" title="Step duration">'+fmtDur(s.durationMs)+'</span></span></div>'+stepNotesHtml(s.notes,s.noteMessages,sc)+
           (b ? '<div class="step-body" id="'+bodyId+'">'+b+'</div>' : '')+'</div>';
       }
       p.innerHTML=h+'</div>';bindResourceMessages(p,sc);
