@@ -160,6 +160,8 @@ Evidence: src/Raun/Resources/ResourceIdentityResolver.cs:69 and :78.
 
 ### Expose existing step concurrency limit — cheapest useful addition
 
+Implemented in beta.25; release evidence recorded below.
+
 Job: limit simultaneous requests inside a wide scenario. Scheduler already supports maxParallelism; normal RunLoop/MTP host does not pass a configurable limit. Scenario concurrency does not solve within-scenario fan-out.
 
 Smallest addition: host and CLI wiring, explicitly per-scenario. Preserve static conflict rules even when execution is serialized.
@@ -368,6 +370,32 @@ pending at the immediate post-publication check.
 
 All six original findings are closed. The separate intermittent cancellation classification follow-up
 below remains unresolved; feature opportunities are recommendations, not committed implementation.
+
+## Implemented feature opportunity: per-scenario step limit (2026-10-14)
+
+Released in [v0.3.0-beta.25](https://github.com/redoz/Raun/releases/tag/v0.3.0-beta.25).
+Implementation commit: `38b99db`.
+
+The normal host now exposes the scheduler's existing limit via `--max-parallel-steps`. It is per
+scenario: 0 preserves unbounded behavior, 1 runs one step at a time within each scenario, and
+positive values cap active scheduled steps. Four scenarios capped at eight steps can run up to
+32 steps altogether. This is not a global limiter and does not constrain fan-out inside a step.
+Dependencies and resource-conflict semantics are unchanged.
+
+RunLoop and RaunTestApplication.RunAsync accept maxParallelSteps; Aspire exposes MaxParallelSteps.
+The CLI overrides the code default, including an explicit 0. Negative values are rejected. README
+covers defaults, scope, code configuration, and examples. Added optional API parameters preserve
+source call sites but change CLR signatures; rebuild previously compiled hosts when upgrading.
+
+Evidence: bounded runtime and missing-option regressions failed before wiring, then passed. The
+14 new cases cover independent limits across concurrent scenarios, zero/unbounded behavior,
+negative rejection, CLI registration/validation/defaults/overrides. The real MTP sample passed
+with --max-parallel-scenarios 4 --max-parallel-steps 1. Staff review found no material blockers.
+
+Verification: zero-warning Release build; 1,432 passed, 5 skipped, 0 failed (1,437 total); all 73
+report checks; all four packages assembled. Hosted CI 38634511769 and release 38635127974 passed.
+All four beta.25 packages were published and attached to the GitHub release. NuGet indexing was
+pending at the immediate post-publication check. Other feature recommendations remain open.
 
 ## Verification follow-up: intermittent cancellation classification
 
