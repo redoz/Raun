@@ -2,7 +2,7 @@
 
 Created: 2026-10-14
 Revised: 2026-10-15
-Status: approved and implemented; final verification and staff review in progress
+Status: implemented and verified; final staff review findings fixed
 Scope: canonical identity feature opportunity. No release unless explicitly requested.
 
 ## Intent
@@ -221,3 +221,20 @@ README must show interface-first normal usage, pure resource owners, labels, thi
 referenced mapping libraries, and fluent custom-Main/Aspire configuration. Run focused checks, locked
 restore, zero-warning build, full solution tests, report checks, and all four package assemblies.
 Obtain one final staff review, then commit/push. Do not publish or tag a release unless requested.
+
+## Final staff review and execution decisions
+
+One independent staff review judged the runtime ownership/evidence design sound. Its generic-manifest
+finding was reproduced: two assemblies can define identically named generic arguments without being
+the same CLR type. Imported declaration validation now reads the resolved owner's actual alternate
+interface symbols instead of reconstructing representation types from documentation names. The
+regression covers two mapping libraries and two distinct List<Shared.Row> types.
+
+Nested owners or representations inside file-local containers now receive RAUN025 at their source;
+registration code is never emitted for those inaccessible declarations. Both review findings have
+behavioral regressions observed failing before the fixes. No findings were declined or deferred.
+
+Inherited class contracts retain their original declaring owner; direct declarations determine new
+owners, preventing derived classes from creating spurious ownership conflicts. Discovery/runtime
+integration was committed together because its generated-host proof spans both responsibilities.
+Native execution used equivalent Windows ledger bookkeeping rather than POSIX helper scripts.

@@ -156,6 +156,45 @@ public sealed class ResourceAlternateTests
         Assert.Equal("Patient", Assert.Single(Assert.Single(result.Definitions()).ResourceMappings).OwnerType.Name);
     }
 
+    [Fact]
+    public void Generic_sources_with_same_named_arguments_from_distinct_assemblies_remain_distinct()
+    {
+        var first = GeneratorHarness.Run("namespace Shared { public record Row(string Id); }", "First");
+        var second = GeneratorHarness.Run("namespace Shared { public record Row(string Id); }", "Second");
+        first.AssertCompiles();
+        second.AssertCompiles();
+        var firstReference = MetadataReference.CreateFromImage(first.Image);
+        var secondReference = MetadataReference.CreateFromImage(second.Image);
+        var left = GeneratorHarness.Run("""
+            using Raun; using System.Collections.Generic;
+            public class One : IResourceAlternate<List<Shared.Row>>
+            { public static ResourceKey KeyFor(List<Shared.Row> rows) => rows[0].Id; }
+            """, "LeftMappings", firstReference);
+        var right = GeneratorHarness.Run("""
+            using Raun; using System.Collections.Generic;
+            public class Two : IResourceAlternate<List<Shared.Row>>
+            { public static ResourceKey KeyFor(List<Shared.Row> rows) => rows[0].Id; }
+            """, "RightMappings", secondReference);
+        left.AssertCompiles();
+        right.AssertCompiles();
+        var application = GeneratorHarness.Run(Story, "Consumer", firstReference, secondReference,
+            MetadataReference.CreateFromImage(left.Image), MetadataReference.CreateFromImage(right.Image));
+        application.AssertCompiles();
+        var mappings = Assert.Single(application.Definitions()).ResourceMappings;
+        Assert.Equal(2, mappings.Count);
+        Assert.NotEqual(mappings[0].SourceType, mappings[1].SourceType);
+    }
+
+    [Theory]
+    [InlineData("file class Container { public class Owner : IResourceAlternate<Row> { public static ResourceKey KeyFor(Row row) => row.Id; } }", "public record Row(string Id);")]
+    [InlineData("file class Container { public record Row(string Id); } public class Owner : IResourceAlternate<Container.Row> { public static ResourceKey KeyFor(Container.Row row) => row.Id; }", "")]
+    public void File_local_containers_are_diagnosed_at_the_declaration(string declaration, string row)
+    {
+        var result = GeneratorHarness.Run("using Raun; " + row + declaration);
+        Assert.Contains(result.GeneratorDiagnostics, diagnostic => diagnostic.Id == "RAUN025" && diagnostic.Location.IsInSource);
+        Assert.DoesNotContain("ResourceMapping.Alternate", result.GeneratedSource, StringComparison.Ordinal);
+    }
+
     private static string Label(ResourceIdentityResolver resolver, object row, Type sourceType)
         => (string)typeof(ResourceAlternateTests).GetMethod(nameof(Format), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .MakeGenericMethod(sourceType).Invoke(null, [resolver, row])!;

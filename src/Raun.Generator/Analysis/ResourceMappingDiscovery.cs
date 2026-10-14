@@ -27,13 +27,10 @@ internal sealed record ResourceMappingDiscovery(
             // Inherited class contracts retain their declaring owner. Interfaces describe contracts;
             // they cannot themselves provide the concrete static dispatch required by a manifest.
             if (owner.TypeKind == TypeKind.Interface) { continue; }
-            var declaredInterfaces = owner.Interfaces.SelectMany(i => new[] { i }.Concat(i.AllInterfaces))
-                .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            foreach (var contract in declaredInterfaces.Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, alternate)))
+            foreach (var contract in AlternateContracts(owner, alternate))
             {
                 var source = contract.TypeArguments[0];
-                if (!Closed(owner) || !Closed(source) || !compilation.IsSymbolAccessibleWithin(owner, compilation.Assembly)
-                    || !compilation.IsSymbolAccessibleWithin(source, compilation.Assembly) || owner.IsFileLocal)
+                if (!Closed(owner) || !Closed(source) || !Accessible(compilation, owner) || !Accessible(compilation, source))
                 {
                     diagnostics.Add(Diagnostic.Create(Descriptors.InvalidResourceAlternate, owner.Locations.FirstOrDefault(),
                         owner.ToDisplayString(), source.ToDisplayString()));
@@ -62,16 +59,23 @@ internal sealed record ResourceMappingDiscovery(
                     continue;
                 }
                 imports.Add(manifest);
+                var seenOwners = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
                 for (var i = 0; i < count; i++)
                 {
-                    var owner = ReadType(compilation, fields, "Owner", i) as INamedTypeSymbol;
-                    var source = ReadType(compilation, fields, "Source", i);
-                    if (owner is null || source is null)
+                    var owner = ReadOwner(compilation, fields, i);
+                    if (owner is null)
                     {
                         diagnostics.Add(Diagnostic.Create(Descriptors.InvalidResourceAlternate, Location.None,
-                            manifest.ToDisplayString(), "unresolvable generated declaration; rebuild its library"));
+                            manifest.ToDisplayString(), "unresolvable generated owner; rebuild its library"));
+                        continue;
                     }
-                    else { declarations.Add(new(owner, source)); }
+                    if (!seenOwners.Add(owner)) { continue; }
+                    // The compiler has already bound every generic argument to its defining assembly.
+                    // Reuse the owner's contracts rather than reconstructing source types from names.
+                    foreach (var contract in AlternateContracts(owner, alternate))
+                    {
+                        declarations.Add(new(owner, contract.TypeArguments[0]));
+                    }
                 }
             }
         }
@@ -89,16 +93,32 @@ internal sealed record ResourceMappingDiscovery(
             .ThenBy(d => d.Source.ToDisplayString(), System.StringComparer.Ordinal).ToArray(), imports, diagnostics);
     }
 
-    private static ITypeSymbol? ReadType(Compilation compilation, Dictionary<string, object?> fields, string prefix, int index)
+    private static INamedTypeSymbol? ReadOwner(Compilation compilation, Dictionary<string, object?> fields, int index)
     {
-        if (!fields.TryGetValue(prefix + index, out var id) || id is not string referenceId
-            || !fields.TryGetValue(prefix + "Assembly" + index, out var assembly) || assembly is not string assemblyId) { return null; }
-        return DocumentationCommentId.GetSymbolsForReferenceId(referenceId, compilation).OfType<ITypeSymbol>()
-            .FirstOrDefault(t => TypeAssembly(t).Identity.ToString() == assemblyId);
+        if (!fields.TryGetValue("Owner" + index, out var id) || id is not string referenceId
+            || !fields.TryGetValue("OwnerAssembly" + index, out var assembly) || assembly is not string assemblyId) { return null; }
+        return DocumentationCommentId.GetSymbolsForReferenceId(referenceId, compilation).OfType<INamedTypeSymbol>()
+            .FirstOrDefault(t => t.ContainingAssembly.Identity.ToString() == assemblyId);
     }
 
-    internal static IAssemblySymbol TypeAssembly(ITypeSymbol type)
-        => type is IArrayTypeSymbol array ? TypeAssembly(array.ElementType) : type.ContainingAssembly;
+    private static IEnumerable<INamedTypeSymbol> AlternateContracts(INamedTypeSymbol owner, INamedTypeSymbol alternate)
+        => owner.Interfaces.SelectMany(i => new[] { i }.Concat(i.AllInterfaces))
+            .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
+            .Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, alternate));
+
+    private static bool Accessible(Compilation compilation, ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array) { return Accessible(compilation, array.ElementType); }
+        if (type is INamedTypeSymbol named)
+        {
+            for (var containing = named; containing is not null; containing = containing.ContainingType)
+            {
+                if (containing.IsFileLocal) { return false; }
+            }
+            if (!named.TypeArguments.All(argument => Accessible(compilation, argument))) { return false; }
+        }
+        return compilation.IsSymbolAccessibleWithin(type, compilation.Assembly);
+    }
 
     private static bool Equal(ResourceDeclaration left, ResourceDeclaration right)
         => SymbolEqualityComparer.Default.Equals(left.Owner, right.Owner) && SymbolEqualityComparer.Default.Equals(left.Source, right.Source);

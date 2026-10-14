@@ -10,7 +10,7 @@
 
 **Spec:** [Approved resource representation design](../specs/2026-10-14-resource-representation-mapping-design.md).
 
-**Status:** Approved and implemented; final solution verification and staff review in progress. Native execution, one final reviewer, no release.
+**Status:** Complete. Native implementation, one final staff review, both findings fixed with RED-to-GREEN regressions. No release.
 
 ## Global Constraints
 
@@ -78,7 +78,7 @@
 **Interfaces:**
 - `ScenarioDefinition.ResourceMappings`: optional/default-empty `IReadOnlyList<ResourceMapping>`.
 - Each mapping assembly emits public sealed `Raun.Generated.RaunResourceMappings_<stable assembly-identity hash>` implementing IResourceMappingManifest, with public static `GetMappings()` returning cached read-only local descriptors. Unique type names avoid cross-assembly C# name ambiguity.
-- Each manifest also exposes generated constant declaration metadata (version 1, indexed owner/source assembly identities and CLR metadata names). The importer reads these constants through Roslyn and resolves symbols for validation, including internal library owners, without exposing those types in public generic signatures or executing GetMappings at compilation. This is generated protocol data, not user mapping attributes.
+- Each manifest also exposes generated constant declaration metadata (version 1, indexed owner assembly identities and reference names). The importer resolves each owner through Roslyn and reads its actual alternate interface symbols for validation (including generic argument assembly identities and internal library owners), without exposing those types in public generic signatures or executing GetMappings at compilation. This is generated protocol data, not user mapping attributes.
 - Import manifests by compile-time assembly symbols in `Raun.Generated`, implementing the exact manifest contract; deterministic assembly/type order. Call their generated GetMappings entry, never owner methods or runtime assembly scanning.
 - Application generated code combines local/imported declarations into cached immutable defaults and attaches those defaults to every generated definition. A library with no scenarios still emits its local manifest. Imported descriptors are not re-exported as local declarations.
 - `RAUN025`: invalid/open/inaccessible alternate declaration, Error. `RAUN026`: multiple distinct owners for the same alternate source, Error. Diagnostic arguments name the source/owners and remedy; add both release entries.
@@ -112,18 +112,20 @@
 
 **Files:** Modify `README.md`, approved spec status, this plan's checkboxes/status; update canonical sample resource owner/steps only where needed to demonstrate an actual alternate payload.
 
-- [ ] Document interface-first owned domain and identity-only owner examples, optional labels, untouched external DTOs, and referenced mapping-only libraries. Show string ResourceKey<Owner> references resolving to the same identity.
-- [ ] Document Identify<Owner>().With<T>(selector) and Identify("kind") escape hatches, exact custom-Main/DI and Aspire Services placement, precedence/freeze constraints, named nullable Type compatibility, and required consumer rebuild. Add no user attributes or new startup convention.
-- [ ] Run `dotnet restore Raun.slnx --locked-mode`; require success without unplanned dependency graph changes.
-- [ ] Run `dotnet build Raun.slnx -c Release --no-restore`; require zero warnings/errors.
-- [ ] Run `dotnet test Raun.slnx -c Release --no-build`; require no failures and inspect sample scenario results.
-- [ ] Run `node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs`; require all report checks passing.
-- [ ] Pack Raun, Raun.Mtp, Raun.Coverage, and Raun.Aspire in Release with --no-build into a task artifact directory; require all four packages produced. Do not publish.
-- [ ] Obtain one final independent staff review of the complete feature diff against the spec. Ask specifically about manifest scoping/import ambiguity, freeze/default concurrency, typed-group merge order, evidence provenance, and backward generated-definition compatibility. Fix substantive findings and repeat only affected checks.
-- [ ] Commit docs/final corrections with why bodies, run `git -c core.whitespace=cr-at-eol diff --check`, then non-force push `HEAD:main`. Record verification and review outcome; no release/tag.
+- [x] Document interface-first owned domain and identity-only owner examples, optional labels, untouched external DTOs, and referenced mapping-only libraries. Show string ResourceKey<Owner> references resolving to the same identity.
+- [x] Document Identify<Owner>().With<T>(selector) and Identify("kind") escape hatches, exact custom-Main/DI and Aspire Services placement, precedence/freeze constraints, named nullable Type compatibility, and required consumer rebuild. Add no user attributes or new startup convention.
+- [x] Run `dotnet restore Raun.slnx --locked-mode`; require success without unplanned dependency graph changes.
+- [x] Run `dotnet build Raun.slnx -c Release --no-restore`; require zero warnings/errors.
+- [x] Run `dotnet test Raun.slnx -c Release --no-build`; require no failures and inspect sample scenario results.
+- [x] Run `node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs`; require all report checks passing.
+- [x] Pack Raun, Raun.Mtp, Raun.Coverage, and Raun.Aspire in Release with --no-build into a task artifact directory; require all four packages produced. Do not publish.
+- [x] Obtain one final independent staff review of the complete feature diff against the spec. Ask specifically about manifest scoping/import ambiguity, freeze/default concurrency, typed-group merge order, evidence provenance, and backward generated-definition compatibility. Fix substantive findings and repeat only affected checks.
+- [x] Commit docs/final corrections with why bodies, run `git -c core.whitespace=cr-at-eol diff --check`, then non-force push `HEAD:main`. Record verification and review outcome; no release/tag.
 
 ## Self-review
 
 Checked against every spec section: contracts/kinds (task 1), fluent/default identity authority (task 2), local/library discovery and diagnostics (task 3), all runtime boundaries and evidence (task 4), docs and shipping checks (task 5). Each review-focus condition has an owning behavioral test. Manifests are immutable declarations consumed by definitions, not global registrations; no stage depends on a custom Main. Task interfaces agree on ResourceMapping, ResourceMappings, ApplyMappings, Normalize, and source-aware ResolveLabel. Native execution and one final reviewer remain the agreed approach.
 
 Execution note: tasks 3 and 4 were committed together because their generated-host verification exercises both discovery and runtime default application. Inherited class contracts retain their declaring owner; direct declarations determine mapping ownership. Existing snapshot and graph assertions were preserved.
+
+Final verification: locked restore passed; Release solution build has zero warnings/errors; full solution has 1,464 passed, 5 skipped, 0 failed (1,469 total); report checks 73/73; all four packages produced locally. Both staff findings fixed; none deferred.

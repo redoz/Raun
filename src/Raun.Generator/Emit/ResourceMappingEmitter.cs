@@ -37,8 +37,6 @@ internal static class ResourceMappingEmitter
                 var declaration = mappings.Local[i];
                 members.Add(Constant("Owner" + i, Text(DocumentationCommentId.CreateReferenceId(declaration.Owner)!)));
                 members.Add(Constant("OwnerAssembly" + i, Text(declaration.Owner.ContainingAssembly.Identity.ToString())));
-                members.Add(Constant("Source" + i, Text(DocumentationCommentId.CreateReferenceId(declaration.Source)!)));
-                members.Add(Constant("SourceAssembly" + i, Text(ResourceMappingDiscovery.TypeAssembly(declaration.Source).Identity.ToString())));
             }
             var values = mappings.Local.Select(declaration => (ExpressionSyntax)Call(
                 MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, MappingType,
