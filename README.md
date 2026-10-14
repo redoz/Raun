@@ -3,6 +3,8 @@
 Scenario tests for .NET. Write `Given` / `When` / `Then` steps in C#. Get a test result for each step.
 Raun generates a dependency graph at compile time and runs it on Microsoft.Testing.Platform (MTP).
 A failed step skips its dependent steps. Independent branches continue.
+Titles can use optional arguments, member paths, and completed return values. Resource objects and typed
+string keys share tracking and report links; labels, snapshots, notes, and logs explain what happened.
 
 ## Install and run
 
@@ -32,9 +34,12 @@ For `dotnet test`, select MTP in the solution's `global.json`:
 
 A scenario class derives from `Scenarios<TWorld>`. Its properties select step classes.
 Use `NoWorld` when you need no shared scenario state.
+Put the scenario, its step classes, and the domain models below in one `.cs` file to run this example.
 
 ```csharp
+using System.Globalization;
 using Raun;
+using Xunit;
 
 public sealed class BookingScenarios : Scenarios<NoWorld>
 {
@@ -46,10 +51,12 @@ public sealed class BookingScenarios : Scenarios<NoWorld>
     public async Task Booking()
     {
         // Run setup steps in parallel. Keep their typed results.
-        var (patient, slot) = await (Given.PatientExists("Jane"), Given.AvailableSlot());
+        var (patient, slot) = await (Given.PatientExists("Jane", city: "Oslo"), Given.AvailableSlot());
         // Wait for both results. Explain why this step matters.
-        var appointment = await When.CreateAppointment(patient, slot).Note("Reserve the selected slot");
+        var appointment = await When.CreateAppointment(patient, slot).Note($"Reserve {slot} for {patient:id}");
         await Then.AppointmentExists(appointment);
+        // An ID parameter still refers to the same resource as the full object.
+        await Then.AppointmentKeyMatches(Appointment.KeyFor(appointment).Value, appointment);
     }
 }
 ```
@@ -61,13 +68,59 @@ Use any assertion library. Put retries and polling inside steps.
 public sealed class AppointmentGiven : Given<NoWorld>
 {
     [StepName("Given patient {$return ?? name} exists")]
+    [StepName("Given patient {$return ?? name} exists in {city}")]
     [return: Created]
-    public Task<Patient> PatientExists(string name)
-        => Task.FromResult(new Patient(name));
+    public Task<Patient> PatientExists(string name, string? city = null)
+        => Task.FromResult(new Patient(Guid.NewGuid().ToString("N"), name, city));
+
+    [StepName("Given an available slot exists")]
+    [return: Created]
+    public Task<Slot> AvailableSlot() => Task.FromResult(new Slot(1));
+}
+
+public sealed class AppointmentWhen : When<NoWorld>
+{
+    [StepName("When booking {$return ?? patient} in slot {slot.Id:D2}")]
+    [return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
+    public Task<Appointment> CreateAppointment(Patient patient, Slot slot)
+    {
+        var appointment = new Appointment(patient, slot);
+        Context.Log($"Created {appointment} for {patient:id}");
+        return Task.FromResult(appointment);
+    }
+}
+
+public sealed class AppointmentThen : Then<NoWorld>
+{
+    [StepName("Then {appointment} is booked for {appointment.Patient.Name}")]
+    public Task AppointmentExists([Read] Appointment appointment)
+    {
+        Assert.Equal("Jane", appointment.Patient.Name);
+        return Task.CompletedTask;
+    }
+
+    [StepName("Then key {appointmentId:id} matches {appointment.Patient.Name}'s appointment")]
+    public Task AppointmentKeyMatches(
+        [Read, ResourceKey<Appointment>] string appointmentId, [Read] Appointment appointment)
+    {
+        Assert.Equal(Appointment.KeyFor(appointment).Value, appointmentId);
+        return Task.CompletedTask;
+    }
 }
 ```
 
-`[StepName]` sets the title. `{$return ?? name}` shows the input until the result is available, then links the returned resource.
+The example uses named optional arguments, two title variants, return-aware titles, formatted member paths,
+resource lineage, typed notes and logs, and both object and string-key parameters. The domain models are
+shown [below](#resource-keys-labels-and-snapshots). For a larger runnable suite, see
+[AppointmentTests](samples/AppointmentTests).
+
+`[StepName]` sets the title. `{$return ?? name}` shows the input until a non-null result is available,
+then shows and links that result. A failed or skipped step, or a null result, keeps the available fallback.
+`{$return}` without a fallback shows `…` until completion. Input references keep their captured data.
+
+Parameter placeholders can read public or internal instance properties and fields, such as
+`{appointment.Patient.Name}`. Member paths are null-safe in titles. `IFormattable` values accept formats
+such as `{slot.Id:D2}` or `{booking.When:yyyy-MM-dd}`, using invariant culture.
 
 For optional parameters, declare multiple `[StepName]` titles. At each call, Raun chooses the title
 whose placeholder parameters are explicitly supplied and which uses the most distinct parameters.
@@ -81,7 +134,12 @@ use the method name without an error.
 [StepName("create {name} at {time}")]
 public Task Create(string name, string? time = null) => Task.CompletedTask;
 ```
-For the remaining methods, see the [complete step definitions](samples/AppointmentTests/AppointmentDsl.cs).
+
+In the example, `PatientExists("Jane")` selects the shorter title;
+`PatientExists("Jane", city: "Oslo")` selects the title that also mentions the city.
+Explicitly supplied null values count as supplied arguments for title selection.
+
+See the [sample step definitions](samples/AppointmentTests/AppointmentDsl.cs) for more operations.
 
 Use `Steps<T>()` properties inside step classes to group methods, such as `Given.Patients.Exists(...)`.
 For a custom phase, derive from `Phase<TWorld>` and add `[PhaseName("Eventually")]`.
@@ -137,12 +195,25 @@ See the [world example](samples/AppointmentTests/CancellationScenarios.cs).
 A **key** identifies a resource. A **label** supplies readable text. A **snapshot** captures data at a reference.
 
 ```csharp
-public sealed record Patient(string Name) : IResource<Patient>
+public sealed record Patient(string Id, string Name, string? City = null) : IResource<Patient>
 {
-    public static ResourceKey KeyFor(Patient patient) => patient.Name;
+    public static ResourceKey KeyFor(Patient patient) => patient.Id;
     public static string? LabelFor(Patient patient) => patient.Name;
 }
+
+public sealed record Slot(int Id) : IResource<Slot>
+{
+    public static ResourceKey KeyFor(Slot slot) => slot.Id.ToString(CultureInfo.InvariantCulture);
+}
+
+public sealed record Appointment(Patient Patient, Slot Slot) : IResource<Appointment>
+{
+    public static ResourceKey KeyFor(Appointment appointment) => $"{appointment.Patient.Id}@{appointment.Slot.Id}";
+    public static string? LabelFor(Appointment appointment) => $"{appointment.Patient.Name} / slot {appointment.Slot.Id}";
+}
 ```
+
+Keys contain strings (`ResourceKey` wraps a string); the patient example keeps its stable ID separate from its display name.
 
 `LabelFor` is optional. Register selectors for external types through `Context.Resources` or a DI-supplied `ResourceIdentityResolver`:
 
@@ -161,7 +232,9 @@ Raun does not call `ToString()` to choose a label. Labels never change resource 
 | `{patient:id}` | Key |
 | `{patient:data}` | Inline data preview |
 
-Each reference keeps its resource link and captured JSON. Hover over a reference to inspect or copy the snapshot.
+Object references keep their resource link and captured JSON when serialization succeeds.
+Key-only references keep the identity and link, with no object snapshot. Hover over an object reference
+to inspect or copy its snapshot.
 Labels and snapshots are captured at the reference; later changes do not rewrite them.
 Use synthetic test data: Raun does not redact reports or artifacts.
 
@@ -196,7 +269,10 @@ The string is the key of `Patient`, so its effects, conflicts, lineage, and titl
 same resource as a `Patient` instance with that key. Key-only references display `Patient:key` and
 carry no object snapshot. `ResourceKey` parameters are also supported. The annotation requires an
 access role (or a producer's `References`/`Consumes` declaration); other parameter types report `RAUN024`.
-Null keys fail the step before any resource claim is recorded.
+The step method still receives its original string or `ResourceKey`; Raun changes only the tracking and title reference.
+Nullable string parameters work when their supplied key is non-null. A supplied null key throws
+`ArgumentNullException` when its claim is evaluated; no claim is recorded for that invalid key.
+For a key-only reference in a manual log or note, format `new ResourceIdentity(typeof(Patient), patientId)`.
 
 ## Notes, logs, and attachments
 
