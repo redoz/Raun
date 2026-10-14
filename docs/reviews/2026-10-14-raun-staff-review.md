@@ -195,3 +195,7 @@ Findings 2–6 remain open. Feature opportunities remain recommendations, not an
 A final nullable-resource check found CS8714 in generated claims for nullable reference parameters. The generator now validates the captured reference with a null guard before calling the resource API's notnull generic methods; the step invocation keeps its nullable signature and value. Two behavioral cases prove successful recording and null rejection before the claim/body, without warning suppression or factory reevaluation.
 
 The staff reviewer cleared this follow-up. Final verification: 1,348 passed, 5 skipped, 0 failed; zero-warning Release build; 37 new behavioral cases in total. Beta.15 supersedes beta.14 for this correction.
+
+## User follow-ups for later
+
+- Resource effects tables: right-align the time column and reserve a consistent fixed width for the verb in the first column, so effect rows line up across steps and scenarios. Requested 2026-10-14; deferred, not yet implemented.
