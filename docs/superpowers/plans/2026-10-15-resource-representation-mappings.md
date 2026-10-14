@@ -1,4 +1,6 @@
-# Fluent Resource Representation Mappings Implementation Plan
+# Superseded: Fluent Resource Representation Mappings Implementation Plan
+
+**Status:** Superseded by the interface-first design on 2026-10-15. Do not execute this plan; it assumed no declarative resource contracts. A revised implementation plan follows approval of the updated design.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans for the established native execution preference. Steps use checkbox syntax for tracking.
 
