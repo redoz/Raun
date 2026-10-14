@@ -467,6 +467,7 @@ public class StepClassTests
         await cts.CancelAsync();
         var results = await run;
 
+        Assert.Null(Step(results, "the cancellation hangs").Exception);
         Assert.Equal(StepStatus.Skipped, Step(results, "the cancellation hangs").Status);
         Assert.Equal(StepStatus.Passed, Step(results, "Teardown").Status);
         Assert.Equal(

@@ -133,37 +133,17 @@ public sealed class ResourceIdentityResolver
         return new ResourceKey(instance.ToString() ?? type.FullName ?? type.Name);
     }
 
-    static Func<object, ResourceKey>? BuildKeyForInvoker(Type type)
+    private static Func<object, ResourceKey>? BuildKeyForInvoker(Type type)
     {
-        // Only types declaring IResource<TSelf> (with TSelf == type, per CRTP) expose a
-        // static-abstract KeyFor. Scan the interface list rather than MakeGenericType, which would
-        // throw for types that don't satisfy the `where TSelf : IResource<TSelf>` constraint.
-        var contract = typeof(IResource<>);
-        var implementsContract = Array.Exists(
-            type.GetInterfaces(),
-            i => i.IsGenericType
-                && i.GetGenericTypeDefinition() == contract
-                && i.GenericTypeArguments[0] == type);
-
-        if (!implementsContract)
+        if (!HasContract(type))
         {
             return null;
         }
 
-        // Both hand-written and generator-emitted halves expose a public static
-        // ResourceKey KeyFor(TSelf) that implements the static-abstract member.
-        var method = type.GetMethod(
-            "KeyFor",
-            BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy,
-            binder: null,
-            types: [type],
-            modifiers: null);
-
-        if (method is null || method.ReturnType != typeof(ResourceKey))
-        {
-            return null;
-        }
-
-        return instance => (ResourceKey)method.Invoke(null, [instance])!;
+        // Dispatch through the contract, including explicit implementations, as labels do.
+        return typeof(ResourceIdentityResolver).GetMethod(nameof(InvokeKey), BindingFlags.NonPublic | BindingFlags.Static)!
+            .MakeGenericMethod(type).CreateDelegate<Func<object, ResourceKey>>();
     }
+
+    private static ResourceKey InvokeKey<T>(object value) where T : IResource<T> => T.KeyFor((T)value);
 }

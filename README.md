@@ -241,6 +241,8 @@ Use synthetic test data: Raun does not redact reports or artifacts.
 ## Resource roles and conflicts
 
 Declare each step's resource effects. The report shows them and the links between resources.
+Resource keys dispatch through `IResource<T>.KeyFor`, including explicit static interface implementations,
+so object and key-only references share the same identity.
 
 ```csharp
 [StepName("When booking for {patient}")]
