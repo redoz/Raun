@@ -16,11 +16,15 @@ var node = new ScenarioNode
 {
     Index = 0, StepId = "hung", Phase = "Given", OperationName = "Hung",
     DisplayNameTemplate = "hung step", DependsOn = [],
-    Timeout = mode is "scenario" or "host" ? null : TimeSpan.FromMilliseconds(100),
+    Timeout = mode is "scenario" or "host" ? null : TimeSpan.FromSeconds(mode == "slow-startup" ? 0.1 : 5),
     PrepareArguments = mode == "preparation" ? _ =>
     {
         Console.WriteLine("PREPARATION");
         Thread.Sleep(Timeout.Infinite);
+        return [];
+    } : mode == "slow-startup" ? _ =>
+    {
+        Thread.Sleep(500);
         return [];
     } : null,
     Invoke = async (_, ctx) =>
@@ -57,12 +61,12 @@ var teardown = new ScenarioNode
 var definition = new ScenarioDefinition
 {
     ScenarioId = "timeout-fixture", DisplayName = "timeout fixture", MethodName = "Fixture.Run",
-    Timeout = mode == "scenario" ? TimeSpan.FromMilliseconds(100) : null,
+    Timeout = mode == "scenario" ? TimeSpan.FromSeconds(mode == "slow-startup" ? 0.1 : 5) : null,
     Nodes = [node, teardown],
 };
-var results = await new ScenarioScheduler(cancellationGracePeriod: mode == "already-canceled" ? TimeSpan.Zero : TimeSpan.FromMilliseconds(250))
+var results = await new ScenarioScheduler(cancellationGracePeriod: mode == "already-canceled" ? TimeSpan.Zero : TimeSpan.FromSeconds(2))
     .RunAsync(definition, cancellationToken: host.Token);
 Console.WriteLine($"RESULT:{results[0].Status}");
 // Prove completed operations cannot leave a watchdog that kills a later healthy host.
-await Task.Delay(500);
+await Task.Delay(2500);
 Console.WriteLine("COMPLETED");

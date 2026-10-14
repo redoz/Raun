@@ -76,7 +76,9 @@ termination callback was introduced. Scope/disposal/exclusive-admission proof us
 tests rather than duplicate marker plumbing in the child fixture. Cancellation callback ownership,
 first-cause races, initially cancelled zero-grace runs, and blocked managed shutdown have behavioral
 coverage. Staff review cleared the final source. Local gate: zero-warning Release solution build,
-1,379 passed / 5 skipped / 0 failed, 73 report checks passed, and four packages packed. Publication and
-saved-review resolution remain the final pending step for beta.19.
+1,380 passed / 5 skipped / 0 failed, 73 report checks passed, and four packages packed. Publication and
+saved-review resolution remain the final pending step for beta.20.
 
 The fixture must be a solution project as well as a non-assembly project reference: solution builds otherwise remove the Release configuration from the out-of-solution dependency. Clean-fixture reproduction confirmed this; the solution now includes TimeoutHost.
+
+Hard-stop probes explicitly prove body/preparation entry, with five-second entry deadlines and two-second grace to separate scheduler startup from noncooperative execution under CI load. Completed-host probes stay alive beyond grace to prove watchdog disarming.

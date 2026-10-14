@@ -17,7 +17,8 @@ public class TimeoutProcessTests
     public async Task Uncooperative_work_terminates_the_host_after_grace(string mode)
     {
         var result = await RunAsync(mode);
-        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(mode == "preparation" ? "PREPARATION" : "BODY", result.Output, StringComparison.Ordinal);
+        Assert.True(result.ExitCode != 0, $"Expected fatal exit after {mode} entered user code. Output: {result.Output}; Error: {result.Error}");
         Assert.Contains("Terminating the test host", result.Error, StringComparison.Ordinal);
         Assert.DoesNotContain("EARLY_CLEANUP", result.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("COMPLETED", result.Output, StringComparison.Ordinal);
@@ -51,6 +52,17 @@ public class TimeoutProcessTests
         Assert.Equal(0, result.ExitCode);
         Assert.DoesNotContain("BODY", result.Output, StringComparison.Ordinal);
         Assert.Contains("RESULT:Skipped", result.Output, StringComparison.Ordinal);
+        Assert.Contains("COMPLETED", result.Output, StringComparison.Ordinal);
+        Assert.Empty(result.Error);
+    }
+
+    [Fact]
+    public async Task A_deadline_before_invocation_prevents_entry_without_killing_the_host()
+    {
+        var result = await RunAsync("slow-startup");
+        Assert.Equal(0, result.ExitCode);
+        Assert.DoesNotContain("BODY", result.Output, StringComparison.Ordinal);
+        Assert.Contains("RESULT:Failed", result.Output, StringComparison.Ordinal);
         Assert.Contains("COMPLETED", result.Output, StringComparison.Ordinal);
         Assert.Empty(result.Error);
     }
