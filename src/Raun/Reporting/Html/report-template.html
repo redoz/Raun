@@ -1395,24 +1395,28 @@
             svg.style.setProperty("--resource-color",resourceColors.get(target));
             const path=document.createElementNS(svg.namespaceURI,"path"),arrow=document.createElementNS(svg.namespaceURI,"path");
             arrow.classList.add("matrix-arrow");svg.append(path,arrow);row.appendChild(svg);
-            connections.push({row,source,destination,svg,path,arrow,below:reference.kind==="Consume"});
+            connections.push({row,source,destination,svg,path,arrow});
           }
         });
         const drawConnections=()=>{
-          for(const {row,source,destination,svg,path,arrow,below} of connections){
-            const bounds=row.getBoundingClientRect(),from=source.getBoundingClientRect(),to=destination.getBoundingClientRect();
+          for(const row of rows){
+            const bundle=connections.filter(connection=>connection.row===row);
+            if(!bundle.length)continue;
+            const bounds=row.getBoundingClientRect(),cell=row.querySelector(".matrix-cell").getBoundingClientRect();
             if(!bounds.width || !bounds.height)continue;
-            svg.setAttribute("viewBox","0 0 "+bounds.width+" "+bounds.height);
-            const direction=from.left<to.left ? 1 : -1;
-            const sx=(direction>0 ? from.right+2 : from.left-2)-bounds.left,sy=(from.top+from.bottom)/2-bounds.top;
-            const ex=(direction>0 ? to.left-3 : to.right+3)-bounds.left;
-            const ey=(below ? to.bottom-5 : to.top+5)-bounds.top;
-            // Separate input lanes clear every intermediate badge, including multiple actions in one column.
-            const badges=Array.from(row.querySelectorAll(".matrix-event"),event=>event.getBoundingClientRect());
-            const lane=(below ? Math.max(...badges.map(box=>box.bottom))+5 : Math.min(...badges.map(box=>box.top))-5)-bounds.top;
-            path.setAttribute("d","M "+sx+" "+sy+" C "+(sx+direction*8)+" "+sy+" "+(sx+direction*4)+" "+lane+" "+(sx+direction*12)+" "+lane+
-              " H "+(ex-direction*12)+" C "+(ex-direction*4)+" "+lane+" "+(ex-direction*8)+" "+ey+" "+ex+" "+ey);
-            arrow.setAttribute("d","M "+ex+" "+ey+" l "+(-direction*4)+" -2.5 v 5 Z");
+            const center=(cell.top+cell.bottom)/2-bounds.top;
+            const badges=bundle.map(connection=>({connection,from:connection.source.getBoundingClientRect(),to:connection.destination.getBoundingClientRect()}));
+            const spacing=Math.min(5,Math.max(1,(Math.min(...badges.flatMap(({from,to})=>[from.height,to.height]))-6)/Math.max(1,bundle.length-1)));
+            badges.forEach(({connection:{svg,path,arrow},from,to},index)=>{
+              svg.setAttribute("viewBox","0 0 "+bounds.width+" "+bounds.height);
+              const direction=from.left<to.left ? 1 : -1;
+              const sx=(direction>0 ? from.right : from.left)-bounds.left;
+              const ex=(direction>0 ? to.left-2 : to.right+2)-bounds.left;
+              const y=center+(index-(bundle.length-1)/2)*spacing;
+              // A centered parallel bundle passes behind intervening opaque resource badges.
+              path.setAttribute("d","M "+sx+" "+y+" H "+ex);
+              arrow.setAttribute("d","M "+ex+" "+y+" l "+(-direction*4)+" -2 v 4 Z");
+            });
           }
         };
         connectionObserver=new ResizeObserver(drawConnections);

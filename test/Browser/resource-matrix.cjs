@@ -142,17 +142,18 @@ const renderFixture = (name, data) => {
     assert.match(await relation.getAttribute('aria-label'),/Reference|Consume/,'Connections describe the actual input action');
     assert.ok(await relation.evaluate(svg=>{
       const row=svg.closest('.matrix-row'),a=svg.getBoundingClientRect();
-      return Math.abs(a.height-row.clientHeight)<1 && svg.querySelector('path').getAttribute('d').includes('C');
-    }),'Connections follow measured badge edges with rounded routing in a full-row overlay');
+      return Math.abs(a.height-row.clientHeight)<1 && /^M [^ ]+ [^ ]+ H [^ ]+$/.test(svg.querySelector('path').getAttribute('d'));
+    }),'Connections follow measured badge edges with straight routing behind resource labels');
     const connectionRow=relation.locator('xpath=..');
     await connectionRow.locator('.step-expander').click();
     await page.waitForTimeout(40);
     assert.ok(await relation.evaluate(svg=>{
       const row=svg.closest('.matrix-row'),bounds=row.getBoundingClientRect();
-      const source=row.querySelector('[data-matrix-verb="Reference"]').getBoundingClientRect();
-      const start=svg.querySelector('path').getAttribute('d').match(/^M ([^ ]+) ([^ ]+)/);
+      const source=row.querySelector('.matrix-cell').getBoundingClientRect();
+      const lanes=Array.from(row.querySelectorAll('.matrix-connection'),connection=>Number(connection.querySelector('path').getAttribute('d').match(/^M ([^ ]+) ([^ ]+)/)[2]));
+      const center=lanes.reduce((sum,y)=>sum+y,0)/lanes.length;
       return Math.abs(svg.getBoundingClientRect().height-row.clientHeight)<1 &&
-        Math.abs(Number(start[2])-((source.top+source.bottom)/2-bounds.top))<1;
+        Math.abs(center-((source.top+source.bottom)/2-bounds.top))<1;
     }),'Expanded logs preserve badge-aligned connections instead of moving them to the row midpoint');
     await connectionRow.locator('.step-expander').click();
     assert.ok(await page.locator('.matrix-continuation.matrix-track').count()>0,'Resource lifelines continue alongside logs');
@@ -235,6 +236,21 @@ const renderFixture = (name, data) => {
     await page.getByRole('button',{name:/Show individual resources/}).click();
     const afterGrouping=await page.locator('.matrix-resource').evaluateAll(nodes=>Object.fromEntries(nodes.map(node=>[node.dataset.resourceColumn,getComputedStyle(node).borderTopColor])));
     assert.deepEqual(afterGrouping,beforeGrouping,'Grouping never reallocates resource colors');
+    const bundleFixture=structuredClone(model),bundleScenario=bundleFixture.scenarios[0];bundleFixture.scenarios=[bundleScenario];
+    const bundleRef=bundleScenario.references.find(reference=>reference.kind==='Reference');
+    const bundleStep=bundleScenario.steps.find(step=>step.effects.some(effect=>effect.resourceId===bundleRef.subjectId && effect.verb==='Create'));
+    const extraResource={...bundleScenario.resources[0],id:'bundle-extra',key:'Companion',label:'Companion'};
+    bundleScenario.resources.push(extraResource);
+    bundleStep.effects.push({...bundleStep.effects.find(effect=>effect.verb==='Reference'),resourceId:extraResource.id,key:extraResource.key,label:extraResource.label});
+    bundleScenario.references.push({...bundleRef,targetId:extraResource.id,targetKey:extraResource.key});
+    await page.goto(renderFixture('resource-matrix-three-inputs',bundleFixture));await page.locator('.card-head').click();
+    assert.ok(await page.locator('.matrix-row').filter({has:page.locator('.matrix-connection')}).first().evaluate(row=>{
+      const paths=Array.from(row.querySelectorAll('.matrix-connection path:not(.matrix-arrow)'));
+      const lanes=paths.map(path=>Number(path.getAttribute('d').match(/^M ([^ ]+) ([^ ]+)/)[2])).sort((a,b)=>a-b);
+      const bounds=row.getBoundingClientRect(),cell=row.querySelector('.matrix-cell').getBoundingClientRect();
+      return lanes.length===3 && lanes[1]>lanes[0] && Math.abs((lanes[2]-lanes[1])-(lanes[1]-lanes[0]))<.1 &&
+        Math.abs(lanes[1]-((cell.top+cell.bottom)/2-bounds.top))<1 && paths.every(path=>/^M [^ ]+ [^ ]+ H [^ ]+$/.test(path.getAttribute('d')));
+    }),'Three connections form an evenly spaced straight bundle centered on the action row');
     for(const verb of ['Edit','Load']){
       const fixture=structuredClone(model),sc=fixture.scenarios[0];fixture.scenarios=[sc];
       const ref=sc.references.find(reference=>reference.kind==='Reference');
