@@ -16,7 +16,8 @@ namespace Raun;
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
 [SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-public class CreatedAttribute : Attribute
+[ResourceActionDefinition(ResourceActionKind.Create)]
+public class CreatedAttribute : ResourceAttribute
 {
     /// <summary>The resource keeps a reference to each specified resource.</summary>
     /// <remarks>
@@ -24,6 +25,7 @@ public class CreatedAttribute : Attribute
     /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
     /// <para>Use nameof(parameter) for a parameter name.</para>
     /// </remarks>
+    [Relationship(ResourceRelation.Reference, Required = false)]
     public string[] References { get; set; } = [];
 
     /// <summary>Each specified resource is an input to the resource that this step produces.</summary>
@@ -33,6 +35,7 @@ public class CreatedAttribute : Attribute
     /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
     /// <para>Use nameof(parameter) for a parameter name.</para>
     /// </remarks>
+    [Relationship(ResourceRelation.Consume, Required = false)]
     public string[] Consumes { get; set; } = [];
 }
 
@@ -50,7 +53,8 @@ public class CreatedAttribute : Attribute
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
 [SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-public class LoadedAttribute : Attribute
+[ResourceActionDefinition(ResourceActionKind.Load)]
+public class LoadedAttribute : ResourceAttribute
 {
     /// <summary>The resource keeps a reference to each specified resource.</summary>
     /// <remarks>
@@ -58,6 +62,7 @@ public class LoadedAttribute : Attribute
     /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
     /// <para>Use nameof(parameter) for a parameter name.</para>
     /// </remarks>
+    [Relationship(ResourceRelation.Reference, Required = false)]
     public string[] References { get; set; } = [];
 
     /// <summary>Each specified resource is an input to the resource that this step produces.</summary>
@@ -67,6 +72,7 @@ public class LoadedAttribute : Attribute
     /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
     /// <para>Use nameof(parameter) for a parameter name.</para>
     /// </remarks>
+    [Relationship(ResourceRelation.Consume, Required = false)]
     public string[] Consumes { get; set; } = [];
 }
 
@@ -84,7 +90,8 @@ public class LoadedAttribute : Attribute
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
 [SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-public class ReadAttribute : Attribute;
+[ResourceActionDefinition(ResourceActionKind.Read)]
+public class ReadAttribute : ResourceAttribute;
 
 /// <summary>The step changes an existing resource.</summary>
 /// <remarks>
@@ -100,7 +107,8 @@ public class ReadAttribute : Attribute;
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
 [SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-public class EditedAttribute : Attribute
+[ResourceActionDefinition(ResourceActionKind.Edit)]
+public class EditedAttribute : ResourceAttribute
 {
     /// <summary>The resource keeps a reference to each specified resource.</summary>
     /// <remarks>
@@ -108,6 +116,7 @@ public class EditedAttribute : Attribute
     /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
     /// <para>Use nameof(parameter) for a parameter name.</para>
     /// </remarks>
+    [Relationship(ResourceRelation.Reference, Required = false)]
     public string[] References { get; set; } = [];
 
     /// <summary>Each specified resource is an input to the resource that this step produces.</summary>
@@ -117,6 +126,7 @@ public class EditedAttribute : Attribute
     /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
     /// <para>Use nameof(parameter) for a parameter name.</para>
     /// </remarks>
+    [Relationship(ResourceRelation.Consume, Required = false)]
     public string[] Consumes { get; set; } = [];
 }
 
@@ -134,4 +144,5 @@ public class EditedAttribute : Attribute
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
 [SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-public class DeletedAttribute : Attribute;
+[ResourceActionDefinition(ResourceActionKind.Delete)]
+public class DeletedAttribute : ResourceAttribute;
