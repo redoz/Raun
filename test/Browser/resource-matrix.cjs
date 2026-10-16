@@ -122,6 +122,13 @@ const renderFixture = (name, data) => {
       assert.ok(mentionColors.every(color=>color.line==='underline' && color.pattern==='solid' && color.offset==='2px' && color.thickness==='1px' && color.border==='0px'),'Solid resource underlines sit at the intended text position without a button border');
       assert.ok(mentionColors.every(color=>color.phaseText!==color.normal && color.phaseLine==='none'),'Matching phase words use their phase color without decorations');
       assert.equal(new Set(mentionColors.map(color=>color.underline)).size,3,'Resources retain distinct muted underline colors');
+      const logReferences=await registryCard.locator('.logs .message-resource').evaluateAll(links=>links.map(link=>{
+        const title=Array.from(link.closest('.card').querySelectorAll('.dn .message-resource')).find(mention=>mention.dataset.messageResource===link.dataset.messageResource);
+        const style=getComputedStyle(link),titleStyle=getComputedStyle(title);
+        return {color:link.style.getPropertyValue('--resource-color'),titleColor:title.style.getPropertyValue('--resource-color'),underline:style.textDecorationColor,titleUnderline:titleStyle.textDecorationColor,line:style.textDecorationLine,pattern:style.textDecorationStyle};
+      }));
+      assert.ok(logReferences.length>0,'The registry journey has resource references in its logs');
+      assert.ok(logReferences.every(link=>link.color && link.color===link.titleColor && link.underline===link.titleUnderline && link.line==='underline' && link.pattern==='solid'),'Log references use the same resource colors and solid underlines as titles in '+colorScheme+' mode');
     }
     await page.emulateMedia({colorScheme:'light'});
 
