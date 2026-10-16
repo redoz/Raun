@@ -74,7 +74,7 @@ public sealed class ScenarioContext
 
         // Resource events are part of the step's story, so they land in the log stream in order,
         // between the lines the step wrote before and after them — and on the span as events.
-        Resources.AttachObserver(OnResource);
+        Resources.AttachActionObserver(OnResource);
     }
 
     // A cleanup gets an immutable token view, while all output still belongs to one teardown node.
@@ -107,10 +107,10 @@ public sealed class ScenarioContext
     /// <summary>Binds this step to its span. Called by the scheduler.</summary>
     internal void AttachActivity(System.Diagnostics.Activity? activity) => _activity = activity;
 
-    private void OnResource(LifecycleVerb verb, ResourceIdentity identity, ResourceConflictException? conflict, string? snapshot, string? label)
+    private void OnResource(LifecycleVerb verb, ResourceIdentity identity, ResourceConflictException? conflict, string? snapshot, string? label, ResourceAction? action)
     {
         var content = conflict is null
-            ? new StepMessage([new StepMessagePart($"[resource] {verb} "), new StepMessagePart(label ?? ResourcePresentation.Display(identity), identity) { Snapshot = snapshot, Label = label }])
+            ? new StepMessage([new StepMessagePart($"[resource] {action?.Name ?? verb.ToString()} "), new StepMessagePart(label ?? ResourcePresentation.Display(identity), identity) { Snapshot = snapshot, Label = label }])
             : new StepMessage([
                 new StepMessagePart($"[resource] conflict: Step '{conflict.StepDisplayName}' ({conflict.Verb}) and step '{conflict.OtherStepDisplayName}' ({conflict.OtherVerb}) both touch "),
                 new StepMessagePart(label ?? ResourcePresentation.Display(identity), identity) { Snapshot = snapshot, Label = label },
@@ -125,6 +125,7 @@ public sealed class ScenarioContext
                 ["verb"] = verb.ToString(),
                 ["identity"] = identity.ToString(),
             };
+            if (action is not null) { tags["action"] = action.Name; }
             if (conflict is not null)
             {
                 tags["conflict"] = conflict.Message;

@@ -9,6 +9,9 @@ public sealed record ResourceEffect
     /// <summary>The lifecycle verb the step declared (Create/Load/Read/Edit/Delete).</summary>
     public required LifecycleVerb Verb { get; init; }
 
+    /// <summary>The optional domain action. The base Verb still controls access.</summary>
+    public ResourceAction? Action { get; init; }
+
     /// <summary>The resource identity the effect targets.</summary>
     public required ResourceIdentity Identity { get; init; }
 

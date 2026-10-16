@@ -18,14 +18,14 @@ public sealed class ResourceContext
     // Effects in first-seen order; _index maps identity → its position in _effects.
     readonly List<ResourceEffect> _effects = [];
     readonly List<ResourceLineageRelation> _lineage = [];
-    readonly Dictionary<ResourceIdentity, int> _index = [];
+    readonly Dictionary<(ResourceIdentity Identity, Type? ActionType), int> _index = [];
     readonly ResourceIdentityResolver _resolver;
     readonly TimeProvider _timeProvider;
     readonly string _stepId;
     string _stepDisplayName;
     ResourceLedger? _ledger;
     int _nodeIndex;
-    Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?>? _observer;
+    Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?, ResourceAction?>? _observer;
 
     /// <summary>Creates a tracer bound to one step, resolving identities via <paramref name="resolver"/>.</summary>
     public ResourceContext(
@@ -67,6 +67,27 @@ public sealed class ResourceContext
 
     /// <summary>Registers a label selector for resource references.</summary>
     public void Label<T>(Func<T, string?> selector) => _resolver.Label(selector);
+
+    /// <summary>Records a domain action on a resource instance.</summary>
+    public ValueTask Apply<T>(ResourceAction action, T resource) where T : notnull
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return resource is ResourceIdentity identity ? Apply(action, identity)
+            : Record(action.Effect, _resolver.Resolve(resource), resource, typeof(T), action);
+    }
+
+    /// <summary>Records a domain action by key, without an object snapshot.</summary>
+    public ValueTask Apply(ResourceAction action, ResourceIdentity identity)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return Record(action.Effect, identity, data: null, action: action);
+    }
+
+    /// <summary>Records a new resource by key, without an object snapshot.</summary>
+    public ValueTask Create(ResourceIdentity identity) => Record(LifecycleVerb.Create, identity, data: null);
+
+    /// <summary>Records an existing resource by key, without an object snapshot.</summary>
+    public ValueTask Load(ResourceIdentity identity) => Record(LifecycleVerb.Load, identity, data: null);
 
     /// <summary>Records bringing a new <paramref name="resource"/> into existence (exclusive).</summary>
     public ValueTask Create<T>(T resource)
@@ -174,11 +195,16 @@ public sealed class ResourceContext
     /// <summary>Notifies <see cref="ScenarioContext"/> of each recorded effect, or of a refused claim
     /// (non-null exception), so the resource story reaches the step's log and span in order.</summary>
     internal void AttachObserver(Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?> observer)
+        => _observer = (verb, identity, conflict, snapshot, label, _) => observer(verb, identity, conflict, snapshot, label);
+
+    internal void AttachActionObserver(Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?, ResourceAction?> observer)
         => _observer = observer;
 
-    ValueTask Record(LifecycleVerb verb, ResourceIdentity identity, object? data, Type? sourceType = null)
+    ValueTask Record(LifecycleVerb verb, ResourceIdentity identity, object? data, Type? sourceType = null, ResourceAction? action = null)
     {
         identity = _resolver.Normalize(identity);
+        if (action?.AttributeType is null) { action = null; }
+        var effectKey = (identity, action?.AttributeType);
         // The ledger first: a refused claim is a ResourceConflictException that fails the step, and it
         // records no effect — the exception carries the identity instead.
         try
@@ -187,17 +213,17 @@ public sealed class ResourceContext
         }
         catch (ResourceConflictException ex)
         {
-            _observer?.Invoke(verb, identity, ex, null, null);
+            _observer?.Invoke(verb, identity, ex, null, null, action);
             throw;
         }
 
         var snapshot = ResourcePresentation.Capture(data);
         var label = data is null ? ResourcePresentation.Display(identity) : _resolver.ResolveLabel(identity, sourceType ?? data.GetType(), data);
-        _observer?.Invoke(verb, identity, null, snapshot, label);
+        _observer?.Invoke(verb, identity, null, snapshot, label, action);
 
         lock (_lock)
         {
-            if (_index.TryGetValue(identity, out int idx))
+            if (_index.TryGetValue(effectKey, out int idx))
             {
                 // Dedup: keep the stronger verb; use latest non-null data.
                 // Timestamp/StepId/StepDisplayName are intentionally preserved from the first-seen touch
@@ -214,10 +240,11 @@ public sealed class ResourceContext
             }
             else
             {
-                _index[identity] = _effects.Count;
+                _index[effectKey] = _effects.Count;
                 _effects.Add(new ResourceEffect
                 {
                     Verb = verb,
+                    Action = action,
                     Identity = identity,
                     Data = data,
                     DataSnapshot = snapshot,
