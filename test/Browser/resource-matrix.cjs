@@ -107,10 +107,10 @@ const renderFixture = (name, data) => {
       const mentionColors=await registryLinks.evaluateAll(links=>links.map(link=>{
         const column=Array.from(link.closest('.card').querySelectorAll('.matrix-resource')).find(header=>header.dataset.resourceColumn===link.dataset.messageResource);
         const style=getComputedStyle(link);
-        return {text:style.color,underline:style.borderBottomColor,column:getComputedStyle(column).borderTopColor};
+        return {text:style.color,normal:getComputedStyle(link.closest('.dn')).color,underline:style.borderBottomColor,column:getComputedStyle(column).borderTopColor};
       }));
-      assert.ok(mentionColors.every(color=>color.text===color.column && color.underline===color.column),'Title references reuse their own resource column color in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
-      assert.equal(new Set(mentionColors.map(color=>color.text)).size,3,'Patient, slot and appointment keep distinct title colors');
+      assert.ok(mentionColors.every(color=>color.text===color.normal && color.underline===color.column),'Title references keep neutral text and resource-colored underlines in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
+      assert.equal(new Set(mentionColors.map(color=>color.underline)).size,3,'Patient, slot and appointment keep distinct underline colors');
     }
     await page.emulateMedia({colorScheme:'light'});
 
@@ -140,10 +140,13 @@ const renderFixture = (name, data) => {
       const box=card.getBoundingClientRect();
       const lastRow=card.querySelector('.matrix-row:last-child').getBoundingClientRect();
       const chevron=card.querySelector('.card-head .tw').getBoundingClientRect();
-      return {bottomGap:box.bottom-lastRow.bottom,leftInset:chevron.left-box.left};
+      const duration=card.querySelector('.card-head .dur').getBoundingClientRect();
+      const firstColumn=card.querySelector('.matrix-resource').getBoundingClientRect();
+      return {bottomGap:box.bottom-lastRow.bottom,leftInset:chevron.left-box.left,durationGap:firstColumn.left-duration.right};
     });
     assert.ok(Math.abs(expandedBounds.bottomGap)<=1,'Expanded border ends at the last grid row, without an empty footer: '+JSON.stringify(expandedBounds));
     assert.ok(expandedBounds.leftInset>=8,'Scenario chevron has space inside the left border: '+JSON.stringify(expandedBounds));
+    assert.ok(expandedBounds.durationGap>=12,'Scenario duration has space before the resource matrix: '+JSON.stringify(expandedBounds));
 
     assert.equal(await collapsedScenario.locator('.matrix-steps').count(),0,'No separate Steps header row');
     await collapsedScenario.locator('.card-head').click();
