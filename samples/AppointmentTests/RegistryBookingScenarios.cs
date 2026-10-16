@@ -60,7 +60,7 @@ public sealed class PatientRegistry : IScenarioWorld<PatientRegistry>
 
 public sealed class RegistryGiven : Given<PatientRegistry>
 {
-    [StepName("Given {name} is registered as {patientId}")]
+    [StepName("Given {$return ?? name} is registered as {$return:id ?? patientId}")]
     [return: Registered]
     public Task<RegistryPatient> RegisteredPatient(string patientId, string name)
     {
@@ -69,7 +69,7 @@ public sealed class RegistryGiven : Given<PatientRegistry>
         return Task.FromResult(row);
     }
 
-    [StepName("Given an available slot exists")]
+    [StepName("Given {$return} is available")]
     [return: Created]
     public Task<Slot> AvailableSlot() => Task.FromResult(new Slot(1));
 }
@@ -83,7 +83,7 @@ public sealed class RegistryWhen : When<PatientRegistry>
 
     // The service accepts an ID, not a patient object. The typed property on Booked still
     // links the booking to Patient, and the preceding row/domain observations supply its name.
-    [StepName("When booking {patientId} in slot {slot.Id:D2}")]
+    [StepName("When booking {patientId} in {slot}")]
     [return: Booked(Patient = nameof(patientId), Slot = nameof(slot))]
     public Task<Appointment> BookById([ResourceKey<Patient>] string patientId, Slot slot)
         => Task.FromResult(World.Book(patientId, slot));
@@ -91,7 +91,7 @@ public sealed class RegistryWhen : When<PatientRegistry>
 
 public sealed class RegistryThen : Then<PatientRegistry>
 {
-    [StepName("Then {patientId} has the recorded booking")]
+    [StepName("Then {appointment} is recorded for {patientId}")]
     public Task AuditBooking([Audited, ResourceKey<Patient>] string patientId, [Read] Appointment appointment)
     {
         var stored = World.FindBooking(patientId, appointment.Slot);

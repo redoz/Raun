@@ -82,7 +82,7 @@ public sealed class AppointmentGiven : Given<NoWorld>
 
 public sealed class AppointmentWhen : When<NoWorld>
 {
-    [StepName("When booking {$return ?? patient} in slot {slot.Id:D2}")]
+    [StepName("When booking {$return ?? patient} in {slot}")]
     [return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
     public Task<Appointment> CreateAppointment(Patient patient, Slot slot)
     {
@@ -94,14 +94,14 @@ public sealed class AppointmentWhen : When<NoWorld>
 
 public sealed class AppointmentThen : Then<NoWorld>
 {
-    [StepName("Then {appointment} is booked for {appointment.Patient.Name}")]
+    [StepName("Then {appointment} is booked for {appointment.Patient}")]
     public Task AppointmentExists([Read] Appointment appointment)
     {
         Assert.Equal("Jane", appointment.Patient.Name);
         return Task.CompletedTask;
     }
 
-    [StepName("Then key {appointmentId:id} matches {appointment.Patient.Name}'s appointment")]
+    [StepName("Then key {appointmentId:id} matches {appointment.Patient}'s appointment")]
     public Task AppointmentKeyMatches(
         [Read, ResourceKey<Appointment>] string appointmentId, [Read] Appointment appointment)
     {
@@ -111,7 +111,7 @@ public sealed class AppointmentThen : Then<NoWorld>
 }
 ```
 
-The example uses named optional arguments, two title variants, return-aware titles, formatted member paths,
+The example uses named optional arguments, two title variants, return-aware titles, resource-valued member paths,
 resource lineage, typed notes and logs, and both object and string-key parameters. The domain models are
 shown [below](#resource-keys-labels-and-snapshots). For a larger runnable suite, see
 [AppointmentTests](samples/AppointmentTests).
@@ -123,6 +123,10 @@ then shows and links that result. A failed or skipped step, or a null result, ke
 Parameter placeholders can read public or internal instance properties and fields, such as
 `{appointment.Patient.Name}`. Member paths are null-safe in titles. `IFormattable` values accept formats
 such as `{slot.Id:D2}` or `{booking.When:yyyy-MM-dd}`, using invariant culture.
+Resource-valued paths such as `{appointment.Patient}` keep their identity, label, and snapshot.
+Scalar paths such as `{appointment.Patient.Name}` display ordinary text. Use the resource value
+with `LabelFor` when that text should be an interactive resource reference.
+Creation steps can use `{$return ?? name}` to link the returned resource after success.
 
 For optional parameters, declare multiple `[StepName]` titles. At each call, Raun chooses the title
 whose placeholder parameters are explicitly supplied and which uses the most distinct parameters.
@@ -206,6 +210,7 @@ public sealed record Patient(string Id, string Name, string? City = null) : IRes
 public sealed record Slot(int Id) : IResource<Slot>
 {
     public static ResourceKey KeyFor(Slot slot) => slot.Id.ToString(CultureInfo.InvariantCulture);
+    public static string? LabelFor(Slot slot) => $"slot {slot.Id:D2}";
 }
 
 public sealed record Appointment(Patient Patient, Slot Slot) : IResource<Appointment>

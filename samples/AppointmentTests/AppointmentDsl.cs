@@ -22,16 +22,19 @@ public sealed record Patient(string Id, string Name, string? City = null) :
 public sealed record Slot(int Id, bool Held = false) : IResource<Slot>
 {
     public static ResourceKey KeyFor(Slot instance) => instance.Id.ToString(CultureInfo.InvariantCulture);
+    public static string? LabelFor(Slot instance) => $"slot {instance.Id:D2}";
 }
 
 public sealed record Appointment(Patient Patient, Slot Slot) : IResource<Appointment>
 {
     public static ResourceKey KeyFor(Appointment instance) => $"{instance.Patient.Id}@{instance.Slot.Id}";
+    public static string? LabelFor(Appointment instance) => $"{instance.Patient.Name} / slot {instance.Slot.Id:D2}";
 }
 
 public sealed record User(string Name) : IResource<User>
 {
     public static ResourceKey KeyFor(User instance) => instance.Name;
+    public static string? LabelFor(User instance) => instance.Name;
 }
 
 public sealed record ImportResult(int Count);
@@ -61,8 +64,8 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
         return Task.CompletedTask;
     }
 
-    [StepName("Given patient {name} exists")]
-    [StepName("Given patient {name} exists in {city}")]
+    [StepName("Given patient {$return ?? name} exists")]
+    [StepName("Given patient {$return ?? name} exists in {city}")]
     [return: Registered]
     public Task<Patient> PatientExists(string name, string? city = null)
     {
@@ -81,7 +84,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
         return Task.FromResult(new Patient($"patient-{name}", name, city));
     }
 
-    [StepName("Given an available slot exists")]
+    [StepName("Given {$return} is available")]
     [return: Created]
     public Task<Slot> AvailableSlot()
     {
@@ -89,7 +92,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
         return Task.FromResult(new Slot(1));
     }
 
-    [StepName("Given the patient is a priority case")]
+    [StepName("Given {patient} is a priority case")]
     public Task<bool> PatientIsPriority([Read] Patient patient)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(180));
@@ -97,7 +100,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
         return Task.FromResult(patient.Name.Length > 0 && char.ToUpperInvariant(patient.Name[0]) < 'M');
     }
 
-    [StepName("Given user {name} exists")]
+    [StepName("Given user {$return ?? name} exists")]
     [return: Created]
     public Task<User> UserExists(string name)
     {
@@ -112,7 +115,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
 /// <summary>Actions: booking and importing.</summary>
 public sealed partial class AppointmentWhen : When<NoWorld>
 {
-    [StepName("When creating an appointment")]
+    [StepName("When booking {patient} in {slot}")]
     [return: Booked(Patient = nameof(patient), Slot = nameof(slot))]
     public Task<Appointment> CreateAppointment(Patient patient, Slot slot)
     {
@@ -120,7 +123,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
         return Task.FromResult(new Appointment(patient, slot));
     }
 
-    [StepName("When creating an urgent appointment")]
+    [StepName("When urgently booking {patient} in {slot2}")]
     [return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]
     public Task<Appointment> CreateUrgentAppointment(Patient patient, Slot slot2)
     {
@@ -139,7 +142,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
 /// <summary>Assertions on bookings and imports.</summary>
 public sealed partial class AppointmentThen : Then<NoWorld>
 {
-    [StepName("Then {appointment.Patient.Name} has an appointment in slot {appointment.Slot.Id:D2}")]
+    [StepName("Then {appointment.Patient} has an appointment in {appointment.Slot}")]
     public Task AppointmentExists([Read] Appointment appointment)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(170));
@@ -148,7 +151,7 @@ public sealed partial class AppointmentThen : Then<NoWorld>
         return Task.CompletedTask;
     }
 
-    [StepName("Then the import should contain {expected} users")]
+    [StepName("Then the import should contain {expected} users (actual {import.Count:D2})")]
     public Task ImportShouldContainUsers(ImportResult import, int expected)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(110));

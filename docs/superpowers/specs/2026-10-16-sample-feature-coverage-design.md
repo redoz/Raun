@@ -54,3 +54,18 @@ Update exact sample totals without weakening the six-node filtered scenario asse
 Execution stayed in the existing isolated managed worktree. The original user checkout is preserved.
 The sample guide explicitly separates exercised journeys from configuration recipes and dedicated
 failure tests. No new public API, release, tag, or package publication.
+
+
+## Follow-up: resource mentions in titles
+
+Raw name/ID arguments and scalar member paths format as ordinary text. The samples now use
+return-aware creation titles and resource-valued member paths, with readable Slot/Appointment
+labels. The registry journey renders eight real resource references, including both registration
+name/ID, the slot, and the audited booking. Resource-valued paths preserve identity; plain import
+counts still demonstrate scalar member formatting. README examples document that distinction.
+
+The new report assertions failed on the old registration title. Real model and DOM checks pass
+with all eight references; clicking the registration ID highlights all five patient mentions.
+AppointmentTests passes 105 nodes with seven expected skips, GettingStarted passes six, and the
+137 MTP tests (including the unchanged six-node filter guard) and 72 report JavaScript tests pass.
+Solution Release build has zero warnings/errors. No runtime formatting or renderer changes.

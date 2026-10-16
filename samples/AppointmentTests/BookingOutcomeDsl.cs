@@ -36,7 +36,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
 
 public sealed partial class AppointmentThen : Then<NoWorld>
 {
-    [StepName("Then the patient is {position} on the waitlist")]
+    [StepName("Then {patient} is {position} on the waitlist")]
     public Task PatientIsOnWaitlist([Read] Patient patient, int position)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(120));
@@ -44,7 +44,7 @@ public sealed partial class AppointmentThen : Then<NoWorld>
         return Task.CompletedTask;
     }
 
-    [StepName("Then the patient is told {reason}")]
+    [StepName("Then {patient} is told {reason}")]
     public Task PatientWasTold([Read] Patient patient, string reason)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(120));

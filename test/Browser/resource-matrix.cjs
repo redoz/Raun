@@ -39,6 +39,16 @@ assert.equal(keyReference.label,'Jane <Doe>');
 assert.equal(keyReference.data,null,'A typed relationship through a string key does not borrow the registry snapshot');
 assert.ok(bookById.displayName.includes('Jane <Doe>'),'Booking by key resolves the earlier readable name');
 const booking=bookById.effects.find(effect=>effect.actionName==='Booked');
+const registered=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Register'));
+const approved=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Approve'));
+const available=actionSample.steps.find(step=>step.effects.some(effect=>effect.type==='Slot' && effect.verb==='Create'));
+const slotResource=actionSample.resources.find(resource=>resource.type==='Slot');
+for(const [step,mentions] of [[registered,[['Jane <Doe>',patientResource.id],['pat-42',patientResource.id]]],[approved,[['Jane <Doe>',patientResource.id]]],[available,[['slot 01',slotResource.id]]],[bookById,[['Jane <Doe>',patientResource.id],['slot 01',slotResource.id]]]]){
+  for(const [text,resourceId] of mentions){
+    assert.ok(step.titleMessage.parts.some(part=>part.text===text && part.resourceId===resourceId),'Title text '+text+' is a reference to the correct resource in '+step.displayName);
+  }
+}
+
 assert.ok(actionSample.references.some(edge=>edge.subjectId===booking.resourceId && edge.targetId===patientResource.id && edge.kind==='Reference'));
 const audit=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Audited'));
 assert.ok(audit.displayName.includes('Jane <Doe>'),'A key-only generated title reuses the patient name');
@@ -48,8 +58,9 @@ assert.ok(actionSample.steps.some(step=>step.effects.some(effect=>effect.actionN
 const allSteps=model.scenarios.flatMap(scenario=>scenario.steps);
 assert.ok(allSteps.some(step=>step.displayName==='Given patient Jane exists'),'An omitted optional city selects the shorter title');
 assert.ok(allSteps.some(step=>step.displayName==='Given patient Jane exists in Oslo'),'A supplied optional city selects the more specific title');
-assert.ok(allSteps.some(step=>step.displayName==='Then Jane has an appointment in slot 01'),'Member paths and numeric formats appear in real titles');
-for(const [scenarioName,creates,expectedAssertion] of [['a booking either lands, waits, or is refused',true,'Then Ada has an appointment in slot 01'],['a patient whose booking waits is put on the waitlist',false,'Then the patient is 3 on the waitlist'],['a patient can decline the waitlist',false,'Then the patient is told the patient declined the waitlist']]){
+assert.ok(allSteps.some(step=>step.displayName==='Then Jane has an appointment in slot 01'),'Resource-valued member paths keep the readable patient and slot labels');
+assert.ok(allSteps.some(step=>step.displayName==='Then the import should contain 2 users (actual 02)'),'Scalar member formatting remains available for ordinary values');
+for(const [scenarioName,creates,expectedAssertion] of [['a booking either lands, waits, or is refused',true,'Then Ada has an appointment in slot 01'],['a patient whose booking waits is put on the waitlist',false,'Then Wren is 3 on the waitlist'],['a patient can decline the waitlist',false,'Then Wren is told the patient declined the waitlist']]){
   const scenario=model.scenarios.find(item=>item.displayName===scenarioName);
   assert.ok(scenario,'The sample demonstrates '+scenarioName);
   const assertions=scenario.steps.filter(step=>step.phase==='Then' && !step.isLifecycle);
@@ -85,6 +96,19 @@ const renderFixture = (name, data) => {
     await page.goto(pathToFileURL(path.join(out, 'resource-matrix-preview.html')).href);
     await page.evaluate(() => document.fonts.ready);
     assert.deepEqual(errors, []);
+    const registryCard=page.locator('.card').filter({hasText:'registered patient books by ID'});
+    await registryCard.locator('.card-head').click();
+    const registryLinks=registryCard.locator('.dn .message-resource');
+    assert.equal(await registryLinks.count(),8,'All eight resource mentions in the real registry journey render as interactive references');
+    const linkedNames=await registryLinks.allTextContents();
+    assert.ok(linkedNames.includes('pat-42') && linkedNames.includes('slot 01'),'ID and slot text render as resource buttons too');
+    const registrationId=registryLinks.filter({hasText:'pat-42'});
+    await registrationId.click();
+    assert.equal(await registryCard.locator('.dn .message-resource.hl').count(),5,'Clicking the registration ID highlights all five patient mentions across the journey');
+    await registrationId.click();
+
+    await registryCard.locator('.card-head').click();
+
     assert.equal(await page.locator('.resource-events').count(),0,'The matrix replaces duplicate Resource events tables');
     assert.equal(await page.locator('.matrix-event').count(),model.scenarios.reduce((total,scenario)=>total+scenario.steps.reduce((count,step)=>count+step.effects.length,0),0),'Every recorded resource event remains inspectable in the matrix');
     assert.equal(await page.locator('.resource-matrix').count(), model.scenarios.filter(hasResources).length, 'Resource matrix is part of the default view');
