@@ -27,7 +27,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
         }
 
         var appointment = new Appointment(patient, slot);
-        await Context.Resources.Create(appointment);
+        await Context.Resources.Apply(ResourceAction.For<BookedAttribute>(), appointment);
         await Context.Resources.Reference(patient, appointment);
         await Context.Resources.Consume(slot, appointment);
         return new Booked(appointment);

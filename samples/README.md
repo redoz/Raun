@@ -19,7 +19,7 @@ The projects are also included in `dotnet test Raun.slnx`.
 | Generated host, simple steps, typed results, assertions | [GettingStarted](GettingStarted/BookingScenarios.cs) |
 | Sequential and parallel tuple/array/LINQ groups, conditional merge | [Booking scenarios](AppointmentTests/Scenarios.cs) |
 | Conditional results: booked, waitlisted, refused | [Outcome scenarios](AppointmentTests/BookingOutcomeScenarios.cs) |
-| Imperative effects for a resource inside a wrapped result | [TryToBook](AppointmentTests/BookingOutcomeDsl.cs): only the successful branch creates a booking and records its relationships |
+| Imperative effects for a resource inside a wrapped result | [TryToBook](AppointmentTests/BookingOutcomeDsl.cs): only the successful branch applies the Booked domain action and records its relationships |
 | Optional title selection and formatted member paths | [PatientExists and AppointmentExists](AppointmentTests/AppointmentDsl.cs); booking scenarios call PatientExists with and without a city |
 | Five lifecycle effects, custom actions, typed relationship properties | [Lifecycle](AppointmentTests/LifecycleScenarios.cs) and [booking attributes](AppointmentTests/BookingAttributes.cs) |
 | Alternate representations, opaque string keys, remembered labels | [Registry booking](AppointmentTests/RegistryBookingScenarios.cs); [Patient](AppointmentTests/AppointmentDsl.cs) owns the row mapping |

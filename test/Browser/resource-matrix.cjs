@@ -61,6 +61,7 @@ for(const [scenarioName,creates,expectedAssertion] of [['a booking either lands,
   assert.equal(scenario.references.length,creates?2:0,'Only successful conditional booking records lineage');
   if(creates){
     const appointment=created[0];
+    assert.equal(appointment.actionName,'Booked','Conditional booking uses the same domain action as direct booking');
     for(const [type,kind] of [['Patient','Reference'],['Slot','Consume']]){
       const target=scenario.resources.find(resource=>resource.type===type);
       assert.ok(scenario.references.some(edge=>edge.subjectId===appointment.resourceId && edge.targetId===target.id && edge.kind===kind),'Conditional booking records the correct '+kind+' endpoint');
