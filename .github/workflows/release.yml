@@ -63,7 +63,18 @@ jobs:
           done
 
       - name: Test package consumption
-        run: python3 eng/test-packages.py artifacts
+        run: |
+          dotnet restore test/Raun.PackageTests/Raun.PackageTests.csproj --locked-mode
+          dotnet build test/Raun.PackageTests/Raun.PackageTests.csproj -c Release --no-restore -p:ContinuousIntegrationBuild=true
+          dotnet run --project test/Raun.PackageTests/Raun.PackageTests.csproj -c Release --no-build -- --report-html --results-directory "$PWD/artifacts/package-consumption"
+
+      - name: Upload package consumption report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-consumption-report
+          path: artifacts/package-consumption/
+          if-no-files-found: ignore
 
       - name: NuGet.org login
         id: nuget_login

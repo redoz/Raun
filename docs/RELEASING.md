@@ -63,10 +63,10 @@ both together.
    dotnet pack src/Raun.Aspire/Raun.Aspire.csproj -c Release -o artifacts
    ```
 
-   Run `python3 eng/test-packages.py artifacts` (or `python` on Windows) to test the packages.
-   It copies both samples outside the repo, replaces framework project references with exact package
-   versions, and restores into a fresh cache. It also checks the generated entry point. Both CI and
-   release workflows run this before publishing; missing scenarios or reports fail the check.
+   Run the [package-consumption scenarios](../test/Raun.PackageTests/README.md) after packing.
+   They copy both samples outside the repo, replace framework project references with exact
+   package versions, and restore into fresh caches. A third case checks the generated entry point.
+   Both workflows run this suite before publishing and upload its HTML report, including on failure.
 4. Tag with git — jj imports tags but does not create them:
 
    ```bash
