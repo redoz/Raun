@@ -1,7 +1,7 @@
 # Custom resource actions and cross-step labels
 
 Date: 2026-10-16
-Status: design and corrected implementation checklist approved; implementation in progress.
+Status: implemented; full verification and final Astra High review complete.
 Execution preference: implement here with one final reviewer, as previously selected.
 Release policy: no tag or publication unless requested.
 
@@ -207,3 +207,15 @@ parameter/return usage, imperative Apply, and automatic remembered labels. Revie
 comments for precise meaning and STE style. Run locked restore, zero-warning solution build, full
 solution tests, report checks, resource-matrix browser checks, and local package validation. Obtain one final staff review, fix
 substantive findings, and commit/push. Do not publish a release.
+
+## Implementation outcome — 2026-10-16
+
+The approved design is implemented, including the five plan-review corrections. The final staff
+review's collectible-cache and empty-default-name findings were reproduced and fixed. Action metadata
+uses a weak-key cache so discarded assembly load contexts can collect. Runtime and analyzer validation
+both reject a final empty action name.
+
+Locked restore, a zero-warning Release build, all 1,526 solution results (1,521 passed and five expected
+branch skips), 72 report JavaScript checks, the resource-matrix browser harness, and four local package
+builds passed. README and the canonical sample show named/default custom attributes and a key-only
+follow-up with a remembered label and no borrowed snapshot. No release was published.
