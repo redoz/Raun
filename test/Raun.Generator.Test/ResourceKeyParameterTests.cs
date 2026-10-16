@@ -25,8 +25,8 @@ public class ResourceKeyParameterTests
         Assert.Equal(expected, touched.Verb);
         Assert.Null(touched.Data);
         Assert.Null(touched.DataSnapshot);
-        Assert.Equal("Patient:123", touched.Label);
-        Assert.Equal("touch Patient:123 / 123 / Patient:123", results[2].DisplayName);
+        Assert.Equal("Jane", touched.Label);
+        Assert.Equal("touch Jane / 123 / Jane", results[2].DisplayName);
         var references = results[2].TitleMessage.Parts.Where(part => part.Resource.HasValue).ToArray();
         Assert.Equal(3, references.Length);
         Assert.All(references, part =>

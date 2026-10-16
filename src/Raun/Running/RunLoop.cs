@@ -350,7 +350,7 @@ public sealed class RunLoop
             : (AsyncServiceScope?)null;
         try
         {
-            var formatting = ScenarioContext.CreateMessageFormattingContext(scope?.ServiceProvider ?? services, resourceMappings: definition.ResourceMappings);
+            var formatting = ScenarioContext.CreateMessageFormattingContext(scope?.ServiceProvider ?? services, resourceMappings: definition.ResourceMappings).WithLabelMemory(definition.Nodes);
             var results = new List<StepResult>(definition.Nodes.Count);
             foreach (var node in definition.Nodes)
             {

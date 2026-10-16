@@ -20,6 +20,7 @@ public sealed class ResourceContext
     readonly List<ResourceLineageRelation> _lineage = [];
     readonly Dictionary<(ResourceIdentity Identity, Type? ActionType), int> _index = [];
     readonly ResourceIdentityResolver _resolver;
+    readonly ResourceLabelScope _labels;
     readonly TimeProvider _timeProvider;
     readonly string _stepId;
     string _stepDisplayName;
@@ -33,7 +34,12 @@ public sealed class ResourceContext
         string stepDisplayName,
         ResourceIdentityResolver resolver,
         TimeProvider timeProvider)
+        : this(stepId, stepDisplayName, resolver, timeProvider, ResourceLabelScope.Standalone()) { }
+
+    internal ResourceContext(string stepId, string stepDisplayName, ResourceIdentityResolver resolver,
+        TimeProvider timeProvider, ResourceLabelScope labels)
     {
+        _labels = labels;
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(timeProvider);
         _stepId = stepId;
@@ -218,7 +224,7 @@ public sealed class ResourceContext
         }
 
         var snapshot = ResourcePresentation.Capture(data);
-        var label = data is null ? ResourcePresentation.Display(identity) : _resolver.ResolveLabel(identity, sourceType ?? data.GetType(), data);
+        var label = _labels.Resolve(_resolver, identity, sourceType ?? data?.GetType(), data);
         _observer?.Invoke(verb, identity, null, snapshot, label, action);
 
         lock (_lock)

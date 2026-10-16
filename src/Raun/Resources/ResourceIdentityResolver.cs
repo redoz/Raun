@@ -49,16 +49,22 @@ public sealed class ResourceIdentityResolver
 
     internal string ResolveLabel(ResourceIdentity identity, Type sourceType, object instance)
     {
+        return TryResolveSourceLabel(sourceType, instance, out var label) ? label : ResourcePresentation.Display(identity);
+    }
+
+    internal bool TryResolveSourceLabel(Type sourceType, object instance, out string label)
+    {
         if (_labels.TryGetValue(sourceType, out var selector)
             && selector(instance) is { } registered && !string.IsNullOrWhiteSpace(registered))
         {
-            return registered;
+            label = registered;
+            return true;
         }
-
-        var alternateLabel = _groups.Snapshot(sourceType).Label?.Invoke(instance);
-        if (!string.IsNullOrWhiteSpace(alternateLabel)) { return alternateLabel; }
-        var label = _labelInvokers.GetOrAdd(sourceType, BuildLabelInvoker)(instance);
-        return string.IsNullOrWhiteSpace(label) ? ResourcePresentation.Display(identity) : label;
+        var alternate = _groups.Snapshot(sourceType).Label?.Invoke(instance);
+        if (!string.IsNullOrWhiteSpace(alternate)) { label = alternate; return true; }
+        var self = _labelInvokers.GetOrAdd(sourceType, BuildLabelInvoker)(instance);
+        label = self ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(self);
     }
 
     private static bool HasContract(Type type)

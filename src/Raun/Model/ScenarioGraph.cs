@@ -57,4 +57,42 @@ internal static class ScenarioGraph
 
         return closure;
     }
-}
+    /// <summary>
+    /// <c>after[i][j]</c> is true when node <c>i</c> must run after node <c>j</c>, transitively, over
+    /// the ordering edges <see cref="ScenarioGraph.Predecessors"/> defines.
+    /// </summary>
+    internal static bool[][] ComputeAfter(IReadOnlyList<ScenarioNode> nodes)
+    {
+        var count = nodes.Count;
+        var after = new bool[count][];
+        var stack = new Stack<int>();
+
+        for (var i = 0; i < count; i++)
+        {
+            var row = new bool[count];
+            stack.Clear();
+            foreach (var predecessor in ScenarioGraph.Predecessors(nodes[i]))
+            {
+                stack.Push(predecessor);
+            }
+
+            while (stack.Count > 0)
+            {
+                var pred = stack.Pop();
+                if (pred < 0 || pred >= count || row[pred])
+                {
+                    continue;
+                }
+
+                row[pred] = true;
+                foreach (var predecessor in ScenarioGraph.Predecessors(nodes[pred]))
+                {
+                    stack.Push(predecessor);
+                }
+            }
+
+            after[i] = row;
+        }
+
+        return after;
+    }}

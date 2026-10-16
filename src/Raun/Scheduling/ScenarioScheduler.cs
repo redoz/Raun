@@ -99,7 +99,7 @@ public sealed class ScenarioScheduler
         var results = new StepResult?[count];
         var outputs = new object?[count];
         var inputs = new StepInputs(outputs, status);
-        var messageFormatting = ScenarioContext.CreateMessageFormattingContext(services, resourceMappings: definition.ResourceMappings);
+        var messageFormatting = ScenarioContext.CreateMessageFormattingContext(services, resourceMappings: definition.ResourceMappings).WithLabelMemory(nodes);
         var titleMessages = new StepMessage?[count];
 
         // The arm each passed condition node selected, decided once when it passed; -1 = no arm.
@@ -196,6 +196,8 @@ public sealed class ScenarioScheduler
             {
                 if (scenarioToken.IsCancellationRequested)
                 {
+                    // Capture cancelled-step evidence once, after in-flight producers have drained.
+                    if (running.Count > 0) { continue; }
                     await ApplyTerminalAsync(
                         i, StepStatus.Skipped, timedOut ? TimedOutSkipReason : CanceledSkipReason).ConfigureAwait(false);
                     progressed = true;
@@ -553,7 +555,7 @@ public sealed class ScenarioScheduler
             // terminal, so it is ordered after all of them, and a cleanup's Delete must never be refused
             // as a conflict with the step that created the thing.
             var teardownContext = new ScenarioContext(
-                node.StepId, name, services, messageFormatting.Resolver, _timeProvider, CancellationToken.None);
+                node.StepId, name, services, messageFormatting.ForStep(node.Index), _timeProvider, CancellationToken.None);
             foreach (var note in StepNotes.FormatMessages(node, messageFormatting, inputs))
             {
                 teardownContext.AddNote(note);
@@ -984,7 +986,7 @@ public sealed class ScenarioScheduler
         using var operationWatch = watchdog.Watch(stepCts, node.Timeout, $"step '{node.DisplayNameTemplate}' in scenario '{definition.DisplayName}'");
         var displayName = titleMessage.Text;
         var context = new ScenarioContext(
-            node.StepId, displayName, services, messageFormatting.Resolver, stepTimeProvider, stepCts.Token);
+            node.StepId, displayName, services, messageFormatting.ForStep(node.Index), stepTimeProvider, stepCts.Token);
 
         if (stepContexts is not null)
         {

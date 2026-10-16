@@ -58,19 +58,23 @@ public sealed class ScenarioContext
         ResourceIdentityResolver? resolver,
         TimeProvider? timeProvider,
         CancellationToken cancellationToken)
+        : this(stepId, stepDisplayName, services, CreateMessageFormattingContext(services, resolver), timeProvider, cancellationToken) { }
+
+    internal ScenarioContext(string stepId, string stepDisplayName, IServiceProvider? services,
+        MessageFormattingContext formatting, TimeProvider? timeProvider, CancellationToken cancellationToken)
     {
         StepId = stepId;
         StepDisplayName = stepDisplayName;
         CancellationToken = cancellationToken;
         Services = services;
         TimeProvider = timeProvider ?? TimeProvider.System;
-        MessageFormatting = CreateMessageFormattingContext(services, resolver);
+        MessageFormatting = formatting;
         _scenarioStart = TimeProvider.GetUtcNow();
         Resources = new ResourceContext(
             stepId,
             stepDisplayName,
             MessageFormatting.Resolver,
-            TimeProvider);
+            TimeProvider, MessageFormatting.Labels);
 
         // Resource events are part of the step's story, so they land in the log stream in order,
         // between the lines the step wrote before and after them — and on the span as events.
@@ -152,7 +156,7 @@ public sealed class ScenarioContext
     /// <summary>Invariant title formatting services for generated stack-bound argument code.</summary>
     [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public MessageFormattingContext ArgumentTitleFormatting
-        => new(MessageFormatting.Resolver, System.Globalization.CultureInfo.InvariantCulture);
+        => MessageFormatting.WithFormatProvider(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Records the frozen argument title from generated code with stack-bound inputs.
     /// Its starting notification uses the symbolic template; terminal reporting uses this title.</summary>

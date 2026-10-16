@@ -11,7 +11,7 @@ internal static class StepNotes
         {
             if (node.FormatTitleMessage is { } rich)
             {
-                var titleFormatting = new MessageFormattingContext(formatting.Resolver, CultureInfo.InvariantCulture);
+                var titleFormatting = formatting.ForStep(node.Index).WithFormatProvider(CultureInfo.InvariantCulture);
                 return rich(inputs ?? UnavailableInputs.Instance, titleFormatting);
             }
             if (node.FormatDisplayName is { } legacy)
@@ -33,7 +33,7 @@ internal static class StepNotes
         {
             try
             {
-                var titleFormatting = new MessageFormattingContext(formatting.Resolver, CultureInfo.InvariantCulture);
+                var titleFormatting = formatting.ForStep(node.Index).WithFormatProvider(CultureInfo.InvariantCulture);
                 return completed(initialTitle, output, titleFormatting) ?? initialTitle;
             }
             catch
@@ -52,7 +52,7 @@ internal static class StepNotes
         {
             foreach (var formatter in node.FormatNoteMessages)
             {
-                Add(() => formatter(available, formatting));
+                Add(() => formatter(available, formatting.ForStep(node.Index)));
             }
         }
         else

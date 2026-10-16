@@ -77,8 +77,7 @@ public sealed class StepMessageBuilder
                     // Default public identity/key structs cannot form usable report references.
                     return new(declaredType.Name);
                 }
-                var label = value is ResourceIdentity ? ResourcePresentation.Display(resource)
-                    : _context.Resolver.ResolveLabel(resource, declaredType, value);
+                var label = _context.Labels.Resolve(_context.Resolver, resource, declaredType, value);
                 if (string.IsNullOrEmpty(format))
                 {
                     return new(label, resource) { Label = label };
@@ -91,7 +90,7 @@ public sealed class StepMessageBuilder
                 {
                     if (value is ResourceIdentity)
                     {
-                        return new(ResourcePresentation.Display(resource), resource) { Label = label };
+                        return new(label, resource) { Label = label };
                     }
                     var data = ResourcePresentation.Data(value);
                     var truncated = data.Length > 16_384;

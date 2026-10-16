@@ -95,7 +95,7 @@ public sealed class ResourceAlternateTests
         Assert.All(results, result => Assert.Equal(Raun.Model.StepStatus.Passed, result.Status));
         Assert.Equal(Assert.Single(results[1].Effects).Identity, Assert.Single(results[2].Effects).Identity);
         Assert.Equal("Patient", Assert.Single(results[1].Effects).Identity.Type!.Name);
-        Assert.Equal("touch Patient:42", results[2].DisplayName);
+        Assert.Equal("touch Jane", results[2].DisplayName);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class ResourceAlternateTests
         var results = await Assert.Single(application.Definitions()).RunAsync();
         Assert.All(results, result => Assert.Equal(Raun.Model.StepStatus.Passed, result.Status));
         Assert.Equal(Assert.Single(results[1].Effects).Identity, Assert.Single(results[2].Effects).Identity);
-        Assert.Equal("touch Patient:42", results[2].DisplayName);
+        Assert.Equal("touch Jane", results[2].DisplayName);
     }
 
     [Theory]
