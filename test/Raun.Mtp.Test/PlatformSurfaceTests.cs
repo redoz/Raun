@@ -24,7 +24,7 @@ public class PlatformSurfaceTests
 
     // The sample's full step count across every scenario, Setup and Teardown included, confirmed by
     // `--list-tests`.
-    private const int UnfilteredTotalCount = 162;
+    private const int UnfilteredTotalCount = 172;
 
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(3);
 

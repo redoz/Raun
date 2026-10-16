@@ -11,6 +11,9 @@ const source = fs.readFileSync(path.join(root, 'src/Raun/Reporting/Html/report-t
 const sample = fs.readFileSync(process.argv[2], 'utf8');
 const payload = sample.match(/<script id="model" type="application\/json">([\s\S]*?)<\/script>/)[1];
 const model = JSON.parse(payload);
+// Use the scenario with patient edits, relationships, and logs; cases may be registered first.
+const matrixScenarioIndex=model.scenarios.findIndex(scenario=>scenario.displayName==='out-of-town patients get a travel reminder');
+assert.ok(matrixScenarioIndex>=0,'The canonical sample includes the travel reminder scenario');
 const domainEffects=model.scenarios.flatMap(scenario=>scenario.steps.flatMap(step=>step.effects));
 for(const [action,verb] of [['Register','Create'],['Hold','Edit'],['Booked','Create'],['Rescheduled','Create'],['Cancel','Delete']]){
   assert.ok(domainEffects.some(effect=>effect.actionName===action && effect.verb===verb),'The real sample demonstrates '+action+' with '+verb+' semantics');
@@ -152,7 +155,7 @@ const renderFixture = (name, data) => {
     assert.equal(await page.locator('.matrix-event').count(),model.scenarios.reduce((total,scenario)=>total+scenario.steps.reduce((count,step)=>count+step.effects.length,0),0),'Every recorded resource event remains inspectable in the matrix');
     assert.equal(await page.locator('.resource-matrix').count(), model.scenarios.filter(hasResources).length, 'Resource matrix is part of the default view');
     assert.equal(await page.locator('.flow-mode,.flow-dependencies,.actdiag').count(), 0, 'Default rows have resource columns without comparison controls or the dependency prototype');
-    const collapsedScenario=page.locator('.card').first();
+    const collapsedScenario=page.locator('.card').nth(matrixScenarioIndex);
     assert.equal(await collapsedScenario.locator('.matrix-resource').first().isVisible(),false,'Resource headings hide with the collapsed scenario');
     await collapsedScenario.locator('.card-head').click();
     const alignedHeadings=await collapsedScenario.evaluate(card=>{
@@ -212,12 +215,12 @@ const renderFixture = (name, data) => {
     assert.equal(await scenarioPanel.evaluate(panel=>getComputedStyle(panel).overflowY),'scroll','Scenario scrollbar is always present');
     await page.setViewportSize({width:1600,height:420});
     const beforeScrollWidth=await scenarioPanel.evaluate(panel=>panel.clientWidth);
-    await page.locator('.card').first().locator('.card-head').click();
+    await page.locator('.card').nth(matrixScenarioIndex).locator('.card-head').click();
     assert.equal(await scenarioPanel.evaluate(panel=>panel.clientWidth),beforeScrollWidth,'Expanding a scenario cannot shift the content width');
-    await page.locator('.card').first().locator('.step-expander').first().click();
+    await page.locator('.card').nth(matrixScenarioIndex).locator('.step-expander').first().click();
     assert.equal(await scenarioPanel.evaluate(panel=>panel.clientWidth),beforeScrollWidth,'Expanding step evidence cannot shift the content width');
-    await page.locator('.card').first().locator('.step-expander').first().click();
-    await page.locator('.card').first().locator('.card-head').click();
+    await page.locator('.card').nth(matrixScenarioIndex).locator('.step-expander').first().click();
+    await page.locator('.card').nth(matrixScenarioIndex).locator('.card-head').click();
     await page.setViewportSize({width:1600,height:1100});
     for (const [index, scenario] of model.scenarios.entries()) {
       const card = page.locator('.card').nth(index);
@@ -259,7 +262,7 @@ const renderFixture = (name, data) => {
       }return issues;
     });
     assert.deepEqual(trackIssues,[],'Resource lines stop at their first and last events');
-    const first = page.locator('.card').first();
+    const first = page.locator('.card').nth(matrixScenarioIndex);
     const before = await first.locator('.matrix-scroll').evaluate(node => node.scrollHeight);
     const expander = first.locator('.step-entry.has-body:not(.step-lifecycle) .step-expander').first();
     await expander.click();
@@ -324,7 +327,7 @@ const renderFixture = (name, data) => {
     await first.locator('.resource-hover').hover();await page.waitForTimeout(100);
     assert.ok(await first.locator('.resource-hover').isVisible(),'Moving into the inspector preserves access to its copy actions');
     await page.keyboard.press('Escape');
-    const editEffect=model.scenarios[0].steps.flatMap(step=>step.effects).find(effect=>effect.verb==='Edit');
+    const editEffect=model.scenarios[matrixScenarioIndex].steps.flatMap(step=>step.effects).find(effect=>effect.verb==='Edit');
     assert.ok(editEffect && editEffect.data,'Sample contains a captured edit snapshot');
     await first.getByRole('button',{name:/^Edit Patient:.*Show evidence/}).click();
     assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-resource-data')),editEffect.data,'Matrix action focuses its event snapshot, not a title reference');
@@ -376,7 +379,7 @@ const renderFixture = (name, data) => {
     await page.getByRole('button',{name:/Show individual resources/}).click();
     const afterGrouping=await page.locator('.matrix-resource').evaluateAll(nodes=>Object.fromEntries(nodes.map(node=>[node.dataset.resourceColumn,getComputedStyle(node).borderTopColor])));
     assert.deepEqual(afterGrouping,beforeGrouping,'Grouping never reallocates resource colors');
-    const bundleFixture=structuredClone(model),bundleScenario=bundleFixture.scenarios[0];bundleFixture.scenarios=[bundleScenario];
+    const bundleFixture=structuredClone(model),bundleScenario=bundleFixture.scenarios[matrixScenarioIndex];bundleFixture.scenarios=[bundleScenario];
     const bundleRef=bundleScenario.references.find(reference=>reference.kind==='Reference');
     const bundleStep=bundleScenario.steps.find(step=>step.effects.some(effect=>effect.resourceId===bundleRef.subjectId && effect.verb==='Create'));
     const extraResource={...bundleScenario.resources[0],id:'bundle-extra',key:'Companion',label:'Companion'};
@@ -392,14 +395,14 @@ const renderFixture = (name, data) => {
         Math.abs(lanes[1]-((cell.top+cell.bottom)/2-bounds.top))<1 && paths.every(path=>/^M [^ ]+ [^ ]+ H [^ ]+$/.test(path.getAttribute('d')));
     }),'Three connections form an evenly spaced straight bundle centered on the action row');
     for(const verb of ['Edit','Load']){
-      const fixture=structuredClone(model),sc=fixture.scenarios[0];fixture.scenarios=[sc];
+      const fixture=structuredClone(model),sc=fixture.scenarios[matrixScenarioIndex];fixture.scenarios=[sc];
       const ref=sc.references.find(reference=>reference.kind==='Reference');
       const producer=sc.steps.find(step=>step.effects.some(effect=>effect.resourceId===ref.subjectId && effect.verb==='Create'));
       producer.effects.find(effect=>effect.resourceId===ref.subjectId && effect.verb==='Create').verb=verb;
       await page.goto(renderFixture('resource-matrix-'+verb.toLowerCase()+'-relationship',fixture));await page.locator('.card-head').click();
       assert.equal(await page.locator('.matrix-connection').filter({hasText:''}).evaluateAll((nodes,verb)=>nodes.some(svg=>svg.getAttribute('aria-label').includes('Reference → '+verb)),verb),true,verb+' producers retain their recorded relationships');
     }
-    const snapshots=structuredClone(model),snapshotScenario=snapshots.scenarios[0];
+    const snapshots=structuredClone(model),snapshotScenario=snapshots.scenarios[matrixScenarioIndex];
     snapshots.scenarios=[snapshotScenario];
     const editStep=snapshotScenario.steps.find(step=>step.effects.some(effect=>effect.verb==='Edit'));
     const captured=editStep.effects.find(effect=>effect.verb==='Edit');
@@ -409,7 +412,7 @@ const renderFixture = (name, data) => {
     await page.getByRole('button',{name:/^Edit Patient:.*Show evidence/}).click();
     assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-resource-data')),captured.data,'Action inspection uses the event snapshot even when its title has a different snapshot');
     assert.deepEqual(errors, []);
-    const repeated=structuredClone(model),repeatScenario=repeated.scenarios[0];repeated.scenarios=[repeatScenario];
+    const repeated=structuredClone(model),repeatScenario=repeated.scenarios[matrixScenarioIndex];repeated.scenarios=[repeatScenario];
     const repeatStep=repeatScenario.steps.find(step=>step.effects.length && !step.isLifecycle),seedEffect=repeatStep.effects[0];
     repeatStep.logs=[];repeatStep.logMessages=[];repeatStep.notes=[];repeatStep.noteMessages=[];repeatStep.attachments=[];delete repeatStep.traceId;
     repeatStep.effects=[{...seedEffect,verb:'Read',data:'{"Version":1}',offsetMs:repeatStep.offsetMs+10},{...seedEffect,verb:'Read',data:'{"Version":2}',offsetMs:repeatStep.offsetMs+20}];
@@ -423,7 +426,7 @@ const renderFixture = (name, data) => {
       assert.ok((await page.locator('.resource-hover-event').textContent()).includes('+'+((index+1)*10).toFixed(1)+' ms'),'Inspector retains each event offset from step start');
       await page.keyboard.press('Escape');
     }
-    const actionFixture=structuredClone(model),actionScenario=actionFixture.scenarios[0];
+    const actionFixture=structuredClone(model),actionScenario=actionFixture.scenarios[matrixScenarioIndex];
     actionFixture.scenarios=[actionScenario];
     const actionStep=actionScenario.steps.find(step=>step.effects.length),actionEffect=actionStep.effects[0];
     actionEffect.verb='Edit';actionEffect.actionName='Approve <now>';actionEffect.label='Jane <Doe>';

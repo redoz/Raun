@@ -153,7 +153,10 @@ Raun detects conflicting parallel access and links resource uses in the report. 
 [tracking sample](samples/AppointmentTests/ResourceTrackingScenarios.cs) shows labels, captured data,
 alternate representations, and key-only parameters. Map alternate representations when an API response
 and database row describe the same entity; use a key-only parameter when a step receives just its ID.
-See the [resource reference](docs/reference/resources.md).
+Use a custom action when a domain name such as Approve explains a change better than Edit.
+Derive its attribute from a resource role; it keeps that role's conflict rules. Later steps that
+receive only an ID can reuse the resource's earlier name. See the [action sample](samples/AppointmentTests/ResourceActionScenarios.cs)
+and [resource reference](docs/reference/resources.md) for both features.
 
 ## Read the report when something fails
 

@@ -28,9 +28,10 @@ public sealed record Appointment(Patient Patient, Slot Slot) : IResource<Appoint
 Keys contain strings (`ResourceKey` wraps a string); the patient example keeps its stable ID separate from its display name.
 
 `LabelFor` is optional. Labels never change resource identity. Explicit `Label<T>` selectors take
-priority, followed by an alternate's label contract, the source type's own `LabelFor`, and finally
-`DisplayName:key`. Null or blank labels use the next option. `[DisplayName("Patient")]` names the
-resource kind. Raun does not call `ToString()` to choose a label.
+priority, followed by an alternate's label contract and the source type's own `LabelFor`.
+If none supplies a name, Raun uses a remembered name visible to this step, then `DisplayName:key`.
+Null or blank labels use the next option. `[DisplayName("Patient")]` names the resource kind.
+Raun does not call `ToString()` to choose a label. See [names across steps](#names-across-steps).
 
 | Format in a title, interpolated log, or note | Text |
 | --- | --- |
@@ -135,7 +136,12 @@ so object and key-only references share the same identity.
 public Task<Appointment> CreateAppointment(Patient patient, Slot slot) { ... }
 ```
 
-Use `[Created]`, `[Loaded]`, or `[Edited]` on returns; use `[Read]`, `[Edited]`, or `[Deleted]` on parameters.
+All five roles—`[Created]`, `[Loaded]`, `[Read]`, `[Edited]`, and `[Deleted]`—work on parameters,
+return values, and methods. A method attribute describes its return value and requires
+`Task<T>` or `ValueTask<T>`. An explicit return attribute replaces the whole method role,
+including its lineage declarations.
+
+Raun records parameter effects before the call and return effects after it.
 `References` records retained links. `Consumes` records inputs used to produce the result.
 Missing resource roles cause compiler diagnostics.
 For effects inside a step, use `await Context.Resources.Create(value)` or `Load`, `Read`, `Edit`, `Delete`, `Reference`, and `Consume`.
@@ -153,8 +159,8 @@ public Task Delete([Deleted, ResourceKey<Patient>] string patientId)
 ```
 
 The string is the key of `Patient`, so its effects, conflicts, lineage, and title links refer to the
-same resource as a `Patient` instance with that key. Key-only references display `Patient:key` and
-carry no object snapshot. `ResourceKey` parameters are also supported. The annotation requires an
+same resource as a `Patient` instance with that key. Key-only references reuse a name observed
+in a visible earlier step, or display `Patient:key` when none is available. They carry no object snapshot. `ResourceKey` parameters are also supported. The annotation requires an
 access role (or a producer's `References`/`Consumes` declaration); other parameter types report `RAUN024`.
 The step method still receives its original string or `ResourceKey`; Raun changes only the tracking and title reference.
 Nullable string parameters work when their supplied key is non-null. A supplied null key throws
@@ -175,9 +181,12 @@ public sealed class AuditedAttribute : ReadAttribute; // Displays "Audited".
 public Task Approve([Approved, ResourceKey<Patient>] string patientId) { ... }
 
 [Audited] // Method shorthand: records the returned resource after the call.
-public Task<Patient> Audit(Patient patient) { ... }
+public Task<Patient> Audit([Read] Patient patient) { ... }
 
 await Context.Resources.Apply(ResourceAction.For<ApprovedAttribute>(), patient);
+// When only the identity is available:
+await Context.Resources.Apply(ResourceAction.For<ApprovedAttribute>(),
+    new ResourceIdentity(typeof(Patient), patientId));
 ```
 
 Use `System.ComponentModel.DisplayName` for a custom label. Otherwise Raun removes the final
@@ -189,12 +198,17 @@ Loaded and Read are shared. Input effects are recorded before the call; return e
 Created, Loaded, and Edited also support inherited `References` and `Consumes` declarations.
 Distinct custom attribute types retain separate report entries, even when their labels match.
 The step code performs the operation; the attribute records its effect.
+Use `ResourceAction.For<TAttribute>()` or `ResourceAction.For(typeof(ApprovedAttribute))`
+for manual tracking. Applying an action to an identity does not create an object snapshot.
+See the [action sample](../../samples/AppointmentTests/ResourceActionScenarios.cs).
 
 ## Names across steps
 
 A label from `Label<T>`, an alternate representation's `LabelFor`, or `IResource<T>.LabelFor`
 is remembered for that canonical resource identity during the scenario. Later key-only references
-reuse it in titles, notes, logs, and resource effects. A blank label cannot erase a good name.
+reuse it in titles, notes, logs, and resource effects. A blank label or a selector that throws
+cannot erase a good name. Different representations of the same identity share that name;
+different resource kinds and scenario cases keep separate names.
 `:id` still shows the key; key-only references never borrow a previous object's snapshot.
 
 A step can see its own earlier observations and its graph predecessors. A causally newer name wins.

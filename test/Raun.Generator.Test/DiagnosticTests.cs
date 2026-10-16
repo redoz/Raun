@@ -326,7 +326,7 @@ public class DiagnosticTests
     }
 
     [Fact]
-    public async Task RAUN027_parameter_requires_cases()
+    public async Task RAUN030_parameter_requires_cases()
     {
         var diagnostics = await Analyze(
             """
@@ -339,11 +339,11 @@ public class DiagnosticTests
             }
             """);
 
-        AssertHas(diagnostics, "RAUN027");
+        AssertHas(diagnostics, "RAUN030");
     }
 
     [Fact]
-    public async Task RAUN027_missing_cases_is_reported_before_compound_argument_lowering()
+    public async Task RAUN030_missing_cases_is_reported_before_compound_argument_lowering()
     {
         // Missing rows own the diagnostic even when a parameter occurs inside an expression.
         var diagnostics = await Analyze(
@@ -357,7 +357,7 @@ public class DiagnosticTests
             }
             """);
 
-        AssertHas(diagnostics, "RAUN027");
+        AssertHas(diagnostics, "RAUN030");
     }
 
     [Fact]

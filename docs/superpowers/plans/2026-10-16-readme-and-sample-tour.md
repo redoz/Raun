@@ -44,3 +44,21 @@
 - CI locked restores passed for Windows and linux-x64.
 - Patched the existing Aspire MessagePack dependency from 2.5.302 to 2.5.303 after NuGet audit blocked restore (GHSA-qhrr-8q5h-9q3h). Aspire unit tests: 7 passed; Aspire sample: 16 passed after the patch.
 - Preserved existing OpenTelemetry versions during lock refresh; final dependency review passed.
+
+## Main rebase follow-up
+
+Rebased onto origin/main at a8acd8e on 2026-10-16. Preserved custom resource actions and scenario name memory.
+Moved the new contracts into the resource reference and linked their runnable examples from the README.
+Main's action diagnostics keep RAUN027–029; case diagnostics now use RAUN030–032.
+
+Added two named manual-action cases and a combined execution test for action metadata, result titles,
+remembered names, and isolation between cases sharing a resource resolver. Updated the sample total to 160.
+The browser harness now selects its resource example by name so ordinary case rows can appear first.
+
+Verification after the rebase:
+
+- Solution CI build: 0 warnings, 0 errors. Locked restores passed for Windows and linux-x64.
+- Generator tests: 680 passed. Runtime tests: 533 passed. MTP tests: 139 passed.
+- Report JavaScript tests: 72 passed. Resource matrix browser checks passed.
+- Core sample: 155 passed, 5 expected branch skips. Aspire sample passed.
+- 97 local documentation links checked; no failures. Independent review found no unresolved issues.
