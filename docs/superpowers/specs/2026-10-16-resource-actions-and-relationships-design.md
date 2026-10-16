@@ -39,7 +39,8 @@ Created, Loaded, Read, Edited, and Deleted remain convenient built-ins. They all
 ResourceAttribute and declare their semantics through the same definition metadata. A consumer can
 inherit one or define a custom action directly. Metadata must have exactly one definition across the
 hierarchy: a derived class cannot replace or repeat an inherited definition. The applied attribute
-has no writable Kind, Effect, or Access property.
+has no writable Kind, Effect, or Access property. Producer action attributes retain References and
+Consumes arrays as relationship shorthand. Custom attributes derived from them inherit that syntax.
 
 Access follows the kind: Create/Edit/Delete are exclusive; Load/Read are shared. The definition
 cannot choose a contradictory lock mode. Reference and Consume are not valid action kinds.
@@ -74,6 +75,25 @@ for a relation from a parameter to the returned resource. Method placement is sh
 placement. The relation always points from the produced/loaded/updated source to the named target.
 There is no endpoint-less relationship and no implicit conversion from an action kind to a relation.
 
+Producer action attributes also support the existing compact form:
+
+```csharp
+[return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
+public Task<Appointment> Book(Patient patient, Slot slot);
+```
+
+This is equivalent to the separate declarations above. The action attribute's location supplies the
+source; each array item supplies a target; the framework-declared property supplies Reference or
+Consume. These properties are a defined Raun metadata contract, not arbitrary custom properties
+recognized by spelling. Keep them on Created, Loaded, and Edited and their derived custom attributes.
+Read only explicitly supplied named arguments; do not execute constructor assignments or property
+initializers to discover defaults. Direct custom actions can use separate RelatesTo declarations.
+
+Normalize both syntax forms into the same relationship records before validation and emission.
+They have identical endpoint, producer, access, timing, and diagnostic rules. Both forms may occur
+on one source, but duplicate edges and conflicting kinds are errors across the combined declarations.
+There is one semantic authority after normalization, with no first-wins or last-wins interpretation.
+
 The source must have a Create, Load, or Edit action, preserving the existing producer-side contract.
 A relationship does not stand in for that source action. A target must support a canonical resource
 identity, including ResourceKey<T> parameters. A target relationship supplies the existing shared
@@ -90,11 +110,13 @@ values, a source naming itself, duplicate relations, and conflicting kinds for t
 pair. Resolve aliases to canonical identities at runtime and reject a self-edge that could not be
 known statically. Do not silently choose the first of competing relationships.
 
-A return action overrides a method action as today. For relationships, explicit return declarations
-replace the complete method-level relationship set; otherwise the method set applies. Relationship
-selection is independent of action selection. A method can use action shorthand and explicit return
-relationships, or an explicit return action and method relationship shorthand. Validate both sites
-and document this precedence rather than guessing per individual relation.
+A return action overrides a method action as today, including the complete inline References/Consumes
+arrays owned by that action. An explicit return action with empty arrays does not inherit arrays
+from the replaced method action. For standalone RelatesTo declarations, an explicit return set replaces
+the method-level set; otherwise the method set applies. Combine the selected action's inline relations
+with the selected standalone relations, then validate the complete normalized set. A return action
+does not discard separate method-level RelatesTo declarations merely because it replaces the method
+action. Validate both sites and document these two selection rules with mixed-form examples.
 
 ## Lowering, execution, and reports
 
@@ -120,16 +142,14 @@ pair deduplication.
 
 ## Migration
 
-Remove References and Consumes arrays from the three producer action attributes. Migrate repository
-samples, README, generator fixtures, and tests to separate RelatesTo declarations. Do not maintain
-two active source configuration paths or silently merge old arrays with new relations.
+Preserve existing References and Consumes arrays as supported shorthand; no source migration is
+required for existing producer attributes or custom attributes derived from them. Add standalone
+RelatesTo declarations as another syntax for the same normalized relationship model. Update README
+and samples to show equivalence and when each form is useful, rather than require wholesale rewrites.
 
-This is an intentional source API change during beta. Consumers and step libraries must rebuild
-using the new declarations. Diagnose legacy lineage metadata in referenced step declarations with
-an actionable rebuild/migration error wherever it can be inspected; never quietly drop old lineage.
-Do not claim binary compatibility for previously compiled attribute named arguments whose members
-were removed. Previously generated graph delegates and saved reports do not require new mandatory
-model fields.
+Existing array declarations in referenced libraries continue to work through the same framework
+metadata contract. Retain the existing inline return-action override behavior. Previously generated
+graph delegates and saved reports do not require new mandatory model fields.
 
 Keep ResourceAction.For<TAttribute>(), imperative lifecycle methods, existing built-in usage without
 lineage arrays, and the previously approved custom inheritance usage. Update factory/analyzer error
@@ -148,7 +168,7 @@ Retain collectible load-context regression coverage and analyzer/runtime parity.
 
 Cover return/parameter/method relationship placement, required endpoints, canonical aliases,
 key-only targets, supported producer actions, independent action/relation override precedence,
-legacy metadata rejection, and duplicate/conflicting/self relations. Assert access and recording
+legacy array compatibility, mixed-form normalization, and duplicate/conflicting/self relations. Assert access and recording
 order, unchanged raw argument evaluation and graph dependencies, target conflict semantics, generated
 lineage, remembered names, and frozen evidence. Retain all guard/merge/node-count assertions when
 snapshot shapes or sample counts change.
@@ -159,8 +179,8 @@ already requested one final staff review. Do not publish a release.
 
 ## Alternatives considered
 
-- Keep relationships as arrays on action attributes: rejected because unrelated concepts share one
-  declaration and require special named-property interpretation.
+- Treat arrays as a separate semantic model: rejected. Keep their compact syntax, but normalize them
+  into the same endpoint-bearing relationship records as standalone declarations.
 - One seven-value action enum: rejected because a Reference/Consume action alone cannot describe
   both endpoints and mixes access operations with lineage edges.
 - Store an overridable effect property or constructor-selected enum on ResourceAttribute: rejected
@@ -170,13 +190,14 @@ already requested one final staff review. Do not publish a release.
   contract.
 - New generic marker types for each effect: rejected because the five enum values already express
   the closed choices without additional user-owned types.
-- Support old arrays and new relations indefinitely: rejected because two configuration authorities
-  create ambiguous merging and ongoing generator/analyzer complexity.
+- Remove inline arrays: rejected after user review because separate semantic models do not require
+  separate syntax at every call site. Shared normalization and combined validation avoid competing
+  interpretation paths while preserving useful compact declarations.
 
 ## Self-review
 
 The design separates action semantics from endpoint-bearing relationships, gives each one validation
-ownership, and specifies metadata discovery, timing, return precedence, beta migration, and evidence
+ownership, and specifies metadata discovery, timing, return precedence, source compatibility, and evidence
 preservation. C# requires constructor arguments but cannot constrain nameof to a step parameter or
 prevent enum casts. Raun diagnostics close those static gaps; runtime validation covers canonical
 aliases and imperative metadata. This is compile-time enforcement where possible, not a claim that
