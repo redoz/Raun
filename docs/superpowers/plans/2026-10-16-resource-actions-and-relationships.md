@@ -46,12 +46,12 @@
 - Sealed repeatable `RelatesToAttribute(ResourceRelation relation, string target)` on Parameter|ReturnValue|Method only; no class-level hardcoded targets.
 - All built-ins derive ResourceAttribute and use definition metadata. Annotate existing three producer classes' arrays with non-generic Relationship markers, Required=false; no string-name classification in the schema reader.
 
-- [ ] Write ResourceDefinitionTests covering all five action/access projections, direct custom and inherited definitions, default/custom labels, missing/repeated/conflicting definitions, invalid enums, unrelated owners, public scalar/array property schemas, typed kind Type identity, optional built-in arrays, and hidden/overridden/invalid-shaped marked properties. Assert Booked schema has Patient/Reference/typeof(Patient)/required and Slot/Consume/typeof(Slot)/required, independent of step names.
-- [ ] Retain constructor/static-initializer/getter throwing probes, private/generic/load-context factories, and actual collectible-context collection assertions. Add schema ResourceType from a collectible assembly and prove the cache still permits collection.
-- [ ] Run `dotnet test --project test/Raun.Test/Raun.Test.csproj -c Release -- --filter-class '*ResourceDefinitionTests' --filter-class '*ResourceActionTests' --filter-class '*ResourceRoleAttributeTests' --filter-class '*SubjectAttributeTests'`; expect failures for absent metadata contracts.
-- [ ] Implement exact-type metadata recognition, metadata-only hierarchy/property inspection and immutable weak-key caching. Validate schema declarations before constructing ResourceAction. Keep public For<T> usable for action-only imperative Apply; a descriptor exposes schema, while actual property bindings belong to an attribute usage. Imperative Reference/Consume remain explicit operations.
-- [ ] Write clear XML comments defining each semantic choice, requiredness, canonical expectations, locations, access, source/target direction, usage binding, and constructor-free discovery. Document intentional unsealed framework extension points for CA1813.
-- [ ] Re-run focused tests and `dotnet build Raun.slnx -c Release --no-restore`; require passing tests and zero warnings/errors. Commit `feat(resources): define action and relationship metadata` with a why body.
+- [x] Write ResourceDefinitionTests covering all five action/access projections, direct custom and inherited definitions, default/custom labels, missing/repeated/conflicting definitions, invalid enums, unrelated owners, public scalar/array property schemas, typed kind Type identity, optional built-in arrays, and hidden/overridden/invalid-shaped marked properties. Assert Booked schema has Patient/Reference/typeof(Patient)/required and Slot/Consume/typeof(Slot)/required, independent of step names.
+- [x] Retain constructor/static-initializer/getter throwing probes, private/generic/load-context factories, and actual collectible-context collection assertions. Add schema ResourceType from a collectible assembly and prove the cache still permits collection.
+- [x] Run `dotnet test --project test/Raun.Test/Raun.Test.csproj -c Release -- --filter-class '*ResourceDefinitionTests' --filter-class '*ResourceActionTests' --filter-class '*ResourceRoleAttributeTests' --filter-class '*SubjectAttributeTests'`; expect failures for absent metadata contracts.
+- [x] Implement exact-type metadata recognition, metadata-only hierarchy/property inspection and immutable weak-key caching. Validate schema declarations before constructing ResourceAction. Keep public For<T> usable for action-only imperative Apply; a descriptor exposes schema, while actual property bindings belong to an attribute usage. Imperative Reference/Consume remain explicit operations.
+- [x] Write clear XML comments defining each semantic choice, requiredness, canonical expectations, locations, access, source/target direction, usage binding, and constructor-free discovery. Document intentional unsealed framework extension points for CA1813.
+- [x] Re-run focused tests and `dotnet build Raun.slnx -c Release --no-restore`; require passing tests and zero warnings/errors. Commit `feat(resources): define action and relationship metadata` with a why body.
 
 ### Task 2: One generator reader and complete compile-time validation
 
@@ -63,14 +63,14 @@
 - `RelationshipReader.Read(IMethodSymbol)` returns the selected, normalized immutable relationship list and immutable diagnostics. It owns action/standalone selection, named property binding, normalization, requiredness and duplicate/conflict checks. Analyzer, parser, and ParallelAccess consume this result; no separate References/Consumes interpretation remains.
 - Keep RAUN010 for invalid subject names and existing 027/028/029 meanings. Add RAUN030 invalid action definition, RAUN031 invalid relationship property schema, RAUN032 invalid relationship binding/configuration; register SupportedDiagnostics and unshipped release entries.
 
-- [ ] Write tests for Booked(Patient=nameof(patient), Slot=nameof(slot2)), required omissions despite nonempty initializers/constructor assignments, optional omission, null/blank scalar/array values, inherited schemas and malformed unused local definitions. Referenced invalid definitions report at the consumer call; local errors report once at their declarations/usages.
-- [ ] Assert direct custom actions have the same semantic claims as inherited ones; unrelated same-name attributes do nothing. Test private/generic referenced relationship properties and metadata-only discovery with throwing constructors/getters.
-- [ ] Assert legacy array syntax and marked custom scalar/array properties normalize to identical source/target/kind edges. Test standalone RelatesTo, mixed-form duplicate/conflicting edges, source self-reference, missing returns, Read/Delete source rejection, and unsupported endpoints. Preserve complete inline return-action override; separately test standalone return-set override and mixed selection.
-- [ ] Add representation cases for Patient domain object, mapped Row, mapped Response DTO, and [ResourceKey<Row>] string with typed Patient markers. Validate available identity support statically and defer canonical equivalence to runtime where fluent mappings can affect it. Do not introduce CLR-assignability rejection.
-- [ ] Pin ParallelAccess to the normalized target access and existing explicit action precedence: Reference/Consume targets share; Create/Edit/Delete exclude in both parallel group orders. Keep existing guard/merge and precise diagnostic counts.
-- [ ] Pin omitted optional relationship subjects at a call: if no captured argument would exist, emit RAUN032 instructing the caller to supply it rather than silently drop the declared edge. Unrelated optional arguments remain unchanged.
-- [ ] Run the focused generator classes before implementation and require intended failures. Implement metadata readers and normalized validation, routing all existing consumers through one relationship interpretation. Update existing test expectations only for intentional diagnostic/API changes; never remove guard/merge/identity assertions.
-- [ ] Run `dotnet test --project test/Raun.Generator.Test/Raun.Generator.Test.csproj -c Release`; inspect snapshot diffs rather than bulk accepting. Require incremental caching/emission discipline and zero-warning solution build. Commit `feat(generator): normalize resource relationships from property metadata`.
+- [x] Write tests for Booked(Patient=nameof(patient), Slot=nameof(slot2)), required omissions despite nonempty initializers/constructor assignments, optional omission, null/blank scalar/array values, inherited schemas and malformed unused local definitions. Referenced invalid definitions report at the consumer call; local errors report once at their declarations/usages.
+- [x] Assert direct custom actions have the same semantic claims as inherited ones; unrelated same-name attributes do nothing. Test private/generic referenced relationship properties and metadata-only discovery with throwing constructors/getters.
+- [x] Assert legacy array syntax and marked custom scalar/array properties normalize to identical source/target/kind edges. Test standalone RelatesTo, mixed-form duplicate/conflicting edges, source self-reference, missing returns, Read/Delete source rejection, and unsupported endpoints. Preserve complete inline return-action override; separately test standalone return-set override and mixed selection.
+- [x] Add representation cases for Patient domain object, mapped Row, mapped Response DTO, and [ResourceKey<Row>] string with typed Patient markers. Validate available identity support statically and defer canonical equivalence to runtime where fluent mappings can affect it. Do not introduce CLR-assignability rejection.
+- [x] Pin ParallelAccess to the normalized target access and existing explicit action precedence: Reference/Consume targets share; Create/Edit/Delete exclude in both parallel group orders. Keep existing guard/merge and precise diagnostic counts.
+- [x] Pin omitted optional relationship subjects at a call: if no captured argument would exist, emit RAUN032 instructing the caller to supply it rather than silently drop the declared edge. Unrelated optional arguments remain unchanged.
+- [x] Run the focused generator classes before implementation and require intended failures. Implement metadata readers and normalized validation, routing all existing consumers through one relationship interpretation. Update existing test expectations only for intentional diagnostic/API changes; never remove guard/merge/identity assertions.
+- [x] Run `dotnet test --project test/Raun.Generator.Test/Raun.Generator.Test.csproj -c Release`; inspect snapshot diffs rather than bulk accepting. Require incremental caching/emission discipline and zero-warning solution build. Commit `feat(generator): normalize resource relationships from property metadata`.
 
 ### Task 3: Emit and enforce canonical relationship bindings
 
@@ -81,11 +81,11 @@
 - Expected kind compares normalized `new ResourceIdentity(expectedResourceType, targetIdentity.Key).Kind` with targetIdentity.Kind. Read the expected Type through `ResourceAction.FromGenerated(scope, actionTypeIdentity).GetRelationship(propertyName).ResourceType`, avoiding inaccessible direct C# type references.
 - Existing imperative Reference/Consume signatures stay valid. Conflicting canonical relationship kinds/self-edges must fail deterministically; repeated same-kind imperative observations can remain idempotent.
 
-- [ ] Write runtime tests for each canonical representation and key-only endpoint accepted by typed Patient expectations. Include fluent mappings, same string keys on different groups rejected, same-group source/target aliases rejected, conflicting kinds rejected, and unchanged original labels/snapshots. No wrapper or borrowed payload in key-only effects.
-- [ ] Add generator execution tests proving scalar/array bindings use actual captured arguments once, named arguments bind slot2 correctly, parameter claims remain pre-call, return-dependent relations remain post-call, and failed invocations produce no return relationships. Test expected-type metadata for private/generic referenced resource owners without inaccessible emitted symbols.
-- [ ] Run focused runtime and generator relationship projects/classes and require intended failures. Emit every normalized relation through the canonical guard with its original source/target expressions. Preserve target-lineage-before-source-effect order and semantic LifecycleVerb projections.
-- [ ] Keep graph-model compatibility and resource identity correlation; diagnose declaration conflicts before report building and reject runtime canonical conflicts before accepting evidence, so builder pair dedup cannot hide conflicting kinds. Preserve same-kind imperative compatibility.
-- [ ] Run full runtime and generator projects sequentially, then zero-warning build. Retain existing ResourceLabelMemoryIntegrationTests, argument evaluation, graph, and process-timeout assertions. Commit `feat(resources): enforce canonical domain relationship bindings`.
+- [x] Write runtime tests for each canonical representation and key-only endpoint accepted by typed Patient expectations. Include fluent mappings, same string keys on different groups rejected, same-group source/target aliases rejected, conflicting kinds rejected, and unchanged original labels/snapshots. No wrapper or borrowed payload in key-only effects.
+- [x] Add generator execution tests proving scalar/array bindings use actual captured arguments once, named arguments bind slot2 correctly, parameter claims remain pre-call, return-dependent relations remain post-call, and failed invocations produce no return relationships. Test expected-type metadata for private/generic referenced resource owners without inaccessible emitted symbols.
+- [x] Run focused runtime and generator relationship projects/classes and require intended failures. Emit every normalized relation through the canonical guard with its original source/target expressions. Preserve target-lineage-before-source-effect order and semantic LifecycleVerb projections.
+- [x] Keep graph-model compatibility and resource identity correlation; diagnose declaration conflicts before report building and reject runtime canonical conflicts before accepting evidence, so report dedup cannot hide evidence. Across steps, preserve each distinct (source, target, kind) observation. Preserve same-kind imperative compatibility.
+- [x] Run full runtime and generator projects sequentially, then zero-warning build. Retain existing ResourceLabelMemoryIntegrationTests, argument evaluation, graph, and process-timeout assertions. Commit `feat(resources): enforce canonical domain relationship bindings`.
 
 ### Task 4: Appointment-domain example, README, and actual report checks
 
@@ -97,22 +97,51 @@
 - Rescheduled : ResourceAttribute with explicit Create definition and required typed Consume Slot property. The old booking keeps its explicit Delete action; Consume still does not imply deletion.
 - Use Booked on both CreateAppointment and CreateUrgentAppointment, Registered on existing patient-creation returns, Held on HoldSlot input/return, Rescheduled on its result, and Cancelled on CancelAppointment's input. Use slot2 as one booking method's parameter name without changing scenario semantics. Keep Approved/Audited and remembered-key example.
 
-- [ ] Add browser assertions on actual sample output: custom domain action names retain Create/Edit/Delete verbs, patient reference and slot consumption connect the right canonical identities, both booking variants work, and key-only audit has the remembered name without data. Preserve every existing matrix, mobile, keyboard, grouping, failure, geometry and snapshot assertion.
-- [ ] Run the new sample/generator assertions before product sample migration and observe the missing domain metadata/bindings failures. Implement the declarations and usages, retaining the scenarios and authored operation bodies.
-- [ ] Document generic property metadata, role-to-parameter binding via nameof, canonical alternative types, Required defaults, legacy arrays, standalone relationships, return precedence, and no execution of attribute code. Use the real booking example rather than another disconnected toy. Review XML comments against the approved STE-style requirement.
-- [ ] Run `dotnet run --project samples/AppointmentTests/AppointmentTests.csproj -c Release -- --report-html`, focused HTML model tests, `node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs`, and `node test/Browser/resource-matrix.cjs samples/AppointmentTests/bin/Release/net10.0/TestResults/raun-report.html artifacts/resource-relationships/browser`; require pass, inspect screenshot. If node count changes, retain exact totals and six-node filtered selection checks.
-- [ ] Commit `feat(samples): demonstrate appointment domain resource attributes` with a why body.
+- [x] Add browser assertions on actual sample output: custom domain action names retain Create/Edit/Delete verbs, patient reference and slot consumption connect the right canonical identities, both booking variants work, and key-only audit has the remembered name without data. Preserve every existing matrix, mobile, keyboard, grouping, failure, geometry and snapshot assertion.
+- [x] Run the new sample/generator assertions before product sample migration and observe the missing domain metadata/bindings failures. Implement the declarations and usages, retaining the scenarios and authored operation bodies.
+- [x] Document generic property metadata, role-to-parameter binding via nameof, canonical alternative types, Required defaults, legacy arrays, standalone relationships, return precedence, and no execution of attribute code. Use the real booking example rather than another disconnected toy. Review XML comments against the approved STE-style requirement.
+- [x] Run `dotnet run --project samples/AppointmentTests/AppointmentTests.csproj -c Release -- --report-html`, focused HTML model tests, `node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs`, and `node test/Browser/resource-matrix.cjs samples/AppointmentTests/bin/Release/net10.0/TestResults/raun-report.html artifacts/resource-relationships/browser`; require pass, inspect screenshot. If node count changes, retain exact totals and six-node filtered selection checks.
+- [x] Commit `feat(samples): demonstrate appointment domain resource attributes` with a why body.
 
 ### Task 5: Full verification and one final staff review
 
 **Files:** Completion status/evidence in this plan and the spec; temporary logs in this plan's ignored workspace only.
 
-- [ ] Run locked restore and inspect lock-file changes (none expected), then `dotnet build Raun.slnx -c Release --no-restore` with zero warnings/errors. Run builds separately from timeout-host tests.
-- [ ] Run `dotnet test Raun.slnx -c Release --no-build`; require zero failures and inspect expected sample branch skips. Do not overlap full suites.
-- [ ] Run final report JS and real sample browser checks; inspect updated domain-action report. Pack Raun, Raun.Mtp, Raun.Coverage and Raun.Aspire locally with --no-build/--no-restore; require four packages. Publish nothing.
-- [ ] Dispatch the one authorized final fresh staff reviewer over the whole change, spec, plan Review Focus and execution rulings. Inspect metadata identity, property/schema parity, binding precedence, requiredness, canonical alternate/fluent mappings, argument timing, preserved snapshots/labels, and actual booking examples. Fix substantive findings with failing regressions then green checks.
-- [ ] Record verified counts, review outcome and any rulings; complete checklist, run `git -c core.whitespace=cr-at-eol diff --check`, commit with why bodies and non-force push. Import refs into the colocated JJ repository without editing user files. Keep the managed worktree and report previews. No release.
+- [x] Run locked restore and inspect lock-file changes (none expected), then `dotnet build Raun.slnx -c Release --no-restore` with zero warnings/errors. Run builds separately from timeout-host tests.
+- [x] Run `dotnet test Raun.slnx -c Release --no-build`; require zero failures and inspect expected sample branch skips. Do not overlap full suites.
+- [x] Run final report JS and real sample browser checks; inspect updated domain-action report. Pack Raun, Raun.Mtp, Raun.Coverage and Raun.Aspire locally with --no-build/--no-restore; require four packages. Publish nothing.
+- [x] Dispatch the one authorized final fresh staff reviewer over the whole change, spec, plan Review Focus and execution rulings. Inspect metadata identity, property/schema parity, binding precedence, requiredness, canonical alternate/fluent mappings, argument timing, preserved snapshots/labels, and actual booking examples. Fix substantive findings with failing regressions then green checks.
+- [x] Record verified counts, review outcome and any rulings; complete checklist, run `git -c core.whitespace=cr-at-eol diff --check`, commit with why bodies and non-force push. Import refs into the colocated JJ repository without editing user files. Keep the managed worktree and report previews. No release.
 
 ## Self-review
 
 Each requirement has one owner: metadata schema and XML docs (1), generic source decoding/validation and static access (2), emitted canonical runtime checks and preserved execution semantics (3), real booking-domain usage and docs/browser evidence (4), full gates/final review/push (5). Property roles never prescribe step names. Typed expectations are canonical resource kinds, including mapped external objects and key-only values. Runtime schema describes declarations; source-bound relationships remain separately normalized. Existing arrays use the same marker and validation, and imperative action-only Apply does not invent bindings. No new reference-wrapper type or executable user discovery hook is needed.
+
+
+## Completion evidence — 2026-10-16
+
+Implemented and verified. Release build: zero warnings and zero errors. Full solution:
+1,559 tests total, 1,554 passed, five expected branch skips, zero failures. The full generator
+suite passes all 632 tests; no verified snapshots changed. The appointment sample passes
+95 tests with five expected skips. Report JavaScript passes all 72 tests, and the real-report
+browser checks pass, including domain verbs, typed relationships, remembered labels, matrix
+geometry, and relationship history across steps. Four current packages were packed locally;
+none were published. Locked restore changed no lock files.
+
+The one final staff review (Astra, High) found three issues: a field could hide an inherited
+relationship property, referenced private metadata differed between Roslyn and reflection,
+and report deduplication discarded a later relationship kind. Each issue was reproduced by
+failing tests and fixed. Focused follow-up: 32 runtime/model and 21 generator cases passed,
+followed by the full solution run above. No declined-to-judge behaviors or deferred minors.
+
+Execution rulings:
+- Equivalent Python/PowerShell bookkeeping was used on Windows; it is reconstructible from Git.
+- Tasks 2 and 3 landed together because normalized declarations and guarded emission form one
+  semantic transition; RED/GREEN evidence was retained. This increases the review range only.
+- Canonical kind conflicts are rejected within one step. Different steps can observe different
+  relationship kinds for the same endpoints; both remain report history. A later policy change
+  must revisit this explicitly rather than discard evidence.
+
+Implementation commits: 7d4c9b4 (contracts), 8b4b52b (generator/runtime integration),
+094897e (booking sample and README), and 63068e7 (final review fixes), followed by this completion record.
+The original user checkout is preserved; the managed worktree and report previews are retained.

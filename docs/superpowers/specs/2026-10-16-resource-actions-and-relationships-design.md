@@ -1,7 +1,7 @@
 # Separate resource actions and relationships
 
 Date: 2026-10-16
-Status: revised property-metadata design approved in conversation; implementation plan ready for review.
+Status: implemented and verified; final staff review findings resolved. See the implementation plan for evidence and execution rulings.
 Execution preference: implement here with one final staff reviewer, carried forward from the session.
 Release policy: no release, tag, or package publication.
 
@@ -137,7 +137,9 @@ are not erased merely by replacing method action shorthand.
 At runtime, reject canonical source/target self-aliases, conflicting canonical relation kinds, and
 typed-kind mismatches that cannot be established statically. Existing imperative operations retain
 their signatures. Repeated imperative observations of the same relation can remain idempotent;
-duplicate source declarations are compiler errors. Never silently retain the first conflicting kind.
+duplicate source declarations are compiler errors. Kind conflicts apply within one step. Different
+steps can record different relationship kinds for the same pair; preserve both historical kinds
+in the report by deduplicating on source, target, and kind. Never silently retain the first conflicting kind.
 
 ## Execution and evidence
 
