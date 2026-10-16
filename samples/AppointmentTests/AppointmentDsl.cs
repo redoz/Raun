@@ -10,12 +10,14 @@ namespace AppointmentTests;
 // IDs are stable; names and cities are presentation/state. RegistryPatient is an external row
 // shape: its mapping belongs here, and the row itself needs no Raun contract.
 public sealed record Patient(string Id, string Name, string? City = null) :
-    IResource<Patient>, IResourceAlternate<RegistryPatient>
+    IResource<Patient>, IResourceAlternate<RegistryPatient>, IResourceAlternate<PatientRow>
 {
     public static ResourceKey KeyFor(Patient instance) => instance.Id;
     public static string? LabelFor(Patient instance) => instance.Name;
     static ResourceKey IResourceAlternate<RegistryPatient>.KeyFor(RegistryPatient row) => row.PatientId;
     static string? IResourceAlternate<RegistryPatient>.LabelFor(RegistryPatient row) => row.FullName;
+    static ResourceKey IResourceAlternate<PatientRow>.KeyFor(PatientRow row) => row.Id;
+    static string? IResourceAlternate<PatientRow>.LabelFor(PatientRow row) => row.Name;
 }
 
 // Same idea for a slot: Id is the identity, Held is state a hold step flips.

@@ -1,0 +1,125 @@
+# Running tests
+
+[Start here](../../README.md) · [Writing scenarios](scenario-authoring.md) · [Resources](resources.md)
+
+## Install and run
+
+Use **.NET SDK 10.0.300 or later**. Create a console project and add Raun:
+
+```bash
+dotnet new console -n MyScenarios
+cd MyScenarios
+dotnet add package Raun.Mtp --prerelease
+dotnet add package xunit.v3.assert
+```
+
+Delete the template's `Program.cs`; Raun generates the entry point. Add your scenario and step classes.
+Keep scenarios in the executable project. Referenced libraries can contain shared steps and domain types.
+
+```bash
+dotnet run -- --report-html --results-directory "$PWD/out"
+```
+
+Use an absolute results path, as above. MTP resolves a relative results path from the test executable directory.
+
+For `dotnet test`, select MTP in the solution's `global.json`:
+
+```json
+{ "test": { "runner": "Microsoft.Testing.Platform" } }
+```
+
+## Concurrent scenarios and shared capacity
+
+Scenarios run concurrently, up to the processor count by default. Each gets its own DI scope and trace.
+Scenario scopes are disposed asynchronously after teardown, including async-only scoped services.
+Resource admission waits for disposal to finish. Disposal failures surface as framework errors after
+already-running scenarios drain; they do not change an already-reported teardown result.
+Use isolated test data. Start an existing suite with `--max-parallel-scenarios 1`.
+Clamp independent steps with `--max-parallel-steps 8`. This limit applies **per scenario**, not to the
+whole run; four active scenarios with eight steps each can run up to 32 steps concurrently.
+`0` (default) leaves steps unbounded; `1` runs one step at a time within each scenario. Dependencies
+and resource-conflict rules still apply. Work started inside a step is outside this scheduler limit.
+Set the code default with `RaunTestApplication.RunAsync(args, maxParallelSteps: 8)`,
+`RunLoop(..., maxParallelSteps: 8)`, or `AspireRunOptions.MaxParallelSteps`. The CLI value overrides it.
+Declare shared infrastructure with resource tokens:
+
+```csharp
+[SharedResource] public sealed class Database : IContendedResource;
+[ExclusiveResource] public sealed class SerialPort : IContendedResource;
+[PooledResource(3)] public sealed class Smtp : IContendedResource;
+
+// Put this on a scenario that needs the database to itself:
+[Uses<Database>(LockMode.Exclusive)]
+```
+
+Put `[Uses<T>]` on steps, scenarios, classes, or assemblies. Shared use permits concurrent holders; a pool limits their number.
+Exclusive use waits for all holders to finish. Raun acquires the full set before Setup and releases it after teardown.
+The report shows time spent waiting.
+
+## Reports and test selection
+
+`--report-html` writes a self-contained report. Its Scenarios view shows step results, timing, a resource matrix, logs, attachments, and errors.
+Select a resource reference to highlight its uses; click outside the matrix or press Esc to clear the selection.
+The IDE reports each step as a test. Selecting a step runs its dependencies, branch conditions, merge sources, and cleanup, but no later steps.
+
+```bash
+dotnet run -- --treenode-filter '/*/*/*/customer books an appointment/*'
+dotnet run -- --treenode-filter '/*/*/*/*/*[Phase=When]'
+dotnet run -- --max-parallel-scenarios 4 --maximum-failed-tests 1
+```
+
+Paths are `/{assembly}/{namespace}/{class}/{scenario}/{step}`.
+Remove numbering prefixes from `--list-tests` step names when filtering. Get scenario names from `[Scenario]` or the report.
+Escape `%` as `%25`, `/` as `%2F`, and literal filter operators with a backslash.
+IDEs use `--filter-uid`. MTP does not accept `--filter` or `--nologo` here.
+`--maximum-failed-tests` stops new scenarios; running scenarios finish.
+
+## Preflight, extensions, and coverage
+
+For a custom `Program.cs`, set `<RaunGenerateProgram>false</RaunGenerateProgram>` in the project file.
+Build and dispose your service provider there. Pass it to Raun and register MTP extensions:
+
+```csharp
+return await RaunTestApplication.RunAsync(args,
+    services: services,
+    preflight: ctx => StartEnvironment(ctx.CancellationToken),
+    configure: builder => builder.AddTrxReportProvider());
+```
+
+Preflight runs once and reports as a test node. Failure skips all scenarios.
+The TRX example needs `Microsoft.Testing.Extensions.TrxReport` and `using Microsoft.Testing.Extensions;`; enable it with `--report-trx`.
+The generated entry point does not register optional extensions.
+
+Coverlet or Microsoft Code Coverage records which code ran.
+Raun.Coverage maps those execution hits to source branches and classifies their purpose.
+The report shows coverage for logical branches and for all branches.
+
+Classified coverage is optional. Add a `Raun.Coverage` package reference alongside a compatible collector.
+`Raun.Mtp` and `Raun.Aspire` do not depend on coverage or its Roslyn/MSBuild analysis assets.
+Generated entry points enable the integration when the leaf package is referenced. For a custom `Main`,
+register `builder.UseClassifiedCoverage()` in `RaunTestApplication.RunAsync`'s `configure` callback
+(or Aspire's `ConfigureTestApplication`), using namespace `Raun.Mtp`.
+Middleware registration also enables the integration. The middleware API retains its source namespace
+and ships in `Raun.Coverage`.
+
+Register a compatible collector for the report's Coverage view.
+Use `--report-html --coverage --coverage-output-format xml`, or `--report-html --coverlet --coverlet-output-format json`.
+Raun classifies branches as argument checks, error handling, null propagation, logging, or logic.
+Add project rules with `builder.UseBranchClassificationMiddleware(() => new ProjectRule())` and `IBranchClassificationMiddleware` from `Raun.Coverage`.
+See the [provider setup](../../samples/AspireAppointments/AspireAppointments.Tests/Program.cs).
+
+## Tracing, simulated time, and Aspire
+
+Subscribe to `RaunTelemetry.SourceName` with OpenTelemetry. Raun emits scenario and step spans, with logs and resource events.
+Instrumented HTTP calls link application spans to the active step. Your exporter sends the spans; Raun does not export them.
+
+For report samples, set `simulateTime: true` on `RunAsync` and call `Context.SimulateElapsed(TimeSpan.FromSeconds(1))` in steps.
+This advances the simulated clock without a real delay. It has no effect in normal runs.
+
+`Raun.Aspire` starts your AppHost in preflight, waits for named resources, and registers the running application:
+
+```csharp
+return await RaunAspire.RunAsync<Projects.MyAppHost>(args, aspire => aspire.WaitFor("api"));
+```
+
+See [AspireAppointments](../../samples/AspireAppointments) for clients, service registration, and trace export.

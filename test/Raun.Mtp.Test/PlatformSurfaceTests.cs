@@ -24,7 +24,7 @@ public class PlatformSurfaceTests
 
     // The sample's full step count across every scenario, Setup and Teardown included, confirmed by
     // `--list-tests`.
-    private const int UnfilteredTotalCount = 128;
+    private const int UnfilteredTotalCount = 162;
 
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(3);
 
@@ -77,7 +77,7 @@ public class PlatformSurfaceTests
         // The generated entry point calls RunAsync(args) with no `configure`, so it registers no
         // extensions and rejects --report-trx as an unknown option. The supported route is a
         // hand-written Program.cs that passes `configure` — which is what the sample does, and what
-        // README's "Reports and extensions" section documents. This proves that route end to end.
+        // docs/reference/running-tests.md documents. This proves that route end to end.
         var results = Path.Combine(Path.GetTempPath(), "raun-trx-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(results);
         try

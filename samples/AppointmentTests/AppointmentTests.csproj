@@ -35,12 +35,14 @@
        project and wire the generator in as an analyzer, and bring assertions only. -->
   <ItemGroup>
     <PackageReference Include="xunit.v3.assert" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <!-- A platform extension, registered through RunAsync's `configure` below: the `report-trx`
          option then works exactly as it does for any other MTP test app. -->
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
     <!-- Only for the [LoggerMessage] source generator the lifecycle DSL uses; ILogger itself arrives
          transitively through Raun. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
   </ItemGroup>
 
   <ItemGroup>
