@@ -112,6 +112,8 @@ internal sealed record ReportEffect
 
 internal sealed record ReportResource
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Label { get; init; }
     public string? Id { get; init; }
     public string? QualifiedType { get; init; }
     public required string Type { get; init; }

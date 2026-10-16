@@ -237,6 +237,7 @@ Object references keep their resource link and captured JSON when serialization 
 Key-only references keep the identity and link, with no object snapshot. Hover over an object reference
 to inspect or copy its snapshot.
 Labels and snapshots are captured at the reference; later changes do not rewrite them.
+Resource columns use the first captured readable label in step order; their tooltips keep the type and key.
 Use synthetic test data: Raun does not redact reports or artifacts.
 
 ## Alternate resource representations

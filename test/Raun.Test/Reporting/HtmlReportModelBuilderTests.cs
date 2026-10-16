@@ -64,6 +64,43 @@ public class HtmlReportModelBuilderTests
         Assert.All(relationships, edge => { Assert.Equal(relationships[0].SubjectId, edge.SubjectId); Assert.Equal(relationships[0].TargetId, edge.TargetId); });
     }
 
+    [Theory]
+    [InlineData("effect")]
+    [InlineData("title")]
+    [InlineData("note")]
+    [InlineData("log")]
+    public void Resource_columns_use_the_first_captured_name_in_step_order(string source)
+    {
+        var first = Node(0, "first", "Given", "key only");
+        var named = Node(1, "named", "Given", "named", dependsOn: [0]);
+        var later = Node(2, "later", "When", "renamed", dependsOn: [1]);
+        var definition = Def(first, named, later);
+        var identity = new ResourceIdentity("patient", "42");
+        var message = new StepMessage([new StepMessagePart("42", identity) { Label = "Jane <Doe>" }]);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnRunStarted([definition]); builder.OnScenarioStarted(definition);
+        // Completion order must not choose the column name, and later names must not overwrite it.
+        builder.OnStepFinished(definition, Result(later, T0.AddMilliseconds(2), 1, effects:
+            [new ResourceEffect { Identity = identity, Verb = LifecycleVerb.Edit, Label = "Janet", Timestamp = T0 }]));
+        builder.OnStepFinished(definition, new StepResult
+        {
+            Node = named, DisplayName = "named", Status = StepStatus.Passed, StartedAt = T0.AddMilliseconds(1),
+            Effects = source == "effect" ? [new ResourceEffect { Identity = identity, Verb = LifecycleVerb.Load, Label = "Jane <Doe>", Timestamp = T0 }] : [],
+            TitleMessage = source == "title" ? message : StepMessage.FromText("named"),
+            NoteMessages = source == "note" ? [message] : [],
+            LogEntries = source == "log" ? [new LogEntry { Elapsed = TimeSpan.Zero, Content = message }] : [],
+        });
+        builder.OnStepFinished(definition, Result(first, T0, 1, effects:
+            [new ResourceEffect { Identity = identity, Verb = LifecycleVerb.Read, Label = "patient:42", Timestamp = T0 }]));
+        var scenario = Assert.Single(builder.Build("labels").Scenarios);
+        var resource = Assert.Single(scenario.Resources);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(resource));
+        Assert.True(json.RootElement.TryGetProperty("Label", out var label), "Resource columns must receive the captured label.");
+        Assert.Equal("Jane <Doe>", label.GetString());
+        Assert.Equal("42", resource.Key);
+        Assert.Equal("Janet", Assert.Single(scenario.Steps[2].Effects).Label);
+    }
+
     [Fact]
     public void Custom_action_names_preserve_semantic_verbs_in_effects_and_history()
     {

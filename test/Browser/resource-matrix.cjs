@@ -98,6 +98,9 @@ const renderFixture = (name, data) => {
     assert.deepEqual(errors, []);
     const registryCard=page.locator('.card').filter({hasText:'registered patient books by ID'});
     await registryCard.locator('.card-head').click();
+    const patientHeader=registryCard.getByRole('button',{name:/^Jane <Doe>, Patient\./});
+    assert.equal(await patientHeader.count(),1,'The patient column uses LabelFor rather than its opaque key');
+    assert.ok((await patientHeader.getAttribute('title')).includes('Patient: pat-42'),'The column tooltip retains the stable identity');
     const registryLinks=registryCard.locator('.dn .message-resource');
     assert.equal(await registryLinks.count(),8,'All eight resource mentions in the real registry journey render as interactive references');
     const linkedNames=await registryLinks.allTextContents();

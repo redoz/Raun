@@ -243,9 +243,20 @@ internal sealed class HtmlReportModelBuilder
 
             // Mentions and lineage endpoints get entries, but only actual effects add activity.
             var events = ordered.SelectMany(r => r.Effects).ToLookup(e => e.Identity);
+            // Choose a stable column name from frozen evidence in authored order. A fallback from
+            // an earlier key-only observation must not hide a subsequently observed readable name.
+            var resourceLabels = ordered.SelectMany(result => result.Effects.Select(effect => (effect.Identity, effect.Label))
+                .Concat(result.TitleMessage.Parts.Concat(result.NoteMessages.SelectMany(note => note.Parts))
+                    .Concat(result.LogEntries.SelectMany(entry => entry.Content?.Parts ?? []))
+                    .Where(part => part.Resource.HasValue).Select(part => (Identity: part.Resource!.Value, part.Label))))
+                .Where(observation => !string.IsNullOrWhiteSpace(observation.Label)
+                    && !string.Equals(observation.Label, ResourcePresentation.Display(observation.Identity), StringComparison.Ordinal))
+                .ToLookup(observation => observation.Identity, observation => observation.Label);
+
             var resources = identities.Select(pair => new ReportResource
             {
                 Id = pair.Value,
+                Label = resourceLabels[pair.Key].FirstOrDefault(),
                 QualifiedType = pair.Key.Kind.QualifiedName,
                 Type = pair.Key.Kind.DisplayName,
                 Key = pair.Key.Key.ToString(),
