@@ -101,6 +101,8 @@ internal sealed record ReportEffect
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? Label { get; init; }
     public string? ResourceId { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ActionName { get; init; }
     public required string Verb { get; init; }
     public required string Type { get; init; }
     public required string Key { get; init; }
@@ -119,6 +121,8 @@ internal sealed record ReportResource
 
 internal sealed record ReportResourceEvent
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ActionName { get; init; }
     public required string Verb { get; init; }
     public required double OffsetMs { get; init; }
     public required string StepId { get; init; }

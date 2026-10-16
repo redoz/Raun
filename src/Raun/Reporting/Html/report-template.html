@@ -1358,7 +1358,7 @@
             if(track && index===last)cell.classList.add("matrix-track-last");
             cell.dataset.resourceColumn=column.key;cell.style.gridColumn=String(columnIndex+2);cell.style.setProperty("--resource-color",color);
             for(const effect of hits[index]){
-              const event=el("button","matrix-event");event.type="button";event.textContent=effect.verb;
+              const event=el("button","matrix-event");event.type="button";event.textContent=effect.actionName ?? effect.verb;
               event.dataset.matrixResource=matrixResourceKey(effect);event.dataset.matrixVerb=effect.verb;
               event.style.setProperty("--resource-color",resourceColors.get(matrixResourceKey(effect)));
               if(effect.resourceId){event.dataset.messageResource=effect.resourceId;event.dataset.resourceActivity=effect.resourceId;}
@@ -1366,8 +1366,8 @@
               if(effect.data!=null)event.setAttribute("data-resource-data",effect.data);
               const offset=Number(effect.offsetMs)-Number(sc.steps[index].offsetMs || 0);
               const time=Number.isFinite(offset) ? (offset>=0 ? "+" : "")+fmtMs(offset) : "—";
-              event.dataset.resourceEvent=effect.verb+" · "+time+" from step start";
-              event.title=effect.verb+" "+effect.type+": "+effect.key;
+              event.dataset.resourceEvent=(effect.actionName ?? effect.verb)+" · "+time+" from step start";
+              event.title=(effect.actionName ?? effect.verb)+" "+effect.type+": "+effect.key;
               event.setAttribute("aria-label",event.title+". Show evidence for step "+sc.steps[index].label+". "+time+" from step start");
               event.addEventListener("click",click=>{
                 click.stopPropagation();selected=column.key;select();

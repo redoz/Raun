@@ -44,6 +44,32 @@ public class HtmlReportModelBuilderTests
         Attachments = attachments ?? new Dictionary<string, string>(),
     };
 
+    [System.ComponentModel.DisplayName("Approve <now>")]
+    private sealed class ApprovedAttribute : EditedAttribute;
+
+    [Fact]
+    public void Custom_action_names_preserve_semantic_verbs_in_effects_and_history()
+    {
+        var node = Node(0, "a", "When", "approve");
+        var definition = Def(node);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnRunStarted([definition]);
+        builder.OnScenarioStarted(definition);
+        builder.OnStepFinished(definition, Result(node, T0, 1, effects: [new ResourceEffect
+        {
+            Verb = LifecycleVerb.Edit, Action = ResourceAction.For<ApprovedAttribute>(),
+            Identity = new ResourceIdentity("patient", "42"), Label = "Jane <Doe>", Timestamp = T0,
+        }]));
+        var scenario = Assert.Single(builder.Build("x").Scenarios);
+        var effect = Assert.Single(Assert.Single(scenario.Steps).Effects);
+        Assert.Equal("Edit", effect.Verb);
+        Assert.Equal("Approve <now>", effect.ActionName);
+        Assert.Equal("Jane <Doe>", effect.Label);
+        var history = Assert.Single(Assert.Single(scenario.Resources).Events);
+        Assert.Equal("Edit", history.Verb);
+        Assert.Equal("Approve <now>", history.ActionName);
+    }
+
     [Fact]
     public void Structured_messages_keep_scoped_identities_and_recording_time_snapshots()
     {

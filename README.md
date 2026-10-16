@@ -323,7 +323,8 @@ so object and key-only references share the same identity.
 public Task<Appointment> CreateAppointment(Patient patient, Slot slot) { ... }
 ```
 
-Use `[Created]`, `[Loaded]`, or `[Edited]` on returns; use `[Read]`, `[Edited]`, or `[Deleted]` on parameters.
+Use `[Created]`, `[Loaded]`, `[Read]`, `[Edited]`, or `[Deleted]` on parameters, return values, or methods.
+A method attribute describes its return value. An explicit return attribute replaces it, including lineage.
 `References` records retained links. `Consumes` records inputs used to produce the result.
 Missing resource roles cause compiler diagnostics.
 For effects inside a step, use `await Context.Resources.Create(value)` or `Load`, `Read`, `Edit`, `Delete`, `Reference`, and `Consume`.
@@ -341,13 +342,54 @@ public Task Delete([Deleted, ResourceKey<Patient>] string patientId)
 ```
 
 The string is the key of `Patient`, so its effects, conflicts, lineage, and title links refer to the
-same resource as a `Patient` instance with that key. Key-only references display `Patient:key` and
-carry no object snapshot. `ResourceKey` parameters are also supported. The annotation requires an
+same resource as a `Patient` instance with that key. Key-only references reuse an observed resource label,
+or display `Patient:key` when no label is available, and carry no object snapshot. `ResourceKey` parameters are also supported. The annotation requires an
 access role (or a producer's `References`/`Consumes` declaration); other parameter types report `RAUN024`.
 The step method still receives its original string or `ResourceKey`; Raun changes only the tracking and title reference.
 Nullable string parameters work when their supplied key is non-null. A supplied null key throws
 `ArgumentNullException` when its claim is evaluated; no claim is recorded for that invalid key.
 For a key-only reference in a manual log or note, format `new ResourceIdentity(typeof(Patient), patientId)`.
+
+### Reusable resource actions
+
+Derive a sealed attribute from one of the five resource roles to name a domain action once:
+
+```csharp
+[DisplayName("Approve")]
+public sealed class ApprovedAttribute : EditedAttribute;
+
+public sealed class AuditedAttribute : ReadAttribute; // Displays "Audited".
+
+[StepName("approve {patientId}")]
+public Task Approve([Approved, ResourceKey<Patient>] string patientId) { ... }
+
+[Audited] // Method shorthand: records the returned resource after the call.
+public Task<Patient> Audit(Patient patient) { ... }
+
+await Context.Resources.Apply(ResourceAction.For<ApprovedAttribute>(), patient);
+```
+
+Use `System.ComponentModel.DisplayName` for a custom label. Otherwise Raun removes the final
+`Attribute` suffix from the concrete attribute's name. The nearest inherited `DisplayName` wins;
+a blank name is an error. Raun reads metadata without constructing the attribute.
+
+An action keeps its base role's behavior: Created, Edited, and Deleted are exclusive;
+Loaded and Read are shared. Input effects are recorded before the call; return effects after it.
+Created, Loaded, and Edited also support inherited `References` and `Consumes` declarations.
+Distinct custom attribute types retain separate report entries, even when their labels match.
+The step code performs the operation; the attribute records its effect.
+
+### Names across steps
+
+A label from `Label<T>`, an alternate representation's `LabelFor`, or `IResource<T>.LabelFor`
+is remembered for that canonical resource identity during the scenario. Later key-only references
+reuse it in titles, notes, logs, and resource effects. A blank label cannot erase a good name.
+`:id` still shows the key; key-only references never borrow a previous object's snapshot.
+
+A step can see its own earlier observations and its graph predecessors. A causally newer name wins.
+When independent predecessor branches meet, the later node in scenario order wins, regardless of
+completion order. Unrelated parallel steps and separate scenario runs do not share observations.
+Cleanup sees the drained scenario's names. Captured titles, logs, and snapshots stay frozen.
 
 ## Notes, logs, and attachments
 

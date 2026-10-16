@@ -198,6 +198,7 @@ internal sealed class HtmlReportModelBuilder
                     {
                         ResourceId = ResourceId(e.Identity),
                         Verb = e.Verb.ToString(),
+                        ActionName = e.Action?.Name,
                         Label = e.Label,
                         Type = e.Identity.Kind.DisplayName,
                         Key = e.Identity.Key.ToString(),
@@ -251,6 +252,7 @@ internal sealed class HtmlReportModelBuilder
                 Events = events[pair.Key].Select(e => new ReportResourceEvent
                 {
                     Verb = e.Verb.ToString(),
+                        ActionName = e.Action?.Name,
                     OffsetMs = Ms(e.Timestamp - start),
                     StepId = e.StepId ?? string.Empty,
                 }).ToList(),

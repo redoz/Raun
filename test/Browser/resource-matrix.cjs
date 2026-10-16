@@ -11,6 +11,13 @@ const source = fs.readFileSync(path.join(root, 'src/Raun/Reporting/Html/report-t
 const sample = fs.readFileSync(process.argv[2], 'utf8');
 const payload = sample.match(/<script id="model" type="application\/json">([\s\S]*?)<\/script>/)[1];
 const model = JSON.parse(payload);
+const actionSample=model.scenarios.find(scenario=>scenario.displayName==='resource actions reuse patient names');
+assert.ok(actionSample,'The canonical sample includes resource actions');
+const audit=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Audited'));
+assert.ok(audit.displayName.includes('Jane <Doe>'),'A key-only generated title reuses the patient name');
+assert.ok(audit.effects.some(effect=>effect.label==='Jane <Doe>' && effect.data==null),'Key-only effects have names without borrowed snapshots');
+assert.ok(actionSample.steps.some(step=>step.effects.some(effect=>effect.actionName==='Approve' && effect.verb==='Edit')));
+
 fs.writeFileSync(path.join(out, 'resource-matrix-preview.html'), source.replace('/*__RAUN_REPORT_JSON__*/', payload));
 const hasResources = scenario => scenario.resources.length || scenario.steps.some(step => step.effects.length);
 const renderFixture = (name, data) => {
@@ -283,6 +290,22 @@ const renderFixture = (name, data) => {
       assert.ok((await page.locator('.resource-hover-event').textContent()).includes('+'+((index+1)*10).toFixed(1)+' ms'),'Inspector retains each event offset from step start');
       await page.keyboard.press('Escape');
     }
+    const actionFixture=structuredClone(model),actionScenario=actionFixture.scenarios[0];
+    actionFixture.scenarios=[actionScenario];
+    const actionStep=actionScenario.steps.find(step=>step.effects.length),actionEffect=actionStep.effects[0];
+    actionEffect.verb='Edit';actionEffect.actionName='Approve <now>';actionEffect.label='Jane <Doe>';
+    actionStep.effects.push({...actionEffect,actionName:'Audited',data:null});
+    actionStep.effects.push({...actionEffect,actionName:'Approve <now>',data:null});
+    await page.goto(renderFixture('custom-actions',actionFixture));
+    await page.locator('.card-head').first().click();
+    const actions=page.locator('.matrix-event').filter({hasText:'Approve <now>'});
+    assert.equal(await actions.count(),2,'Equal action labels remain separate recorded effects');
+    assert.equal(await actions.first().getAttribute('data-matrix-verb'),'Edit','Custom names preserve effect semantics');
+    assert.equal(await page.locator('.matrix-event').filter({hasText:'Audited'}).count(),1,'Default custom names are visible');
+    await actions.first().focus();
+    assert.match(await page.locator('.resource-hover-event').textContent(),/Approve <now>/);
+    assert.deepEqual(errors,[]);
+    await page.screenshot({path:path.join(out,'custom-actions.png'),fullPage:true});
     console.log('PASS: default resource matrix; every sample row and order; unchanged no-resource lists; keyboard focus; snapshots; disclosure; failures; grouping; mobile access.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
