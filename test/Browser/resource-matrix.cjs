@@ -121,6 +121,15 @@ const renderFixture = (name, data) => {
     await registrationId.click();
     assert.equal(await registryCard.locator('.dn .message-resource.hl').count(),5,'Clicking the registration ID highlights all five patient mentions across the journey');
     await registrationId.click();
+    const columnGeometry=()=>registryCard.locator('.scenario-heading-row,.card-head,.matrix-resource,.matrix-resource small,.matrix-row').evaluateAll(nodes=>nodes.map(node=>{
+      const rect=node.getBoundingClientRect();return {x:rect.x,y:rect.y,width:rect.width,height:rect.height};
+    }));
+    const unselectedGeometry=await columnGeometry();
+    await patientHeader.click();
+    assert.ok(await registryCard.locator('.matrix-reference').count()>0,'Column selection marks related resources');
+    assert.deepEqual(await columnGeometry(),unselectedGeometry,'Selecting a resource column must not move headers, text or grid rows');
+    await patientHeader.click();
+    assert.deepEqual(await columnGeometry(),unselectedGeometry,'Clearing the selected column must keep the same geometry');
 
     await registryCard.locator('.card-head').click();
 
