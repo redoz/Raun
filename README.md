@@ -176,5 +176,20 @@ public sealed class Schedule : IContendedResource;
 Raun waits before Setup and holds capacity through teardown. Pools can limit concurrent
 holders. See [shared capacity](docs/reference/running-tests.md#concurrent-scenarios-and-shared-capacity).
 
+## Check code coverage
+
+Add `Raun.Coverage` and a coverage collector to see which branches your tests exercise.
+The report shows total branch coverage and coverage of your logic. Argument checks,
+error handling, null propagation, and logging are classified separately.
+
+With Microsoft Code Coverage registered, run:
+
+```bash
+dotnet run -- --report-html --coverage --coverage-output-format xml
+```
+
+See the sample's [collector setup](samples/AspireAppointments/AspireAppointments.Tests/Program.cs)
+and [coverage commands](samples/AspireAppointments/README.md#coverage-and-traces). Coverlet is also supported.
+
 Browse the [sample guide](samples/AppointmentTests/README.md) and [design notes](docs/superpowers/specs).
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
