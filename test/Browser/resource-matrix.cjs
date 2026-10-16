@@ -123,9 +123,20 @@ const renderFixture = (name, data) => {
       });
     });
     assert.ok(alignedHeadings,'Resource headings share the scenario heading row');
+    const expandedBounds=await collapsedScenario.evaluate(async card=>{
+      if(card.scenarioAnimation)await card.scenarioAnimation.finished;
+      const box=card.getBoundingClientRect();
+      const lastRow=card.querySelector('.matrix-row:last-child').getBoundingClientRect();
+      const chevron=card.querySelector('.card-head .tw').getBoundingClientRect();
+      return {bottomGap:box.bottom-lastRow.bottom,leftInset:chevron.left-box.left};
+    });
+    assert.ok(Math.abs(expandedBounds.bottomGap)<=1,'Expanded border ends at the last grid row, without an empty footer: '+JSON.stringify(expandedBounds));
+    assert.ok(expandedBounds.leftInset>=8,'Scenario chevron has space inside the left border: '+JSON.stringify(expandedBounds));
+
     assert.equal(await collapsedScenario.locator('.matrix-steps').count(),0,'No separate Steps header row');
     await collapsedScenario.locator('.card-head').click();
     assert.equal(await collapsedScenario.locator('.matrix-resource').first().isVisible(),false,'Resource headings hide again on collapse');
+    await collapsedScenario.evaluate(async card=>{if(card.scenarioAnimation)await card.scenarioAnimation.finished;});
     const motion=await collapsedScenario.evaluate(async card=>{
       card.querySelector('.card-head').click();
       const opening=card.scenarioAnimation,animatedOpen=Boolean(opening);
@@ -136,7 +147,7 @@ const renderFixture = (name, data) => {
       if(closing)await closing.finished;
       return {animatedOpen,animatedClose,expandedHeight,closedHeight:card.querySelector('.scenario-reveal').getBoundingClientRect().height};
     });
-    assert.ok(motion.animatedOpen && motion.animatedClose && motion.expandedHeight>0 && motion.closedHeight===0,'Scenario disclosure animates both directions and settles to natural height');
+    assert.ok(motion.animatedOpen && motion.animatedClose && motion.expandedHeight>0 && motion.closedHeight===0,'Scenario disclosure animates both directions and settles to natural height: '+JSON.stringify(motion));
     await page.emulateMedia({reducedMotion:'reduce'});
     const reduced=await collapsedScenario.evaluate(card=>{
       card.querySelector('.card-head').click();const animation=Boolean(card.scenarioAnimation);

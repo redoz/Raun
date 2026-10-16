@@ -120,7 +120,7 @@
   .summary-section[aria-selected="true"]{background:var(--surface-hover);border-color:var(--border-strong)}
   .summary-section:focus-visible,.generated-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
   main{margin:0;padding:0}
-  .card{position:relative;background:var(--surface);border:0;border-top:1px solid var(--border);border-radius:0;margin:0}
+  .card{position:relative;background:var(--surface);border:0;border-top:1px solid var(--border);border-radius:0;margin:0;padding-left:8px}
   .card-head{display:grid;grid-template-columns:12px 12px minmax(0,1fr) max-content;align-items:center;column-gap:10px;row-gap:0;padding:12px 0;cursor:pointer;min-width:0}
   .card:not(.collapsed){background:var(--surface-2);outline:1px solid var(--border-strong);outline-offset:-1px}
   .card-head:hover{background:var(--surface-2)}
@@ -134,7 +134,7 @@
   .scenario-status.skipped,.scenario-status.not-taken{background:light-dark(#d3a21e,#e9c478)}
   .card-head .name{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0;font-size:14px;font-weight:500}.scenario-title{min-width:0;overflow-wrap:anywhere}.card-head .report-meta{max-width:40%}
   .card-head .dur{flex:none;white-space:nowrap;text-align:right}
-  .card-body{padding:0 0 12px 20px}
+  .card-body{padding:0 0 0 20px}
   @media(max-width:650px){
     .appbar{padding:8px 12px}.run-summary,.run-summary-items,#report-tabs{gap:4px}
     .run-summary-items{display:block}.summary-times{margin-top:4px;gap:4px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2.3fr)}
