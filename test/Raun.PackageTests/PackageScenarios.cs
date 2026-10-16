@@ -1,7 +1,10 @@
 using Raun;
-using Xunit;
 
 namespace Raun.PackageTests;
+
+// Limit simultaneous SDK/coverage processes on smaller CI runners.
+[PooledResource(2)]
+public sealed class SdkSlots : IContendedResource;
 
 public sealed class PackageScenarios : Scenarios
 {
@@ -9,65 +12,102 @@ public sealed class PackageScenarios : Scenarios
     public PackageWhen When => Steps<PackageWhen>();
     public PackageThen Then => Steps<PackageThen>();
 
-    [Scenario("built packages work for consumers")]
+    [Scenario("built packages work for consumers", Timeout = 900000)]
     [ScenarioCase("generated entry point", "GeneratedEntryPoint")]
     [ScenarioCase("Appointment sample", "AppointmentTests")]
     [ScenarioCase("Aspire sample", "AspireAppointments")]
+    [Uses<SdkSlots>]
+    [Teardown(Run.OnSuccess)]
     public async Task ConsumePackages(string sample)
     {
-        var consumer = await Given.IsolatedConsumer(sample);
+        var feed = await Given.BuiltPackages().Note("All four packages must exist at the same version.");
+        var consumer = await Given.IsolatedConsumer(feed, sample)
+            .Note($"Only {feed} supplies Raun packages; a fresh cache prevents an older build masking a broken package.");
         await When.Restoring(consumer);
         await When.Building(consumer);
-        await Then.ResolvesBuiltPackages(consumer);
-        await When.Running(consumer);
-        await Then.ReportContainsPassingScenarios(consumer);
+        ConsumerReport report;
+        if (await Given.SupportsCoverage(consumer))
+        {
+            report = await When.RunningWithCoverage(consumer)
+                .Note("Exercise Raun.Coverage and its packaged build host, not just the runtime assemblies.");
+            await Then.ContainsClassifiedCoverage(report);
+        }
+        else
+        {
+            report = await When.Running(consumer);
+        }
+        await (Then.ResolvesBuiltPackages(consumer), Then.ReportContainsPassingScenarios(report));
     }
 }
 
 public sealed class PackageGiven : Given
 {
-    [StepName("Given {sample} consumes the built packages in isolation")]
-    public Task<PackageConsumer> IsolatedConsumer(string sample)
+    [StepName("Given the locally built {$return}")]
+    [return: Loaded]
+    public Task<PackageFeed> BuiltPackages() => Task.FromResult(PackageConsumer.FindFeed());
+
+    [StepName("Given {sample} consumes {feed} in isolation")]
+    [return: Created(References = [nameof(feed)])]
+    public Task<PackageConsumer> IsolatedConsumer([Read] PackageFeed feed, string sample)
     {
-        var consumer = PackageConsumer.Prepare(sample);
-        Context.Log($"Testing Raun {consumer.Version} in {consumer.Root}");
+        var consumer = PackageConsumer.Prepare(feed, sample, Context);
+        Context.Log($"Created {consumer} from {feed} in {consumer.Root}");
         return Task.FromResult(consumer);
     }
+
+    [StepName("Given {consumer} supports coverage collection")]
+    public Task<bool> SupportsCoverage([Read] PackageConsumer consumer)
+        => Task.FromResult(Path.GetFileNameWithoutExtension(consumer.Project) == "AspireAppointments.Tests");
 }
 
 public sealed class PackageWhen : When
 {
-    [StepName("When restoring from the local feed into a fresh cache")]
-    public Task Restoring(PackageConsumer consumer)
+    [StepName("When restoring {consumer}", TimeoutMs = 600000)]
+    public Task Restoring([Restored] PackageConsumer consumer)
         => consumer.DotnetAsync(Context, "restore", consumer.Project, "--configfile", Path.Combine(consumer.Root, "nuget.config"));
 
-    [StepName("When building the package consumer")]
-    public Task Building(PackageConsumer consumer)
-        => consumer.DotnetAsync(Context, "build", consumer.Project, "-c", "Release", "--no-restore");
+    [StepName("When building {consumer}", TimeoutMs = 600000)]
+    public Task Building([Built] PackageConsumer consumer)
+        => consumer.DotnetAsync(Context, "build", consumer.Project, "-c", "Release", "--no-restore", "-p:UseSharedCompilation=false", "-nr:false");
 
-    [StepName("When running the package consumer")]
-    public Task Running(PackageConsumer consumer)
-        => consumer.DotnetAsync(Context, "run", "--project", consumer.Project, "-c", "Release", "--no-build", "--",
-            "--report-html", "--results-directory", consumer.ReportDirectory);
+    [StepName("When running {consumer}", TimeoutMs = 600000)]
+    [return: Created(References = [nameof(consumer)])]
+    public Task<ConsumerReport> Running([Read] PackageConsumer consumer)
+        => consumer.RunWithReportAsync(Context, collectCoverage: false);
+
+    [StepName("When running {consumer} with code coverage", TimeoutMs = 600000)]
+    [return: Created(References = [nameof(consumer)])]
+    public Task<ConsumerReport> RunningWithCoverage([Read] PackageConsumer consumer)
+        => consumer.RunWithReportAsync(Context, collectCoverage: true);
 }
 
 public sealed class PackageThen : Then
 {
-    [StepName("Then the consumer resolved the exact built packages")]
-    public Task ResolvesBuiltPackages(PackageConsumer consumer)
+    [StepName("Then {consumer} resolved the exact built packages")]
+    public Task ResolvesBuiltPackages([Read] PackageConsumer consumer)
     {
         consumer.VerifyAssets();
+        Context.Log($"{consumer} resolved Raun {consumer.Version} from the local feed.");
         return Task.CompletedTask;
     }
 
-    [StepName("Then its report contains passing scenarios")]
-    public Task ReportContainsPassingScenarios(PackageConsumer consumer)
+    [StepName("Then {report} contains passing scenarios")]
+    public Task ReportContainsPassingScenarios([Read] ConsumerReport report)
     {
-        var html = File.ReadAllText(Path.Combine(consumer.ReportDirectory, "raun-report.html"));
+        var html = File.ReadAllText(report.File);
         Context.AddAttachment("consumer-report.html", html);
         var count = PackageConsumer.VerifyReport(html);
-        Assert.True(count > 0);
-        Context.Log($"Verified {count} consumer scenarios.");
+        Context.Log($"{report} contains {count} passing scenarios.");
+        return Task.CompletedTask;
+    }
+
+    [StepName("Then {report} contains classified code coverage")]
+    public Task ContainsClassifiedCoverage([Read] ConsumerReport report)
+    {
+        var html = File.ReadAllText(report.File);
+        Context.AddAttachment("consumer-report.html", html);
+        PackageConsumer.VerifyCoverage(html);
+        Context.Log($"{report} includes classified code coverage.");
         return Task.CompletedTask;
     }
 }

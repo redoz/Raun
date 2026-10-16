@@ -7,7 +7,8 @@ using Xunit;
 
 namespace Raun.PackageTests;
 
-public sealed partial class PackageConsumer
+[System.ComponentModel.DisplayName("Consumer")]
+public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
 {
     private static readonly HashSet<string> PackageIds = ["Raun", "Raun.Mtp", "Raun.Aspire", "Raun.Coverage"];
 
@@ -23,23 +24,56 @@ public sealed partial class PackageConsumer
     public string Version { get; }
     public string ReportDirectory => Path.Combine(Root, "report");
 
-    public static PackageConsumer Prepare(string sample)
+    public string Name => Path.GetFileNameWithoutExtension(Project) switch
+    {
+        "GeneratedEntryPoint" => "Generated entry point",
+        "AppointmentTests" => "Appointment sample",
+        "AspireAppointments.Tests" => "Aspire sample",
+        var name => name,
+    };
+    public static Raun.ResourceKey KeyFor(PackageConsumer consumer) => consumer.Root;
+    public static string LabelFor(PackageConsumer consumer) => consumer.Name;
+
+    private static string FindRepository()
     {
         var repo = new DirectoryInfo(AppContext.BaseDirectory);
         while (!File.Exists(Path.Combine(repo.FullName, "Raun.slnx")))
             repo = repo.Parent ?? throw new InvalidOperationException("Cannot find repository root.");
-        var feed = Path.GetFullPath(Environment.GetEnvironmentVariable("RAUN_PACKAGE_FEED") ?? Path.Combine(repo.FullName, "artifacts"));
-        var version = ReadPackageVersion(feed);
+        return repo.FullName;
+    }
+
+    public static PackageFeed FindFeed()
+    {
+        var feed = Path.GetFullPath(Environment.GetEnvironmentVariable("RAUN_PACKAGE_FEED") ?? Path.Combine(FindRepository(), "artifacts"));
+        return new PackageFeed(feed, ReadPackageVersion(feed));
+    }
+
+    public static PackageConsumer Prepare(PackageFeed feed, string sample, Raun.ScenarioContext context)
+    {
+        var version = feed.Version;
         var root = Directory.CreateTempSubdirectory("raun-package-consumption-").FullName;
-        Configure(root, repo.FullName, feed);
-        if (sample == "GeneratedEntryPoint")
-            WriteGeneratedApp(root, version);
-        else
-            CopySample(root, repo.FullName, sample, version);
         var relative = sample == "AspireAppointments"
             ? "AspireAppointments/AspireAppointments.Tests/AspireAppointments.Tests.csproj"
             : $"{sample}/{sample}.csproj";
-        return new PackageConsumer(root, Path.Combine(root, relative), version);
+        var consumer = new PackageConsumer(root, Path.Combine(root, relative), version);
+        context.OnTeardown(async teardown =>
+        {
+            // Only remove the exact temporary directory created above; keep failures for inspection.
+            Assert.Equal(Path.TrimEndingDirectorySeparator(Path.GetTempPath()), Path.GetDirectoryName(root));
+            Assert.StartsWith("raun-package-consumption-", Path.GetFileName(root), StringComparison.Ordinal);
+            Directory.Delete(root, recursive: true);
+            await teardown.Resources.Delete(consumer);
+            teardown.Log($"Removed {consumer} and its temporary package cache.");
+        });
+        Configure(root, FindRepository(), feed.Directory);
+        if (sample == "GeneratedEntryPoint")
+            WriteGeneratedApp(root, version);
+        else
+            CopySample(root, FindRepository(), sample, version);
+        new XDocument(new XElement("Solution", Directory.EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories)
+            .Select(project => new XElement("Project", new XAttribute("Path", Path.GetRelativePath(root, project).Replace('\\', '/'))))))
+            .Save(Path.Combine(root, "Consumer.slnx"));
+        return consumer;
     }
 
     private static string ReadPackageVersion(string feed)
@@ -187,11 +221,57 @@ public sealed partial class PackageConsumer
         }
         finally
         {
-            context.AddAttachment("stdout.txt", await stdout);
-            context.AddAttachment("stderr.txt", await stderr);
+            context.AddAttachment("stdout", await stdout);
+            context.AddAttachment("stderr", await stderr);
         }
-        context.Log($"dotnet {string.Join(' ', arguments)} exited {process.ExitCode}");
+        context.Log($"{this}: dotnet {string.Join(' ', arguments)} exited {process.ExitCode}");
         Assert.True(process.ExitCode == 0, $"dotnet failed:{Environment.NewLine}{await stdout}{Environment.NewLine}{await stderr}");
+    }
+
+    public async Task<ConsumerReport> RunWithReportAsync(Raun.ScenarioContext context, bool collectCoverage)
+    {
+        List<string> arguments = ["run", "--project", Project, "-c", "Release", "--no-build", "--",
+            "--report-html", "--results-directory", ReportDirectory];
+        if (collectCoverage)
+        {
+            // Include the sample's own steps as source under test. Coverlet cannot instrument
+            // an already-loaded MTP controller, so use the sample's dynamic collector here.
+            var settings = Path.Combine(Root, "coverage.config");
+            File.WriteAllText(settings, """
+                <Configuration>
+                  <IncludeTestAssembly>true</IncludeTestAssembly>
+                  <CodeCoverage><ModulePaths><Include>
+                    <ModulePath>.*AspireAppointments.*</ModulePath>
+                  </Include></ModulePaths></CodeCoverage>
+                </Configuration>
+                """);
+            arguments.AddRange(["--coverage", "--coverage-output-format", "xml", "--coverage-settings", settings]);
+        }
+        await DotnetAsync(context, [.. arguments]);
+        var report = new ConsumerReport(Path.Combine(ReportDirectory, "raun-report.html"), Name);
+        context.OnTeardown(async teardown =>
+        {
+            File.Delete(report.File);
+            await teardown.Resources.Delete(report);
+            teardown.Log($"Removed {report}; its snapshot remains attached to the verification step.");
+        });
+        return report;
+    }
+
+    public static void VerifyCoverage(string html)
+    {
+        var match = ReportModel().Match(html);
+        Assert.True(match.Success);
+        using var model = JsonDocument.Parse(match.Groups[1].Value);
+        var coverage = model.RootElement.GetProperty("coverage");
+        Assert.True(coverage.GetProperty("status").GetString() == "available", coverage.GetRawText());
+        Assert.NotEmpty(coverage.GetProperty("types").EnumerateArray());
+        Assert.Contains(coverage.GetProperty("categories").EnumerateArray(), category =>
+        {
+            var counts = category.GetProperty("counts");
+            return new[] { "exercised", "complete", "reached", "partial", "evaluated" }
+                .Any(name => counts.GetProperty(name).GetInt32() > 0);
+        });
     }
 
     public void VerifyAssets()

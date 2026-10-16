@@ -20,5 +20,20 @@ the packages. It stays outside `Raun.slnx` because the packages must exist befor
 runs. CI and release run it after packing and before publishing.
 
 The report includes child-process output and consumer reports as attachments.
-Temporary consumer directories are kept for inspection; their paths appear in the
-Given step's log.
+Successful runs delete their consumer reports and temporary directories during Teardown.
+Failed runs keep them for inspection; their paths appear in the Given step's log.
+
+The suite exercises features where they describe real work:
+
+| Feature | Use in this suite |
+| --- | --- |
+| Inline cases | Both samples and the generated-entry-point app |
+| Resources, labels, and references | Feed → consumer → report in the matrix |
+| Custom resource actions | Restored and Built describe workspace changes |
+| Notes and resource-aware logs | Explain isolation and link output to consumers |
+| Branches | Aspire collects coverage; the other consumers use their normal runner |
+| Parallel groups | Package resolution and report checks are independent reads |
+| Pooled capacity | At most two SDK workloads run together |
+| Timeouts and cancellation | Bound external commands and stop their process trees |
+| Cleanup policies | Remove successful workspaces and keep failed ones |
+| Coverage | Check classified execution evidence from the packaged coverage integration |
