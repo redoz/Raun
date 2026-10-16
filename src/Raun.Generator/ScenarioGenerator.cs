@@ -175,6 +175,11 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
             return null;
         }
 
+        if (ScenarioCaseBinding.Bind(ctx.SemanticModel, method, syntax).Diagnostics.Count > 0)
+        {
+            return null;
+        }
+
         var lineSpan = syntax.Identifier.GetLocation().GetLineSpan();
         return GeneratorSafety.SafeParse(
             () => ScenarioParser.Lower(ctx.SemanticModel, method, syntax),

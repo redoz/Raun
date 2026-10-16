@@ -45,9 +45,9 @@
 - Public ScenarioCaseAttribute(string caseName, params object?[] arguments), with read-only CaseName and Arguments.
 - Internal ScenarioCaseBinding.Bind(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax) returns ScenarioCaseBindingResult: IReadOnlyList<BoundScenarioCase> Cases and EquatableArray<ScenarioDiagnostic> Diagnostics. BoundScenarioCase has string Key, int SourceOrdinal and IReadOnlyDictionary<IParameterSymbol, ExpressionSyntax> Arguments. Keep this transient semantic binding out of long-lived incremental IR.
 - Rows expose Key, SourceOrdinal and typed arguments in parameter order. Shared validation is consumed by both analyzer and generator.
-- RAUN027 InvalidScenarioCase: invalid placement, missing rows, blank/duplicate names or arity.
-- RAUN028 InvalidScenarioCaseArgument: unsupported value or incompatible parameter conversion.
-- RAUN029 InvalidScenarioCaseSignature: generic/overloaded/optional/params/by-ref parameter forms in case-enabled methods.
+- RAUN030 InvalidScenarioCase: invalid placement, missing rows, blank/duplicate names or arity.
+- RAUN031 InvalidScenarioCaseArgument: unsupported value or incompatible parameter conversion.
+- RAUN032 InvalidScenarioCaseSignature: generic/overloaded/optional/params/by-ref parameter forms in case-enabled methods.
 
 - [ ] Add failing attribute metadata and analyzer tests for accepted string/enum/status rows and every validation rule in the spec. Assert diagnostic ID, source span and expected/actual type where relevant.
 - [ ] Run the new tests and verify failure for missing API/binding behavior before production changes.

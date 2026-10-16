@@ -36,3 +36,6 @@ RAUN029 | Raun.Usage | Error | Resource return role requires a result
 RAUN030 | Raun.Usage | Error | Invalid resource action definition
 RAUN031 | Raun.Usage | Error | Invalid relationship property
 RAUN032 | Raun.Usage | Error | Invalid resource relationship
+RAUN033 | Raun.Usage | Error | Scenario case metadata is invalid
+RAUN034 | Raun.Usage | Error | Scenario case argument must match its parameter type
+RAUN035 | Raun.Usage | Error | Scenario case signature is unsupported

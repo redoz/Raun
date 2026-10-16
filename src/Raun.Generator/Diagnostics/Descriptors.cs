@@ -235,11 +235,23 @@ internal static class Descriptors
         "RAUN032", "Invalid resource relationship", "Invalid resource metadata on '{0}': {1}",
         Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor InvalidScenarioCase = new(
+        "RAUN033", "Scenario case is invalid", "Scenario case '{0}' {1}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor InvalidScenarioCaseArgument = new(
+        "RAUN034", "Scenario case argument is incompatible", "Case argument for parameter '{0}' must be a constant implicitly convertible to '{1}', but is '{2}'",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor InvalidScenarioCaseSignature = new(
+        "RAUN035", "Scenario case signature is unsupported", "Scenario '{0}' with cases cannot be generic or overloaded, or have optional, params, or by-ref parameters",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
-        InvalidResourceDefinition, InvalidRelationshipProperty, InvalidResourceRelationship, InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
+        InvalidResourceDefinition, InvalidRelationshipProperty, InvalidResourceRelationship, InvalidScenarioCase, InvalidScenarioCaseArgument, InvalidScenarioCaseSignature, InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
         UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle, InvalidResourceKeyParameter,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,

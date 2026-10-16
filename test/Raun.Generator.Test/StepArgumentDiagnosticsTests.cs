@@ -22,11 +22,11 @@ public class StepArgumentDiagnosticsTests
     [InlineData("await Then.Equal(HiddenConstant, null);", "HiddenConstant", "not visible outside its type")]
     [InlineData("await Then.Equal(RefusedScenarios.HiddenConstant, null);", "HiddenConstant", "not visible outside its type")]
     [InlineData("await Then.Equal(new HiddenType(), null);", "HiddenType", "not visible outside its type")]
-    [InlineData("await Then.Equal(seed, null);", "seed", "parameter of the scenario method")]
+
     public async Task A_refused_argument_is_reported_once_where_it_is_written_with_the_reason(
         string statement, string offending, string reason)
     {
-        var source = SampleSources.CompositionDsl + Scenario("int seed", statement);
+        var source = SampleSources.CompositionDsl + Scenario("", statement);
 
         var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
 

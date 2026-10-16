@@ -31,6 +31,9 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.InvalidResourceAction,
         Descriptors.AmbiguousResourceRole,
         Descriptors.ResourceRoleWithoutResult,
+        Descriptors.InvalidScenarioCase,
+        Descriptors.InvalidScenarioCaseArgument,
+        Descriptors.InvalidScenarioCaseSignature,
         Descriptors.UnhandledException,
         Descriptors.UnboundPlaceholder,
         Descriptors.MissingResourceRole,
@@ -440,6 +443,13 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     {
         var method = (MethodDeclarationSyntax)context.Node;
         if (context.SemanticModel.GetDeclaredSymbol(method) is not IMethodSymbol symbol) { return; }
+        var binding = ScenarioCaseBinding.Bind(context.SemanticModel, symbol, method);
+        foreach (var diagnostic in binding.Diagnostics)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[diagnostic.Id],
+                Location.Create(method.SyntaxTree, new Microsoft.CodeAnalysis.Text.TextSpan(diagnostic.SpanStart, diagnostic.SpanLength)),
+                diagnostic.Arguments.Cast<object>().ToArray()));
+        }
         foreach (var problem in ResourceRoleMetadata.Validate(symbol, context.Compilation))
         {
             context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[problem.Id],
