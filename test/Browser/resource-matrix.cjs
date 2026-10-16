@@ -119,7 +119,7 @@ const renderFixture = (name, data) => {
         return {text:style.color,normal,underline:style.textDecorationColor,tintDistance:distance(style.textDecorationColor,muted),resourceDistance:distance(columnColor,muted),line:style.textDecorationLine,pattern:style.textDecorationStyle,offset:style.textUnderlineOffset,phaseText:phase.color,phaseLine:phase.textDecorationLine,thickness:style.textDecorationThickness,border:style.borderBottomWidth};
       }));
       assert.ok(mentionColors.every(color=>color.text===color.normal && color.tintDistance>0 && color.tintDistance<color.resourceDistance*.8),'Title references use normal text and subdued resource-colored underlines in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
-      assert.ok(mentionColors.every(color=>color.line==='underline' && color.pattern==='dotted' && color.offset==='2px' && color.thickness==='1px' && color.border==='0px'),'Dotted resource underlines sit at the intended text position without a button border');
+      assert.ok(mentionColors.every(color=>color.line==='underline' && color.pattern==='solid' && color.offset==='2px' && color.thickness==='1px' && color.border==='0px'),'Solid resource underlines sit at the intended text position without a button border');
       assert.ok(mentionColors.every(color=>color.phaseText!==color.normal && color.phaseLine==='none'),'Matching phase words use their phase color without decorations');
       assert.equal(new Set(mentionColors.map(color=>color.underline)).size,3,'Resources retain distinct muted underline colors');
     }
