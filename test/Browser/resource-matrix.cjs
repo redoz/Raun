@@ -110,10 +110,15 @@ const renderFixture = (name, data) => {
       const mentionColors=await registryLinks.evaluateAll(links=>links.map(link=>{
         const column=Array.from(link.closest('.card').querySelectorAll('.matrix-resource')).find(header=>header.dataset.resourceColumn===link.dataset.messageResource);
         const style=getComputedStyle(link);
-        return {text:style.color,muted:getComputedStyle(link.closest('.card').querySelector('.card-head .dur')).color,underline:style.borderBottomColor,column:getComputedStyle(column).borderTopColor};
+        const muted=getComputedStyle(link.closest('.card').querySelector('.card-head .dur')).color;
+        const columnColor=getComputedStyle(column).borderTopColor;
+        const rgb=color=>color.match(/[0-9.]+/g).slice(0,3).map(Number).map(value=>color.startsWith('color(srgb')?value*255:value);
+        const distance=(a,b)=>rgb(a).reduce((sum,value,index)=>sum+Math.abs(value-rgb(b)[index]),0);
+        return {text:style.color,underline:style.borderBottomColor,column:columnColor,tintDistance:distance(style.color,muted),resourceDistance:distance(columnColor,muted)};
       }));
-      assert.ok(mentionColors.every(color=>color.text===color.muted && color.underline===color.column),'Title references use muted grey text and resource-colored underlines in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
+      assert.ok(mentionColors.every(color=>color.tintDistance>0 && color.tintDistance<color.resourceDistance*.4 && color.underline===color.column),'Title references use muted resource tints and full-color underlines in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
       assert.equal(new Set(mentionColors.map(color=>color.underline)).size,3,'Patient, slot and appointment keep distinct underline colors');
+      assert.equal(new Set(mentionColors.map(color=>color.text)).size,3,'Each resource keeps its own subtle text tint');
     }
     await page.emulateMedia({colorScheme:'light'});
 
