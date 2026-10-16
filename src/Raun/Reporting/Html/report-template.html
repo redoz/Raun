@@ -288,6 +288,7 @@
   .matrix-resource[aria-pressed="true"]{background:var(--surface-hover);box-shadow:inset 0 -2px var(--resource-color)}
   .matrix-resource.matrix-reference{background:var(--surface-hover);border-bottom:2px dashed var(--resource-color)}
   .resource-matrix .matrix-row{position:relative;isolation:isolate;padding:0;align-items:start}
+  .resource-matrix .matrix-row:last-child{border-bottom:0}
   .resource-matrix .matrix-row>.step-head{grid-column:1;grid-row:1;grid-template-columns:12px 8px max-content minmax(0,1fr) max-content;column-gap:9px;padding:10px 10px 12px 4px;align-self:start}
   .resource-matrix .matrix-row.step-lifecycle.status-passed:not(.open)>.step-head{padding-top:2px;padding-bottom:3px}
   .resource-matrix .matrix-row>.step-notes{grid-column:1;grid-row:2;margin:0 10px 5px 93px}
