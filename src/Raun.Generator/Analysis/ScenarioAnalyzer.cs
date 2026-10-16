@@ -74,9 +74,11 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     {
         try
         {
-            foreach (var issue in ResourceDefinitionReader.Validate((INamedTypeSymbol)context.Symbol))
+            foreach (var issue in ResourceDefinitionReader.Validate((INamedTypeSymbol)context.Symbol, context.Compilation))
             {
-                if (issue.Subject.Locations.FirstOrDefault() is { IsInSource: true } location)
+                var location = issue.Subject.Locations.FirstOrDefault(candidate => candidate.IsInSource)
+                    ?? context.Symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
+                if (location is not null)
                 { context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[issue.Id], location, issue.Subject.Name, issue.Reason)); }
             }
             AnalyzeContendedResource(context, (INamedTypeSymbol)context.Symbol);
@@ -438,7 +440,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     {
         var method = (MethodDeclarationSyntax)context.Node;
         if (context.SemanticModel.GetDeclaredSymbol(method) is not IMethodSymbol symbol) { return; }
-        foreach (var problem in ResourceRoleMetadata.Validate(symbol))
+        foreach (var problem in ResourceRoleMetadata.Validate(symbol, context.Compilation))
         {
             context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[problem.Id],
                 problem.Subject.Locations.FirstOrDefault() ?? method.GetLocation(), problem.Subject.Name, problem.Reason));

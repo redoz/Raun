@@ -45,6 +45,13 @@ internal static class ResourceActionMetadata
         var properties = new Dictionary<string, (System.Reflection.PropertyInfo Property, RelationshipDefinition? Definition)>(StringComparer.Ordinal);
         foreach (var owner in hierarchy.AsEnumerable().Reverse())
         {
+            foreach (var member in owner.GetMembers(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                if (member is not System.Reflection.PropertyInfo && properties.TryGetValue(member.Name, out var inherited)
+                    && inherited.Definition is not null)
+                { throw new ArgumentException("A member cannot hide an inherited relationship property.", nameof(type)); }
+            }
             foreach (var property in owner.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
                 | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly))
             {

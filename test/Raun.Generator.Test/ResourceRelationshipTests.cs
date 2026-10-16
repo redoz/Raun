@@ -172,4 +172,27 @@ public class ResourceRelationshipTests
         var source = Source[..Source.IndexOf("public sealed class Steps", StringComparison.Ordinal)].Replace(before, after, StringComparison.Ordinal);
         Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), d => d.Id == id);
     }
+
+    [Fact]
+    public async Task A_field_cannot_impersonate_an_inherited_relationship_property()
+    {
+        var source = Source.Replace("public sealed class Steps", "public sealed class HiddenAttribute : CreatedAttribute { public new string[] References = []; } public sealed class Steps", StringComparison.Ordinal)
+            .Replace("[return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]", "[return: Hidden(References = [nameof(patient), nameof(slot2)])]", StringComparison.Ordinal);
+        Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), d => d.Id == "RAUN031");
+    }
+
+    [Theory]
+    [InlineData("private new string[] References { get; set; } = [];")]
+    [InlineData("[Relationship(ResourceRelation.Reference)] private string Secret { get; set; } = \"\";")]
+    public void Referenced_private_members_receive_the_same_schema_validation(string member)
+    {
+        var declarations = Source[..Source.IndexOf("public sealed class Stories", StringComparison.Ordinal)]
+            .Replace("public sealed class Steps", "public sealed class HiddenAttribute : CreatedAttribute { " + member + " } public sealed class Steps", StringComparison.Ordinal)
+            .Replace("[return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]", "[return: Hidden]", StringComparison.Ordinal)
+            .Replace("Book(Patient patient, Slot slot2)", "Book([Read] Patient patient, [Read] Slot slot2)", StringComparison.Ordinal);
+        var library = GeneratorHarness.Run(declarations, "PrivateBookings"); library.AssertCompiles();
+        var story = Source[Source.IndexOf("public sealed class Stories", StringComparison.Ordinal)..];
+        var consumer = GeneratorHarness.Run("using Raun; using System.Threading.Tasks; " + story, "Consumer", MetadataReference.CreateFromImage(library.Image));
+        Assert.Single(consumer.GeneratorDiagnostics, d => d.Id == "RAUN031");
+    }
 }

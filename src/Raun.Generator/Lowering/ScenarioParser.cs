@@ -1796,7 +1796,7 @@ internal sealed class ScenarioParser
         {
             foreach (var issue in RelationshipReader.Read(method).Issues)
             { Report(Descriptors.ById[issue.Id], invocation, issue.Id == "RAUN010" ? issue.Reason : issue.Subject.Name, issue.Id == "RAUN010" ? method.Name : issue.Reason); }
-            foreach (var problem in ResourceRoleMetadata.Validate(method))
+            foreach (var problem in ResourceRoleMetadata.Validate(method, _model.Compilation))
             { Report(Descriptors.ById[problem.Id], invocation, problem.Subject.Name, problem.Reason); }
         }
 

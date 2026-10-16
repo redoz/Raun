@@ -48,6 +48,23 @@ public class HtmlReportModelBuilderTests
     private sealed class ApprovedAttribute : EditedAttribute;
 
     [Fact]
+    public void Different_relationship_kinds_recorded_by_later_steps_both_survive_in_history()
+    {
+        var first = Node(0, "first", "When", "reference");
+        var second = Node(1, "second", "When", "consume", dependsOn: [0]);
+        var definition = Def(first, second);
+        var subject = new ResourceIdentity("booking", "a");
+        var target = new ResourceIdentity("patient", "p");
+        var builder = new HtmlReportModelBuilder();
+        builder.OnRunStarted([definition]); builder.OnScenarioStarted(definition);
+        builder.OnStepFinished(definition, Result(first, T0, 1, lineage: [new ResourceLineageRelation { Subject = subject, Target = target, Kind = LifecycleVerb.Reference }]));
+        builder.OnStepFinished(definition, Result(second, T0.AddMilliseconds(2), 1, lineage: [new ResourceLineageRelation { Subject = subject, Target = target, Kind = LifecycleVerb.Consume }]));
+        var relationships = Assert.Single(builder.Build("history").Scenarios).References;
+        Assert.Equal(["Reference", "Consume"], relationships.Select(edge => edge.Kind));
+        Assert.All(relationships, edge => { Assert.Equal(relationships[0].SubjectId, edge.SubjectId); Assert.Equal(relationships[0].TargetId, edge.TargetId); });
+    }
+
+    [Fact]
     public void Custom_action_names_preserve_semantic_verbs_in_effects_and_history()
     {
         var node = Node(0, "a", "When", "approve");

@@ -50,6 +50,7 @@ public class ResourceDefinitionTests
     [InlineData(typeof(InvalidKindAttribute))]
     [InlineData(typeof(InvalidPropertyAttribute))]
     [InlineData(typeof(HidingAttribute))]
+    [InlineData(typeof(HidingFieldAttribute))]
     public void Malformed_definitions_are_rejected_without_running_user_code(Type type)
         => Assert.Throws<ArgumentException>(() => ResourceAction.For(type));
 
@@ -66,5 +67,11 @@ public class ResourceDefinitionTests
     private sealed class HidingAttribute : CreatedAttribute
     {
         public new string[] References { get; set; } = [];
+    }
+    private sealed class HidingFieldAttribute : CreatedAttribute
+    {
+        // This malformed public field is the regression input: attribute named arguments can bind fields.
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1051:Do not declare visible instance fields", Justification = "Exercises a field hiding an inherited relationship property.")]
+        public new string[] References = [];
     }
 }

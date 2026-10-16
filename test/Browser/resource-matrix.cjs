@@ -317,6 +317,21 @@ const renderFixture = (name, data) => {
     assert.match(await page.locator('.resource-hover-event').textContent(),/Approve <now>/);
     assert.deepEqual(errors,[]);
     await page.screenshot({path:path.join(out,'custom-actions.png'),fullPage:true});
+    const historyFixture=structuredClone(model),historyScenario=historyFixture.scenarios[0];historyFixture.scenarios=[historyScenario];
+    const historyReference=historyScenario.references.find(edge=>edge.kind==='Reference');
+    const historySource=historyScenario.steps.find(step=>step.effects.some(effect=>effect.resourceId===historyReference.subjectId && effect.verb==='Create'));
+    const historyTarget=historySource.effects.find(effect=>effect.resourceId===historyReference.targetId && effect.verb==='Reference');
+    const historyProduced=historySource.effects.find(effect=>effect.resourceId===historyReference.subjectId && effect.verb==='Create');
+    historyScenario.steps.push({...historySource,stepId:'history-later',label:'later',displayName:'Later consumption of a referenced input',titleMessage:null,
+      effects:[{...historyTarget,verb:'Consume',actionName:null},{...historyProduced,verb:'Edit',actionName:null}]});
+    historyScenario.references.push({...historyReference,kind:'Consume'});
+    await page.goto(renderFixture('relationship-history',historyFixture));
+    await page.locator('.card-head').first().click();
+    const historyLabels=await page.locator('.matrix-connection').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')));
+    const historyPrefix=historyReference.targetType+' '+historyReference.targetKey+' ';
+    assert.ok(historyLabels.some(label=>label.startsWith(historyPrefix+'Reference → Create')),'The original reference keeps its connection');
+    assert.ok(historyLabels.some(label=>label.startsWith(historyPrefix+'Consume → Edit')),'Later consumption of the same pair keeps its own connection');
+    assert.deepEqual(errors,[]);
     console.log('PASS: default resource matrix; every sample row and order; unchanged no-resource lists; keyboard focus; snapshots; disclosure; failures; grouping; mobile access.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
