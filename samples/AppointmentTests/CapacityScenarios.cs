@@ -9,7 +9,7 @@ public sealed class ScannerStations : IContendedResource;
 [ExclusiveResource]
 public sealed class CalibrationConsole : IContendedResource;
 
-public sealed class CapacityScenarios : Scenarios<NoWorld>
+public sealed class CapacityScenarios : Raun.Scenarios
 {
     public ScannerWhen When => Steps<ScannerWhen>();
 
@@ -45,7 +45,7 @@ public sealed class CapacityScenarios : Scenarios<NoWorld>
     }
 }
 
-public sealed class ScannerWhen : When<NoWorld>
+public sealed class ScannerWhen : When
 {
     [StepName("When scanning the {appointment} appointment")]
     public async Task ScanAppointment(string appointment)

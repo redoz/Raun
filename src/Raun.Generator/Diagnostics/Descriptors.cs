@@ -32,7 +32,7 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor UnsupportedStatement = new(
         "RAUN002",
         "Unsupported scenario statement",
-        "Scenario statements must be an awaited step call (a method of a Given/When/Then step class, or of any Phase<TWorld>), an awaited tuple, or an awaited array of such calls",
+        "Scenario statements must be an awaited step call (a method of a Given/When/Then step class, or of any Phase or Phase<TWorld>), an awaited tuple, or an awaited array of such calls",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -48,7 +48,7 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor NotADslCall = new(
         "RAUN004",
         "Scenario step must be a step call",
-        "Scenario steps must call a step: a public instance method of a step class deriving from Given<TWorld>, When<TWorld>, Then<TWorld>, or another Phase<TWorld>",
+        "Scenario steps must call a step: a public instance method of a step class deriving from Given, When, Then, or another Phase (including their generic variants)",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -64,7 +64,7 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor InvalidGroupElement = new(
         "RAUN006",
         "Parallel group element must be a step call",
-        "Every element of a tuple/array parallel group must be a step call (a method of a Given/When/Then step class, or of any Phase<TWorld>)",
+        "Every element of a tuple/array parallel group must be a step call (a method of a Given/When/Then step class, or of any Phase or Phase<TWorld>)",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);

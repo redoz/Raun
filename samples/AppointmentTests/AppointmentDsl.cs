@@ -46,8 +46,8 @@ public sealed record ImportResult(int Count);
 // handles, no stubs. [StepName] sets how a step reads in the test runner; {placeholder}s bind to
 // parameters. The classes are partial: LifecycleDsl.cs adds the rest of an appointment's life.
 //
-// This suite keeps no scenario state, so its world is NoWorld (CancellationScenarios.cs shows one
-// that does). Inside a step, `Context` is the running step's ScenarioContext, never null.
+// This suite needs no world. CancellationScenarios.cs shows a suite with shared state.
+// Inside a step, Context is the running step's ScenarioContext, never null.
 //
 // Each step authors how long it "took" via Context.SimulateElapsed — under the showcase's
 // simulated-time scheduler (Program.cs opts in with simulateTime: true) this advances the step's own
@@ -57,7 +57,7 @@ public sealed record ImportResult(int Count);
 // past 1s so the report's auto-scaling time ruler switches from ms to s units.
 
 /// <summary>Arrange steps: patients, slots and users.</summary>
-public sealed partial class AppointmentGiven : Given<NoWorld>
+public sealed partial class AppointmentGiven : Given
 {
     [StepName("Given the database is clean")]
     public Task DatabaseIsClean()
@@ -115,7 +115,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
 }
 
 /// <summary>Actions: booking and importing.</summary>
-public sealed partial class AppointmentWhen : When<NoWorld>
+public sealed partial class AppointmentWhen : When
 {
     [StepName("When booking {patient} in {slot}")]
     [return: Booked(Patient = nameof(patient), Slot = nameof(slot))]
@@ -142,7 +142,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
 }
 
 /// <summary>Assertions on bookings and imports.</summary>
-public sealed partial class AppointmentThen : Then<NoWorld>
+public sealed partial class AppointmentThen : Then
 {
     [StepName("Then {appointment.Patient} has an appointment in {appointment.Slot}")]
     public Task AppointmentExists([Read] Appointment appointment)
@@ -166,7 +166,7 @@ public sealed partial class AppointmentThen : Then<NoWorld>
 /// The phases every appointment scenario class reaches its steps through, declared once. Go-to-definition
 /// on <c>Given</c> in a scenario lands here.
 /// </summary>
-public abstract class AppointmentSuite : Scenarios<NoWorld>
+public abstract class AppointmentSuite : Raun.Scenarios
 {
     public AppointmentGiven Given => Steps<AppointmentGiven>();
 

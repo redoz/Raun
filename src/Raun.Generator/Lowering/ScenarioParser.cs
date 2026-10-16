@@ -193,7 +193,7 @@ internal sealed class ScenarioParser
                 Descriptors.ScenarioClassShape,
                 _syntax.Identifier.GetLocation(),
                 methodFullName,
-                "is declared in '" + _method.ContainingType.Name + "', which does not derive from Scenarios<TWorld>; declare it in a class that does (Scenarios<NoWorld> for a suite with no state)");
+                "is declared in '" + _method.ContainingType.Name + "', which does not derive from Scenarios or Scenarios<TWorld>; declare it in a class that does (Scenarios for a suite with no state)");
             return null;
         }
 
@@ -1621,7 +1621,9 @@ internal sealed class ScenarioParser
             return null;
         }
 
-        if (!SymbolEqualityComparer.Default.Equals(stepWorld, world))
+        stepWorld = SymbolHelpers.WorldOfStepClass(receiverType) ?? stepWorld;
+        if (!SymbolHelpers.IsWorldIndependentStepClass(receiverType)
+            && !SymbolEqualityComparer.Default.Equals(stepWorld, world))
         {
             Report(Descriptors.WorldMismatch, member.Expression, receiverType.Name, stepWorld.Name, world.Name);
             return null;
@@ -1639,7 +1641,9 @@ internal sealed class ScenarioParser
                 Descriptors.UnfollowableStepReceiver,
                 member.Expression,
                 receiverText,
-                "'" + receiverType.Name + "' derives from Phase<" + stepWorld.Name + "> but no class in its base chain carries [PhaseName]; derive from Given<>, When<> or Then<>, or name the phase");
+                "'" + receiverType.Name + "' derives from "
+                    + (SymbolHelpers.IsWorldIndependentStepClass(receiverType) ? "Phase" : "Phase<" + stepWorld.Name + ">")
+                    + " but no class in its base chain carries [PhaseName]; derive from Given, When or Then (or their generic variants), or name the phase");
             return null;
         }
 
@@ -1735,8 +1739,17 @@ internal sealed class ScenarioParser
                 link,
                 text,
                 onScenario
-                    ? "'" + property.Name + "' is not declared on a class deriving from Scenarios<>"
+                    ? "'" + property.Name + "' is not declared on a class deriving from Scenarios or Scenarios<TWorld>"
                     : "'" + property.Name + "' is not declared on a step class");
+            return false;
+        }
+
+        if (_world is { } world
+            && SymbolHelpers.WorldOfStepClass(property.Type) is { } propertyWorld
+            && !SymbolHelpers.IsWorldIndependentStepClass(property.Type)
+            && !SymbolEqualityComparer.Default.Equals(propertyWorld, world))
+        {
+            Report(Descriptors.WorldMismatch, link, property.Type.Name, propertyWorld.Name, world.Name);
             return false;
         }
 

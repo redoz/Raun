@@ -9,7 +9,7 @@ namespace AppointmentTests;
 // step classes as AppointmentDsl.cs; split out so the two files each read as one story.
 
 /// <summary>Arrange steps for patients already on file and their slots.</summary>
-public sealed partial class AppointmentGiven : Given<NoWorld>
+public sealed partial class AppointmentGiven : Given
 {
     // A lookup, not a creation: the patient already exists, so the role is Loaded and there is
     // nothing to tear down.
@@ -47,7 +47,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
     }
 }
 
-public sealed partial class AppointmentWhen : When<NoWorld>
+public sealed partial class AppointmentWhen : When
 {
     // A hold is a lease on real capacity. Leaking one blocks real bookings, so releasing it is
     // Cleanup.Required: it runs whatever the scenario's [Teardown(Run.…)] policy says.
@@ -100,7 +100,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
     }
 }
 
-public sealed partial class AppointmentThen : Then<NoWorld>
+public sealed partial class AppointmentThen : Then
 {
     [StepName("Then {appointment} sits in {slot}")]
     public Task AppointmentIsIn([Read] Appointment appointment, [Read] Slot slot)
@@ -125,7 +125,7 @@ public sealed partial class AppointmentThen : Then<NoWorld>
 /// that become true once an asynchronous process (an outbox, a projection) has caught up.
 /// </summary>
 [PhaseName("Eventually")]
-public sealed class AppointmentEventually : Phase<NoWorld>
+public sealed class AppointmentEventually : Phase
 {
     [StepName("Eventually the reminder for {appointment} is delivered")]
     public Task ReminderIsDelivered([Read] Appointment appointment)

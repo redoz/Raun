@@ -13,7 +13,7 @@ public sealed record Waitlisted(int Position) : BookingOutcome;
 
 public sealed record Refused(string Reason) : BookingOutcome;
 
-public sealed partial class AppointmentWhen : When<NoWorld>
+public sealed partial class AppointmentWhen : When
 {
     // A held slot cannot be booked. The patient can join the waitlist or decline it.
     // Wrapped outcomes need imperative resource recording: only Booked contains a new resource.
@@ -34,7 +34,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
     }
 }
 
-public sealed partial class AppointmentThen : Then<NoWorld>
+public sealed partial class AppointmentThen : Then
 {
     [StepName("Then {patient} is {position} on the waitlist")]
     public Task PatientIsOnWaitlist([Read] Patient patient, int position)

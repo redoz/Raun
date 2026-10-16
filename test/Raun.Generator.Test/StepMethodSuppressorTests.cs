@@ -11,11 +11,22 @@ namespace Raun.Generator.Test;
 /// members as static") is suppressed on steps — and only on steps.</summary>
 public class StepMethodSuppressorTests
 {
-    [Fact]
-    public async Task CA1822_is_suppressed_on_steps_and_nowhere_else()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CA1822_is_suppressed_on_steps_and_nowhere_else(bool nonGeneric)
     {
         var compilation = GeneratorHarness.CompilationFor(
-            StepClassTests.Clinic,
+            nonGeneric
+                ? """
+                  using System.Threading.Tasks;
+                  using Raun;
+                  public sealed class Group : Given { public Task Exists() => Task.CompletedTask; }
+                  [PhaseName("Check")]
+                  public sealed class Check : Phase { public Task CalendarIsFree() => Task.CompletedTask; }
+                  public sealed class Other { public Task DisposeAsync() => Task.CompletedTask; }
+                  """
+                : StepClassTests.Clinic,
             new CSharpParseOptions(LanguageVersion.Preview));
 
         var diagnostics = await compilation

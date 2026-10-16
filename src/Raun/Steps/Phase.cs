@@ -4,24 +4,18 @@ namespace Raun;
 
 /// <summary>
 /// Base class for a class of steps. A step is a public instance method on a class deriving from
-/// <see cref="Given{TWorld}"/>, <see cref="When{TWorld}"/>, <see cref="Then{TWorld}"/>, or a custom
-/// phase (<see cref="Phase{TWorld}"/> plus <see cref="PhaseNameAttribute"/>). Inside a step,
-/// <see cref="Context"/> is Raun's and <see cref="World"/> is yours.
+/// <see cref="Given"/>, <see cref="When"/>, <see cref="Then"/>, or a custom
+/// phase (<see cref="Phase"/> plus <see cref="PhaseNameAttribute"/>). Inside a step,
+/// <see cref="Context"/> provides the running step's services.
 /// </summary>
 /// <remarks>
 /// Raun creates at most one instance of each step class per scenario, on first use, and binds it to
 /// that scenario's world. Siblings of a parallel group share the instance, so a step class holds no
 /// mutable state of its own.
 /// </remarks>
-/// <typeparam name="TWorld">The scenario state the steps share.</typeparam>
-public abstract class Phase<TWorld>
-    where TWorld : class, IScenarioWorld<TWorld>
+public abstract class Phase
 {
-    private ScenarioScope<TWorld>? _scope;
-
-    /// <summary>The scenario's world.</summary>
-    /// <exception cref="InvalidOperationException">The instance was not created by Raun for a scenario.</exception>
-    protected TWorld World => Scope.World;
+    private IScenarioScope? _scope;
 
     /// <summary>
     /// The context of the step that is running: its cancellation, logging, teardown registrations and
@@ -40,16 +34,47 @@ public abstract class Phase<TWorld>
     /// group properties written this way.
     /// </summary>
     protected T Steps<T>()
-        where T : Phase<TWorld>
+        where T : Phase
         => Scope.Steps<T>();
 
-    private ScenarioScope<TWorld> Scope => _scope
+    private protected IScenarioScope Scope => _scope
         ?? throw new InvalidOperationException(
             $"{GetType().Name} was not created by Raun. Step classes are created per scenario; reach them through a phase property such as Given.");
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void Bind(ScenarioScope<TWorld> scope) => _scope = scope;
+    internal virtual void Bind(IScenarioScope scope) => _scope = scope;
 }
+
+/// <summary>Base class for steps that share a scenario world.</summary>
+/// <typeparam name="TWorld">The scenario state the steps share.</typeparam>
+public abstract class Phase<TWorld> : Phase
+    where TWorld : class, IScenarioWorld<TWorld>
+{
+    /// <summary>The scenario's world.</summary>
+    /// <exception cref="InvalidOperationException">The instance was not created by Raun for a scenario.</exception>
+    protected TWorld World => ((ScenarioScope<TWorld>)Scope).World;
+
+    internal override void Bind(IScenarioScope scope)
+    {
+        if (scope is not ScenarioScope<TWorld>)
+            throw new InvalidOperationException($"{GetType().Name} requires a scenario world of type {typeof(TWorld).Name}.");
+        base.Bind(scope);
+    }
+}
+
+/// <summary>Steps that arrange a scenario's preconditions.</summary>
+[PhaseName("Given")]
+#pragma warning disable CA1716 // "Given" reads as the phase it is; the VB keyword clash does not matter here.
+public abstract class Given : Phase;
+#pragma warning restore CA1716
+
+/// <summary>Steps that perform the action under test.</summary>
+[PhaseName("When")]
+public abstract class When : Phase;
+
+/// <summary>Steps that assert a scenario's outcome.</summary>
+[PhaseName("Then")]
+public abstract class Then : Phase;
 
 /// <summary>Steps that arrange a scenario's preconditions.</summary>
 [PhaseName("Given")]

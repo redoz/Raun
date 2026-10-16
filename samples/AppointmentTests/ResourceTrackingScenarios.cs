@@ -32,7 +32,7 @@ public sealed class ResourceTrackingScenarios : AppointmentSuite
     }
 }
 
-public sealed partial class AppointmentGiven : Given<NoWorld>
+public sealed partial class AppointmentGiven : Given
 {
     [StepName("Given imported patient {$return ?? name} is on file")]
     [return: Loaded]
@@ -54,7 +54,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
     }
 }
 
-public sealed partial class AppointmentWhen : When<NoWorld>
+public sealed partial class AppointmentWhen : When
 {
     [StepName("When importing the clinic booking for {patient.Name} {{external}}")]
     [return: Created]
@@ -86,7 +86,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
     }
 }
 
-public sealed partial class AppointmentThen : Then<NoWorld>
+public sealed partial class AppointmentThen : Then
 {
     [StepName("Then patient {name:id} can be read by key")]
     public Task ReadPatientByKey([Read, ResourceKey<Patient>] string name)

@@ -53,15 +53,14 @@ dotnet add package xunit.v3.assert
 ```
 
 Delete the template's `Program.cs`; Raun generates the entry point. Add a scenario class
-derived from `Scenarios<NoWorld>`, its step classes, and any domain types. `NoWorld` means
-the scenario needs no shared state. Run with `dotnet run -- --report-html`.
+derived from `Scenarios`, its step classes, and any domain types. Run with `dotnet run -- --report-html`.
 The [authoring reference](docs/reference/scenario-authoring.md) covers the class wiring;
 [running tests](docs/reference/running-tests.md) covers `dotnet test`, selection, and runner options.
 
 ## Reuse steps and give them readable titles
 
 Use a shared step when several scenarios perform the same operation or check.
-Steps live in classes such as `AppointmentGiven : Given<NoWorld>`. A suite exposes them
+Steps live in classes such as `AppointmentGiven : Given`. A suite exposes them
 through properties such as `public AppointmentGiven Given => Steps<AppointmentGiven>();`.
 They return ordinary `Task` or `Task<T>` values and can use your preferred assertion library.
 
@@ -100,7 +99,8 @@ handler; the [Aspire sample](samples/AspireAppointments/README.md) makes real HT
 
 ## Add state, services, and cleanup
 
-Use a world when steps share state that belongs to one scenario, such as a tenant or stub server. Define it with
+Use a world when steps share state that belongs to one scenario, such as a tenant or stub server.
+Derive from `Scenarios<TWorld>` and matching step bases such as `Given<TWorld>`. Define the world with
 `IScenarioWorld<TWorld>.CreateAsync(ScenarioContext)`. Raun creates it during Setup.
 Steps access it through `World`; `Context` provides services, cancellation, logs, and cleanup.
 

@@ -17,6 +17,7 @@ Scenarios run concurrently. A branch that is not taken appears as skipped.
 
 | Add this to your suite | Read this example |
 | --- | --- |
+| Steps without shared state | [AppointmentSuite and step bases](AppointmentDsl.cs): use Scenarios, Given, When, and Then without a world type |
 | Your first scenario | [Scenarios.Booking](Scenarios.cs) and the [step classes](AppointmentDsl.cs) |
 | Checks with different inputs | [AuthorizationScenarios.EndpointAccess](AuthorizationScenarios.cs): four named cases check anonymous, reader, and admin access |
 | A world for each scenario | [ClinicWorld.CreateAsync](CancellationScenarios.cs): create a tenant and stub server, then register cleanup |

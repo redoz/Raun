@@ -7,8 +7,8 @@ using Xunit;
 namespace AppointmentTests.Cancellations;
 
 // A suite with scenario state (docs/superpowers/specs/2026-09-29-step-classes-and-scenario-world-design.md).
-// The booking and lifecycle scenarios need none, so their world is NoWorld; these need a seeded test
-// isolation, so they have a world of their own. Two kinds of state are kept apart:
+// The booking and lifecycle scenarios need no world. These scenarios need seeded test isolation,
+// so they have a world of their own. Two kinds of state are kept apart:
 //
 //  - the WORLD is scenario infrastructure: a seeded TestIsolation, created once per scenario in its
 //    Setup node, shared by every step, disposed in teardown whatever happened;

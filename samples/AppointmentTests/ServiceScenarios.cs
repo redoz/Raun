@@ -20,7 +20,7 @@ public sealed partial class ReceptionSession(ILogger<ReceptionSession> logger)
     private static partial void PatientCheckedIn(ILogger logger, int count);
 }
 
-public sealed class ServiceScenarios : Scenarios<NoWorld>
+public sealed class ServiceScenarios : Raun.Scenarios
 {
     public ReceptionGiven Given => Steps<ReceptionGiven>();
     public ReceptionThen Then => Steps<ReceptionThen>();
@@ -40,7 +40,7 @@ public sealed class ServiceScenarios : Scenarios<NoWorld>
     }
 }
 
-public sealed class ReceptionGiven(ReceptionSession session) : Given<NoWorld>
+public sealed class ReceptionGiven(ReceptionSession session) : Given
 {
     [StepName("Given a patient checks in at reception")]
     public Task<ReceptionSession> PatientChecksIn()
@@ -53,7 +53,7 @@ public sealed class ReceptionGiven(ReceptionSession session) : Given<NoWorld>
     }
 }
 
-public sealed class ReceptionThen(ReceptionSession session) : Then<NoWorld>
+public sealed class ReceptionThen(ReceptionSession session) : Then
 {
     [StepName("Then reception shares the session across its steps")]
     public Task SameReceptionSession(ReceptionSession checkedInSession)

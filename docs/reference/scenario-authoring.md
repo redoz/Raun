@@ -4,10 +4,14 @@
 
 ## Scenarios and steps
 
-A scenario class derives from `Scenarios<TWorld>`. Use `NoWorld` when the scenario needs no shared state.
+A scenario class derives from `Scenarios`. When steps need shared state, use `Scenarios<TWorld>`.
 Properties such as `Given => Steps<AppointmentGiven>()` select step classes.
-Steps are public instance methods on classes derived from `Given<TWorld>`, `When<TWorld>`, `Then<TWorld>`, or `Phase<TWorld>`.
+Steps are public instance methods on classes derived from `Given`, `When`, `Then`, or a custom `Phase`.
+Use the generic forms to access a typed `World`; both forms provide `Context`.
 Use any assertion library. Put retries and polling inside steps.
+
+World-independent steps can also run in a suite with a world. A step that declares a world type must
+match the suite's world. Existing generic forms using `NoWorld` remain supported.
 
 Scenario bodies are processed at build time; do not call them directly. The analyzer reports unsupported syntax.
 See the [scenario](../../samples/AppointmentTests/Scenarios.cs) and [step definitions](../../samples/AppointmentTests/AppointmentDsl.cs).
@@ -23,7 +27,7 @@ using Xunit;
 
 namespace MyScenarios;
 
-public sealed class PatientScenarios : Scenarios<NoWorld>
+public sealed class PatientScenarios : Scenarios
 {
     public PatientGiven Given => Steps<PatientGiven>();
     public PatientThen Then => Steps<PatientThen>();
@@ -36,13 +40,13 @@ public sealed class PatientScenarios : Scenarios<NoWorld>
     }
 }
 
-public sealed class PatientGiven : Given<NoWorld>
+public sealed class PatientGiven : Given
 {
     [StepName("Given a patient named {name}")]
     public Task<string> PatientName(string name) => Task.FromResult(name);
 }
 
-public sealed class PatientThen : Then<NoWorld>
+public sealed class PatientThen : Then
 {
     [StepName("Then the patient is named {expected}")]
     public Task NameIs(string actual, string expected)
@@ -133,7 +137,7 @@ Explicitly supplied null values count as supplied arguments for title selection.
 See the [title examples](../../samples/AppointmentTests/ResourceTrackingScenarios.cs) for a runnable example.
 
 Use `Steps<T>()` properties inside step classes to group methods, such as `Given.Patients.Exists(...)`.
-For a custom phase, derive from `Phase<TWorld>` and add `[PhaseName("Eventually")]`.
+For a custom phase, derive from `Phase` or `Phase<TWorld>` and add `[PhaseName("Eventually")]`.
 Scenario bodies are generator input; do not call them directly. Compiler diagnostics reject unsupported syntax.
 
 ## Parallel groups, arguments, and branches

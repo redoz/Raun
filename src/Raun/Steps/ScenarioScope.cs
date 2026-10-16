@@ -10,7 +10,7 @@ namespace Raun;
 /// </summary>
 /// <typeparam name="TWorld">The scenario state the steps share.</typeparam>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public sealed class ScenarioScope<TWorld>
+public sealed class ScenarioScope<TWorld> : IScenarioScope
     where TWorld : class, IScenarioWorld<TWorld>
 {
     private readonly Dictionary<Type, object> _steps = [];
@@ -31,7 +31,7 @@ public sealed class ScenarioScope<TWorld>
     /// bound to this scope. Siblings of a parallel group asking at once get the same instance.
     /// </summary>
     public T Steps<T>()
-        where T : Phase<TWorld>
+        where T : Phase
     {
         lock (_steps)
         {

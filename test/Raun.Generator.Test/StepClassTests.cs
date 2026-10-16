@@ -598,7 +598,7 @@ public class StepClassTests
             """);
 
         // One diagnostic for the scenario, not one per call that cannot be followed without a world.
-        Assert.Contains("does not derive from Scenarios<TWorld>", Single(diagnostics, "RAUN020").GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        Assert.Contains("does not derive from Scenarios or Scenarios<TWorld>", Single(diagnostics, "RAUN020").GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN019");
     }
 

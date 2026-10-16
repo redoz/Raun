@@ -3,7 +3,7 @@ using Xunit;
 
 namespace AppointmentTests;
 
-public sealed partial class AppointmentWhen : When<NoWorld>
+public sealed partial class AppointmentWhen : When
 {
     [StepName("When recording approval of {patient}")]
     public async Task ManuallyApprovePatient([Read] Patient patient)
@@ -17,7 +17,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
     }
 }
 
-public sealed partial class AppointmentThen : Then<NoWorld>
+public sealed partial class AppointmentThen : Then
 {
     [StepName("Then {patientId} is audited")]
     public Task AuditPatient([Audited, ResourceKey<Patient>] string patientId, string expectedName)
