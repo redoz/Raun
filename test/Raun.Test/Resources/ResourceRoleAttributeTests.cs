@@ -13,6 +13,17 @@ public class ResourceRoleAttributeTests
             .Cast<AttributeUsageAttribute>().Single().ValidOn;
 
     [Fact]
+    public void All_primary_roles_support_the_same_locations()
+    {
+        var expected = AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method;
+        Assert.Equal(expected, Targets<CreatedAttribute>());
+        Assert.Equal(expected, Targets<LoadedAttribute>());
+        Assert.Equal(expected, Targets<ReadAttribute>());
+        Assert.Equal(expected, Targets<EditedAttribute>());
+        Assert.Equal(expected, Targets<DeletedAttribute>());
+    }
+
+    [Fact]
     public void Return_roles_allow_return_and_method()
     {
         Assert.True(Targets<CreatedAttribute>().HasFlag(AttributeTargets.ReturnValue));
