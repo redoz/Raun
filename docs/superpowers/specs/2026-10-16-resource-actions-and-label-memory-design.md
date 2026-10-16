@@ -1,7 +1,7 @@
 # Custom resource actions and cross-step labels
 
 Date: 2026-10-16
-Status: written design approved; implementation checklist awaiting review.
+Status: design and corrected implementation checklist approved; implementation in progress.
 Execution preference: implement here with one final reviewer, as previously selected.
 Release policy: no tag or publication unless requested.
 
@@ -60,7 +60,8 @@ an input must also declare its Delete effect.
 Allow the five primary role attributes on a parameter, a return value, or a method. A method-level
 role is shorthand for its returned resource and requires a supported value-returning step. This
 allows Create on input data and Delete on a returned resource. Keep return-role override precedence
-for an explicit return attribute versus method shorthand. Diagnose multiple competing role
+for an explicit return attribute versus method shorthand. The selected attribute supplies the complete
+action and lineage; an empty return lineage does not inherit method lineage. Diagnose multiple competing role
 attributes on a single subject instead of silently selecting the first. A method can declare
 several effects across different parameters and its return value.
 
@@ -130,7 +131,9 @@ observations and observations from dependency predecessors. Use the existing Sce
 including merge, guard, and ordering-only edges. An unrelated parallel step cannot change the name
 used in a title. Among visible producers, prefer causally newer observations; if independent producer
 branches both precede the reader, use declaration/node order as a deterministic tie-break. Within one
-step, use observation order. These rules apply to skipped-step formatting and teardown as well.
+step, use observation order. These rules apply to skipped-step formatting and teardown as well. On host cancellation, request
+cancellation promptly but capture pending-node skipped presentation only after relevant predecessors
+drain. Do not publish a provisional title and replace it later.
 
 Labels are evidence, not proof of resource creation or successful mutation. A name actually observed
 in a failed predecessor can still name that resource in subsequent skipped-step output. Do not infer

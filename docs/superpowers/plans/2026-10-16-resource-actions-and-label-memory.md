@@ -10,7 +10,7 @@
 
 **Spec:** [Approved actions and label-memory design](../specs/2026-10-16-resource-actions-and-label-memory-design.md).
 
-**Status:** Written design approved; implementation checklist awaiting review. Preserve native execution with one final reviewer. No release.
+**Status:** Approved for execution, including the Astra High plan-review corrections. Preserve native execution with one final reviewer. No release.
 
 ## Global Constraints
 
@@ -78,20 +78,20 @@
 
 **Interfaces:**
 - Add value-equatable lowered action metadata containing base verb, display name, and assembly-qualified concrete attribute type name. ResourceRoleClaim gets optional action metadata; retain its existing built-in shape when absent.
-- AttributeReader exposes `ParameterAction(IParameterSymbol)` / `ReturnAction(IMethodSymbol)` with the same method-shorthand override rule as existing roles. Existing role consumers use the action's base verb. ProducerLineage recognizes derived bases and inherited named properties.
+- AttributeReader exposes `ParameterAction(IParameterSymbol)` / `ReturnAction(IMethodSymbol)` with the same method-shorthand override rule as existing roles. Existing role consumers use the action's base verb. Select the effective role attribute once, then derive action and lineage from it. An explicit return attribute replaces the complete method-level role, including empty or different lineage arrays. ProducerLineage recognizes derived bases and inherited named properties.
 - AssemblyQualifiedTypeName renders exact CLR type identities, including nested/constructed generic arguments and their assemblies. Custom claims emit `Resources.Apply(ResourceAction.FromGenerated(typeof(RaunGenerated), typeIdentity), value)` using syntax factories; no source parsing or direct references to inaccessible attribute types.
 - RAUN027 (Error): invalid custom action metadata, including blank DisplayName. RAUN028 (Error): competing role attributes on one subject. RAUN029 (Error): method/return role has no supported resource return. Add all to release tracking and appropriate SupportedDiagnostics lists.
 
 - [ ] Write failing generator tests for all five effects on parameters and returned values, method shorthand/return override, direct/indirect derived attributes, private/nested and referenced-library action types, generic metadata identities, and default/explicit names. Assert generated/runtime descriptors match task 1 (review focus 1/2).
-- [ ] Assert custom Edit triggers the existing parallel-conflict analyzer, custom Read stays shared, and Created/Loaded/Edited lineage works on newly valid input locations. Test several resource parameters plus a return, and key-only input roles for all five effects.
-- [ ] Add diagnostics for blank labels, competing roles, and method roles on Task/ValueTask without a value. Same-name attributes outside Raun's inheritance tree must not become resource roles. Attribute discovery must not run constructor bodies or initializers.
+- [ ] Assert built-in and custom Create inputs conflict with Read in both declaration orders; Loaded/Read remains shared. Static classification must match all seven runtime effects. Assert custom Edit triggers the existing parallel-conflict analyzer, custom Read stays shared, and Created/Loaded/Edited lineage works on newly valid input locations. Test several resource parameters plus a return, and key-only input roles for all five effects.
+- [ ] Add diagnostics for blank labels, competing roles, and method roles on Task/ValueTask without a value. Include unadorned local methods without StepName and separately compiled library steps. Validate resolved step symbols at invocation/lowering, report metadata-only errors at the consumer call, and avoid duplicate local declaration/call diagnostics. Test explicit return roles with empty and different lineage overriding method lineage. Same-name attributes outside Raun's inheritance tree must not become resource roles. Attribute discovery must not run constructor bodies or initializers.
 - [ ] Run `dotnet test --project test/Raun.Generator.Test/Raun.Generator.Test.csproj -c Release -- --filter-class '*CustomResourceActionTests'`; require the intended failures.
 - [ ] Implement symbol-based hierarchy recognition, action IR, accurate diagnostics, lineage handling, and metadata emission. Keep all pre-call versus post-call claim placement, argument capture, stack-bound invocation, graph dependencies, and return timing unchanged.
 - [ ] Run the full generator project. Review received snapshots before acceptance; unchanged built-in scenarios should retain their source output. Require caching and emission-discipline tests to pass, plus zero-warning solution build. Commit `feat(generator): lower reusable resource action attributes`.
 
 ### Task 4: Scenario-owned label memory across every presentation path
 
-**Files:** Create `src/Raun/Resources/ResourceLabelMemory.cs`; modify `ResourceIdentityResolver.cs`, `ResourceContext.cs`, `src/Raun/Reporting/Messages/MessageFormattingContext.cs`, `StepMessageBuilder.cs`, `src/Raun/ScenarioContext.cs`, `Model/ScenarioGraph.cs` only for reusable ordering helpers, `Scheduling/ScenarioScheduler.cs`, `Running/RunLoop.cs`; test `test/Raun.Test/Resources/ResourceLabelMemoryTests.cs`, `Reporting/ResourceLabelMemoryIntegrationTests.cs`, and generator key/title/return tests.
+**Files:** Create `src/Raun/Resources/ResourceLabelMemory.cs`; modify `ResourceIdentityResolver.cs`, `ResourceContext.cs`, `src/Raun/Reporting/Messages/MessageFormattingContext.cs`, `StepMessageBuilder.cs`, `src/Raun/ScenarioContext.cs`, `Model/StepNotes.cs`, `Model/ScenarioGraph.cs` only for reusable ordering helpers, `Scheduling/ScenarioScheduler.cs`, `Running/RunLoop.cs`; test `test/Raun.Test/Resources/ResourceLabelMemoryTests.cs`, `Reporting/ResourceLabelMemoryIntegrationTests.cs`, and generator key/title/return tests.
 
 **Interfaces:**
 - Stateless resolver helper `internal bool TryResolveSourceLabel(Type sourceType, object instance, out string label)` returns true only for nonblank selector/alternate/self label evidence. Existing ResolveLabel wrappers remain compatible.
@@ -106,6 +106,8 @@
 - [ ] Cover setup, argument preparation, initial and completed titles, notes, structured/interpolated logs, imperative and generated effects, skipped-step formatting after observed failure, teardown, and cleanup token views (review focus 5). Assert earlier captured labels and derived runtime snapshots remain unchanged.
 - [ ] Run `dotnet test --project test/Raun.Test/Raun.Test.csproj -c Release -- --filter-class '*ResourceLabelMemoryTests' --filter-class '*ResourceLabelMemoryIntegrationTests'`; require intended failures before implementation.
 - [ ] Implement a synchronized observation store retaining only identity, label, producer node, and within-step sequence. Filter to the reader's own prior observations and graph predecessors; discard causally dominated candidates, then tie-break maximal independent producers by node order. Do not select by wall-clock completion. The final teardown scope can see all drained scenario observations because teardown is the execution's implicit join.
+- [ ] Fix StepNotes.FormatTitle and FormatCompletedTitle to use WithFormatProvider instead of reconstructing contexts. Prove normal initial titles consume predecessor names and completed-title observations reach later key-only references.
+- [ ] Add a cancellation cutoff regression with barriers: move a draining predecessor observation before/after the pending reader becomes cancelled, preserve final observations, and require identical frozen labels. Request cancellation promptly, but defer cancelled pending-node presentation until relevant predecessors drain. Preserve watchdog ownership and never publish a temporary title and rewrite it later.
 - [ ] Bind a memory once in the scheduler and use a per-node view at every formatting call. Preserve scope in invariant formatting and cleanup clones. Use the same label resolution in effects and message references. Make key-only lookups use memory without invoking object label functions or copying old payloads.
 - [ ] Re-run focused tests and full runtime/generator projects sequentially; expect all passing, existing snapshot/graph/timeout ownership assertions intact, and zero-warning build. Commit `feat(resources): remember names across ordered scenario steps`.
 
@@ -137,3 +139,10 @@
 ## Self-review
 
 Each approved requirement has an owner: action metadata and STE comments (task 1), runtime claims and distinct action records (task 2), generation/analyzers/locations (task 3), scenario-scoped names and all formatting paths (task 4), matrix/report/docs (task 5), full validation/review/push (task 6). Interfaces carry concrete attribute Type identity and canonical resource identity separately. The generated metadata helper avoids private-type references and preserves generic argument assemblies/load context. The label-memory path keeps the DI resolver stateless, including invariant formatting and cleanup clones. All five review-focus cases have named behavioral tests. No new startup convention, registry, release, or speculative base effects are introduced.
+
+## Astra High plan review corrections
+
+All five findings are incorporated: deterministic cancelled-step capture after predecessor drain;
+call-site validation for unadorned/referenced steps; StepNotes scope preservation; Create input
+exclusivity tests; and selection of action plus lineage from one effective role declaration.
+The user authorized updating these points and proceeding directly to implementation.
