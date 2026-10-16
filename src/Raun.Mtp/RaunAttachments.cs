@@ -91,11 +91,12 @@ internal static class RaunAttachments
     /// <summary>Replaces every character that cannot appear in a file name with an underscore.</summary>
     public static string SanitizeFileName(string name)
     {
-        var invalid = Path.GetInvalidFileNameChars();
+        // Reports must also be portable to Windows and GitHub artifact archives.
         var builder = new System.Text.StringBuilder(name.Length);
         foreach (var ch in name)
         {
-            builder.Append(Array.IndexOf(invalid, ch) >= 0 ? '_' : ch);
+            var invalid = char.IsControl(ch) || ch is '"' or '<' or '>' or ':' or '|' or '*' or '?' or '/' or '\\';
+            builder.Append(invalid ? '_' : ch);
         }
 
         return builder.ToString();

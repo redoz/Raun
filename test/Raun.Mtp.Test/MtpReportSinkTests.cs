@@ -84,6 +84,7 @@ public class MtpReportSinkTests
             var artifact = Assert.Single(bus.Nodes[^1].Properties.OfType<FileArtifactProperty>());
             Assert.StartsWith(root, artifact.FileInfo.FullName, StringComparison.Ordinal);
             Assert.Equal("hello", File.ReadAllText(artifact.FileInfo.FullName));
+            Assert.DoesNotContain(':', Path.GetRelativePath(root, artifact.FileInfo.FullName));
         }
         finally
         {

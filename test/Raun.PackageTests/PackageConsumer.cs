@@ -235,12 +235,18 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         if (collectCoverage)
         {
             // Include the sample's own steps as source under test. Coverlet cannot instrument
-            // an already-loaded MTP controller, so use the sample's dynamic collector here.
+            // an already-loaded MTP controller. Disable static instrumentation to avoid the
+            // .NET 10 Linux metadata crash: github.com/microsoft/codecoverage/issues/203.
             var settings = Path.Combine(Root, "coverage.config");
             File.WriteAllText(settings, """
                 <Configuration>
                   <IncludeTestAssembly>true</IncludeTestAssembly>
-                  <CodeCoverage><ModulePaths><Include>
+                  <CodeCoverage>
+                    <EnableStaticManagedInstrumentation>false</EnableStaticManagedInstrumentation>
+                    <EnableStaticNativeInstrumentation>false</EnableStaticNativeInstrumentation>
+                    <EnableDynamicManagedInstrumentation>true</EnableDynamicManagedInstrumentation>
+                    <EnableDynamicNativeInstrumentation>false</EnableDynamicNativeInstrumentation>
+                    <ModulePaths><Include>
                     <ModulePath>.*AspireAppointments.*</ModulePath>
                   </Include></ModulePaths></CodeCoverage>
                 </Configuration>
