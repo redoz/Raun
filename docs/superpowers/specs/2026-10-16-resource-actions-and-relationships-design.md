@@ -1,27 +1,27 @@
 # Separate resource actions and relationships
 
 Date: 2026-10-16
-Status: conversational design approved; written design ready for review.
-Execution preference: implementation here with one final reviewer, carried forward from the session.
+Status: revised property-metadata design approved in conversation; implementation plan ready for review.
+Execution preference: implement here with one final staff reviewer, carried forward from the session.
 Release policy: no release, tag, or package publication.
 
 ## Intent
 
-Define resource actions and resource relationships as separate, validated concepts. An action says
-what a step does to one resource. A relationship says how two resources connect. Neither attribute
-names nor arbitrary constructor code establish semantics. Consumers define a custom action once,
-and invalid declarations fail during compilation whenever their inputs are statically available.
+Make domain attributes reusable without coupling them to step parameter names. An action describes
+one resource operation. A relationship connects two resource subjects. Both generator and runtime
+read explicit metadata without executing attribute constructors, getters, initializers, or virtual
+GetRelationships methods. Invalid declarations fail at compilation where their inputs are known.
 
-This supersedes the action classification and lineage-declaration portions of the implemented
-2026-10-16 resource-actions-and-label-memory design. Scenario-owned label memory, canonical identities,
-frozen evidence, access timing, and report geometry remain requirements.
+This supersedes the action classification and relationship syntax in the implemented resource-actions-
+and-label-memory design. Canonical identities, remembered labels, access timing, frozen evidence,
+load-context handling, existing reports, and matrix geometry remain requirements.
 
-## Public action contract
+## Action definitions
 
-Introduce an abstract ResourceAttribute as the common base for action attributes, and a five-value
-ResourceActionKind enum: Create, Load, Read, Edit, Delete. This is a single choice, not Flags.
-
-Declare the effect with a sealed ResourceActionDefinitionAttribute on the action attribute class:
+ResourceAttribute is the common abstract base. A sealed class-level ResourceActionDefinitionAttribute
+selects exactly one ResourceActionKind: Create, Load, Read, Edit, Delete. This is not Flags. Created,
+Loaded, Read, Edited, and Deleted declare their semantics through this metadata and remain extensible.
+Consumers may inherit a built-in or declare a direct custom action:
 
 ```csharp
 [ResourceActionDefinition(ResourceActionKind.Edit)]
@@ -29,212 +29,166 @@ public class EditedAttribute : ResourceAttribute;
 
 [System.ComponentModel.DisplayName("Approve")]
 public sealed class ApprovedAttribute : EditedAttribute;
-
-// Direct definitions also work, without selecting a built-in attribute name.
-[ResourceActionDefinition(ResourceActionKind.Read)]
-public sealed class AuditedAttribute : ResourceAttribute;
 ```
 
-Created, Loaded, Read, Edited, and Deleted remain convenient built-ins. They all derive from
-ResourceAttribute and declare their semantics through the same definition metadata. A consumer can
-inherit one or define a custom action directly. Metadata must have exactly one definition across the
-hierarchy: a derived class cannot replace or repeat an inherited definition. The applied attribute
-has no writable Kind, Effect, or Access property. The common relationship model is a read-only Relationships collection. Each declaration contains
-its relation kind and target; placement supplies its source. References and Consumes are syntax
-adapters into this model, not the core relationship contract. Producer action attributes retain
-those arrays as shorthand, and derived custom attributes inherit that syntax.
+There must be exactly one definition across the hierarchy. Redefining even the same inherited effect
+is invalid. Kind, Effect, and Access cannot be changed at an attribute usage. Create/Edit/Delete are
+exclusive; Load/Read are shared. No attribute name establishes semantics. Preserve built-in labels,
+concrete custom names without the terminal Attribute suffix, nearest custom DisplayName overrides,
+and rejection of blank final names. Runtime/analyzer validation must agree.
 
-Access follows the kind: Create/Edit/Delete are exclusive; Load/Read are shared. The definition
-cannot choose a contradictory lock mode. Reference and Consume are not valid action kinds.
+## Relationship property metadata
 
-Discover definitions through exact Raun metadata symbols and CustomAttributeData. Never instantiate
-attributes, evaluate properties, inspect constructor bodies, or interpret arbitrary IL. Verify that
-the definition owner derives from ResourceAttribute. Reject missing, competing, or invalid enum
-values, and metadata applied to an unrelated class. Validate unused local definitions too, and
-validate referenced definitions at the consumer call when their source is unavailable.
-
-Keep existing naming rules: default concrete name minus final Attribute suffix; nearest custom
-DisplayName override; no blank resolved names. Preserve the five built-in labels. Built-in identity
-may select its familiar presentation label, but never establishes action semantics. Runtime and
-analyzer validation must agree. Retain private/generic/referenced types, correct load-context lookup,
-and weak-key caching that permits collectible assemblies to unload.
-
-## Public relationship contract
-
-Introduce a two-value ResourceRelation enum: Reference and Consume. Introduce a sealed, repeatable
-RelatesToAttribute(ResourceRelation kind, string target), valid on action attribute classes,
-parameters, return values, and methods. Both constructor arguments are required and read as metadata.
-
-```csharp
-[return: Created]
-[return: RelatesTo(ResourceRelation.Reference, nameof(patient))]
-[return: RelatesTo(ResourceRelation.Consume, nameof(slot))]
-public Task<Appointment> Book(Patient patient, Slot slot);
-```
-
-The placement supplies the source endpoint. The required target names a parameter, or Subject.Return
-for a relation from a parameter to the returned resource. Method placement is shorthand for return
-placement. The relation always points from the produced/loaded/updated source to the named target.
-There is no endpoint-less relationship and no implicit conversion from an action kind to a relation.
-
-Producer action attributes also support the existing compact form:
-
-```csharp
-[return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
-public Task<Appointment> Book(Patient patient, Slot slot);
-```
-
-This is equivalent to the separate declarations above. The action attribute's location supplies the
-source; each array item supplies a target; the framework-declared property supplies Reference or
-Consume. These properties are a defined Raun metadata contract, not arbitrary custom properties
-recognized by spelling. Keep them on Created, Loaded, and Edited and their derived custom attributes.
-Read only explicitly supplied named arguments; do not execute constructor assignments or property
-initializers to discover defaults. Direct custom actions can use separate RelatesTo declarations.
-
-Normalize both syntax forms into the same relationship records before validation and emission.
-They have identical endpoint, producer, access, timing, and diagnostic rules. Both forms may occur
-on one source, but duplicate edges and conflicting kinds are errors across the combined declarations.
-There is one semantic authority after normalization, with no first-wins or last-wins interpretation.
-
-The source must have a Create, Load, or Edit action, preserving the existing producer-side contract.
-A relationship does not stand in for that source action. A target must support a canonical resource
-identity, including ResourceKey<T> parameters. A target relationship supplies the existing shared
-Reference/Consume access, so a separate Read attribute is unnecessary. A separately declared exclusive
-target action remains exclusive and cannot be weakened by the relation.
-
-Reference means the source keeps a link to an independently identified target. Consume means the
-target is an input to producing the source. Both target accesses are shared. Consume never implies
-Delete: removal requires an explicit Delete action. A relationship is report evidence, not a lock on
-an external system and not proof that the operation succeeded.
-
-Diagnose invalid enum values, blank/unknown targets, unsupported source/target types, missing return
-values, a source naming itself, duplicate relations, and conflicting kinds for the same endpoint
-pair. Resolve aliases to canonical identities at runtime and reject a self-edge that could not be
-known statically. Do not silently choose the first of competing relationships.
-
-A return action overrides a method action as today, including the complete inline References/Consumes
-arrays owned by that action. An explicit return action with empty arrays does not inherit arrays
-from the replaced method action. For standalone RelatesTo declarations, an explicit return set replaces
-the method-level set; otherwise the method set applies. Combine the selected action's inline relations
-with the selected standalone relations, then validate the complete normalized set. A return action
-does not discard separate method-level RelatesTo declarations merely because it replaces the method
-action. Validate both sites and document these two selection rules with mixed-form examples.
-
-## Domain attributes own relationship declarations
-
-A domain attribute can declare its action and its relationships once. Use the same RelatesTo metadata
-on its class to supply relationship defaults; its application supplies the source resource:
+A RelationshipAttribute(ResourceRelation relation) marks an action attribute property. A generic
+RelationshipAttribute<TResource> adds an expected canonical resource kind. ResourceRelation has only
+Reference and Consume. Both are shared target accesses; Consume does not imply Delete.
 
 ```csharp
 [ResourceActionDefinition(ResourceActionKind.Create)]
-[RelatesTo(ResourceRelation.Reference, "patient")]
-[RelatesTo(ResourceRelation.Consume, "slot")]
-public sealed class BookedAttribute : ResourceAttribute;
+public sealed class BookedAttribute : ResourceAttribute
+{
+    [Relationship<Patient>(ResourceRelation.Reference)]
+    public string Patient { get; set; } = "";
 
-[return: Booked]
-public Task<Appointment> Book(Patient patient, Slot slot);
+    [Relationship<Slot>(ResourceRelation.Consume)]
+    public string Slot { get; set; } = "";
+}
+
+[return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]
+public Task<Appointment> Book(Patient patient, Slot slot2);
 ```
 
-These class declarations are metadata, not constructor code. The target strings name the decorated
-step's parameters, so validate their existence, resource support, and self/duplicate/conflicting
-relationships at each application. A class-level declaration requires a ResourceAttribute-derived
-owner and a supported producer action. A misleading class name never supplies missing semantics.
+Patient and Slot are roles owned by the domain attribute. Their values name parameters of the
+specific step. Renaming a step parameter changes only that usage's nameof expression. Do not bake
+"patient" or "slot" into the attribute class as step endpoints. There are no class-level RelatesTo
+defaults and no executable GetRelationships override.
 
-Inherited class relationships accumulate with the effective action's class hierarchy, inline usage
-shorthand, and selected standalone declarations into one normalized Relationships collection. Defaults
-are mandatory parts of the domain attribute's contract; usage-site declarations can add relationships
-but cannot silently erase them. Duplicate or conflicting edges are diagnostics across all sources.
-Changing step parameter names requires updating the contract or choosing another domain attribute;
-an invalid application must not silently lose its declared relationship.
+Marked properties must be public, readable/writable instance string or string[] properties with no
+index parameters. The generator reads their supplied named arguments, never their getters, setters,
+or initializer defaults. A single marker per property determines the relation kind. Reject hiding or
+overriding an inherited marked property rather than silently reinterpreting its binding.
 
-Relationship extraction consumes the common declaration model rather than switching on concrete
-built-in action types or arbitrary custom property names. An internal framework hook may organize
-runtime implementation, but arbitrary virtual getters, constructors, and property initializers do
-not define semantics: the source generator cannot execute them. Runtime metadata discovery uses the
-same declarative information and normalized rules. Both paths remain constructor-free.
+Relationship metadata has a Required property, default true. Required bindings must be explicitly
+supplied and nonempty. Required=false allows omission and empty arrays; an explicitly supplied null,
+blank string, or blank array item is always invalid. Optional properties do not supply hidden bindings
+from constructor assignments or initializers. The built-in arrays use Required=false for compatibility.
 
-## Lowering, execution, and reports
+Typed markers express expected canonical kinds, not CLR assignability. A Patient owner can accept a
+mapped DTO, row, domain object, or ResourceKey<T> parameter belonging to the same canonical group.
+Use known generated mappings for conclusive static validation; check unresolved or fluent mappings
+at runtime. Do not reject equivalent representations based only on their declared CLR types.
 
-Lower actions and relationships into distinct validated records. An action has a resource subject,
-base kind, and optional custom action identity/name. A relationship has a relation kind and two
-resolved subjects. Only resolved, valid records reach emission; reject invalid input instead of
-constructing partial relationship records or silently discarding target names.
+The non-generic marker supports existing arrays whose targets can represent different resource kinds.
+Do not add ResourceRef<T> in this slice: existing ResourceIdentity represents resolved endpoints, while
+the generic marker expresses type expectations at the metadata boundary. C# attribute arguments
+cannot contain a custom resource-reference struct.
 
-Keep LifecycleVerb and the existing runtime/report representation for compatibility: the five action
-kinds map to the corresponding verbs, and the two relation kinds map to Reference/Consume. They are
-projections of separate declarations, not one seven-choice action configuration surface.
+## One Relationships contract and compatible syntax
 
-Keep parameter access claims before invocation. Record anything requiring the returned value only
-after invocation. Do not duplicate raw argument evaluation, move exclusive input claims after a call,
-or fabricate a ResourceIdentity wrapper snapshot. Reuse the current imperative Reference/Consume
-APIs and their explicit endpoints; this change does not need another imperative facade.
+Expose a read-only Relationships schema on ResourceAttribute and its cached ResourceAction descriptor.
+Each RelationshipDefinition identifies a marked property, its relation kind, optional expected resource
+Type, scalar/array shape, and requiredness. The base getter can return the metadata descriptor's schema;
+framework discovery never constructs a user attribute to read it. The schema describes attribute
+properties, not step-bound endpoints. At each application, normalize property values into separate
+relationship records with an explicit source and target.
 
-Preserve action aggregation by canonical identity and concrete custom attribute Type, semantic
-conflict rules, chronological logs, captured snapshots, deterministic label memory, teardown scope,
-resource-matrix selection/connections, and data-free key-only references. Reject contradictory
-relationship declarations before the report builder; it must not resolve ambiguity by first-wins
-pair deduplication.
+Annotate the built-in References and Consumes array properties with the same non-generic marker:
 
-## Migration
+```csharp
+[Relationship(ResourceRelation.Reference, Required = false)]
+public string[] References { get; set; } = [];
+```
 
-Preserve existing References and Consumes arrays as supported shorthand; no source migration is
-required for existing producer attributes or custom attributes derived from them. Add standalone
-RelatesTo declarations as another syntax for the same normalized relationship model. Update README
-and samples to show equivalence and when each form is useful, rather than require wholesale rewrites.
+Keep both arrays on Created, Loaded, and Edited and let custom subclasses inherit them. Preserve:
 
-Existing array declarations in referenced libraries continue to work through the same framework
-metadata contract. Retain the existing inline return-action override behavior. Previously generated
-graph delegates and saved reports do not require new mandatory model fields.
+```csharp
+[return: Created(References = [nameof(patient)], Consumes = [nameof(slot2)])]
+```
 
-Keep ResourceAction.For<TAttribute>(), imperative lifecycle methods, existing built-in usage without
-lineage arrays, and the previously approved custom inheritance usage. Update factory/analyzer error
-messages to refer to the new explicit action definition contract.
+Retain standalone, repeatable RelatesToAttribute(ResourceRelation relation, string target) on parameters,
+return values, and methods. Its location supplies the source endpoint. This is another syntax for
+identical normalized relationship records; it does not select an action or bypass validation.
 
-## Documentation and validation
+All property annotations, inherited convenience arrays, and standalone declarations use one normalized
+model. There are no consumer-specific mappings, concrete-action switches, arbitrary property-name
+recognition, or special runtime constructor conventions.
 
-Use ASD-STE100-style XML comments on ResourceAttribute, the definition attribute and enum values,
-all five built-ins, RelatesToAttribute, ResourceRelation, and each public argument/property. Explain
-source/target direction, access, timing, method/return precedence, and Consume versus Delete.
+## Subject selection and validation
 
-Tests first. Cover built-in and direct custom definitions; indirect inheritance; missing/duplicate/
-conflicting definitions; invalid enum casts; same-name unrelated classes; blank labels; private and
-generic referenced attributes; and metadata discovery without constructors/static initialization.
-Retain collectible load-context regression coverage and analyzer/runtime parity.
+The source must have a Create, Load, or Edit action. Reference means the source keeps a link to the
+target; Consume means the target contributes to producing the source. The target names a resource
+parameter, including a key-only parameter, or Subject.Return when the source is a parameter. The
+relationship supplies shared target access, so a separate Read declaration is unnecessary. It cannot
+weaken a separately declared exclusive action on that target.
 
-Cover return/parameter/method relationship placement, required endpoints, canonical aliases,
-key-only targets, supported producer actions, independent action/relation override precedence,
-legacy array compatibility, domain-owned and inherited relationship defaults, mixed-form normalization,
-and duplicate/conflicting/self relations. Assert access and recording
-order, unchanged raw argument evaluation and graph dependencies, target conflict semantics, generated
-lineage, remembered names, and frozen evidence. Retain all guard/merge/node-count assertions when
-snapshot shapes or sample counts change.
+Diagnose missing/duplicate/invalid action definitions, unrelated metadata owners, invalid enum values,
+invalid property shapes, missing required bindings, blank/unknown endpoints, unsupported resource
+subjects, missing return values, direct self-relations, duplicate edges, and competing kinds for one
+source/target pair. Validate unadorned local steps and referenced library call sites; avoid duplicate
+local declaration and call diagnostics. Preserve existing diagnostic IDs where their meaning remains
+accurate and register new ones.
 
-Run locked restore, zero-warning Release build, full solution tests, report JavaScript checks,
-canonical sample and resource-matrix browser checks, and four local package builds. Obtain the
-already requested one final staff review. Do not publish a release.
+A return action overrides the complete method action, including its property bindings. An explicit
+return action with no optional arrays does not inherit the replaced action's arrays. Explicit return
+RelatesTo declarations replace the method's standalone set; otherwise that method set applies. Combine
+these selected declarations and validate the complete relationship set. Separate method relationships
+are not erased merely by replacing method action shorthand.
 
-## Alternatives considered
+At runtime, reject canonical source/target self-aliases, conflicting canonical relation kinds, and
+typed-kind mismatches that cannot be established statically. Existing imperative operations retain
+their signatures. Repeated imperative observations of the same relation can remain idempotent;
+duplicate source declarations are compiler errors. Never silently retain the first conflicting kind.
 
-- Treat arrays as a separate semantic model: rejected. Keep their compact syntax, but normalize them
-  into the same endpoint-bearing relationship records as standalone declarations.
-- One seven-value action enum: rejected because a Reference/Consume action alone cannot describe
-  both endpoints and mixes access operations with lineage edges.
-- Store an overridable effect property or constructor-selected enum on ResourceAttribute: rejected
-  because arbitrary custom code is not readable across referenced libraries without execution or IL
-  interpretation. Class metadata declares the value explicitly and consistently.
-- Classify built-ins or custom attributes by their names: rejected because spelling is not a semantic
-  contract.
-- New generic marker types for each effect: rejected because the five enum values already express
-  the closed choices without additional user-owned types.
-- Remove inline arrays: rejected after user review because separate semantic models do not require
-  separate syntax at every call site. Shared normalization and combined validation avoid competing
-  interpretation paths while preserving useful compact declarations.
+## Execution and evidence
+
+Preserve LifecycleVerb and its seven runtime/report values as projections of the separate concepts.
+Five action kinds project to primary verbs; Reference/Consume are relationship target effects.
+Preserve ResourceAction.For<TAttribute>(), Apply, built-in aggregation, distinct custom action Type
+identity, chronological logs, snapshot retention, and metadata-only factories with weak-key caches.
+
+Parameter claims remain before invocation. Relationships or claims requiring a return value follow
+invocation. Use captured arguments exactly once. A missing optional argument involved in a declared
+relationship must use its real default or produce a diagnostic, never silently drop a declared edge.
+Validate runtime-only alias/type constraints before accepting that relation's claim or evidence.
+
+Preserve source-specific key/label resolution, canonical mapping, scenario-owned label memory,
+key-only data-free references, branch/merge behavior, cancellation drain, cleanup scopes, and existing
+matrix connections and semantic styling. New normalized records are internal; do not require new
+members in previously generated scenario graphs or report payloads.
+
+## Appointment-domain example and README
+
+Add domain attributes used by existing executable sample steps, not only unused declarations:
+Registered (Create) for patients, Held (Edit) for slots, Booked (Create) with typed Patient/Slot property
+bindings, Rescheduled (Create) with a typed consumed Slot property, and Cancelled (Delete) for bookings.
+Use Booked on both ordinary and urgent booking methods. Demonstrate a step argument named slot2 in
+an executable scenario/step or generator regression, proving the domain attribute does not prescribe
+parameter names. Keep the existing Approved/Audited and key-only remembered-name example working.
+
+Update README with property metadata, generic expected kinds, required/optional bindings, inherited
+array shorthand, standalone syntax, return precedence, and metadata-only discovery. Write ASD-STE100-
+style XML comments on every new public attribute, enum member, property, and relationship descriptor.
+Explain meaning, access, recording time, source/target direction, and Consume versus Delete.
+
+## Verification and alternatives
+
+Tests first. Cover inherited/direct/private/generic/referenced definitions, invalid declarations and
+usages, constructor-free discovery, requiredness, property shadowing, mixed syntax, return precedence,
+canonical alternate and key-only endpoints, runtime alias/type guards, and analyzer/runtime schema
+parity. Retain attribute unload, graph, argument evaluation, title, snapshot, and cancellation checks.
+Run locked restore, zero-warning Release build, full solution tests, report JavaScript checks, real
+sample and matrix browser checks, and four local package builds. Obtain one final staff review. No
+release is authorized.
+
+Rejected: one seven-value action enum (relationships require endpoints); executable GetRelationships
+(the generator cannot run it); custom object attribute arguments (not supported by C#); class-level
+hardcoded step names (break reusable role binding); name-based role/property magic (no explicit
+contract); removing compatible array shorthand (unnecessary source churn); separate interpretations
+for each syntax (ambiguity and drift). Shared metadata schema and normalization provide one authority.
 
 ## Self-review
 
-The design separates action semantics from endpoint-bearing relationships, gives each one validation
-ownership, and specifies metadata discovery, timing, return precedence, source compatibility, and evidence
-preservation. C# requires constructor arguments but cannot constrain nameof to a step parameter or
-prevent enum casts. Raun diagnostics close those static gaps; runtime validation covers canonical
-aliases and imperative metadata. This is compile-time enforcement where possible, not a claim that
-C# alone can prove domain behavior.
+The property names and endpoint names have separate owners. Definitions use metadata that both
+compilation and execution can inspect; the common Relationships schema is not a collection of hidden
+runtime bindings. Requiredness is explicit and does not depend on initializer code. Canonical expected
+kinds permit alternate representations. Examples exercise the public contract and preserved evidence.
