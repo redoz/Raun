@@ -110,15 +110,18 @@ const renderFixture = (name, data) => {
       const mentionColors=await registryLinks.evaluateAll(links=>links.map(link=>{
         const column=Array.from(link.closest('.card').querySelectorAll('.matrix-resource')).find(header=>header.dataset.resourceColumn===link.dataset.messageResource);
         const style=getComputedStyle(link);
+        const normal=getComputedStyle(link.closest('.dn')).color;
         const muted=getComputedStyle(link.closest('.card').querySelector('.card-head .dur')).color;
+        const phase=getComputedStyle(link.closest('.dn').querySelector('.phase-given,.phase-when,.phase-then'));
         const columnColor=getComputedStyle(column).borderTopColor;
         const rgb=color=>color.match(/[0-9.]+/g).slice(0,3).map(Number).map(value=>color.startsWith('color(srgb')?value*255:value);
         const distance=(a,b)=>rgb(a).reduce((sum,value,index)=>sum+Math.abs(value-rgb(b)[index]),0);
-        return {text:style.color,underline:style.borderBottomColor,column:columnColor,tintDistance:distance(style.color,muted),resourceDistance:distance(columnColor,muted)};
+        return {text:style.color,normal,underline:style.textDecorationColor,tintDistance:distance(style.textDecorationColor,muted),resourceDistance:distance(columnColor,muted),line:style.textDecorationLine,pattern:style.textDecorationStyle,offset:style.textUnderlineOffset,phaseOffset:phase.textUnderlineOffset,phaseText:phase.color,phaseLine:phase.textDecorationLine,phasePattern:phase.textDecorationStyle,phaseUnderline:phase.textDecorationColor,thickness:style.textDecorationThickness,phaseThickness:phase.textDecorationThickness,border:style.borderBottomWidth};
       }));
-      assert.ok(mentionColors.every(color=>color.tintDistance>0 && color.tintDistance<color.resourceDistance*.4 && color.underline===color.column),'Title references use muted resource tints and full-color underlines in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
-      assert.equal(new Set(mentionColors.map(color=>color.underline)).size,3,'Patient, slot and appointment keep distinct underline colors');
-      assert.equal(new Set(mentionColors.map(color=>color.text)).size,3,'Each resource keeps its own subtle text tint');
+      assert.ok(mentionColors.every(color=>color.text===color.normal && color.tintDistance>0 && color.tintDistance<color.resourceDistance*.8),'Title references use normal text and subdued resource-colored underlines in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
+      assert.ok(mentionColors.every(color=>color.line==='underline' && color.pattern==='dotted' && color.offset===color.phaseOffset && color.thickness===color.phaseThickness && color.border==='0px'),'Dotted resource underlines use the same text position and thickness as phase underlines');
+      assert.ok(mentionColors.every(color=>color.phaseText===color.normal && color.phaseLine==='underline' && color.phasePattern==='solid' && color.phaseUnderline!==color.normal),'Matching phase words use normal text with a solid phase-colored underline');
+      assert.equal(new Set(mentionColors.map(color=>color.underline)).size,3,'Resources retain distinct muted underline colors');
     }
     await page.emulateMedia({colorScheme:'light'});
 

@@ -225,6 +225,9 @@ test('phase coloring uses matching authored prefix once with chevron before stat
  assert.equal(head.children[1].getAttribute('aria-label'),'passed');
  assert.equal(head.querySelector('.sx').classList.contains('number-passed'),false);
  assert.ok(head.querySelector('.phase-given'));
+ const mismatched=scope.buildScenarioDrill({...scenario,steps:[{...current,phase:'When'}]});
+ assert.equal(mismatched.querySelector('.phase-given'),null);
+ assert.equal(mismatched.querySelector('.phase-when'),null);
  assert.equal((nodeText(head).match(/Given/g)||[]).length,1);
 });
 

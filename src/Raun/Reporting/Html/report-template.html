@@ -174,7 +174,7 @@
   .pill.not-taken{ color:var(--muted); background:var(--inset); } .pill.not-taken .pd{ background:var(--faint); }
   .step-entry.status-not-taken .dn{ color:var(--muted); }
   .step-entry .sx s,.step-entry .dn s{text-decoration-thickness:1px}
-  .step-entry .dn s .message-resource{text-decoration-line:line-through;text-decoration-thickness:1px}
+  .step-entry .dn s .message-resource{text-decoration-line:line-through;text-decoration-style:solid;text-decoration-color:currentColor;text-decoration-thickness:1px}
 
   /* ---------- DRILL PANEL (scenario-level: every step in run order) ---------- */
   .drill-host{ margin-top:4px; }
@@ -198,13 +198,13 @@
   .step-lifecycle.status-passed:not(.open) .step-head>.dm{visibility:hidden}
   .step-lifecycle.status-passed:not(.open) .dn{font-size:12px}
   .step-lifecycle.status-passed .step-head{cursor:pointer}
-  .phase-given{color:var(--ph-given)}.phase-when{color:var(--ph-when)}.phase-then{color:var(--ph-then)}
-  .phase-given,.phase-when,.phase-then{text-decoration-line:underline;text-decoration-color:currentColor;text-underline-offset:2px;text-decoration-thickness:1px}
+  .phase-given{--phase-color:var(--ph-given)}.phase-when{--phase-color:var(--ph-when)}.phase-then{--phase-color:var(--ph-then)}
+  .phase-given,.phase-when,.phase-then{color:inherit;text-decoration-line:underline;text-decoration-color:color-mix(in srgb,var(--phase-color) 50%,var(--muted));text-underline-offset:2px;text-decoration-thickness:1px}
   .step-head .dm{display:flex;align-items:center;justify-content:flex-end;gap:8px;font:12px/1.4 var(--sans);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
   .step-offset{color:var(--faint)}
   .resource-mention{display:inline;white-space:normal}
-  .message-resource{font:inherit;color:inherit;background:none;border:0;border-bottom:1px dotted var(--muted);padding:0;cursor:pointer;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}
-  .dn .message-resource{color:color-mix(in srgb,var(--resource-color,var(--muted)) 25%,var(--muted));border-bottom-color:var(--resource-color,var(--muted))}
+  .message-resource{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:var(--muted);text-underline-offset:2px;text-decoration-thickness:1px}
+  .dn .message-resource{text-decoration-color:color-mix(in srgb,var(--resource-color,var(--muted)) 50%,var(--muted))}
   .message-resource:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
   .message-resource.hl{background:var(--ink);color:var(--surface)}
   .resource-hover{position:fixed;inset:auto;margin:0;z-index:100;display:block;width:fit-content;min-width:min(220px,calc(100vw - 24px));max-width:min(400px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;padding:10px;background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);box-shadow:0 6px 24px #0003;font:12px/1.4 var(--sans);text-align:left;white-space:normal}
