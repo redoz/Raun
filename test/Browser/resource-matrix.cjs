@@ -110,9 +110,9 @@ const renderFixture = (name, data) => {
       const mentionColors=await registryLinks.evaluateAll(links=>links.map(link=>{
         const column=Array.from(link.closest('.card').querySelectorAll('.matrix-resource')).find(header=>header.dataset.resourceColumn===link.dataset.messageResource);
         const style=getComputedStyle(link);
-        return {text:style.color,normal:getComputedStyle(link.closest('.dn')).color,underline:style.borderBottomColor,column:getComputedStyle(column).borderTopColor};
+        return {text:style.color,muted:getComputedStyle(link.closest('.card').querySelector('.card-head .dur')).color,underline:style.borderBottomColor,column:getComputedStyle(column).borderTopColor};
       }));
-      assert.ok(mentionColors.every(color=>color.text===color.normal && color.underline===color.column),'Title references keep neutral text and resource-colored underlines in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
+      assert.ok(mentionColors.every(color=>color.text===color.muted && color.underline===color.column),'Title references use muted grey text and resource-colored underlines in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
       assert.equal(new Set(mentionColors.map(color=>color.underline)).size,3,'Patient, slot and appointment keep distinct underline colors');
     }
     await page.emulateMedia({colorScheme:'light'});
