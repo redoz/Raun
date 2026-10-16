@@ -23,6 +23,9 @@
     <!-- ILogger bridge: step logs written through the standard .NET logging abstraction.
          Abstractions only â€” no logging implementation is taken as a dependency. -->
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+    <!-- Aspire 13.6.1 uses 2.5.302; 2.5.303 fixes GHSA-qhrr-8q5h-9q3h. -->
+    <PackageVersion Include="MessagePack" Version="2.5.303" />
 
     <!-- DI: Raun.Mtp needs only the abstractions (IServiceScopeFactory); the test project needs
          the implementation to build a provider. -->
