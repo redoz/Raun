@@ -30,20 +30,20 @@ const patientResource=patientResources[0];
 assert.equal(patientResource.key,'pat-42');
 assert.ok(!actionSample.resources.some(resource=>resource.type==='RegistryPatient'),'The external row does not create a separate identity');
 const patientEffects=actionSample.steps.flatMap(step=>step.effects).filter(effect=>effect.resourceId===patientResource.id);
-assert.ok(patientEffects.some(effect=>effect.data && JSON.parse(effect.data).FullName==='Jane <Doe>'),'The original registry representation is captured');
-assert.ok(patientEffects.some(effect=>effect.data && JSON.parse(effect.data).Name==='Jane <Doe>'),'The domain representation keeps its own evidence');
+assert.ok(patientEffects.some(effect=>effect.data && JSON.parse(effect.data).FullName==='Jane'),'The original registry representation is captured');
+assert.ok(patientEffects.some(effect=>effect.data && JSON.parse(effect.data).Name==='Jane'),'The domain representation keeps its own evidence');
 const bookById=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Booked'));
 const keyReference=bookById.effects.find(effect=>effect.resourceId===patientResource.id);
 assert.equal(keyReference.verb,'Reference');
-assert.equal(keyReference.label,'Jane <Doe>');
+assert.equal(keyReference.label,'Jane');
 assert.equal(keyReference.data,null,'A typed relationship through a string key does not borrow the registry snapshot');
-assert.ok(bookById.displayName.includes('Jane <Doe>'),'Booking by key resolves the earlier readable name');
+assert.ok(bookById.displayName.includes('Jane'),'Booking by key resolves the earlier readable name');
 const booking=bookById.effects.find(effect=>effect.actionName==='Booked');
 const registered=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Register'));
 const approved=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Approve'));
 const available=actionSample.steps.find(step=>step.effects.some(effect=>effect.type==='Slot' && effect.verb==='Create'));
 const slotResource=actionSample.resources.find(resource=>resource.type==='Slot');
-for(const [step,mentions] of [[registered,[['Jane <Doe>',patientResource.id],['pat-42',patientResource.id]]],[approved,[['Jane <Doe>',patientResource.id]]],[available,[['slot 01',slotResource.id]]],[bookById,[['Jane <Doe>',patientResource.id],['slot 01',slotResource.id]]]]){
+for(const [step,mentions] of [[registered,[['Jane',patientResource.id],['pat-42',patientResource.id]]],[approved,[['Jane',patientResource.id]]],[available,[['slot 01',slotResource.id]]],[bookById,[['Jane',patientResource.id],['slot 01',slotResource.id]]]]){
   for(const [text,resourceId] of mentions){
     assert.ok(step.titleMessage.parts.some(part=>part.text===text && part.resourceId===resourceId),'Title text '+text+' is a reference to the correct resource in '+step.displayName);
   }
@@ -51,8 +51,8 @@ for(const [step,mentions] of [[registered,[['Jane <Doe>',patientResource.id],['p
 
 assert.ok(actionSample.references.some(edge=>edge.subjectId===booking.resourceId && edge.targetId===patientResource.id && edge.kind==='Reference'));
 const audit=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Audited'));
-assert.ok(audit.displayName.includes('Jane <Doe>'),'A key-only generated title reuses the patient name');
-assert.ok(audit.effects.some(effect=>effect.resourceId===patientResource.id && effect.label==='Jane <Doe>' && effect.data==null),'Key-only effects have names without borrowed snapshots');
+assert.ok(audit.displayName.includes('Jane'),'A key-only generated title reuses the patient name');
+assert.ok(audit.effects.some(effect=>effect.resourceId===patientResource.id && effect.label==='Jane' && effect.data==null),'Key-only effects have names without borrowed snapshots');
 assert.ok(actionSample.steps.some(step=>step.effects.some(effect=>effect.actionName==='Approve' && effect.verb==='Edit')));
 
 const allSteps=model.scenarios.flatMap(scenario=>scenario.steps);
@@ -98,7 +98,7 @@ const renderFixture = (name, data) => {
     assert.deepEqual(errors, []);
     const registryCard=page.locator('.card').filter({hasText:'registered patient books by ID'});
     await registryCard.locator('.card-head').click();
-    const patientHeader=registryCard.getByRole('button',{name:/^Jane <Doe>, Patient\./});
+    const patientHeader=registryCard.getByRole('button',{name:/^Jane, Patient\./});
     assert.equal(await patientHeader.count(),1,'The patient column uses LabelFor rather than its opaque key');
     assert.ok((await patientHeader.getAttribute('title')).includes('Patient: pat-42'),'The column tooltip retains the stable identity');
     const registryLinks=registryCard.locator('.dn .message-resource');

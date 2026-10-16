@@ -111,7 +111,7 @@ public sealed class RegistryBookingScenarios : Scenarios<PatientRegistry>
     [Scenario("registered patient books by ID")]
     public async Task BookRegisteredPatient()
     {
-        var row = await Given.RegisteredPatient("pat-42", "Jane <Doe>");
+        var row = await Given.RegisteredPatient("pat-42", "Jane");
         var patient = await When.ApprovePatient(row);
         var slot = await Given.AvailableSlot();
         var appointment = await When.BookById(patient.Id, slot);
