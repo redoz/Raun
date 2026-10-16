@@ -1,7 +1,7 @@
 # Custom resource actions and cross-step labels
 
 Date: 2026-10-16
-Status: approach approved in conversation; written design awaiting review.
+Status: written design approved; implementation checklist awaiting review.
 Execution preference: implement here with one final reviewer, as previously selected.
 Release policy: no tag or publication unless requested.
 
