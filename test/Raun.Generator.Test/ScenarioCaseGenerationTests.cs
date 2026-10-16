@@ -59,7 +59,14 @@ public class ScenarioCaseGenerationTests
             Assert.All(steps, step => Assert.Equal(StepStatus.Passed, step.Status));
             Assert.Equal(["System.String", "System.String", name], steps.Single(s => s.Node.OperationName == "Capture").Logs);
         }
-        var registered = ScenarioRegistry.Definitions().Where(d => d.MethodName == "CaseDemo.Cases.Run").ToList();
+        // Other compilations can register the same method name with different case rows.
+        var unrelated = GeneratorHarness.Run(Source("[ScenarioCase(\"a\", \"other\")]"));
+        unrelated.AssertCompiles();
+        _ = unrelated.Definitions();
+        Assert.Contains(ScenarioRegistry.Definitions(), d => d.Method?.DeclaringType?.Assembly == unrelated.Assembly);
+        var registered = ScenarioRegistry.Definitions()
+            .Where(d => d.Method?.DeclaringType?.Assembly == result.Assembly && d.MethodName == "CaseDemo.Cases.Run")
+            .ToList();
         Assert.Equal(definitions.Select(d => d.DisplayName), registered.Select(d => d.DisplayName));
     }
 
