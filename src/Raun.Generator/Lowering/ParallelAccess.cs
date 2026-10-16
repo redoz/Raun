@@ -41,8 +41,8 @@ internal readonly record struct ParallelAccess(
                 continue;
             }
 
-            // Mirrors LifecycleVerb.ToLockMode in the runtime assembly: Edit/Delete exclude, the rest share.
-            var exclusive = verb is "Edit" or "Delete";
+            // Mirrors LifecycleVerb.ToLockMode in the runtime assembly: Create/Edit/Delete exclude, the rest share.
+            var exclusive = verb is "Create" or "Edit" or "Delete";
             foreach (var read in lowering.Arguments[index].Reads)
             {
                 accesses.Add(new ParallelAccess(read.Local, verb, exclusive, operation, read.Node));
@@ -84,16 +84,12 @@ internal readonly record struct ParallelAccess(
     {
         var verbs = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        var returnLineage = AttributeReader.ProducerLineage(method.GetReturnTypeAttributes());
-        if (returnLineage.References.IsEmpty && returnLineage.Consumes.IsEmpty)
-        {
-            returnLineage = AttributeReader.ProducerLineage(method.GetAttributes());
-        }
+        var returnLineage = AttributeReader.ReturnLineage(method);
 
         AddLineage(verbs, returnLineage);
         foreach (var parameter in method.Parameters)
         {
-            if (AttributeReader.ParameterRole(parameter) == "Edit")
+            if (AttributeReader.ParameterRole(parameter) is "Create" or "Load" or "Edit")
             {
                 AddLineage(verbs, AttributeReader.ProducerLineage(parameter.GetAttributes()));
             }

@@ -1792,6 +1792,12 @@ internal sealed class ScenarioParser
     {
         var (invocation, member, phase, method, resultType, lowering, loop, _, _) = call;
 
+        if (method.DeclaringSyntaxReferences.Length == 0)
+        {
+            foreach (var problem in ResourceRoleMetadata.Validate(method))
+            { Report(Descriptors.ById[problem.Id], invocation, problem.Subject.Name, problem.Reason); }
+        }
+
         var dslNamespace = method.ContainingType?.ContainingNamespace;
         if (dslNamespace is { IsGlobalNamespace: false })
         {
@@ -2132,24 +2138,19 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            if (role == "Edit")
+            if (role is "Create" or "Load" or "Edit")
             {
                 EmitLineage(AttributeReader.ProducerLineage(parameter.GetAttributes()), expression);
             }
 
-            claims.Add(new ResourceRoleClaim(role, expression, IsReturn: false));
+            claims.Add(new ResourceRoleClaim(role, expression, IsReturn: false) { Action = AttributeReader.ParameterAction(parameter) is { AttributeIdentity: not null } action ? action : null });
         }
 
         if (hasResult && AttributeReader.ReturnRole(method) is { } returnRole)
         {
-            var lineage = AttributeReader.ProducerLineage(method.GetReturnTypeAttributes());
-            if (lineage.References.IsEmpty && lineage.Consumes.IsEmpty)
-            {
-                lineage = AttributeReader.ProducerLineage(method.GetAttributes());
-            }
-
+            var lineage = AttributeReader.ReturnLineage(method);
             EmitLineage(lineage, ReturnValue);
-            claims.Add(new ResourceRoleClaim(returnRole, ReturnValue, IsReturn: true));
+            claims.Add(new ResourceRoleClaim(returnRole, ReturnValue, IsReturn: true) { Action = AttributeReader.ReturnAction(method) is { AttributeIdentity: not null } action ? action : null });
         }
 
         return claims;

@@ -215,11 +215,21 @@ internal static class Descriptors
         "Resource representation '{0}' has multiple owners: {1}; declare one canonical owner",
         Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor InvalidResourceAction = new(
+        "RAUN027", "Invalid resource action metadata", "Invalid resource action on '{0}': {1}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+    public static readonly DiagnosticDescriptor AmbiguousResourceRole = new(
+        "RAUN028", "Competing resource roles", "Competing resource roles on '{0}': {1}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+    public static readonly DiagnosticDescriptor ResourceRoleWithoutResult = new(
+        "RAUN029", "Resource return role requires a result", "Invalid return role on '{0}': {1}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
-        InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
+        InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
         UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle, InvalidResourceKeyParameter,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,

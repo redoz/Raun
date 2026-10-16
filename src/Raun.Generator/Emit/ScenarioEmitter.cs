@@ -528,7 +528,18 @@ internal static class ScenarioEmitter
     /// </summary>
     private static ExpressionStatementSyntax ResourceCallStatement(ResourceRoleClaim claim, bool synchronous = false)
     {
-        var arguments = new List<ArgumentSyntax> { Argument(claim.Expression) };
+        var arguments = new List<ArgumentSyntax>();
+        if (claim.Action is { } action)
+        {
+            arguments.Add(Argument(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                Names.Global("Raun", "ResourceAction"), IdentifierName("FromGenerated")))
+                .WithArgumentList(ArgumentList(SeparatedList(new[]
+                {
+                    Argument(TypeOfExpression(Names.Global("Raun", "Generated", "RaunGenerated"))),
+                    Argument(Lit(action.AttributeIdentity)),
+                })))));
+        }
+        arguments.Add(Argument(claim.Expression));
         foreach (var subject in claim.SubjectExpressions)
         {
             arguments.Add(Argument(subject));
@@ -541,7 +552,7 @@ internal static class ScenarioEmitter
                     SyntaxKind.SimpleMemberAccessExpression,
                     IdentifierName("__ctx"),
                     IdentifierName("Resources")),
-                IdentifierName(claim.Verb)))
+                IdentifierName(claim.Action.HasValue ? "Apply" : claim.Verb)))
             .WithArgumentList(ArgumentList(SeparatedList(arguments)));
 
         ExpressionSyntax operation = synchronous

@@ -23,7 +23,7 @@ internal static class AttributeReader
     {
         foreach (var attr in attributes)
         {
-            if (attr.AttributeClass?.Name is "CreatedAttribute" or "LoadedAttribute" or "EditedAttribute")
+            if (ResourceRoleMetadata.BaseVerb(attr.AttributeClass) is "Create" or "Load" or "Edit")
             {
                 return (NamedStringArray(attr, "References"), NamedStringArray(attr, "Consumes"));
             }
@@ -125,47 +125,25 @@ internal static class AttributeReader
     /// The resource role declared on <paramref name="parameter"/> (<c>[Read]/[Edited]/[Deleted]</c>),
     /// as the runtime <c>ResourceContext</c> verb name, or null when none.
     /// </summary>
-    public static string? ParameterRole(IParameterSymbol parameter)
-        => RoleVerb(parameter.GetAttributes(), parameterRoles: true);
+    public static ResourceRoleMetadata? ParameterAction(IParameterSymbol parameter)
+        => ResourceRoleMetadata.From(RoleAttribute(parameter.GetAttributes()), out _);
 
-    /// <summary>
-    /// The resource role declared on <paramref name="method"/>'s return value
-    /// (<c>[return: Created]/[return: Loaded]/[return: Edited]</c>), falling back to the method-level
-    /// shorthand, as the runtime verb name, or null when none. Return roles only apply when the step
-    /// actually yields a value (the caller checks that).
-    /// </summary>
-    public static string? ReturnRole(IMethodSymbol method)
-        => RoleVerb(method.GetReturnTypeAttributes(), parameterRoles: false)
-            ?? RoleVerb(method.GetAttributes(), parameterRoles: false);
+    public static ResourceRoleMetadata? ReturnAction(IMethodSymbol method)
+        => ResourceRoleMetadata.From(ReturnAttribute(method), out _);
 
-    /// <summary>
-    /// Maps the first recognized role attribute to its runtime verb name. Parameter roles admit
-    /// <c>Read/Edited/Deleted</c>; return/method roles admit <c>Created/Loaded/Edited</c>; <c>Edited</c>
-    /// is valid in both positions. Reference/Consume are not parameter roles — they are conferred on a
-    /// target by being named in a producer's lineage (see <see cref="ProducerLineage"/>).
-    /// </summary>
-    private static string? RoleVerb(ImmutableArray<AttributeData> attributes, bool parameterRoles)
-    {
-        foreach (var attr in attributes)
-        {
-            var verb = attr.AttributeClass?.Name switch
-            {
-                "ReadAttribute" when parameterRoles => "Read",
-                "DeletedAttribute" when parameterRoles => "Delete",
-                "EditedAttribute" => "Edit",
-                "CreatedAttribute" when !parameterRoles => "Create",
-                "LoadedAttribute" when !parameterRoles => "Load",
-                _ => null,
-            };
+    public static string? ParameterRole(IParameterSymbol parameter) => ParameterAction(parameter)?.Verb;
+    public static string? ReturnRole(IMethodSymbol method) => ReturnAction(method)?.Verb;
 
-            if (verb is not null)
-            {
-                return verb;
-            }
-        }
+    public static AttributeData? ReturnAttribute(IMethodSymbol method)
+        => RoleAttribute(method.GetReturnTypeAttributes()) ?? RoleAttribute(method.GetAttributes());
 
-        return null;
-    }
+    private static AttributeData? RoleAttribute(ImmutableArray<AttributeData> attributes)
+        => attributes.FirstOrDefault(a => ResourceRoleMetadata.BaseVerb(a.AttributeClass) is not null);
+
+    public static (ImmutableArray<string> References, ImmutableArray<string> Consumes) ReturnLineage(IMethodSymbol method)
+        => ReturnAttribute(method) is { } attribute
+            ? ProducerLineage(ImmutableArray.Create(attribute))
+            : (ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
 
     /// <summary>Numeric value of <c>Raun.LockMode.Exclusive</c>. MUST stay identical to the runtime enum (separate assembly).</summary>
     private const int LockModeExclusive = 1;

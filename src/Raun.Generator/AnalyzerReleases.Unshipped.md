@@ -30,3 +30,6 @@ RAUN023 | Raun.Usage | Error | No step title matches the supplied arguments
 RAUN024 | Raun.Usage | Error | Resource key parameter must be a string or ResourceKey
 RAUN025 | Raun.Usage | Error | Resource alternate declaration must use closed accessible types
 RAUN026 | Raun.Usage | Error | Resource alternate has conflicting owners
+RAUN027 | Raun.Usage | Error | Invalid custom resource action metadata
+RAUN028 | Raun.Usage | Error | Competing resource role attributes
+RAUN029 | Raun.Usage | Error | Resource return role requires a result

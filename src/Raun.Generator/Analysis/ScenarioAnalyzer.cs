@@ -25,6 +25,9 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
 {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
     [
+        Descriptors.InvalidResourceAction,
+        Descriptors.AmbiguousResourceRole,
+        Descriptors.ResourceRoleWithoutResult,
         Descriptors.UnhandledException,
         Descriptors.UnboundPlaceholder,
         Descriptors.MissingResourceRole,
@@ -426,8 +429,15 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeMethodCore(SyntaxNodeAnalysisContext context)
     {
         var method = (MethodDeclarationSyntax)context.Node;
-        if (context.SemanticModel.GetDeclaredSymbol(method) is IMethodSymbol symbol
-            && (HasAttribute(symbol, "StepNameAttribute") || symbol.Parameters.Any(parameter => AttributeReader.ResourceKeyType(parameter) is not null)))
+        if (context.SemanticModel.GetDeclaredSymbol(method) is not IMethodSymbol symbol) { return; }
+        foreach (var problem in ResourceRoleMetadata.Validate(symbol))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[problem.Id],
+                problem.Subject.Locations.FirstOrDefault() ?? method.GetLocation(), problem.Subject.Name, problem.Reason));
+        }
+        if (HasAttribute(symbol, "StepNameAttribute") || symbol.Parameters.Any(parameter => AttributeReader.ResourceKeyType(parameter) is not null)
+            || symbol.Parameters.Any(parameter => AttributeReader.ParameterRole(parameter) is not null)
+            || AttributeReader.ReturnRole(symbol) is not null)
         {
             AnalyzeStepName(context, symbol);
             AnalyzeStepResources(context, symbol);
@@ -528,7 +538,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
 
         foreach (var parameter in method.Parameters)
         {
-            if (AttributeReader.ParameterRole(parameter) != "Edit")
+            if (AttributeReader.ParameterRole(parameter) is not ("Create" or "Load" or "Edit"))
             {
                 continue;
             }
@@ -546,11 +556,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
             && AttributeReader.ReturnRole(method) is not null;
         if (hasReturnRole)
         {
-            var (refs, cons) = AttributeReader.ProducerLineage(method.GetReturnTypeAttributes());
-            if (refs.IsEmpty && cons.IsEmpty)
-            {
-                (refs, cons) = AttributeReader.ProducerLineage(method.GetAttributes());
-            }
+            var (refs, cons) = AttributeReader.ReturnLineage(method);
 
             if (!refs.IsEmpty || !cons.IsEmpty)
             {
