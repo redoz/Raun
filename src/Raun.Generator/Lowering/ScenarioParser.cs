@@ -30,6 +30,7 @@ internal sealed class ScenarioParser
     private readonly SemanticModel _model;
     private readonly IMethodSymbol _method;
     private readonly MethodDeclarationSyntax _syntax;
+    private readonly BoundScenarioCase? _case;
 
     // Step-output local -> the step(s) that produced it. Keyed by symbol, never by name: an argument
     // is lowered by binding its identifiers, so a lambda parameter or a sibling scope's local that
@@ -77,11 +78,12 @@ internal sealed class ScenarioParser
 
     private readonly List<ParsedStep> _steps = [];
 
-    private ScenarioParser(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax)
+    private ScenarioParser(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax, BoundScenarioCase? caseBinding)
     {
         _model = model;
         _method = method;
         _syntax = syntax;
+        _case = caseBinding;
     }
 
     /// <summary>What a step-output local holds. Three distinct shapes, so nothing can read a step
@@ -154,8 +156,8 @@ internal sealed class ScenarioParser
     }
 
     /// <summary>Lowers one scenario, or reports why it cannot be.</summary>
-    public static ParseOutcome Lower(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax)
-        => new ScenarioParser(model, method, syntax).Run();
+    public static ParseOutcome Lower(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax, BoundScenarioCase? caseBinding = null)
+        => new ScenarioParser(model, method, syntax, caseBinding).Run();
 
     private ParseOutcome Run()
     {
@@ -181,7 +183,7 @@ internal sealed class ScenarioParser
         }
 
         var methodFullName = MethodFullName;
-        _scenarioId = GenStableId.ForScenario(methodFullName);
+        _scenarioId = GenStableId.ForScenario(_case is null ? methodFullName : methodFullName + "|case|" + _case.Key);
 
         _world = SymbolHelpers.WorldOfScenarios(_method.ContainingType);
         if (_world is null)
@@ -255,13 +257,14 @@ internal sealed class ScenarioParser
         return new ParsedScenario
         {
             MethodFullName = methodFullName,
+            RegistrationKey = _case is null ? null : methodFullName + "/case/" + _case.SourceOrdinal.ToString("D10", System.Globalization.CultureInfo.InvariantCulture) + "/" + _case.Key,
             Namespace = _method.ContainingNamespace is { IsGlobalNamespace: false } declaringNamespace
                 ? declaringNamespace.ToDisplayString(SymbolHelpers.NoGlobal)
                 : "",
             TypeName = DeclaringTypeName(_method.ContainingType),
-            SafeName = SafeName(methodFullName),
+            SafeName = SafeName(methodFullName) + (_case is null ? "" : "_case_" + _scenarioId),
             ScenarioId = _scenarioId,
-            DisplayName = AttributeReader.ScenarioDisplayName(_method) ?? _method.Name,
+            DisplayName = (AttributeReader.ScenarioDisplayName(_method) ?? _method.Name) + (_case is null ? "" : " [" + _case.Key + "]"),
             ClassDisplayName = AttributeReader.ClassDisplayName(_method.ContainingType),
             TimeoutMs = AttributeReader.ScenarioTimeout(_method),
             TeardownPolicy = AttributeReader.TeardownPolicy(_method),
@@ -1559,6 +1562,7 @@ internal sealed class ScenarioParser
             => source is FailedOutput ? IdentifierName(local.Name) : Spell(source),
         IParameterSymbol parameter when loop is { } element
             && SymbolEqualityComparer.Default.Equals(parameter, element.Variable) => Num(element.Value),
+        IParameterSymbol parameter when _case is not null && _case.Arguments.TryGetValue(parameter, out var value) => value,
         _ => null,
     };
 

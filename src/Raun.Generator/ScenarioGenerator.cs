@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -38,6 +39,7 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
                 "Raun.ScenarioAttribute",
                 predicate: static (node, _) => node is MethodDeclarationSyntax,
                 transform: static (ctx, _) => Transform(ctx))
+            .SelectMany(static (results, _) => results)
             .Where(static result => result is not null);
 
         // One output per scenario: an edit re-emits that scenario's file and leaves its neighbours
@@ -100,7 +102,7 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
         // or renamed.
         var registry = scenarios
             .Select(static (result, _) => result?.Scenario is { } s
-                ? new RegistryEntry(s.SafeName, s.MethodFullName)
+                ? new RegistryEntry(s.SafeName, s.MethodFullName, s.RegistrationKey)
                 : default)
             .Where(static entry => entry.SafeName is not null)
             .Collect();
@@ -168,23 +170,26 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
         return true;
     }
 
-    private static ScenarioResult? Transform(GeneratorAttributeSyntaxContext ctx)
+    private static ImmutableArray<ScenarioResult?> Transform(GeneratorAttributeSyntaxContext ctx)
     {
         if (ctx.TargetSymbol is not IMethodSymbol method || ctx.TargetNode is not MethodDeclarationSyntax syntax)
         {
-            return null;
+            return [];
         }
 
-        if (ScenarioCaseBinding.Bind(ctx.SemanticModel, method, syntax).Diagnostics.Count > 0)
+        var binding = ScenarioCaseBinding.Bind(ctx.SemanticModel, method, syntax);
+        if (binding.Diagnostics.Count > 0)
         {
-            return null;
+            return [];
         }
 
         var lineSpan = syntax.Identifier.GetLocation().GetLineSpan();
-        return GeneratorSafety.SafeParse(
-            () => ScenarioParser.Lower(ctx.SemanticModel, method, syntax),
-            lineSpan.Path,
-            lineSpan.StartLinePosition.Line + 1);
+        ScenarioResult Parse(BoundScenarioCase? row) => GeneratorSafety.SafeParse(
+            () => ScenarioParser.Lower(ctx.SemanticModel, method, syntax, row),
+            lineSpan.Path, lineSpan.StartLinePosition.Line + 1);
+        return binding.Cases.Count == 0
+            ? [Parse(null)]
+            : [.. binding.Cases.Select(row => (ScenarioResult?)Parse(row))];
     }
 
     /// <summary>A parser diagnostic's span as a location in its source tree, found by path (the

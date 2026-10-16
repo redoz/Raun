@@ -326,7 +326,7 @@ public class DiagnosticTests
     }
 
     [Fact]
-    public async Task RAUN007_argument_is_a_scenario_parameter()
+    public async Task RAUN027_parameter_requires_cases()
     {
         var diagnostics = await Analyze(
             """
@@ -339,14 +339,13 @@ public class DiagnosticTests
             }
             """);
 
-        AssertHas(diagnostics, "RAUN007");
+        AssertHas(diagnostics, "RAUN027");
     }
 
     [Fact]
-    public async Task RAUN007_unreachable_name_inside_a_compound_argument()
+    public async Task RAUN027_missing_cases_is_reported_before_compound_argument_lowering()
     {
-        // A bare identifier is flagged, but so must one buried in an expression — otherwise the
-        // generator emits code referencing a name the generated step cannot see.
+        // Missing rows own the diagnostic even when a parameter occurs inside an expression.
         var diagnostics = await Analyze(
             """
             public sealed class S : AppointmentSuite
@@ -358,7 +357,7 @@ public class DiagnosticTests
             }
             """);
 
-        AssertHas(diagnostics, "RAUN007");
+        AssertHas(diagnostics, "RAUN027");
     }
 
     [Fact]

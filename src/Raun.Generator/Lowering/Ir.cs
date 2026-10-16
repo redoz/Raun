@@ -166,12 +166,13 @@ internal sealed record ParseOutcome
 /// method and the method full name it registers under. Deliberately nothing else — the registry
 /// must not move when a step body is edited.
 /// </summary>
-internal readonly record struct RegistryEntry(string SafeName, string MethodFullName);
+internal readonly record struct RegistryEntry(string SafeName, string MethodFullName, string? RegistrationKey = null);
 
 /// <summary>A lowered scenario ready for emission.</summary>
 internal sealed record ParsedScenario
 {
     public string MethodFullName { get; init; } = "";
+    public string? RegistrationKey { get; init; }
     public string Namespace { get; init; } = "";       // declaring namespace, "" for global
     public string TypeName { get; init; } = "";        // declaring type, nested joined with '+'
     public string SafeName { get; init; } = "";        // identifier-safe form for generated members

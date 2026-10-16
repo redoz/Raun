@@ -142,17 +142,36 @@ internal static class ScenarioCaseBinding
             return LiteralExpression(SyntaxKind.NullLiteralExpression);
         }
 
-        // Roslyn spells primitives invariantly, including escapes and numeric suffixes.
-        var text = Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatPrimitive(value, quoteStrings: true, useHexadecimalNumbers: false) ?? throw new InvalidOperationException("Unsupported constant type.");
-        if (value is double d && (double.IsNaN(d) || double.IsInfinity(d)))
+        return value switch
         {
-            text = "double." + (double.IsNaN(d) ? "NaN" : d > 0 ? "PositiveInfinity" : "NegativeInfinity");
-        }
-        else if (value is float f && (float.IsNaN(f) || float.IsInfinity(f)))
-        {
-            text = "float." + (float.IsNaN(f) ? "NaN" : f > 0 ? "PositiveInfinity" : "NegativeInfinity");
-        }
-
-        return ParseExpression(text);
+            string v => LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(v)),
+            char v => LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal(v)),
+            bool v => LiteralExpression(v ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression),
+            sbyte v => Literals.Num(v),
+            byte v => Literals.Num(v),
+            short v => Literals.Num(v),
+            ushort v => Literals.Num(v),
+            int v => Literals.Num(v),
+            uint v => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(v)),
+            long.MinValue => Member("long", "MinValue"),
+            long v when v < 0 => PrefixUnaryExpression(SyntaxKind.UnaryMinusExpression, Constant(-v)),
+            long v => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(v)),
+            ulong v => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(v)),
+            float v when float.IsNaN(v) => Member("float", "NaN"),
+            float.PositiveInfinity => Member("float", "PositiveInfinity"),
+            float.NegativeInfinity => Member("float", "NegativeInfinity"),
+            float v when 1 / v < 0 => PrefixUnaryExpression(SyntaxKind.UnaryMinusExpression, Constant(-v)),
+            float v => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(v)),
+            double v when double.IsNaN(v) => Member("double", "NaN"),
+            double.PositiveInfinity => Member("double", "PositiveInfinity"),
+            double.NegativeInfinity => Member("double", "NegativeInfinity"),
+            double v when 1 / v < 0 => PrefixUnaryExpression(SyntaxKind.UnaryMinusExpression, Constant(-v)),
+            double v => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(v)),
+            _ => throw new InvalidOperationException("Unsupported constant type."),
+        };
     }
+
+    private static MemberAccessExpressionSyntax Member(string type, string name)
+        => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+            PredefinedType(Token(type == "long" ? SyntaxKind.LongKeyword : type == "float" ? SyntaxKind.FloatKeyword : SyntaxKind.DoubleKeyword)), IdentifierName(name));
 }

@@ -20,7 +20,7 @@ public static class ScenarioRegistry
     public static bool TryGet(string methodFullName, out Func<ScenarioDefinition>? factory)
         => Factories.TryGetValue(methodFullName, out factory);
 
-    /// <summary>The method names currently registered.</summary>
+    /// <summary>The registration keys (method names, or individual generated case keys) currently registered.</summary>
     public static IReadOnlyCollection<string> RegisteredMethods => [.. Factories.Keys];
 
     /// <summary>Lowers every registered scenario once, in registration-key order. The one registry
@@ -28,9 +28,9 @@ public static class ScenarioRegistry
     public static IReadOnlyList<ScenarioDefinition> Definitions()
     {
         var definitions = new List<ScenarioDefinition>(Factories.Count);
-        foreach (var factory in Factories.Values)
+        foreach (var entry in Factories.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
-            definitions.Add(factory());
+            definitions.Add(entry.Value());
         }
 
         return definitions;

@@ -19,6 +19,11 @@ public class GeneratorSnapshotTests
     private const string Directory = "Snapshots";
 
     [Fact]
+    public void Inline_cases() =>
+        VerifyDriver(GeneratorHarness.RunDriver(ScenarioCaseGenerationTests.Source(
+            "[ScenarioCase(\"reader\", \"Alice\")] [ScenarioCase(\"anonymous\", \"Bob\")]")));
+
+    [Fact]
     public void Linear_scenario() =>
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.Dsl + SampleSources.LinearScenario));
 

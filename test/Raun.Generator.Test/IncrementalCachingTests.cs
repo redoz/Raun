@@ -83,6 +83,25 @@ public class IncrementalCachingTests
         Assert.All(reasons, r => Assert.Equal(IncrementalStepRunReason.Cached, r));
     }
 
+    [Fact]
+    public void Case_comment_edits_cache_every_output()
+    {
+        var source = ScenarioCaseGenerationTests.Source("[ScenarioCase(\"a\", \"one\")] [ScenarioCase(\"b\", \"two\")]" );
+        var reasons = RunTwice(source, source + "\n// comment\n");
+        Assert.NotEmpty(reasons);
+        Assert.All(reasons, reason => Assert.Equal(IncrementalStepRunReason.Cached, reason));
+    }
+
+    [Fact]
+    public void Editing_one_case_value_keeps_other_case_and_registry_cached()
+    {
+        var source = ScenarioCaseGenerationTests.Source("[ScenarioCase(\"a\", \"one\")] [ScenarioCase(\"b\", \"two\")]" );
+        var (reasons, hints) = RunTwiceTracking(source, source.Replace("\"two\"", "\"changed\"", StringComparison.Ordinal));
+        Assert.Equal(2, hints.Count(h => h.StartsWith("RaunScenario.", StringComparison.Ordinal)));
+        Assert.Single(reasons, IncrementalStepRunReason.Modified);
+        Assert.True(reasons.Count(r => r == IncrementalStepRunReason.Cached) >= 3, string.Join(", ", reasons));
+    }
+
     private static string Dsl(string sampleName) => sampleName switch
     {
         nameof(SampleSources.ResourceScenario) => SampleSources.ResourceDsl,

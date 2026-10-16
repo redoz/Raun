@@ -155,7 +155,7 @@ internal static class ScenarioEmitter
                         IdentifierName("Register")))
                     .WithArgumentList(ArgumentList(SeparatedList<ArgumentSyntax>(new[]
                     {
-                        Argument(Lit(s.MethodFullName)),
+                        Argument(Lit(s.RegistrationKey ?? s.MethodFullName)),
                         Argument(IdentifierName($"Scenario_{s.SafeName}")),
                     })))));
 

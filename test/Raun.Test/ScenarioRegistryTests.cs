@@ -10,10 +10,10 @@ namespace Raun.Test;
 /// </summary>
 public class ScenarioRegistryTests
 {
-    private static ScenarioDefinition Empty(string method) => new()
+    private static ScenarioDefinition Empty(string method, string? displayName = null) => new()
     {
-        ScenarioId = "id",
-        DisplayName = method,
+        ScenarioId = displayName ?? method,
+        DisplayName = displayName ?? method,
         MethodName = method,
         Nodes = [],
     };
@@ -26,6 +26,16 @@ public class ScenarioRegistryTests
 
         Assert.True(ScenarioRegistry.TryGet(key, out var factory));
         Assert.Equal(key, factory!().MethodName);
+    }
+
+    [Fact]
+    public void Case_factories_enumerate_by_registration_key_even_when_inserted_in_reverse()
+    {
+        const string method = "Ns.Type.OrderedCases";
+        ScenarioRegistry.Register(method + "/case/0000000001/second", () => Empty(method, "second"));
+        ScenarioRegistry.Register(method + "/case/0000000000/first", () => Empty(method, "first"));
+
+        Assert.Equal(["first", "second"], ScenarioRegistry.Definitions().Where(d => d.MethodName == method).Select(d => d.DisplayName));
     }
 
     [Fact]
@@ -49,6 +59,7 @@ public class ScenarioRegistryTests
 
         Assert.Contains(a, names);
         Assert.Contains(b, names);
-        Assert.Equal(names.Count, names.Distinct().Count());
+        var ids = ScenarioRegistry.Definitions().Select(d => d.ScenarioId).ToList();
+        Assert.Equal(ids.Count, ids.Distinct().Count());
     }
 }
