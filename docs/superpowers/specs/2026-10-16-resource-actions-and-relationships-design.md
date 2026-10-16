@@ -39,8 +39,10 @@ Created, Loaded, Read, Edited, and Deleted remain convenient built-ins. They all
 ResourceAttribute and declare their semantics through the same definition metadata. A consumer can
 inherit one or define a custom action directly. Metadata must have exactly one definition across the
 hierarchy: a derived class cannot replace or repeat an inherited definition. The applied attribute
-has no writable Kind, Effect, or Access property. Producer action attributes retain References and
-Consumes arrays as relationship shorthand. Custom attributes derived from them inherit that syntax.
+has no writable Kind, Effect, or Access property. The common relationship model is a read-only Relationships collection. Each declaration contains
+its relation kind and target; placement supplies its source. References and Consumes are syntax
+adapters into this model, not the core relationship contract. Producer action attributes retain
+those arrays as shorthand, and derived custom attributes inherit that syntax.
 
 Access follows the kind: Create/Edit/Delete are exclusive; Load/Read are shared. The definition
 cannot choose a contradictory lock mode. Reference and Consume are not valid action kinds.
@@ -60,8 +62,8 @@ and weak-key caching that permits collectible assemblies to unload.
 ## Public relationship contract
 
 Introduce a two-value ResourceRelation enum: Reference and Consume. Introduce a sealed, repeatable
-RelatesToAttribute(ResourceRelation kind, string target), valid on parameters, return values, and
-methods. Both constructor arguments are required and read as metadata.
+RelatesToAttribute(ResourceRelation kind, string target), valid on action attribute classes,
+parameters, return values, and methods. Both constructor arguments are required and read as metadata.
 
 ```csharp
 [return: Created]
@@ -118,6 +120,39 @@ with the selected standalone relations, then validate the complete normalized se
 does not discard separate method-level RelatesTo declarations merely because it replaces the method
 action. Validate both sites and document these two selection rules with mixed-form examples.
 
+## Domain attributes own relationship declarations
+
+A domain attribute can declare its action and its relationships once. Use the same RelatesTo metadata
+on its class to supply relationship defaults; its application supplies the source resource:
+
+```csharp
+[ResourceActionDefinition(ResourceActionKind.Create)]
+[RelatesTo(ResourceRelation.Reference, "patient")]
+[RelatesTo(ResourceRelation.Consume, "slot")]
+public sealed class BookedAttribute : ResourceAttribute;
+
+[return: Booked]
+public Task<Appointment> Book(Patient patient, Slot slot);
+```
+
+These class declarations are metadata, not constructor code. The target strings name the decorated
+step's parameters, so validate their existence, resource support, and self/duplicate/conflicting
+relationships at each application. A class-level declaration requires a ResourceAttribute-derived
+owner and a supported producer action. A misleading class name never supplies missing semantics.
+
+Inherited class relationships accumulate with the effective action's class hierarchy, inline usage
+shorthand, and selected standalone declarations into one normalized Relationships collection. Defaults
+are mandatory parts of the domain attribute's contract; usage-site declarations can add relationships
+but cannot silently erase them. Duplicate or conflicting edges are diagnostics across all sources.
+Changing step parameter names requires updating the contract or choosing another domain attribute;
+an invalid application must not silently lose its declared relationship.
+
+Relationship extraction consumes the common declaration model rather than switching on concrete
+built-in action types or arbitrary custom property names. An internal framework hook may organize
+runtime implementation, but arbitrary virtual getters, constructors, and property initializers do
+not define semantics: the source generator cannot execute them. Runtime metadata discovery uses the
+same declarative information and normalized rules. Both paths remain constructor-free.
+
 ## Lowering, execution, and reports
 
 Lower actions and relationships into distinct validated records. An action has a resource subject,
@@ -168,7 +203,8 @@ Retain collectible load-context regression coverage and analyzer/runtime parity.
 
 Cover return/parameter/method relationship placement, required endpoints, canonical aliases,
 key-only targets, supported producer actions, independent action/relation override precedence,
-legacy array compatibility, mixed-form normalization, and duplicate/conflicting/self relations. Assert access and recording
+legacy array compatibility, domain-owned and inherited relationship defaults, mixed-form normalization,
+and duplicate/conflicting/self relations. Assert access and recording
 order, unchanged raw argument evaluation and graph dependencies, target conflict semantics, generated
 lineage, remembered names, and frozen evidence. Retain all guard/merge/node-count assertions when
 snapshot shapes or sample counts change.
