@@ -221,6 +221,11 @@ const renderFixture = (name, data) => {
       assert.deepEqual(stepIds, scenario.steps.map(step => step.stepId), 'Registration order is preserved');
       if (!hasResources(scenario)) assert.equal(await card.locator('.resource-matrix,.matrix-tools').count(), 0, 'Scenarios without resources retain their normal list');
     }
+    const expandedGaps=await page.locator('.card:not(.collapsed)+.card:not(.collapsed)').evaluateAll(async cards=>{
+      await Promise.all(cards.flatMap(card=>[card,card.previousElementSibling]).map(card=>card.scenarioAnimation?.finished.catch(()=>{})));
+      return cards.map(card=>card.getBoundingClientRect().top-card.previousElementSibling.getBoundingClientRect().bottom);
+    });
+    assert.ok(expandedGaps.length>0 && expandedGaps.every(gap=>gap>=8),'Adjacent expanded scenarios have space between their background boxes');
     for(const theme of ['light','dark']){
       await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
       for(const [index,scenario] of model.scenarios.entries()){
