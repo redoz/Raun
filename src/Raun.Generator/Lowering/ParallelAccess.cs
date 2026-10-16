@@ -83,33 +83,7 @@ internal readonly record struct ParallelAccess(
     private static Dictionary<string, string> LineageVerbs(IMethodSymbol method)
     {
         var verbs = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        var returnLineage = AttributeReader.ReturnLineage(method);
-
-        AddLineage(verbs, returnLineage);
-        foreach (var parameter in method.Parameters)
-        {
-            if (AttributeReader.ParameterRole(parameter) is "Create" or "Load" or "Edit")
-            {
-                AddLineage(verbs, AttributeReader.ProducerLineage(parameter.GetAttributes()));
-            }
-        }
-
+        foreach (var relation in RelationshipReader.Read(method).Relationships) { verbs[relation.Target] = relation.Kind; }
         return verbs;
-
-        static void AddLineage(
-            Dictionary<string, string> verbs,
-            (ImmutableArray<string> References, ImmutableArray<string> Consumes) lineage)
-        {
-            foreach (var target in lineage.References)
-            {
-                verbs[target] = "Reference";
-            }
-
-            foreach (var target in lineage.Consumes)
-            {
-                verbs[target] = "Consume";
-            }
-        }
     }
 }

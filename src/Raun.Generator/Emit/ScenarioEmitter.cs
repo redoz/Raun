@@ -528,6 +528,31 @@ internal static class ScenarioEmitter
     /// </summary>
     private static ExpressionStatementSyntax ResourceCallStatement(ResourceRoleClaim claim, bool synchronous = false)
     {
+        if (claim.SubjectExpressions.Count > 0)
+        {
+            var relationArguments = new List<ArgumentSyntax>
+            {
+                Argument(Names.Global("Raun", "ResourceRelation", claim.Verb)),
+                Argument(claim.SubjectExpressions[0]), Argument(claim.Expression),
+            };
+            if (claim.RelationshipAttributeIdentity is { } attributeIdentity && claim.RelationshipPropertyName is { } propertyName)
+            {
+                var descriptor = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                    Names.Global("Raun", "ResourceAction"), IdentifierName("FromGenerated")))
+                    .WithArgumentList(ArgumentList(SeparatedList(new[] { Argument(TypeOfExpression(Names.Global("Raun", "Generated", "RaunGenerated"))), Argument(Lit(attributeIdentity)) })));
+                var property = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, descriptor, IdentifierName("GetRelationship")))
+                    .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(Lit(propertyName)))));
+                relationArguments.Add(Argument(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, property, IdentifierName("ResourceType"))));
+            }
+            var relationCall = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("__ctx"), IdentifierName("Resources")), IdentifierName("Relate")))
+                .WithArgumentList(ArgumentList(SeparatedList(relationArguments)));
+            ExpressionSyntax relationOperation = synchronous
+                ? InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                    InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, relationCall, IdentifierName("GetAwaiter"))), IdentifierName("GetResult")))
+                : AwaitExpression(relationCall);
+            return ExpressionStatement(relationOperation).WithLeadingTrivia(HiddenTrivia());
+        }
         var arguments = new List<ArgumentSyntax>();
         if (claim.Action is { } action)
         {

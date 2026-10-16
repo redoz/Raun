@@ -33,3 +33,6 @@ RAUN026 | Raun.Usage | Error | Resource alternate has conflicting owners
 RAUN027 | Raun.Usage | Error | Invalid custom resource action metadata
 RAUN028 | Raun.Usage | Error | Competing resource role attributes
 RAUN029 | Raun.Usage | Error | Resource return role requires a result
+RAUN030 | Raun.Usage | Error | Invalid resource action definition
+RAUN031 | Raun.Usage | Error | Invalid relationship property
+RAUN032 | Raun.Usage | Error | Invalid resource relationship

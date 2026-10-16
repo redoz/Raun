@@ -17,9 +17,13 @@ public sealed class ResourceRepresentationIntegrationTests
         await context.Read(new Patient("42"));
         await context.Load<Row>((ResourceKey)"42");
         await context.Edit(symbolic);
-        await context.Reference(symbolic, new Patient("42"), symbolic);
+        await context.Reference(symbolic, new Patient("43"), new ResourceIdentity(typeof(Row), "43"));
         Assert.Equal(new ResourceIdentity(typeof(Patient), "42"), Assert.Single(context.Effects).Identity);
-        Assert.All(context.Lineage, relation => Assert.Equal(relation.Subject, relation.Target));
+        var relation = Assert.Single(context.Lineage);
+        Assert.Equal(new ResourceIdentity(typeof(Patient), "43"), relation.Subject);
+        Assert.Equal(new ResourceIdentity(typeof(Patient), "42"), relation.Target);
+        await Assert.ThrowsAsync<ArgumentException>(() => context.Reference(symbolic, new Patient("42")).AsTask());
+        Assert.Single(context.Lineage);
         var title = new StepMessageBuilder(new MessageFormattingContext(resolver)).AppendFormatted(symbolic).Build();
         Assert.Equal(Assert.Single(context.Effects).Identity, Assert.Single(title.Parts).Resource);
     }

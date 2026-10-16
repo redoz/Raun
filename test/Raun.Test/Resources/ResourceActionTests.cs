@@ -87,6 +87,9 @@ public sealed class ResourceActionTests
         var scope = assembly.GetType(typeof(ResourceActionTests).FullName!)!;
         var action = ResourceAction.FromGenerated(scope, typeof(ApprovedAttribute).AssemblyQualifiedName!);
         Assert.Equal(assembly, action.AttributeType!.Assembly);
+        var schemaType = assembly.GetType(typeof(ResourceDefinitionTests).FullName + "+BookedAttribute")!;
+        var schema = ResourceAction.For(schemaType);
+        Assert.Equal(assembly, schema.GetRelationship("Patient").ResourceType!.Assembly);
         var reference = new WeakReference(context);
         context.Unload();
         return reference;

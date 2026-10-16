@@ -18,36 +18,6 @@ internal static class AttributeReader
     /// attribute — its <c>References</c>/<c>Consumes</c> named properties. Each target is a parameter
     /// name (via <c>nameof</c>) or <see cref="ReturnSubject"/>. Empty arrays when absent.
     /// </summary>
-    public static (ImmutableArray<string> References, ImmutableArray<string> Consumes) ProducerLineage(
-        ImmutableArray<AttributeData> attributes)
-    {
-        foreach (var attr in attributes)
-        {
-            if (ResourceRoleMetadata.BaseVerb(attr.AttributeClass) is "Create" or "Load" or "Edit")
-            {
-                return (NamedStringArray(attr, "References"), NamedStringArray(attr, "Consumes"));
-            }
-        }
-
-        return (ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
-    }
-
-    private static ImmutableArray<string> NamedStringArray(AttributeData attr, string name)
-    {
-        foreach (var named in attr.NamedArguments)
-        {
-            if (named.Key == name && named.Value.Kind == TypedConstantKind.Array)
-            {
-                return named.Value.Values
-                    .Select(v => v.Value as string)
-                    .Where(s => s is not null)
-                    .ToImmutableArray()!;
-            }
-        }
-
-        return ImmutableArray<string>.Empty;
-    }
-
     public static string? ScenarioDisplayName(IMethodSymbol method)
     {
         var attr = method.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "ScenarioAttribute");
@@ -137,13 +107,8 @@ internal static class AttributeReader
     public static AttributeData? ReturnAttribute(IMethodSymbol method)
         => RoleAttribute(method.GetReturnTypeAttributes()) ?? RoleAttribute(method.GetAttributes());
 
-    private static AttributeData? RoleAttribute(ImmutableArray<AttributeData> attributes)
-        => attributes.FirstOrDefault(a => ResourceRoleMetadata.BaseVerb(a.AttributeClass) is not null);
-
-    public static (ImmutableArray<string> References, ImmutableArray<string> Consumes) ReturnLineage(IMethodSymbol method)
-        => ReturnAttribute(method) is { } attribute
-            ? ProducerLineage(ImmutableArray.Create(attribute))
-            : (ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
+    internal static AttributeData? RoleAttribute(ImmutableArray<AttributeData> attributes)
+        => attributes.FirstOrDefault(a => ResourceDefinitionReader.IsAction(a.AttributeClass));
 
     /// <summary>Numeric value of <c>Raun.LockMode.Exclusive</c>. MUST stay identical to the runtime enum (separate assembly).</summary>
     private const int LockModeExclusive = 1;

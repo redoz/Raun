@@ -99,8 +99,8 @@ public class ResourceLoweringTests
         // [return: Created(References = [nameof(user)], Consumes = [nameof(slot)])] emits each lineage call
         // with the created Appointment (__r) riding along as the subject.
         // Note: the target expression is __inputs.Get<T>(n) which contains parens, so .* is used instead of [^)]*.
-        Assert.Matches(@"Resources\.Reference\(.*,\s*__r\)", result.GeneratedSource);
-        Assert.Matches(@"Resources\.Consume\(.*,\s*__r\)", result.GeneratedSource);
+        Assert.Matches(@"Resources\.Relate\(global::Raun.ResourceRelation.Reference,\s*__r,", result.GeneratedSource);
+        Assert.Matches(@"Resources\.Relate\(global::Raun.ResourceRelation.Consume,\s*__r,", result.GeneratedSource);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public class ResourceLoweringTests
         var source = result.GeneratedSource;
 
         var call = source.IndexOf("Steps<global::ResourceDemo.ResourceWhen>().BookWithLineage(", StringComparison.Ordinal);
-        var reference = source.IndexOf("__ctx.Resources.Reference(", StringComparison.Ordinal);
+        var reference = source.IndexOf("__ctx.Resources.Relate(global::Raun.ResourceRelation.Reference,", StringComparison.Ordinal);
 
         Assert.True(call >= 0 && reference >= 0, "expected the call and the lineage claim in the generated source");
         Assert.True(call < reference, "a lineage claim with the return as subject must follow the call");

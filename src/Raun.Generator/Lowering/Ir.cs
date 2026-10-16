@@ -32,6 +32,8 @@ internal readonly record struct ResourceRoleClaim
 
     public string Verb { get; init; }
     public ResourceRoleMetadata? Action { get; init; }
+    public string? RelationshipAttributeIdentity { get; init; }
+    public string? RelationshipPropertyName { get; init; }
 
     public ExpressionSyntax Expression
     {

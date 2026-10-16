@@ -122,8 +122,7 @@ public sealed class ResourceContext
     /// <summary>Records a durable reference to a resource by identity, plus lineage from each subject.</summary>
     public ValueTask Reference(ResourceIdentity target, params object[] subjects)
     {
-        RecordLineage(LifecycleVerb.Reference, target, subjects);
-        return Record(LifecycleVerb.Reference, target, data: null);
+        return RecordRelated(LifecycleVerb.Reference, target, null, null, subjects);
     }
 
     /// <summary>Records the produced resource keeping a durable reference to <paramref name="resource"/> (shared),
@@ -132,15 +131,13 @@ public sealed class ResourceContext
         where T : notnull
     {
         var target = _resolver.Resolve(resource);
-        RecordLineage(LifecycleVerb.Reference, target, subjects);
-        return Record(LifecycleVerb.Reference, target, resource, typeof(T));
+        return RecordRelated(LifecycleVerb.Reference, target, resource, typeof(T), subjects);
     }
 
     /// <summary>Records consuming a resource by identity, plus lineage from each subject.</summary>
     public ValueTask Consume(ResourceIdentity target, params object[] subjects)
     {
-        RecordLineage(LifecycleVerb.Consume, target, subjects);
-        return Record(LifecycleVerb.Consume, target, data: null);
+        return RecordRelated(LifecycleVerb.Consume, target, null, null, subjects);
     }
 
     /// <summary>Records consuming/using-up <paramref name="resource"/> into the produced resource (shared),
@@ -149,8 +146,7 @@ public sealed class ResourceContext
         where T : notnull
     {
         var target = _resolver.Resolve(resource);
-        RecordLineage(LifecycleVerb.Consume, target, subjects);
-        return Record(LifecycleVerb.Consume, target, resource, typeof(T));
+        return RecordRelated(LifecycleVerb.Consume, target, resource, typeof(T), subjects);
     }
 
     /// <summary>Records a mutation of an existing resource by identity (exclusive, without an instance).</summary>
@@ -171,22 +167,44 @@ public sealed class ResourceContext
         where T : notnull
         => Record(LifecycleVerb.Delete, _resolver.Resolve(resource), resource, typeof(T));
 
-    void RecordLineage(LifecycleVerb kind, ResourceIdentity target, object[] subjects)
+    /// <summary>Record a relationship after validating its canonical endpoints.</summary>
+    /// <remarks>The expected type identifies a canonical group, including all mapped representations. Key-only targets have no data snapshot.</remarks>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public ValueTask Relate<TSource, TTarget>(ResourceRelation relation, TSource source, TTarget target, Type? expectedResourceType = null)
+        where TSource : notnull where TTarget : notnull
+    {
+        if (!Enum.IsDefined(relation)) { throw new ArgumentOutOfRangeException(nameof(relation)); }
+        var sourceIdentity = _resolver.Resolve(source);
+        var targetIdentity = _resolver.Resolve(target);
+        if (sourceIdentity == targetIdentity) { throw new ArgumentException("A resource relationship cannot target its own canonical identity.", nameof(target)); }
+        if (expectedResourceType is not null
+            && _resolver.Normalize(new ResourceIdentity(expectedResourceType, targetIdentity.Key)).Kind != targetIdentity.Kind)
+        { throw new ArgumentException("The relationship target does not belong to the expected canonical resource group.", nameof(target)); }
+        var verb = relation == ResourceRelation.Reference ? LifecycleVerb.Reference : LifecycleVerb.Consume;
+        return RecordRelated(verb, targetIdentity, target is ResourceIdentity ? null : target, typeof(TTarget), [sourceIdentity]);
+    }
+
+    private ValueTask RecordRelated(LifecycleVerb kind, ResourceIdentity target, object? data, Type? sourceType, object[] subjects)
     {
         target = _resolver.Normalize(target);
-        if (subjects is null || subjects.Length == 0)
-        {
-            return;
-        }
-
+        var identities = (subjects ?? []).Select(subject => subject is ResourceIdentity identity
+            ? _resolver.Normalize(identity) : _resolver.Resolve(subject.GetType(), subject)).Distinct().ToArray();
         lock (_lock)
         {
-            foreach (var subject in subjects)
+            foreach (var source in identities)
             {
-                var subjectIdentity = subject is ResourceIdentity identity
-                    ? _resolver.Normalize(identity) : _resolver.Resolve(subject.GetType(), subject);
-                _lineage.Add(new ResourceLineageRelation { Subject = subjectIdentity, Target = target, Kind = kind });
+                if (source == target) { throw new ArgumentException("A relationship cannot target its own canonical identity.", nameof(subjects)); }
+                if (_lineage.Exists(edge => edge.Subject == source && edge.Target == target && edge.Kind != kind))
+                { throw new ArgumentException("Conflicting relationship kinds name the same canonical endpoints.", nameof(subjects)); }
             }
+            // Record claims first: a refused shared target claim must not leave accepted lineage.
+            var result = Record(kind, target, data, sourceType);
+            foreach (var source in identities)
+            {
+                if (!_lineage.Exists(edge => edge.Subject == source && edge.Target == target && edge.Kind == kind))
+                { _lineage.Add(new ResourceLineageRelation { Subject = source, Target = target, Kind = kind }); }
+            }
+            return result;
         }
     }
 

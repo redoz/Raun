@@ -225,11 +225,21 @@ internal static class Descriptors
         "RAUN029", "Resource return role requires a result", "Invalid return role on '{0}': {1}",
         Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor InvalidResourceDefinition = new(
+        "RAUN030", "Invalid resource action definition", "Invalid resource metadata on '{0}': {1}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+    public static readonly DiagnosticDescriptor InvalidRelationshipProperty = new(
+        "RAUN031", "Invalid relationship property", "Invalid resource metadata on '{0}': {1}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+    public static readonly DiagnosticDescriptor InvalidResourceRelationship = new(
+        "RAUN032", "Invalid resource relationship", "Invalid resource metadata on '{0}': {1}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
-        InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
+        InvalidResourceDefinition, InvalidRelationshipProperty, InvalidResourceRelationship, InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
         UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle, InvalidResourceKeyParameter,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,

@@ -25,6 +25,9 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
 {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
     [
+        Descriptors.InvalidResourceDefinition,
+        Descriptors.InvalidRelationshipProperty,
+        Descriptors.InvalidResourceRelationship,
         Descriptors.InvalidResourceAction,
         Descriptors.AmbiguousResourceRole,
         Descriptors.ResourceRoleWithoutResult,
@@ -71,6 +74,11 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     {
         try
         {
+            foreach (var issue in ResourceDefinitionReader.Validate((INamedTypeSymbol)context.Symbol))
+            {
+                if (issue.Subject.Locations.FirstOrDefault() is { IsInSource: true } location)
+                { context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[issue.Id], location, issue.Subject.Name, issue.Reason)); }
+            }
             AnalyzeContendedResource(context, (INamedTypeSymbol)context.Symbol);
             AnalyzeStepClassState(context, (INamedTypeSymbol)context.Symbol);
         }
@@ -435,6 +443,11 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
             context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[problem.Id],
                 problem.Subject.Locations.FirstOrDefault() ?? method.GetLocation(), problem.Subject.Name, problem.Reason));
         }
+        foreach (var issue in RelationshipReader.Read(symbol).Issues)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[issue.Id], issue.Subject.Locations.FirstOrDefault(),
+                issue.Id == "RAUN010" ? issue.Reason : issue.Subject.Name, issue.Id == "RAUN010" ? symbol.Name : issue.Reason));
+        }
         if (HasAttribute(symbol, "StepNameAttribute") || symbol.Parameters.Any(parameter => AttributeReader.ResourceKeyType(parameter) is not null)
             || symbol.Parameters.Any(parameter => AttributeReader.ParameterRole(parameter) is not null)
             || AttributeReader.ReturnRole(symbol) is not null)
@@ -531,45 +544,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     {
         var paramNames = method.Parameters.Select(p => p.Name).ToImmutableHashSet();
 
-        // Producing subjects and the targets they name via [Created]/[Loaded]/[Edited]'s
-        // References/Consumes. A producer is keyed by its own "self" name — a parameter name, or the
-        // return sentinel — so it cannot name itself as a lineage target.
-        var producers = new List<(string Self, ImmutableArray<string> Targets, Location Location)>();
-
-        foreach (var parameter in method.Parameters)
-        {
-            if (AttributeReader.ParameterRole(parameter) is not ("Create" or "Load" or "Edit"))
-            {
-                continue;
-            }
-
-            var (refs, cons) = AttributeReader.ProducerLineage(parameter.GetAttributes());
-            if (!refs.IsEmpty || !cons.IsEmpty)
-            {
-                var loc = parameter.Locations.FirstOrDefault() ?? method.Locations.FirstOrDefault() ?? Location.None;
-                producers.Add((parameter.Name, refs.AddRange(cons), loc));
-            }
-        }
-
-        var hasReturnRole = SymbolHelpers.TryUnwrapReturn(method.ReturnType, out var returnType)
-            && returnType is not null
-            && AttributeReader.ReturnRole(method) is not null;
-        if (hasReturnRole)
-        {
-            var (refs, cons) = AttributeReader.ReturnLineage(method);
-
-            if (!refs.IsEmpty || !cons.IsEmpty)
-            {
-                producers.Add((AttributeReader.ReturnSubject, refs.AddRange(cons), method.Locations.FirstOrDefault() ?? Location.None));
-            }
-        }
-
-        // A bare parameter named as a lineage target is "covered" for RAUN009: being named confers the
-        // Reference/Consume role (and its shared effect), so it needs no attribute of its own.
-        var coveredByLineage = producers
-            .SelectMany(p => p.Targets)
-            .Where(name => name != AttributeReader.ReturnSubject && paramNames.Contains(name))
-            .ToImmutableHashSet();
+        var coveredByLineage = RelationshipReader.Read(method).Relationships.Select(r => r.Target).ToImmutableHashSet();
 
         foreach (var parameter in method.Parameters)
         {
@@ -600,22 +575,6 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
                 Descriptors.MissingResourceRole, location, "return", method.Name));
         }
 
-        // RAUN010: each lineage target must name a parameter, or the return when the step yields a
-        // subject (Subject.Return); a producer may not name itself.
-        foreach (var producer in producers)
-        {
-            foreach (var target in producer.Targets)
-            {
-                var valid = target == AttributeReader.ReturnSubject
-                    ? hasReturnRole && producer.Self != AttributeReader.ReturnSubject
-                    : paramNames.Contains(target) && target != producer.Self;
-                if (!valid)
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        Descriptors.InvalidLineageSubject, producer.Location, target, method.Name));
-                }
-            }
-        }
     }
 
     /// <summary>
