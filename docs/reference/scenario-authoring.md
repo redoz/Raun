@@ -1,6 +1,6 @@
 # Writing scenarios
 
-[Start here](../../README.md) · [Sample walkthrough](../../samples/AppointmentTests/README.md) · [Resources](resources.md) · [Running tests](running-tests.md)
+[Start here](../../README.md) · [Sample walkthrough](../../samples/AppointmentTests/README.md) · [Resources](resources.md) · [Running tests](running-tests.md) · [Execution model](../explanation/execution-model.md)
 
 ## Scenarios and steps
 

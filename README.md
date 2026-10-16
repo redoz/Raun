@@ -9,6 +9,16 @@ steps that depend on it are skipped; independent branches can continue.
 - A **world** holds the infrastructure and state shared by one scenario's steps.
 - A **resource** is something steps create, read, change, or delete, identified by a stable key.
 
+```mermaid
+flowchart LR
+    Scenario -->|contains| Step
+    Scenario -->|may own| World
+    Step -->|may use| World
+    Step -->|acts on| Resource
+```
+
+See [how scenarios run](docs/explanation/execution-model.md) for the execution model.
+
 ## Start with a scenario
 
 Write one scenario for one behavior, such as booking an appointment or rejecting an unauthorized request.

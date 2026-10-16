@@ -1,5 +1,8 @@
 # xUnit v3 Scenario Graph Extension Design
 
+> Historical design for the original xUnit integration. Raun now uses Microsoft.Testing.Platform.
+> See [how scenarios run](explanation/execution-model.md) for the current execution model.
+
 ## Goal
 
 Design an xUnit v3 extension for integration-style scenario tests where business steps are reported as individual xUnit tests. Scenarios should support readable Given/When/Then source, sequential execution by default, explicit fork/join parallelism, typed state flowing between steps, and dependent steps skipped after failures.
