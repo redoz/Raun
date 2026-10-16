@@ -102,6 +102,18 @@ const renderFixture = (name, data) => {
     assert.equal(await registryLinks.count(),8,'All eight resource mentions in the real registry journey render as interactive references');
     const linkedNames=await registryLinks.allTextContents();
     assert.ok(linkedNames.includes('pat-42') && linkedNames.includes('slot 01'),'ID and slot text render as resource buttons too');
+    for(const colorScheme of ['light','dark']){
+      await page.emulateMedia({colorScheme});
+      const mentionColors=await registryLinks.evaluateAll(links=>links.map(link=>{
+        const column=Array.from(link.closest('.card').querySelectorAll('.matrix-resource')).find(header=>header.dataset.resourceColumn===link.dataset.messageResource);
+        const style=getComputedStyle(link);
+        return {text:style.color,underline:style.borderBottomColor,column:getComputedStyle(column).borderTopColor};
+      }));
+      assert.ok(mentionColors.every(color=>color.text===color.column && color.underline===color.column),'Title references reuse their own resource column color in '+colorScheme+' mode: '+JSON.stringify(mentionColors));
+      assert.equal(new Set(mentionColors.map(color=>color.text)).size,3,'Patient, slot and appointment keep distinct title colors');
+    }
+    await page.emulateMedia({colorScheme:'light'});
+
     const registrationId=registryLinks.filter({hasText:'pat-42'});
     await registrationId.click();
     assert.equal(await registryCard.locator('.dn .message-resource.hl').count(),5,'Clicking the registration ID highlights all five patient mentions across the journey');
