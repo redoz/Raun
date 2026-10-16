@@ -59,7 +59,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
     }
 
     [StepName("Given patient {name} exists")]
-    [return: Created]
+    [return: Registered]
     public Task<Patient> PatientExists(string name)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(320));
@@ -109,7 +109,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
 public sealed partial class AppointmentWhen : When<NoWorld>
 {
     [StepName("When creating an appointment")]
-    [return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
+    [return: Booked(Patient = nameof(patient), Slot = nameof(slot))]
     public Task<Appointment> CreateAppointment(Patient patient, Slot slot)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(600));
@@ -117,11 +117,11 @@ public sealed partial class AppointmentWhen : When<NoWorld>
     }
 
     [StepName("When creating an urgent appointment")]
-    [return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
-    public Task<Appointment> CreateUrgentAppointment(Patient patient, Slot slot)
+    [return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]
+    public Task<Appointment> CreateUrgentAppointment(Patient patient, Slot slot2)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(410));
-        return Task.FromResult(new Appointment(patient, slot));
+        return Task.FromResult(new Appointment(patient, slot2));
     }
 
     [StepName("When importing the users")]

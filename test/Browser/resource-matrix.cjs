@@ -11,6 +11,17 @@ const source = fs.readFileSync(path.join(root, 'src/Raun/Reporting/Html/report-t
 const sample = fs.readFileSync(process.argv[2], 'utf8');
 const payload = sample.match(/<script id="model" type="application\/json">([\s\S]*?)<\/script>/)[1];
 const model = JSON.parse(payload);
+const domainEffects=model.scenarios.flatMap(scenario=>scenario.steps.flatMap(step=>step.effects));
+for(const [action,verb] of [['Register','Create'],['Hold','Edit'],['Booked','Create'],['Rescheduled','Create'],['Cancel','Delete']]){
+  assert.ok(domainEffects.some(effect=>effect.actionName===action && effect.verb===verb),'The real sample demonstrates '+action+' with '+verb+' semantics');
+}
+for(const scenario of model.scenarios)for(const step of scenario.steps){
+  const booked=step.effects.find(effect=>effect.actionName==='Booked');
+  if(!booked)continue;
+  assert.ok(scenario.references.some(edge=>edge.subjectId===booked.resourceId && edge.kind==='Reference' && edge.targetType==='Patient'),'Booked retains the patient reference');
+  assert.ok(scenario.references.some(edge=>edge.subjectId===booked.resourceId && edge.kind==='Consume' && edge.targetType==='Slot'),'Booked consumes the chosen slot');
+}
+
 const actionSample=model.scenarios.find(scenario=>scenario.displayName==='resource actions reuse patient names');
 assert.ok(actionSample,'The canonical sample includes resource actions');
 const audit=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Audited'));

@@ -52,8 +52,8 @@ public sealed partial class AppointmentWhen : When<NoWorld>
     // A hold is a lease on real capacity. Leaking one blocks real bookings, so releasing it is
     // Cleanup.Required: it runs whatever the scenario's [Teardown(Run.…)] policy says.
     [StepName("When the slot is put on hold")]
-    [return: Edited]
-    public Task<Slot> HoldSlot([Edited] Slot slot)
+    [return: Held]
+    public Task<Slot> HoldSlot([Held] Slot slot)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(140));
         Context.OnTeardown(Cleanup.Required, teardown =>
@@ -68,7 +68,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
     // Rescheduling removes the old booking and creates a new one in the target slot. The old
     // appointment is [Deleted]; the new one consumes the slot it moves into.
     [StepName("When rescheduling the appointment")]
-    [return: Created(Consumes = [nameof(slot)])]
+    [return: Rescheduled(Slot = nameof(slot))]
     public Task<Appointment> Reschedule([Deleted] Appointment appointment, Slot slot)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(480));
@@ -79,7 +79,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
     // Context.Log writes to — so production-style logging (here a LoggerMessage delegate) needs no
     // test-specific sink.
     [StepName("When cancelling the appointment")]
-    public Task CancelAppointment([Deleted] Appointment appointment)
+    public Task CancelAppointment([Cancelled] Appointment appointment)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(260));
         var logger = Context.GetLogger("Clinic.Bookings");

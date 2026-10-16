@@ -379,6 +379,57 @@ Created, Loaded, and Edited also support inherited `References` and `Consumes` d
 Distinct custom attribute types retain separate report entries, even when their labels match.
 The step code performs the operation; the attribute records its effect.
 
+### Domain attributes and relationship bindings
+
+A domain attribute can describe its effect and the roles its resources play:
+
+```csharp
+[ResourceActionDefinition(ResourceActionKind.Create)]
+public sealed class BookedAttribute : ResourceAttribute
+{
+    [Relationship<Patient>(ResourceRelation.Reference)]
+    public string Patient { get; set; } = "";
+
+    [Relationship<Slot>(ResourceRelation.Consume)]
+    public string Slot { get; set; } = "";
+}
+
+[return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]
+public Task<Appointment> Book(Patient patient, Slot slot2) { ... }
+```
+
+The property names belong to the domain attribute. Their supplied values name this step's parameters;
+`Slot` can bind `slot`, `slot2`, or another parameter name. Raun reads this metadata without running
+attribute code. Property initializers and constructor assignments do not supply missing bindings.
+
+`Relationship<Patient>` expects the **canonical Patient identity**, so mapped EF rows, DTOs, domain
+objects, and `[ResourceKey<T>]` parameters in that group also work. CLR inheritance is unnecessary.
+Canonical group checks that depend on host mappings run before that relationship is recorded.
+
+Marked properties accept a string or string array and require an explicit nonempty binding by default.
+Use `Required = false` for optional properties; supplied null or blank targets remain errors.
+The non-generic `[Relationship(ResourceRelation.Reference)]` permits targets of any resource kind.
+Every action exposes its immutable `Relationships` property schema; bindings are resolved per usage.
+
+Existing `[Created(References = [...], Consumes = [...])]` syntax remains supported. Those optional
+array properties use the same metadata and validation. Separate declarations also work:
+
+```csharp
+[return: Created]
+[return: RelatesTo(ResourceRelation.Reference, nameof(patient))]
+[return: RelatesTo(ResourceRelation.Consume, nameof(slot2))]
+public Task<Appointment> Book(Patient patient, Slot slot2) { ... }
+```
+
+A relationship source needs Create, Load, or Edit. Both relationship kinds use shared target access;
+Consume does not delete its target. Duplicate, conflicting, missing, or self-targeting declarations
+are errors. A return action replaces a method action and all its property bindings. Explicit return
+`RelatesTo` declarations replace the method's standalone set; otherwise that set still applies.
+
+The appointment sample uses `Registered`, `Held`, `Booked`, `Rescheduled`, and `Cancelled` in its real
+steps. Both regular and urgent booking use `Booked`, including the `slot2` binding above. Imperative
+`Apply` records an action; explicit `Reference`/`Consume` calls describe imperative relationships.
+
 ### Names across steps
 
 A label from `Label<T>`, an alternate representation's `LabelFor`, or `IResource<T>.LabelFor`
