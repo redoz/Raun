@@ -59,6 +59,46 @@ public sealed class ResourceActionTests
         finally { context.Unload(); }
     }
 
+    [Fact]
+    public void Default_action_names_must_contain_text()
+    {
+        Assert.Throws<ArgumentException>(() => ResourceAction.For<Attribute>());
+        Assert.Equal("Explicit", ResourceAction.For<Named.Attribute>().Name);
+    }
+
+    [Fact]
+    public void Cached_metadata_does_not_prevent_a_collectible_context_from_unloading()
+    {
+        var reference = LoadAndUnload();
+        for (var attempt = 0; attempt < 10 && reference.IsAlive; attempt++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+        Assert.False(reference.IsAlive);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static WeakReference LoadAndUnload()
+    {
+        var context = new AssemblyLoadContext("unload-actions", isCollectible: true);
+        var assembly = context.LoadFromAssemblyPath(typeof(ResourceActionTests).Assembly.Location);
+        var scope = assembly.GetType(typeof(ResourceActionTests).FullName!)!;
+        var action = ResourceAction.FromGenerated(scope, typeof(ApprovedAttribute).AssemblyQualifiedName!);
+        Assert.Equal(assembly, action.AttributeType!.Assembly);
+        var reference = new WeakReference(context);
+        context.Unload();
+        return reference;
+    }
+
+    private sealed class Attribute : EditedAttribute;
+    private static class Named
+    {
+        [DisplayName("Explicit")]
+        internal sealed class Attribute : EditedAttribute;
+    }
+
     [DisplayName("Approve")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Exercises indirect action inheritance.")]
     public class ApprovedAttribute : EditedAttribute;

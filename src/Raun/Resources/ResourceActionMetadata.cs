@@ -1,11 +1,11 @@
-using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.ComponentModel;
 
 namespace Raun;
 
 internal static class ResourceActionMetadata
 {
-    private static readonly ConcurrentDictionary<Type, ResourceAction> Actions = new();
+    private static readonly ConditionalWeakTable<Type, ResourceAction> Actions = new();
     private static readonly Dictionary<Type, LifecycleVerb> Bases = new Dictionary<Type, LifecycleVerb>
     {
         [typeof(CreatedAttribute)] = LifecycleVerb.Create,
@@ -15,7 +15,7 @@ internal static class ResourceActionMetadata
         [typeof(DeletedAttribute)] = LifecycleVerb.Delete,
     };
 
-    internal static ResourceAction Get(Type type) => Actions.GetOrAdd(type, Build);
+    internal static ResourceAction Get(Type type) => Actions.GetValue(type, Build);
 
     private static ResourceAction Build(Type type)
     {
@@ -29,7 +29,10 @@ internal static class ResourceActionMetadata
                 if (current == type) { return new(effect, effect.ToString(), attributeType: null); }
                 var simpleName = type.Name.Split('`')[0];
                 if (simpleName.EndsWith("Attribute", StringComparison.Ordinal)) { simpleName = simpleName[..^9]; }
-                return new(effect, displayName ?? simpleName, type);
+                var name = displayName ?? simpleName;
+                if (string.IsNullOrWhiteSpace(name))
+                { throw new ArgumentException("A resource action name must contain text. Set DisplayName on the attribute type.", nameof(type)); }
+                return new(effect, name, type);
             }
             if (displayName is not null) { continue; }
             var label = current.GetCustomAttributesData().FirstOrDefault(data => data.AttributeType == typeof(DisplayNameAttribute));

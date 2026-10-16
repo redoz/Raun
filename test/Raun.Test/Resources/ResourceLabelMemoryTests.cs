@@ -34,6 +34,19 @@ public class ResourceLabelMemoryTests
         Assert.Equal("New name", StepMessage.Create(formatting, $"{Key}").Text);
     }
 
+    [Fact]
+    public void A_failed_selector_keeps_the_last_good_name_without_changing_the_captured_data()
+    {
+        var resolver = new ResourceIdentityResolver();
+        var formatting = new MessageFormattingContext(resolver);
+        StepMessage.Create(formatting, $"{new Patient("42", "Jane")}");
+        resolver.Label<Patient>(_ => throw new InvalidOperationException("label failure"));
+        var changed = StepMessage.Create(formatting, $"{new Patient("42", "New data")}");
+        Assert.Equal("Jane", changed.Text);
+        Assert.Contains("New data", Assert.Single(changed.Parts).Snapshot, StringComparison.Ordinal);
+        Assert.Equal("Jane", StepMessage.Create(formatting, $"{Key}").Text);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -42,6 +55,8 @@ public class ResourceLabelMemoryTests
         var resolver = new ResourceIdentityResolver();
         var memory = new ResourceLabelMemory([Node(0), Node(1), Node(2, [0, 1])]);
         var a = memory.ForStep(0); var b = memory.ForStep(1); var join = memory.ForStep(2);
+        a.Resolve(resolver, Key, typeof(Patient), new Patient("42", "Initial A"));
+        Assert.Equal("Patient:42", b.Resolve(resolver, Key, null, null));
         void Observe(ResourceLabelScope scope, string name) => scope.Resolve(resolver, Key, typeof(Patient), new Patient("42", name));
         if (reverse) { Observe(b, "B"); Observe(a, "A"); }
         else { Observe(a, "A"); Observe(b, "B"); }

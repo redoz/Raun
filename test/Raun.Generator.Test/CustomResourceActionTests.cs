@@ -29,6 +29,16 @@ public sealed class CustomResourceActionTests
     }
 
     [Fact]
+    public async Task Empty_default_action_name_is_diagnosed()
+    {
+        var source = Source("Edited").Replace("[DisplayName(\"Domain action\")]", "", StringComparison.Ordinal)
+            .Replace("class CustomAttribute", "class Attribute", StringComparison.Ordinal)
+            .Replace("[Custom]", "[Attribute]", StringComparison.Ordinal)
+            .Replace("[return: Custom]", "[return: Read]", StringComparison.Ordinal);
+        Assert.Single(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), d => d.Id == "RAUN027");
+    }
+
+    [Fact]
     public async Task Private_generic_attributes_keep_their_type_and_default_name()
     {
         var source = Source("Edited").Replace("[Custom]", "[Local<string>]", StringComparison.Ordinal)
