@@ -49,12 +49,12 @@
 - RAUN031 InvalidScenarioCaseArgument: unsupported value or incompatible parameter conversion.
 - RAUN032 InvalidScenarioCaseSignature: generic/overloaded/optional/params/by-ref parameter forms in case-enabled methods.
 
-- [ ] Add failing attribute metadata and analyzer tests for accepted string/enum/status rows and every validation rule in the spec. Assert diagnostic ID, source span and expected/actual type where relevant.
-- [ ] Run the new tests and verify failure for missing API/binding behavior before production changes.
-- [ ] Implement attribute and semantic binding. Normalize bare null from source argument syntax; reject explicit array argument lists. Validate parameters even when the authored body never reads them.
-- [ ] Reuse Roslyn semantic conversion checks rather than maintaining a second numeric conversion table. Reject unsupported values with targeted diagnostics and no RAUN000/crashed-generator fallback.
-- [ ] Wire the analyzer and Unshipped table; verify valid parameters are distinguished from the old unbound-parameter RAUN007 path. Update the existing test to preserve its span and error coverage under the more specific diagnostic.
-- [ ] Build Release, run the new test classes using the built xUnit executable, and commit the tested metadata/validation slice.
+- [x] Add failing attribute metadata and analyzer tests for accepted string/enum/status rows and every validation rule in the spec. Assert diagnostic ID, source span and expected/actual type where relevant.
+- [x] Run the new tests and verify failure for missing API/binding behavior before production changes.
+- [x] Implement attribute and semantic binding. Normalize bare null from source argument syntax; reject explicit array argument lists. Validate parameters even when the authored body never reads them.
+- [x] Reuse Roslyn semantic conversion checks rather than maintaining a second numeric conversion table. Reject unsupported values with targeted diagnostics and no RAUN000/crashed-generator fallback.
+- [x] Wire the analyzer and Unshipped table; verify valid parameters are distinguished from the old unbound-parameter RAUN007 path. Update the existing test to preserve its span and error coverage under the more specific diagnostic.
+- [x] Build Release, run the new test classes using the built xUnit executable, and commit the tested metadata/validation slice.
 
 ## Task 2: Bind constants into independently generated scenarios
 
@@ -76,14 +76,14 @@
 - Add optional RegistrationKey to ParsedScenario and RegistryEntry; fall back to MethodFullName for legacy scenarios. Do not change the public ScenarioDefinition contract.
 - Keep GeneratorSafety.SafeParse's singleton behavior; flatten one safely lowered ScenarioResult per valid row in the incremental pipeline.
 
-- [ ] Add failing generation tests using GeneratorHarness.Run(source).Definitions(): assert two definitions with different constant inputs, unique builders/registry entries/IDs, original MethodInfo, and no generated warnings.
-- [ ] Add tests for null and escaped strings, enum/flags and numeric boundary values; execute their generated steps and inspect captured typed argument values.
-- [ ] Test use in a condition step, title placeholder and parallel child step. Test nested lambda shadowing to prove substitution is semantic rather than textual.
-- [ ] Add reordering, inserted-row and edited-value variants: compare IDs by explicit case key, compare step IDs, and assert emitted CreateAll case order follows authored rows. Preserve every existing guard/merge assertion and legacy snapshot.
-- [ ] Lower each valid row with bound constants. Generate safe member names using the existing method safe name plus the case ID, and hash method identity plus a separated explicit key for case identity. Use `base display [key]` for reporting.
-- [ ] Give case registry keys a separate source-order component (ordinal plus explicit key) without using it in UIDs. Emit the distinct registry key while keeping MethodName and MethodInfo pointed at the original method.
-- [ ] Make ScenarioRegistry.Definitions enumerate factories by ordinal registration-key order, matching its documented contract. Keep Register/TryGet singleton APIs and parameterless registration strings unchanged. Add a registry test with reverse insertion order proving deterministic enumeration and preservation of both cases.
-- [ ] Review only the new received case snapshots; existing parameterless verified snapshots must remain unchanged. Run generator suite and registry tests, then commit the tested generation slice.
+- [x] Add failing generation tests using GeneratorHarness.Run(source).Definitions(): assert two definitions with different constant inputs, unique builders/registry entries/IDs, original MethodInfo, and no generated warnings.
+- [x] Add tests for null and escaped strings, enum/flags and numeric boundary values; execute their generated steps and inspect captured typed argument values.
+- [x] Test use in a condition step, title placeholder and parallel child step. Test nested lambda shadowing to prove substitution is semantic rather than textual.
+- [x] Add reordering, inserted-row and edited-value variants: compare IDs by explicit case key, compare step IDs, and assert emitted CreateAll case order follows authored rows. Preserve every existing guard/merge assertion and legacy snapshot.
+- [x] Lower each valid row with bound constants. Generate safe member names using the existing method safe name plus the case ID, and hash method identity plus a separated explicit key for case identity. Use `base display [key]` for reporting.
+- [x] Give case registry keys a separate source-order component (ordinal plus explicit key) without using it in UIDs. Emit the distinct registry key while keeping MethodName and MethodInfo pointed at the original method.
+- [x] Make ScenarioRegistry.Definitions enumerate factories by ordinal registration-key order, matching its documented contract. Keep Register/TryGet singleton APIs and parameterless registration strings unchanged. Add a registry test with reverse insertion order proving deterministic enumeration and preservation of both cases.
+- [x] Review only the new received case snapshots; existing parameterless verified snapshots must remain unchanged. Run generator suite and registry tests, then commit the tested generation slice.
 
 ## Task 3: Execution, discovery, filtering and authorization example
 
@@ -98,12 +98,12 @@
 - Consume ordinary ScenarioDefinitions generated by Task 2. Reuse the existing RunLoop, ScenarioScope, UID selectors and report sinks; add runtime special cases only if a regression test proves an existing integration assumption must change.
 - The authorization example uses named anonymous/reader/admin cases over endpoint strings and a local deterministic request handler. It does not introduce a network service, DI argument factory, or external authentication dependency.
 
-- [ ] Add failing integration tests that run two compiled cases through the existing execution harness: assert distinct world/scope instances, one Setup and Teardown per case, and independent success/failure results.
-- [ ] Exercise MTP discovery for two cases from the same method: all step UIDs are unique and display grouping contains the readable case name. Verify a case name containing slash/percent keeps the five-segment path and existing escaping rules.
-- [ ] Run a selected step UID in one case and assert predecessor closure plus teardown run only for that case, with no sibling world creation. Capture a report and assert its two case scenarios remain separate.
-- [ ] Add the authorization sample and README example after generation works. Assert each inline expected status is checked and all configured cases appear in the sample report.
-- [ ] Run locked restore, full Release build, generator tests, runtime tests, MTP tests and both existing report interaction scripts. Run the canonical sample; inspect case names and outcomes. Diagnose any failures rather than weakening assertions or blindly accepting snapshots.
-- [ ] Request one fresh whole-branch review; fix important findings and rerun affected checks. Commit the verified execution/sample/docs slice. Do not push, tag or publish a release unless requested.
+- [x] Add failing integration tests that run two compiled cases through the existing execution harness: assert distinct world/scope instances, one Setup and Teardown per case, and independent success/failure results.
+- [x] Exercise MTP discovery for two cases from the same method: all step UIDs are unique and display grouping contains the readable case name. Verify a case name containing slash/percent keeps the five-segment path and existing escaping rules.
+- [x] Run a selected step UID in one case and assert predecessor closure plus teardown run only for that case, with no sibling world creation. Capture a report and assert its two case scenarios remain separate.
+- [x] Add the authorization sample and README example after generation works. Assert each inline expected status is checked and all configured cases appear in the sample report.
+- [x] Run locked restore, full Release build, generator tests, runtime tests, MTP tests and both existing report interaction scripts. Run the canonical sample; inspect case names and outcomes. Diagnose any failures rather than weakening assertions or blindly accepting snapshots.
+- [x] Request one fresh whole-branch review; fix important findings and rerun affected checks. Commit the verified execution/sample/docs slice. Do not push, tag or publish a release unless requested.
 
 ## Verification commands
 
@@ -130,3 +130,30 @@ parameterless compatibility, case source ordering, independent lifetimes, filter
 separation. Review Focus items have explicit tests in their owning tasks. The only ordering
 clarification is enforcing the registry's already documented registration-key order; UIDs and
 parameterless generated output remain compatible. No package dependency or version change is needed.
+
+## Completion evidence
+
+Implemented on `codex/scenario-cases`. Locked restore and Release solution build passed with zero
+warnings. Final suites: generator 634/634, runtime 507/507, MTP 139/139, report scripts 72/72.
+The canonical sample reports 111 steps (106 passed, 5 expected not-taken); all four authorization
+cases passed. Only the three new inline-case snapshots were added; existing snapshots are unchanged.
+
+An independent whole-branch review found two important validation gaps. Regression tests failed first
+for inaccessible boxed enum types and writes to bound case arguments; RAUN031/RAUN007 guards now pass
+those tests and the full suites. Untyped `default` was already correctly rejected. Exact CLI case
+filtering is covered with escaped brackets. One existing process-wide ActivityListener test race was
+fixed by joining its class to the existing `ActivityListeners` collection.
+
+Rulings made during implementation:
+- Analyzer owns case diagnostics; generator shares validation and suppresses invalid definitions.
+  Disabling the analyzer removes those diagnostics, consistent with existing analyzer ownership.
+- Registry uniqueness assertions use scenario IDs because cases intentionally share method names.
+  Integration tests guard adapter grouping and discovery assumptions.
+- Reuse the existing symbol-substitution callback instead of adding a second rewriting mechanism.
+  Conditions, parallel steps and lambda capture tests cover the relevant paths.
+- Replace the invalid C# lambda-shadowing fixture with a nested local and captured case parameter.
+  Invalid source shadowing is left to the compiler.
+- Group the existing global-listener test with the other listener tests; the cost is less test parallelism.
+
+Deferred minor: ScenarioRegistry summary/Register/TryGet comments still describe exclusively
+method-name keys; its RegisteredMethods documentation already mentions generated case keys.

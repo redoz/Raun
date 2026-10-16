@@ -8,6 +8,8 @@ using Xunit;
 
 namespace Raun.Test.Reporting;
 
+// This class subscribes to the process-wide source, like TracingTests and RunLoopTests.
+[Collection("ActivityListeners")]
 public sealed class ReturnTitleRuntimeTests
 {
     [Fact]

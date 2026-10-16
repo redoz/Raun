@@ -76,6 +76,38 @@ public class ScenarioCaseDiagnosticsTests
     }
 
     [Fact]
+    public async Task Inaccessible_boxed_enum_is_diagnosed_before_emission()
+    {
+        var source = ScenarioCaseGenerationTests.Source("[ScenarioCase(\"one\", Secret.Reader)]", "object value")
+            .Replace("[Scenario(\"authorization\")]", "private enum Secret { Reader }\n    [Scenario(\"authorization\")]", StringComparison.Ordinal);
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source));
+        Assert.Equal("RAUN031", diagnostic.Id);
+        Assert.Contains("Secret.Reader", source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length), StringComparison.Ordinal);
+        Assert.DoesNotContain("CaseDemo_Cases_Run", GeneratorHarness.Run(source).GeneratedSource, StringComparison.Ordinal);
+    }
+    [Fact]
+    public async Task Untyped_default_null_cannot_bind_to_a_nonnullable_value_parameter()
+    {
+        var source = ScenarioCaseGenerationTests.Source("[ScenarioCase(\"one\", default)]", "int value");
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source));
+        Assert.Equal("RAUN031", diagnostic.Id);
+        Assert.DoesNotContain("CaseDemo_Cases_Run", GeneratorHarness.Run(source).GeneratedSource, StringComparison.Ordinal);
+    }
+    [Theory]
+    [InlineData("value++")]
+    [InlineData("++value")]
+    [InlineData("value = 2")]
+    [InlineData("value += 2")]
+    [InlineData("System.Threading.Interlocked.Increment(ref value)")]
+    [InlineData("int.TryParse(\"2\", out value)")]
+    public async Task Case_argument_writes_are_refused(string expression)
+    {
+        var source = ScenarioCaseGenerationTests.Source("[ScenarioCase(\"one\", 1)]", "int value", "await Given.Capture(" + expression + ");");
+        var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source));
+        Assert.Equal("RAUN007", diagnostic.Id);
+        Assert.DoesNotContain("CaseDemo_Cases_Run", GeneratorHarness.Run(source).GeneratedSource, StringComparison.Ordinal);
+    }
+    [Fact]
     public async Task Type_error_names_the_parameter_and_expected_type()
     {
         var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(Source("Actor actor", "[ScenarioCase(\"one\", \"Reader\")]")));

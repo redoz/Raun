@@ -87,8 +87,8 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
     private const string NestedStep =
         "a step cannot run inside another step's argument; await it as its own statement and pass its result";
 
-    private const string WritesStepOutput =
-        "an argument must not change a step's result, which later steps read too";
+    private const string WritesBoundValue =
+        "an argument must not change a step's result or scenario case argument, which later steps read too";
 
     private readonly SemanticModel _model;
     private readonly SyntaxNode _root;
@@ -234,9 +234,9 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
 
     public override SyntaxNode? VisitAssignmentExpression(AssignmentExpressionSyntax node)
     {
-        if (IsStepOutput(node.Left))
+        if (IsBoundValue(node.Left))
         {
-            Violate(node.Left, WritesStepOutput);
+            Violate(node.Left, WritesBoundValue);
         }
 
         return base.VisitAssignmentExpression(node);
@@ -245,9 +245,9 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
     public override SyntaxNode? VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
     {
         if (node.Kind() is SyntaxKind.PreIncrementExpression or SyntaxKind.PreDecrementExpression
-            && IsStepOutput(node.Operand))
+            && IsBoundValue(node.Operand))
         {
-            Violate(node.Operand, WritesStepOutput);
+            Violate(node.Operand, WritesBoundValue);
         }
 
         return base.VisitPrefixUnaryExpression(node);
@@ -256,9 +256,9 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
     public override SyntaxNode? VisitPostfixUnaryExpression(PostfixUnaryExpressionSyntax node)
     {
         if (node.Kind() is SyntaxKind.PostIncrementExpression or SyntaxKind.PostDecrementExpression
-            && IsStepOutput(node.Operand))
+            && IsBoundValue(node.Operand))
         {
-            Violate(node.Operand, WritesStepOutput);
+            Violate(node.Operand, WritesBoundValue);
         }
 
         return base.VisitPostfixUnaryExpression(node);
@@ -267,9 +267,9 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
     public override SyntaxNode? VisitArgument(ArgumentSyntax node)
     {
         if (node.RefKindKeyword.Kind() is SyntaxKind.RefKeyword or SyntaxKind.OutKeyword
-            && IsStepOutput(node.Expression))
+            && IsBoundValue(node.Expression))
         {
-            Violate(node.Expression, WritesStepOutput);
+            Violate(node.Expression, WritesBoundValue);
         }
 
         return base.VisitArgument(node);
@@ -335,9 +335,9 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
             && symbol.OriginalDefinition.DeclaringSyntaxReferences.Any(
                 r => r.SyntaxTree == _root.SyntaxTree && _root.Span.Contains(r.Span));
 
-    /// <summary>True when <paramref name="target"/> is rooted in a step output — the local itself, or a
+    /// <summary>True when <paramref name="target"/> is rooted in a step output or bound case argument — the value itself, or a
     /// member or element reached through it.</summary>
-    private bool IsStepOutput(ExpressionSyntax target)
+    private bool IsBoundValue(ExpressionSyntax target)
     {
         while (true)
         {
@@ -356,9 +356,10 @@ internal sealed class ArgumentLowering : CSharpSyntaxRewriter
                     target = suppressed.Operand;
                     continue;
                 case IdentifierNameSyntax identifier:
-                    return _model.GetSymbolInfo(identifier).Symbol is ILocalSymbol local
-                        && !DeclaredWithin(local)
-                        && _stepValue(local) is not null;
+                    var symbol = _model.GetSymbolInfo(identifier).Symbol;
+                    return symbol is ILocalSymbol or IParameterSymbol
+                        && !DeclaredWithin(symbol)
+                        && _stepValue(symbol) is not null;
                 default:
                     return false;
             }

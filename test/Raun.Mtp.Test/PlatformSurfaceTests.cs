@@ -24,7 +24,7 @@ public class PlatformSurfaceTests
 
     // The sample's full step count across every scenario, Setup and Teardown included, confirmed by
     // `--list-tests`.
-    private const int UnfilteredTotalCount = 112;
+    private const int UnfilteredTotalCount = 128;
 
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(3);
 
@@ -61,6 +61,14 @@ public class PlatformSurfaceTests
         var filteredTotal = ReadSummaryTotal(filtered.StdOut);
 
         Assert.Equal(FilteredScenarioStepCount, filteredTotal);
+    }
+
+    [Fact]
+    public async Task A_tree_filter_selects_one_named_case_with_escaped_brackets()
+    {
+        var result = await RunSampleAsync("--treenode-filter", @"/*/*/*/endpoint access \[reader\]/*");
+        Assert.True(result.ExitCode == 0, result.Describe());
+        Assert.Equal(4, ReadSummaryTotal(result.StdOut)); // Setup, request, status assertion, teardown.
     }
 
     [Fact]

@@ -97,6 +97,8 @@ internal static class ScenarioCaseBinding
                     && parameter.NullableAnnotation == NullableAnnotation.NotAnnotated;
                 if (argument.NameColon is not null || argument.NameEquals is not null || !supported
                     || !conversion.IsImplicit || conversion.IsUserDefined || nullability
+                    || constant.Value is not null && type is not null && !model.Compilation.IsSymbolAccessibleWithin(type, model.Compilation.Assembly)
+
                     || !model.Compilation.IsSymbolAccessibleWithin(parameter.Type, model.Compilation.Assembly))
                 {
                     Report(Descriptors.InvalidScenarioCaseArgument, expression.GetLocation(), parameter.Name,

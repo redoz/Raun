@@ -116,6 +116,48 @@ resource lineage, typed notes and logs, and both object and string-key parameter
 shown [below](#resource-keys-labels-and-snapshots). For a larger runnable suite, see
 [AppointmentTests](samples/AppointmentTests).
 
+### Inline scenario cases
+
+Add named constant rows beside a parameterized scenario. The analyzer checks each row against the
+method's parameter types and reports missing, extra or incompatible arguments during the build.
+
+```csharp
+[Scenario("endpoint access")]
+[ScenarioCase("anonymous", "/appointments", EndpointRole.Anonymous, HttpStatusCode.Unauthorized)]
+[ScenarioCase("reader", "/appointments", EndpointRole.Reader, HttpStatusCode.OK)]
+public async Task EndpointAccess(string endpoint, EndpointRole role, HttpStatusCode expected)
+{
+    var status = await When.Request(endpoint, role);
+    await Then.StatusIs(status, expected);
+}
+```
+
+Each row appears as a separate scenario, such as `endpoint access [reader]`, with its own world,
+DI scope, Setup and teardown. Steps can be discovered, filtered and reported independently. See the
+runnable [authorization example](samples/AppointmentTests/AuthorizationScenarios.cs), which also checks
+forbidden access to an admin endpoint with a local handler.
+
+Case parameters are read-only inside step argument expressions.
+
+Use positional primitive/string constants, enum values (including flags), and null for nullable
+parameters. Arguments follow C# implicit conversion rules. Arrays, `typeof` values, member-data
+providers and DI-created argument values are not supported. Case methods cannot be generic,
+overloaded, or use optional, `params` or by-reference parameters.
+
+Case names must be nonblank and unique within the method; they are case-sensitive. Keep those names
+stable: scenario and step IDs use the method identity and case name. Editing values or reordering rows
+preserves their IDs; renaming a case changes them. Rows appear in source order. Parameterized scenarios
+require at least one row; parameterless scenarios continue to use `[Scenario]` alone.
+
+Escape the display name's brackets when using the platform tree-filter grammar. This runs the reader
+case, including Setup and teardown:
+
+```bash
+dotnet run --project samples/AppointmentTests -- --treenode-filter '/*/*/*/endpoint access \[reader\]/*'
+```
+
+IDE step-UID selection also isolates an individual case.
+
 `[StepName]` sets the title. `{$return ?? name}` shows the input until a non-null result is available,
 then shows and links that result. A failed or skipped step, or a null result, keeps the available fallback.
 `{$return}` without a fallback shows `…` until completion. Input references keep their captured data.
