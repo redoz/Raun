@@ -45,9 +45,9 @@
 - Public ScenarioCaseAttribute(string caseName, params object?[] arguments), with read-only CaseName and Arguments.
 - Internal ScenarioCaseBinding.Bind(SemanticModel model, IMethodSymbol method, MethodDeclarationSyntax syntax) returns ScenarioCaseBindingResult: IReadOnlyList<BoundScenarioCase> Cases and EquatableArray<ScenarioDiagnostic> Diagnostics. BoundScenarioCase has string Key, int SourceOrdinal and IReadOnlyDictionary<IParameterSymbol, ExpressionSyntax> Arguments. Keep this transient semantic binding out of long-lived incremental IR.
 - Rows expose Key, SourceOrdinal and typed arguments in parameter order. Shared validation is consumed by both analyzer and generator.
-- RAUN030 InvalidScenarioCase: invalid placement, missing rows, blank/duplicate names or arity.
-- RAUN031 InvalidScenarioCaseArgument: unsupported value or incompatible parameter conversion.
-- RAUN032 InvalidScenarioCaseSignature: generic/overloaded/optional/params/by-ref parameter forms in case-enabled methods.
+- RAUN033 InvalidScenarioCase: invalid placement, missing rows, blank/duplicate names or arity.
+- RAUN034 InvalidScenarioCaseArgument: unsupported value or incompatible parameter conversion.
+- RAUN035 InvalidScenarioCaseSignature: generic/overloaded/optional/params/by-ref parameter forms in case-enabled methods.
 
 - [x] Add failing attribute metadata and analyzer tests for accepted string/enum/status rows and every validation rule in the spec. Assert diagnostic ID, source span and expected/actual type where relevant.
 - [x] Run the new tests and verify failure for missing API/binding behavior before production changes.
@@ -139,7 +139,7 @@ The canonical sample reports 111 steps (106 passed, 5 expected not-taken); all f
 cases passed. Only the three new inline-case snapshots were added; existing snapshots are unchanged.
 
 An independent whole-branch review found two important validation gaps. Regression tests failed first
-for inaccessible boxed enum types and writes to bound case arguments; RAUN031/RAUN007 guards now pass
+for inaccessible boxed enum types and writes to bound case arguments; RAUN034/RAUN007 guards now pass
 those tests and the full suites. Untyped `default` was already correctly rejected. Exact CLI case
 filtering is covered with escaped brackets. One existing process-wide ActivityListener test race was
 fixed by joining its class to the existing `ActivityListeners` collection.

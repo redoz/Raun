@@ -28,7 +28,7 @@ public class DiagnosticTests
         var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
 
         Assert.Equal(
-            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016", "RAUN022", "RAUN024", "RAUN027", "RAUN028", "RAUN029", "RAUN030", "RAUN031", "RAUN032"],
+            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016", "RAUN022", "RAUN024", "RAUN027", "RAUN028", "RAUN029", "RAUN030", "RAUN031", "RAUN032", "RAUN033", "RAUN034", "RAUN035"],
             analyzer.SupportedDiagnostics.Select(d => d.Id).Order(StringComparer.Ordinal));
     }
 
@@ -326,7 +326,7 @@ public class DiagnosticTests
     }
 
     [Fact]
-    public async Task RAUN030_parameter_requires_cases()
+    public async Task RAUN033_parameter_requires_cases()
     {
         var diagnostics = await Analyze(
             """
@@ -339,11 +339,11 @@ public class DiagnosticTests
             }
             """);
 
-        AssertHas(diagnostics, "RAUN030");
+        AssertHas(diagnostics, "RAUN033");
     }
 
     [Fact]
-    public async Task RAUN030_missing_cases_is_reported_before_compound_argument_lowering()
+    public async Task RAUN033_missing_cases_is_reported_before_compound_argument_lowering()
     {
         // Missing rows own the diagnostic even when a parameter occurs inside an expression.
         var diagnostics = await Analyze(
@@ -357,7 +357,7 @@ public class DiagnosticTests
             }
             """);
 
-        AssertHas(diagnostics, "RAUN030");
+        AssertHas(diagnostics, "RAUN033");
     }
 
     [Fact]

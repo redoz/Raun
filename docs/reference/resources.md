@@ -161,7 +161,7 @@ public Task Delete([Deleted, ResourceKey<Patient>] string patientId)
 The string is the key of `Patient`, so its effects, conflicts, lineage, and title links refer to the
 same resource as a `Patient` instance with that key. Key-only references reuse a name observed
 in a visible earlier step, or display `Patient:key` when none is available. They carry no object snapshot. `ResourceKey` parameters are also supported. The annotation requires an
-access role (or a producer's `References`/`Consumes` declaration); other parameter types report `RAUN024`.
+access role, a producer's `References`/`Consumes` declaration, or a typed relationship property; other parameter types report `RAUN024`.
 The step method still receives its original string or `ResourceKey`; Raun changes only the tracking and title reference.
 Nullable string parameters work when their supplied key is non-null. A supplied null key throws
 `ArgumentNullException` when its claim is evaluated; no claim is recorded for that invalid key.
@@ -201,6 +201,33 @@ The step code performs the operation; the attribute records its effect.
 Use `ResourceAction.For<TAttribute>()` or `ResourceAction.For(typeof(ApprovedAttribute))`
 for manual tracking. Applying an action to an identity does not create an object snapshot.
 See the [action sample](../../samples/AppointmentTests/ResourceActionScenarios.cs).
+
+## Domain attributes with typed relationships
+
+Use a domain attribute when an operation always links the same kinds of resources.
+The [booking attributes](../../samples/AppointmentTests/BookingAttributes.cs) declare the action
+and its relationships together:
+
+```csharp
+[ResourceActionDefinition(ResourceActionKind.Create)]
+public sealed class BookedAttribute : ResourceAttribute
+{
+    [Relationship<Patient>(ResourceRelation.Reference)]
+    public string Patient { get; set; } = "";
+
+    [Relationship<Slot>(ResourceRelation.Consume)]
+    public string Slot { get; set; } = "";
+}
+
+[return: Booked(Patient = nameof(patientId), Slot = nameof(slot))]
+public Task<Appointment> Book([ResourceKey<Patient>] string patientId, Slot slot) { ... }
+```
+
+The property values name step parameters. Raun validates that each parameter represents the
+declared resource kind, including alternate representations and typed keys. The
+[registry sample](../../samples/AppointmentTests/RegistryBookingScenarios.cs) shows a registry row,
+domain patient, and opaque string ID sharing one identity and readable name.
+Existing inline `References` and `Consumes` declarations remain supported.
 
 ## Names across steps
 

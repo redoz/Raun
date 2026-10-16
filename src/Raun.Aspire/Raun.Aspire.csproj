@@ -31,7 +31,6 @@
     <PackageReference Include="MessagePack" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Http" />
-    <PackageReference Include="MessagePack" />
   </ItemGroup>
 
 </Project>

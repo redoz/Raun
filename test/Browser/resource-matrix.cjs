@@ -442,7 +442,7 @@ const renderFixture = (name, data) => {
     assert.match(await page.locator('.resource-hover-event').textContent(),/Approve <now>/);
     assert.deepEqual(errors,[]);
     await page.screenshot({path:path.join(out,'custom-actions.png'),fullPage:true});
-    const historyFixture=structuredClone(model),historyScenario=historyFixture.scenarios[0];historyFixture.scenarios=[historyScenario];
+    const historyFixture=structuredClone(model),historyScenario=historyFixture.scenarios.find(scenario=>scenario.scenarioId===actionSample.scenarioId);historyFixture.scenarios=[historyScenario];
     const historyReference=historyScenario.references.find(edge=>edge.kind==='Reference');
     const historySource=historyScenario.steps.find(step=>step.effects.some(effect=>effect.resourceId===historyReference.subjectId && effect.verb==='Create'));
     const historyTarget=historySource.effects.find(effect=>effect.resourceId===historyReference.targetId && effect.verb==='Reference');

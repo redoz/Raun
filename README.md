@@ -54,6 +54,7 @@ dotnet add package xunit.v3.assert
 
 Delete the template's `Program.cs`; Raun generates the entry point. Add a scenario class
 derived from `Scenarios`, its step classes, and any domain types. Run with `dotnet run -- --report-html`.
+The [GettingStarted sample](samples/GettingStarted) is a complete app with a generated entry point.
 The [authoring reference](docs/reference/scenario-authoring.md) covers the class wiring;
 [running tests](docs/reference/running-tests.md) covers `dotnet test`, selection, and runner options.
 
@@ -167,6 +168,8 @@ Use a custom action when a domain name such as Approve explains a change better 
 Derive its attribute from a resource role; it keeps that role's conflict rules. Later steps that
 receive only an ID can reuse the resource's earlier name. See the [action sample](samples/AppointmentTests/ResourceActionScenarios.cs)
 and [resource reference](docs/reference/resources.md) for both features.
+Domain attributes can also declare typed relationship properties: the [booking attributes](samples/AppointmentTests/BookingAttributes.cs)
+link each booking to its patient and slot; the [registry example](samples/AppointmentTests/RegistryBookingScenarios.cs) uses an opaque patient ID.
 
 ## Read the report when something fails
 

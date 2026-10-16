@@ -4,7 +4,7 @@ using Xunit;
 namespace AppointmentTests;
 
 // A database row can represent a Patient without implementing a Raun interface itself.
-public sealed record PatientRow(string Name, string City);
+public sealed record PatientRow(string Id, string Name, string City);
 public sealed record SlotRow(int Hour);
 public sealed record DeliveryReceipt(string Id, string Recipient);
 
@@ -14,7 +14,7 @@ public sealed class ResourceTrackingScenarios : AppointmentSuite
     public async Task ImportedBooking()
     {
         var patient = await Given.ImportedPatient("Ingrid");
-        await Then.ReadPatientByKey(patient.Name);
+        await Then.ReadPatientByKey(patient.Id);
         var slot = await Given.ClinicSlot();
         var appointment = await When.ImportBooking(patient, slot);
         await Then.AppointmentExists(appointment)
@@ -37,7 +37,7 @@ public sealed partial class AppointmentGiven : Given
     [StepName("Given imported patient {$return ?? name} is on file")]
     [return: Loaded]
     public Task<PatientRow> ImportedPatient(string name)
-        => Task.FromResult(new PatientRow(name, "Uppsala"));
+        => Task.FromResult(new PatientRow("imported-" + name, name, "Uppsala"));
 
     // Program.cs maps this external row to Slot and gives it a display label.
     [StepName("Given the clinic returns slot {$return}")]
@@ -60,7 +60,7 @@ public sealed partial class AppointmentWhen : When
     [return: Created]
     public async Task<Appointment> ImportBooking(PatientRow patient, SlotRow slot)
     {
-        var appointment = new Appointment(new Patient(patient.Name, patient.City), new Slot(slot.Hour));
+        var appointment = new Appointment(new Patient(patient.Id, patient.Name, patient.City), new Slot(slot.Hour));
         var receipt = new DeliveryReceipt($"booking-{patient.Name}", patient.Name);
         await Context.Resources.Create(appointment);
         await Context.Resources.Reference(patient, appointment);
@@ -68,7 +68,7 @@ public sealed partial class AppointmentWhen : When
         await Context.Resources.Create(receipt);
         Context.Log($"Imported {appointment}; clinic row {patient:data}; confirmation {receipt}.");
         Assert.Contains(Context.Resources.Effects, effect => effect.Identity == new ResourceIdentity("clinic-confirmation", receipt.Id));
-        Assert.Contains(Context.Resources.Effects, effect => effect.Identity == new ResourceIdentity(typeof(Patient), patient.Name));
+        Assert.Contains(Context.Resources.Effects, effect => effect.Identity == new ResourceIdentity(typeof(Patient), patient.Id));
         Assert.Contains(Context.Resources.Effects, effect => effect.Identity == new ResourceIdentity(typeof(Slot), Slot.KeyFor(new Slot(slot.Hour))) && effect.Label == "Clinic slot at 15:00");
         Assert.Contains(Context.Resources.Effects, effect => effect.Label == $"Confirmation for {patient.Name}");
         Assert.Equal(2, Context.Resources.Lineage.Count);

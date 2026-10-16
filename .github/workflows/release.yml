@@ -76,6 +76,21 @@ jobs:
           path: artifacts/package-consumption/
           if-no-files-found: ignore
 
+      - name: Upload standalone package report
+        id: package-report-html
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: artifacts/package-consumption/raun-report.html
+          archive: false
+          if-no-files-found: ignore
+
+      - name: Link package report in run summary
+        if: always() && steps.package-report-html.outputs.artifact-url != ''
+        env:
+          REPORT_URL: ${{ steps.package-report-html.outputs.artifact-url }}
+        run: printf '[Package consumption report](%s)\n' "$REPORT_URL" >> "$GITHUB_STEP_SUMMARY"
+
       - name: NuGet.org login
         id: nuget_login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1

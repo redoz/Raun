@@ -60,7 +60,7 @@ public sealed class PatientRegistry : IScenarioWorld<PatientRegistry>
 
 public sealed class RegistryGiven : Given<PatientRegistry>
 {
-    [StepName("Given {$return ?? name} is registered as {$return:id ?? patientId}")]
+    [StepName("Given {$return ?? name} is registered as {$return ?? patientId:id}")]
     [return: Registered]
     public Task<RegistryPatient> RegisteredPatient(string patientId, string name)
     {

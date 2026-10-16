@@ -20,19 +20,19 @@ public class ScenarioCaseDiagnosticsTests
         """;
 
     [Theory]
-    [InlineData("string path", "", "RAUN030", "Authorization")]
-    [InlineData("", "[ScenarioCase(\"unused\", 1)]", "RAUN030", "ScenarioCase")]
-    [InlineData("int value", "[ScenarioCase(\" \u0020\", 1)]", "RAUN030", "ScenarioCase")]
-    [InlineData("int value", "[ScenarioCase(\"one\", 1, 2)]", "RAUN030", "ScenarioCase")]
-    [InlineData("int value", "[ScenarioCase(\"one\")]", "RAUN030", "ScenarioCase")]
-    [InlineData("int value", "[ScenarioCase(\"one\", \"text\")]", "RAUN031", "\"text\"")]
-    [InlineData("byte value", "[ScenarioCase(\"one\", 256)]", "RAUN031", "256")]
-    [InlineData("Actor actor", "[ScenarioCase(\"one\", OtherActor.Reader)]", "RAUN031", "OtherActor.Reader")]
-    [InlineData("object value", "[ScenarioCase(\"one\", typeof(string))]", "RAUN031", "typeof(string)")]
-    [InlineData("object value", "[ScenarioCase(\"one\", new int[] { 1 })]", "RAUN031", "new int[]")]
-    [InlineData("int value = 1", "[ScenarioCase(\"one\", 1)]", "RAUN032", "Authorization")]
-    [InlineData("ref int value", "[ScenarioCase(\"one\", 1)]", "RAUN032", "Authorization")]
-    [InlineData("params int[] value", "[ScenarioCase(\"one\", 1)]", "RAUN032", "Authorization")]
+    [InlineData("string path", "", "RAUN033", "Authorization")]
+    [InlineData("", "[ScenarioCase(\"unused\", 1)]", "RAUN033", "ScenarioCase")]
+    [InlineData("int value", "[ScenarioCase(\" \u0020\", 1)]", "RAUN033", "ScenarioCase")]
+    [InlineData("int value", "[ScenarioCase(\"one\", 1, 2)]", "RAUN033", "ScenarioCase")]
+    [InlineData("int value", "[ScenarioCase(\"one\")]", "RAUN033", "ScenarioCase")]
+    [InlineData("int value", "[ScenarioCase(\"one\", \"text\")]", "RAUN034", "\"text\"")]
+    [InlineData("byte value", "[ScenarioCase(\"one\", 256)]", "RAUN034", "256")]
+    [InlineData("Actor actor", "[ScenarioCase(\"one\", OtherActor.Reader)]", "RAUN034", "OtherActor.Reader")]
+    [InlineData("object value", "[ScenarioCase(\"one\", typeof(string))]", "RAUN034", "typeof(string)")]
+    [InlineData("object value", "[ScenarioCase(\"one\", new int[] { 1 })]", "RAUN034", "new int[]")]
+    [InlineData("int value = 1", "[ScenarioCase(\"one\", 1)]", "RAUN035", "Authorization")]
+    [InlineData("ref int value", "[ScenarioCase(\"one\", 1)]", "RAUN035", "Authorization")]
+    [InlineData("params int[] value", "[ScenarioCase(\"one\", 1)]", "RAUN035", "Authorization")]
     public async Task Invalid_cases_are_located_and_refused(string parameters, string attributes, string id, string span)
     {
         var source = Source(parameters, attributes);
@@ -47,7 +47,7 @@ public class ScenarioCaseDiagnosticsTests
     public async Task Duplicate_names_are_errors_but_case_is_significant()
     {
         var duplicate = Source("int value", "[ScenarioCase(\"one\", 1)] [ScenarioCase(\"one\", 2)]");
-        Assert.Equal("RAUN030", Assert.Single(await GeneratorHarness.DiagnoseAsync(duplicate)).Id);
+        Assert.Equal("RAUN033", Assert.Single(await GeneratorHarness.DiagnoseAsync(duplicate)).Id);
         Assert.Empty(await GeneratorHarness.DiagnoseAsync(Source("int value", "[ScenarioCase(\"one\", 1)] [ScenarioCase(\"One\", 2)]"), requireCompilable: true));
     }
 
@@ -62,17 +62,17 @@ public class ScenarioCaseDiagnosticsTests
 
     [Fact]
     public async Task Cases_require_the_scenario_marker()
-        => Assert.Equal("RAUN030", Assert.Single(await GeneratorHarness.DiagnoseAsync(Source("int value", "[ScenarioCase(\"one\", 1)]", scenario: false))).Id);
+        => Assert.Equal("RAUN033", Assert.Single(await GeneratorHarness.DiagnoseAsync(Source("int value", "[ScenarioCase(\"one\", 1)]", scenario: false))).Id);
 
     [Fact]
     public async Task Case_method_overloads_are_refused()
-        => Assert.Equal("RAUN032", Assert.Single(await GeneratorHarness.DiagnoseAsync(Source("int value", "[ScenarioCase(\"one\", 1)]", "public void Authorization() { }"))).Id);
+        => Assert.Equal("RAUN035", Assert.Single(await GeneratorHarness.DiagnoseAsync(Source("int value", "[ScenarioCase(\"one\", 1)]", "public void Authorization() { }"))).Id);
 
     [Fact]
     public async Task Generic_case_methods_are_refused()
     {
         var source = Source("int value", "[ScenarioCase(\"one\", 1)]").Replace("Authorization(int", "Authorization<T>(int", StringComparison.Ordinal);
-        Assert.Equal("RAUN032", Assert.Single(await GeneratorHarness.DiagnoseAsync(source)).Id);
+        Assert.Equal("RAUN035", Assert.Single(await GeneratorHarness.DiagnoseAsync(source)).Id);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class ScenarioCaseDiagnosticsTests
         var source = ScenarioCaseGenerationTests.Source("[ScenarioCase(\"one\", Secret.Reader)]", "object value")
             .Replace("[Scenario(\"authorization\")]", "private enum Secret { Reader }\n    [Scenario(\"authorization\")]", StringComparison.Ordinal);
         var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source));
-        Assert.Equal("RAUN031", diagnostic.Id);
+        Assert.Equal("RAUN034", diagnostic.Id);
         Assert.Contains("Secret.Reader", source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length), StringComparison.Ordinal);
         Assert.DoesNotContain("CaseDemo_Cases_Run", GeneratorHarness.Run(source).GeneratedSource, StringComparison.Ordinal);
     }
@@ -90,7 +90,7 @@ public class ScenarioCaseDiagnosticsTests
     {
         var source = ScenarioCaseGenerationTests.Source("[ScenarioCase(\"one\", default)]", "int value");
         var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source));
-        Assert.Equal("RAUN031", diagnostic.Id);
+        Assert.Equal("RAUN034", diagnostic.Id);
         Assert.DoesNotContain("CaseDemo_Cases_Run", GeneratorHarness.Run(source).GeneratedSource, StringComparison.Ordinal);
     }
     [Theory]
