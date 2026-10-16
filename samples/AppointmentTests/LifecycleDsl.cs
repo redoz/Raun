@@ -18,7 +18,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
     public Task<Patient> PatientOnFile(string name)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(90));
-        return Task.FromResult(new Patient(name));
+        return Task.FromResult(new Patient($"patient-{name}", name));
     }
 
     [StepName("Given a slot at {hour}:00 is available")]
@@ -30,7 +30,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
     }
 
     // Edits the patient and returns the edited patient: [Edited] on the parameter, [return: Edited]
-    // on the result. Both resolve to Patient:{name}, so the trace shows one Edit, not two.
+    // on the result. Both resolve to Patient:{id}, so the trace shows one Edit, not two.
     [StepName("Given the patient lives in {city}")]
     [return: Edited]
     public Task<Patient> PatientLivesIn([Edited] Patient patient, string city)

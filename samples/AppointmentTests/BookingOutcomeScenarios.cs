@@ -6,8 +6,8 @@ namespace AppointmentTests;
 /// <summary>
 /// Pattern branching: a <c>switch</c> over a step's awaited result. Exactly one section runs, picked by
 /// the type of the value the step produced; the others are reported not-taken, and a pattern variable
-/// such as <c>booked</c> is the arm's own step output. The demo rule is deterministic, so each
-/// scenario takes a known arm: Ada is booked, Wren is waitlisted.
+/// such as <c>booked</c> is the arm's own step output. Availability and the patient
+/// choice select the outcome: book an open slot, join the waitlist, or decline it.
 /// </summary>
 [DisplayName("Booking outcome")]
 public sealed class BookingOutcomeScenarios : AppointmentSuite
@@ -37,8 +37,30 @@ public sealed class BookingOutcomeScenarios : AppointmentSuite
     {
         var patient = await Given.PatientExists("Wren");
         var slot = await Given.AvailableSlot();
+        var heldSlot = await When.HoldSlot(slot);
 
-        switch (await When.TryToBook(patient, slot))
+        switch (await When.TryToBook(patient, heldSlot))
+        {
+            case Booked booked:
+                await Then.AppointmentExists(booked.Appointment);
+                break;
+            case Waitlisted waitlisted:
+                await Then.PatientIsOnWaitlist(patient, waitlisted.Position);
+                break;
+            case Refused refused:
+                await Then.PatientWasTold(patient, refused.Reason);
+                break;
+        }
+    }
+
+    [Scenario("a patient can decline the waitlist")]
+    public async Task DeclineWaitlist()
+    {
+        var patient = await Given.PatientExists("Wren");
+        var slot = await Given.AvailableSlot();
+        var heldSlot = await When.HoldSlot(slot);
+
+        switch (await When.TryToBook(patient, heldSlot, acceptsWaitlist: false))
         {
             case Booked booked:
                 await Then.AppointmentExists(booked.Appointment);

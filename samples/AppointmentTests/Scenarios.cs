@@ -50,7 +50,7 @@ public sealed class Scenarios : AppointmentSuite
         await Given.DatabaseIsClean();
 
         var (patient, slot) = await (
-            Given.PatientExists("Jane"),
+            Given.PatientExists("Jane", city: "Oslo"),
             Given.AvailableSlot());
 
         var appointment = await When.CreateAppointment(patient, slot);

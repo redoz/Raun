@@ -15,19 +15,22 @@ public sealed record Refused(string Reason) : BookingOutcome;
 
 public sealed partial class AppointmentWhen : When<NoWorld>
 {
-    // Deterministic demo rule: a patient is booked unless their name starts with 'W' (waitlisted) or 'R'
-    // (refused). The slot is only consumed when the booking lands.
+    // A held slot cannot be booked. The patient can join the waitlist or decline it.
+    // Wrapped outcomes need imperative resource recording: only Booked contains a new resource.
     [StepName("When trying to book {patient}")]
-    public Task<BookingOutcome> TryToBook([Read] Patient patient, [Read] Slot slot)
+    public async Task<BookingOutcome> TryToBook([Read] Patient patient, [Read] Slot slot, bool acceptsWaitlist = true)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(350));
-        BookingOutcome outcome = char.ToUpperInvariant(patient.Name[0]) switch
+        if (slot.Held)
         {
-            'W' => new Waitlisted(3),
-            'R' => new Refused("no clinicians available"),
-            _ => new Booked(new Appointment(patient, slot)),
-        };
-        return Task.FromResult(outcome);
+            return acceptsWaitlist ? new Waitlisted(3) : new Refused("the patient declined the waitlist");
+        }
+
+        var appointment = new Appointment(patient, slot);
+        await Context.Resources.Create(appointment);
+        await Context.Resources.Reference(patient, appointment);
+        await Context.Resources.Consume(slot, appointment);
+        return new Booked(appointment);
     }
 }
 

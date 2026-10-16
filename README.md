@@ -24,6 +24,8 @@ Keep scenarios in the executable project. Referenced libraries can contain share
 dotnet run -- --report-html --results-directory out
 ```
 
+For a complete runnable example with no `Program.cs`, see [GettingStarted](samples/GettingStarted).
+
 For `dotnet test`, select MTP in the solution's `global.json`:
 
 ```json
@@ -252,6 +254,11 @@ public sealed record Patient(string Id, string Name) :
     static string? IResourceAlternate<PatientResponse>.LabelFor(PatientResponse response) => response.DisplayName;
 }
 ```
+
+The [registry booking scenario](samples/AppointmentTests/RegistryBookingScenarios.cs) demonstrates
+this end to end: import a registry row, approve its domain patient, then book and audit using only
+`pat-42`. The report keeps one patient identity, remembers the name, and keeps key-only evidence
+free of borrowed snapshots.
 
 All three resolve to **Patient + key**. Their resource roles share conflict detection, lineage, and
 report links. `[Read, ResourceKey<Patient>] string patientId` and `Context.Resources.Load<PatientRow>(key)`
@@ -596,7 +603,9 @@ See [AspireAppointments](samples/AspireAppointments) for clients, service regist
 
 ## Repository
 
-[AppointmentTests](samples/AppointmentTests) contains working feature examples.
+[GettingStarted](samples/GettingStarted) is the smallest runnable example and uses the generated host.
+[AppointmentTests](samples/AppointmentTests) demonstrates the larger authoring and report surface.
+See the [sample guide](samples/README.md) for the feature map, run commands, and deliberate limits.
 See [design notes](docs/superpowers/specs) for decisions and [releasing](docs/RELEASING.md) for package publishing.
 Run `dotnet build Raun.slnx` and `dotnet test Raun.slnx` to verify the repository.
 

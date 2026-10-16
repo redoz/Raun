@@ -7,12 +7,15 @@ namespace AppointmentTests;
 // Domain entities flow between steps as ordinary types — each `await` unwraps Task<T> into T. The
 // shared identities (Patient/Slot/Appointment/User) are CRTP resources so steps can declare what they
 // do to them; ImportResult is a pure count DTO, not a shared identity, so it stays a plain record.
-// A patient's identity is their name; City is state that steps may edit. Because KeyFor projects the
-// stable member, `patient with { City = ... }` is still the SAME resource in the trace.
-public sealed record Patient(string Name, string? City = null) : IResource<Patient>
+// IDs are stable; names and cities are presentation/state. RegistryPatient is an external row
+// shape: its mapping belongs here, and the row itself needs no Raun contract.
+public sealed record Patient(string Id, string Name, string? City = null) :
+    IResource<Patient>, IResourceAlternate<RegistryPatient>
 {
-    public static ResourceKey KeyFor(Patient instance) => instance.Name;
+    public static ResourceKey KeyFor(Patient instance) => instance.Id;
     public static string? LabelFor(Patient instance) => instance.Name;
+    static ResourceKey IResourceAlternate<RegistryPatient>.KeyFor(RegistryPatient row) => row.PatientId;
+    static string? IResourceAlternate<RegistryPatient>.LabelFor(RegistryPatient row) => row.FullName;
 }
 
 // Same idea for a slot: Id is the identity, Held is state a hold step flips.
@@ -23,7 +26,7 @@ public sealed record Slot(int Id, bool Held = false) : IResource<Slot>
 
 public sealed record Appointment(Patient Patient, Slot Slot) : IResource<Appointment>
 {
-    public static ResourceKey KeyFor(Appointment instance) => $"{instance.Patient.Name}@{instance.Slot.Id}";
+    public static ResourceKey KeyFor(Appointment instance) => $"{instance.Patient.Id}@{instance.Slot.Id}";
 }
 
 public sealed record User(string Name) : IResource<User>
@@ -59,8 +62,9 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
     }
 
     [StepName("Given patient {name} exists")]
+    [StepName("Given patient {name} exists in {city}")]
     [return: Registered]
-    public Task<Patient> PatientExists(string name)
+    public Task<Patient> PatientExists(string name, string? city = null)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(320));
 
@@ -74,7 +78,7 @@ public sealed partial class AppointmentGiven : Given<NoWorld>
             return Task.CompletedTask;
         });
 
-        return Task.FromResult(new Patient(name));
+        return Task.FromResult(new Patient($"patient-{name}", name, city));
     }
 
     [StepName("Given an available slot exists")]
@@ -135,7 +139,7 @@ public sealed partial class AppointmentWhen : When<NoWorld>
 /// <summary>Assertions on bookings and imports.</summary>
 public sealed partial class AppointmentThen : Then<NoWorld>
 {
-    [StepName("Then the appointment should exist")]
+    [StepName("Then {appointment.Patient.Name} has an appointment in slot {appointment.Slot.Id:D2}")]
     public Task AppointmentExists([Read] Appointment appointment)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(170));

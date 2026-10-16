@@ -22,12 +22,51 @@ for(const scenario of model.scenarios)for(const step of scenario.steps){
   assert.ok(scenario.references.some(edge=>edge.subjectId===booked.resourceId && edge.kind==='Consume' && edge.targetType==='Slot'),'Booked consumes the chosen slot');
 }
 
-const actionSample=model.scenarios.find(scenario=>scenario.displayName==='resource actions reuse patient names');
-assert.ok(actionSample,'The canonical sample includes resource actions');
+const actionSample=model.scenarios.find(scenario=>scenario.displayName==='registered patient books by ID');
+assert.ok(actionSample,'The sample books a registered patient through an opaque ID');
+const patientResources=actionSample.resources.filter(resource=>resource.type==='Patient');
+assert.equal(patientResources.length,1,'Registry row, domain patient and string key share one canonical resource');
+const patientResource=patientResources[0];
+assert.equal(patientResource.key,'pat-42');
+assert.ok(!actionSample.resources.some(resource=>resource.type==='RegistryPatient'),'The external row does not create a separate identity');
+const patientEffects=actionSample.steps.flatMap(step=>step.effects).filter(effect=>effect.resourceId===patientResource.id);
+assert.ok(patientEffects.some(effect=>effect.data && JSON.parse(effect.data).FullName==='Jane <Doe>'),'The original registry representation is captured');
+assert.ok(patientEffects.some(effect=>effect.data && JSON.parse(effect.data).Name==='Jane <Doe>'),'The domain representation keeps its own evidence');
+const bookById=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Booked'));
+const keyReference=bookById.effects.find(effect=>effect.resourceId===patientResource.id);
+assert.equal(keyReference.verb,'Reference');
+assert.equal(keyReference.label,'Jane <Doe>');
+assert.equal(keyReference.data,null,'A typed relationship through a string key does not borrow the registry snapshot');
+assert.ok(bookById.displayName.includes('Jane <Doe>'),'Booking by key resolves the earlier readable name');
+const booking=bookById.effects.find(effect=>effect.actionName==='Booked');
+assert.ok(actionSample.references.some(edge=>edge.subjectId===booking.resourceId && edge.targetId===patientResource.id && edge.kind==='Reference'));
 const audit=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Audited'));
 assert.ok(audit.displayName.includes('Jane <Doe>'),'A key-only generated title reuses the patient name');
-assert.ok(audit.effects.some(effect=>effect.label==='Jane <Doe>' && effect.data==null),'Key-only effects have names without borrowed snapshots');
+assert.ok(audit.effects.some(effect=>effect.resourceId===patientResource.id && effect.label==='Jane <Doe>' && effect.data==null),'Key-only effects have names without borrowed snapshots');
 assert.ok(actionSample.steps.some(step=>step.effects.some(effect=>effect.actionName==='Approve' && effect.verb==='Edit')));
+
+const allSteps=model.scenarios.flatMap(scenario=>scenario.steps);
+assert.ok(allSteps.some(step=>step.displayName==='Given patient Jane exists'),'An omitted optional city selects the shorter title');
+assert.ok(allSteps.some(step=>step.displayName==='Given patient Jane exists in Oslo'),'A supplied optional city selects the more specific title');
+assert.ok(allSteps.some(step=>step.displayName==='Then Jane has an appointment in slot 01'),'Member paths and numeric formats appear in real titles');
+for(const [scenarioName,creates,expectedAssertion] of [['a booking either lands, waits, or is refused',true,'Then Ada has an appointment in slot 01'],['a patient whose booking waits is put on the waitlist',false,'Then the patient is 3 on the waitlist'],['a patient can decline the waitlist',false,'Then the patient is told the patient declined the waitlist']]){
+  const scenario=model.scenarios.find(item=>item.displayName===scenarioName);
+  assert.ok(scenario,'The sample demonstrates '+scenarioName);
+  const assertions=scenario.steps.filter(step=>step.phase==='Then' && !step.isLifecycle);
+  assert.deepEqual(assertions.filter(step=>step.status==='passed').map(step=>step.displayName),[expectedAssertion],'The patient choice selects its expected business outcome');
+  assert.equal(assertions.filter(step=>step.status==='not-taken').length,2,'The other two business outcomes are not taken');
+  const attempt=scenario.steps.find(step=>step.displayName.startsWith('When trying to book'));
+  const created=attempt.effects.filter(effect=>effect.type==='Appointment' && effect.verb==='Create');
+  assert.equal(created.length,creates?1:0,'Only successful conditional booking creates an appointment');
+  assert.equal(scenario.references.length,creates?2:0,'Only successful conditional booking records lineage');
+  if(creates){
+    const appointment=created[0];
+    for(const [type,kind] of [['Patient','Reference'],['Slot','Consume']]){
+      const target=scenario.resources.find(resource=>resource.type===type);
+      assert.ok(scenario.references.some(edge=>edge.subjectId===appointment.resourceId && edge.targetId===target.id && edge.kind===kind),'Conditional booking records the correct '+kind+' endpoint');
+    }
+  }
+}
 
 fs.writeFileSync(path.join(out, 'resource-matrix-preview.html'), source.replace('/*__RAUN_REPORT_JSON__*/', payload));
 const hasResources = scenario => scenario.resources.length || scenario.steps.some(step => step.effects.length);

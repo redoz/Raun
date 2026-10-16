@@ -15,6 +15,7 @@
     <Project Path="test/Raun.Aspire.Test/Raun.Aspire.Test.csproj" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/GettingStarted/GettingStarted.csproj" />
     <Project Path="samples/AppointmentTests/AppointmentTests.csproj" />
     <Project Path="samples/AspireAppointments/AspireAppointments.Api/AspireAppointments.Api.csproj" />
     <Project Path="samples/AspireAppointments/AspireAppointments.AppHost/AspireAppointments.AppHost.csproj" />
