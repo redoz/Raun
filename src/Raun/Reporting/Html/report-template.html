@@ -198,8 +198,8 @@
   .step-lifecycle.status-passed:not(.open) .step-head>.dm{visibility:hidden}
   .step-lifecycle.status-passed:not(.open) .dn{font-size:12px}
   .step-lifecycle.status-passed .step-head{cursor:pointer}
-  .phase-given{--phase-color:var(--ph-given)}.phase-when{--phase-color:var(--ph-when)}.phase-then{--phase-color:var(--ph-then)}
-  .phase-given,.phase-when,.phase-then{color:inherit;text-decoration-line:underline;text-decoration-color:color-mix(in srgb,var(--phase-color) 50%,var(--muted));text-underline-offset:2px;text-decoration-thickness:1px}
+  .phase-given{color:var(--ph-given)}.phase-when{color:var(--ph-when)}.phase-then{color:var(--ph-then)}
+  .phase-given,.phase-when,.phase-then{text-decoration:none}
   .step-head .dm{display:flex;align-items:center;justify-content:flex-end;gap:8px;font:12px/1.4 var(--sans);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
   .step-offset{color:var(--faint)}
   .resource-mention{display:inline;white-space:normal}
