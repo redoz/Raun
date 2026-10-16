@@ -67,14 +67,16 @@ internal static class DisplayNameBuilder
                 {
                     isReturn = true;
                     reservedFormat = true;
-                    returns.Add(new ReturnHole(message.MarkReturn(), TypeSyntaxFactory.From(resultType), path.Format));
+                    returns.Add(new ReturnHole(message.MarkReturn(), TypeSyntaxFactory.From(resultType), path.Format, path.Alignment));
+                    var unavailable = path.Align("…");
+                    var returnAlignment = path.Alignment;
                     placeholderText = path.FallbackText ?? "";
                     path = path.Fallback;
                     if (path is null)
                     {
-                        constant.Append('…');
-                        format.Append("…");
-                        message.AppendUnavailableReturn();
+                        constant.Append(unavailable);
+                        format.Append(unavailable);
+                        message.AppendUnavailableReturn(returnAlignment);
                         continue;
                     }
                 }
@@ -92,6 +94,7 @@ internal static class DisplayNameBuilder
                 continue;
             }
 
+            reservedFormat |= path!.Alignment != 0 || path.RequiresTypedFormatter;
             var argument = defaultParameter is null ? lowered[index].Expression.WithoutTrivia() : DefaultArgument(defaultParameter);
             // Bind the value as the called method does before accessing members or inferring the
             // formatter's generic type. The producer may return a more concrete type than this parameter.
@@ -99,12 +102,12 @@ internal static class DisplayNameBuilder
             var boundArgument = CastExpression(parameterType, ParenthesizedExpression(argument));
             if (path.Members.Count == 0 && AttributeReader.ResourceKeyType(path.Parameter) is not null)
             {
-                message.Append(ResourceKeyBinding.Apply(path.Parameter, boundArgument), path.Format);
+                message.Append(ResourceKeyBinding.Apply(path.Parameter, boundArgument), path.Format, path.Alignment);
                 reservedFormat = true;
                 constant.Append('{').Append(placeholderText).Append('}');
                 continue;
             }
-            message.Append(path.Walk(boundArgument), path.Format);
+            message.Append(path.Walk(boundArgument), path.Format, path.Alignment);
             reservedFormat |= path.Format is "id" or "data";
             if (path!.Members.Count > 0)
             {
@@ -128,8 +131,8 @@ internal static class DisplayNameBuilder
             }
             else if (path.Format is null && TryFoldLiterals(defaultParameter is null ? (originalLowered ?? lowered)[index].Expression : argument, out folded))
             {
-                constant.Append(folded!);
-                format.Append(folded!);
+                constant.Append(path.Align(folded!));
+                format.Append(path.Align(folded!));
             }
             else
             {
@@ -144,7 +147,7 @@ internal static class DisplayNameBuilder
             returns.Count == 0 ? null : CompletedTitle(returns, message.PartCount));
     }
 
-    private readonly record struct ReturnHole(int Index, TypeSyntax Type, string? Format);
+    private readonly record struct ReturnHole(int Index, TypeSyntax Type, string? Format, int Alignment);
 
     private static CastExpressionSyntax DefaultArgument(IParameterSymbol parameter)
     {
@@ -202,7 +205,7 @@ internal static class DisplayNameBuilder
         foreach (var hole in holes)
         {
             var replacement = new Message();
-            replacement.Append(CastExpression(hole.Type, output), hole.Format);
+            replacement.Append(CastExpression(hole.Type, output), hole.Format, hole.Alignment);
             statements.Add(ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
                 At(IdentifierName("__parts"), hole.Index), At(Access(replacement.Build()!, "Parts"), 0))));
         }
@@ -236,16 +239,16 @@ internal static class DisplayNameBuilder
             return PartCount;
         }
 
-        public void AppendUnavailableReturn()
+        public void AppendUnavailableReturn(int alignment)
         {
-            Append("…");
+            Append(alignment < 0 ? "…".PadRight(-alignment) : "…".PadLeft(alignment));
             Flush();
             _anyHole = true;
         }
 
         public void Append(string text) => _pending.Append(text);
 
-        public void Append(ExpressionSyntax value, string? format)
+        public void Append(ExpressionSyntax value, string? format, int alignment = 0)
         {
             Flush();
             var arguments = new List<ArgumentSyntax> { Argument(value) };
@@ -255,6 +258,7 @@ internal static class DisplayNameBuilder
                     .WithNameColon(NameColon(IdentifierName("format"))));
             }
 
+            if (alignment != 0) arguments.Add(Argument(Literals.Num(alignment)).WithNameColon(NameColon(IdentifierName("alignment"))));
             Call("AppendFormatted", arguments);
             _anyHole = true;
             PartCount++;

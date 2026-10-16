@@ -158,6 +158,11 @@ dotnet run --project samples/AppointmentTests -- --treenode-filter '/*/*/*/endpo
 
 IDE step-UID selection also isolates an individual case.
 
+`[StepName]` uses C# interpolation syntax inside its ordinary string literal: `{{` and `}}` escape
+literal braces, and `{value,8:D2}` combines alignment and formatting. `$return` is the extra token
+for the step result; put a common format after the whole fallback: `{$return ?? name:id}`.
+Parameter/member paths remain the supported title expressions.
+
 `[StepName]` sets the title. `{$return ?? name}` shows the input until a non-null result is available,
 then shows and links that result. A failed or skipped step, or a null result, keeps the available fallback.
 `{$return}` without a fallback shows `…` until completion. Input references keep their captured data.

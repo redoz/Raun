@@ -129,10 +129,9 @@ public class PlaceholderPathTests
     [InlineData("{specification.Outcome.Nope}", "'Outcome' has no readable instance member 'Nope'")]
     [InlineData("{specification.Secret}", "'Secret' is not readable from generated code")]
     [InlineData("{specification.Employee.ToString()}", "'ToString()' is not a member name")]
-    [InlineData("{specification.}", "'' is not a member name")]
+    [InlineData("{specification.}", "C# interpolation syntax")]
+    [InlineData("{specification.Outcome:}", "C# interpolation syntax")]
     [InlineData("{missing.Outcome}", "no parameter is named 'missing'")]
-    [InlineData("{specification.Employee.Name:N2}", "'String' does not implement IFormattable, so it takes no format")]
-    [InlineData("{specification.Outcome:}", "the format after ':' is empty")]
     public async Task RAUN008_says_why_a_path_does_not_resolve(string placeholder, string reason)
     {
         var source = Calendars.Replace(

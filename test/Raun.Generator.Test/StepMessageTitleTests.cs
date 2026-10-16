@@ -179,12 +179,12 @@ public class StepMessageTitleTests
     }
 
     [Fact]
-    public async Task Reserved_resource_formats_bind_without_weakening_other_placeholder_validation()
+    public async Task Resource_formats_follow_CSharp_policy_and_keep_parameter_validation()
     {
         var source = Source.Replace("Seed seed, Seed other", "[Read] Seed seed, [Read] Seed other", StringComparison.Ordinal);
         Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
-        var invalidFormat = await GeneratorHarness.DiagnoseAsync(source.Replace("{seed:id}", "{seed:invalid}", StringComparison.Ordinal), requireCompilable: true);
-        Assert.Contains(invalidFormat, diagnostic => diagnostic.Id == "RAUN008");
+        var ordinaryFormat = await GeneratorHarness.DiagnoseAsync(source.Replace("{seed:id}", "{seed:invalid}", StringComparison.Ordinal), requireCompilable: true);
+        Assert.Empty(ordinaryFormat); // C# ignores formats on values without IFormattable, as notes/logs do.
         var invalidParameter = await GeneratorHarness.DiagnoseAsync(source.Replace("{plain:id}", "{missing:id}", StringComparison.Ordinal), requireCompilable: true);
         Assert.Contains(invalidParameter, diagnostic => diagnostic.Id == "RAUN008");
     }

@@ -22,7 +22,7 @@ public class ReturnTitleTests
         public sealed class Steps : Given<NoWorld>
         {
             public Task<Seed> Input() => Task.FromResult(new Seed("before"));
-            [StepName("Input {input:id}; output {$return:id ?? name}; again {$return:data ?? name}")]
+            [StepName("Input {input:id}; output {$return ?? name:id}; again {$return ?? name:data}")]
             public Task<Seed?> Produce(Seed input, string name = "optional")
             {
                 input.Key = "after";
@@ -101,9 +101,9 @@ public class ReturnTitleTests
     [InlineData("Task<string?>", "Task.FromResult<string?>(null)", "{$return}", "…", "…")]
     [InlineData("Task<int>", "Task.FromResult(0)", "{$return}{$return:D2}", "000", "……")]
     [InlineData("ValueTask<bool>", "new ValueTask<bool>(false)", "{$return}", "False", "…")]
-    [InlineData("ValueTask<DateTime>", "new ValueTask<DateTime>(new DateTime(2026, 10, 13, 9, 30, 0))", "{$return:HH:mm ?? holder.Day:yyyy-MM-dd}", "09:30", "{holder.Day:yyyy-MM-dd}")]
+    [InlineData("ValueTask<DateTime>", "new ValueTask<DateTime>(new DateTime(2026, 10, 13, 9, 30, 0))", "{$return ?? holder.Day:HH:mm}", "09:30", "{holder.Day:HH:mm}")]
     [InlineData("Task<string>", "Task.FromResult(\"returned\")", "{$return ?? holder.Name}", "returned", "{holder.Name}")]
-    [InlineData("Task<DateTime?>", "Task.FromResult<DateTime?>(null)", "{$return:HH:mm ?? holder.Day:yyyy-MM-dd}", "2026-10-13", "{holder.Day:yyyy-MM-dd}")]
+    [InlineData("Task<DateTime?>", "Task.FromResult<DateTime?>(null)", "{$return ?? holder.Day:HH:mm}", "00:00", "{holder.Day:HH:mm}")]
     [InlineData("Task<string?>", "Task.FromResult<string?>(null)", "{$return ?? holder.Name}", "member", "{holder.Name}")]
     public async Task Return_binding_supports_task_shapes_formats_and_actual_null_semantics(string type, string expression, string template, string expected, string discovery)
     {
@@ -120,7 +120,7 @@ public class ReturnTitleTests
     [Fact]
     public async Task Omitted_optional_fallback_requires_a_matching_title()
     {
-        var source = SimpleSource("Task<string?>", "Task.FromResult<string?>(null)", "{$return:id ?? name}")
+        var source = SimpleSource("Task<string?>", "Task.FromResult<string?>(null)", "{$return ?? name:id}")
             .Replace("string name, Holder holder", "string name = \"optional\", Holder? holder = null", StringComparison.Ordinal)
             .Replace("name: \"fallback\", holder: new Holder(\"member\", new DateTime(2026, 10, 13))", "", StringComparison.Ordinal);
         var diagnostics = await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true);
@@ -169,7 +169,7 @@ public class ReturnTitleTests
     [InlineData("IView", "IView")]
     public async Task Completion_formats_using_the_declared_result_type(string declaredType, string? resourceType)
     {
-        var source = SimpleSource("Task<" + declaredType + ">", "Task.FromResult<" + declaredType + ">(new Seed())", "{$return:id ?? name}") + """
+        var source = SimpleSource("Task<" + declaredType + ">", "Task.FromResult<" + declaredType + ">(new Seed())", "{$return ?? name:id}") + """
 
             public interface IView { }
             public class BaseSeed { }
@@ -208,13 +208,11 @@ public class ReturnTitleTests
     [Theory]
     [InlineData("Task", "Task.CompletedTask", "{$return ?? name}")]
     [InlineData("ValueTask", "ValueTask.CompletedTask", "{$return}")]
-    [InlineData("Task<string>", "Task.FromResult(\"return\")", "{$return:HH:mm ?? name}")]
     [InlineData("Task<int>", "Task.FromResult(1)", "{$return ?? missing}")]
+    [InlineData("Task<int>", "Task.FromResult(1)", "{$return ?? name:}")]
     [InlineData("Task<int>", "Task.FromResult(1)", "{$return ?? name ?? holder.Name}")]
     [InlineData("Task<int>", "Task.FromResult(1)", "{$return ?? name + name}")]
     [InlineData("Task<int>", "Task.FromResult(1)", "{$return.Member ?? name}")]
-    [InlineData("Task<int>", "Task.FromResult(1)", "{$return: ?? name}")]
-    [InlineData("Task<int>", "Task.FromResult(1)", "{$return ?? name:F2}")]
     public async Task Invalid_return_placeholders_use_RAUN008(string type, string expression, string template)
     {
         var diagnostics = await GeneratorHarness.DiagnoseAsync(SimpleSource(type, expression, template), requireCompilable: true);

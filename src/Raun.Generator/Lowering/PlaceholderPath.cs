@@ -21,17 +21,19 @@ internal readonly record struct PathMember(string Name, bool NullConditional);
 /// </summary>
 internal sealed class PlaceholderPath
 {
-    private PlaceholderPath(IParameterSymbol parameter, IReadOnlyList<PathMember> members, string? format)
+    private PlaceholderPath(IParameterSymbol parameter, IReadOnlyList<PathMember> members, string? format, int alignment)
     {
         Parameter = parameter;
         Members = members;
         Format = format;
+        Alignment = alignment;
     }
 
-    private PlaceholderPath(ITypeSymbol returnType, string? format, PlaceholderPath? fallback, string? fallbackText)
+    private PlaceholderPath(ITypeSymbol returnType, string? format, PlaceholderPath? fallback, string? fallbackText, int alignment)
     {
         ReturnType = returnType;
         Format = format;
+        Alignment = alignment;
         Fallback = fallback;
         FallbackText = fallbackText;
         Members = [];
@@ -49,6 +51,8 @@ internal sealed class PlaceholderPath
 
     /// <summary>The format after the first colon, or null for none.</summary>
     public string? Format { get; }
+    public int Alignment { get; }
+    public bool RequiresTypedFormatter { get; private init; }
 
     /// <summary>
     /// Binds <paramref name="placeholder"/> against <paramref name="method"/>'s parameters. On failure
@@ -56,20 +60,30 @@ internal sealed class PlaceholderPath
     /// </summary>
     public static bool TryBind(IMethodSymbol method, string placeholder, out PlaceholderPath? path, out string reason)
     {
-        if (!placeholder.StartsWith("$return", System.StringComparison.Ordinal))
-        {
-            return TryBindParameter(method, placeholder, out path, out reason);
-        }
-
         path = null;
-        var coalesce = placeholder.IndexOf("??", System.StringComparison.Ordinal);
-        var primary = coalesce < 0 ? placeholder : placeholder.Substring(0, coalesce).TrimEnd();
-        var fallbackText = coalesce < 0 ? null : placeholder.Substring(coalesce + 2).Trim();
-        if (!TrySplitFormat(primary, out var root, out var format, out reason))
+        var hole = TemplateInterpolation.ReadHole(placeholder, out var translatedReturn);
+        if (hole is null)
         {
+            reason = "the placeholder must use C# interpolation syntax";
             return false;
         }
-        if (root != "$return")
+        var format = hole.FormatClause?.FormatStringToken.ValueText;
+        var alignment = 0;
+        if (hole.AlignmentClause is { } clause && !TryAlignment(clause.Value, out alignment))
+        {
+            reason = "alignment must be a signed integer literal";
+            return false;
+        }
+        if (!translatedReturn) return TryBindParameter(method, hole.Expression, format, alignment, out path, out reason);
+
+        var primary = hole.Expression;
+        ExpressionSyntax? fallbackExpression = null;
+        if (primary is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.CoalesceExpression } coalesce)
+        {
+            primary = coalesce.Left;
+            fallbackExpression = coalesce.Right;
+        }
+        if (primary is not IdentifierNameSyntax { Identifier.ValueText: "return" })
         {
             reason = "a return placeholder starts at '$return' without a member path";
             return false;
@@ -79,61 +93,54 @@ internal sealed class PlaceholderPath
             reason = "'$return' requires a Task<T> or ValueTask<T> result";
             return false;
         }
-        if (!ValidateFormat(resultType, format, out reason))
-        {
-            return false;
-        }
         PlaceholderPath? fallback = null;
-        if (fallbackText is not null)
+        string? fallbackText = null;
+        if (fallbackExpression is not null)
         {
-            if (fallbackText.IndexOf("??", System.StringComparison.Ordinal) >= 0)
-            {
-                reason = "a return placeholder accepts only one parameter-path fallback";
-                return false;
-            }
-            if (!TryBindParameter(method, fallbackText, out fallback, out reason))
-            {
-                return false;
-            }
-            // Params packing is outside return-title binding; all invocation forms share this rule.
-            // Ordinary parameter placeholders continue through their existing binder unchanged.
+            if (!TryBindParameter(method, fallbackExpression, format, alignment, out fallback, out reason)) return false;
             if (fallback!.Parameter!.IsParams)
             {
                 reason = "a return placeholder fallback cannot start at a params parameter";
                 return false;
             }
+            fallbackText = fallbackExpression.ToString()
+                + (alignment == 0 ? "" : "," + alignment.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                + (format is null ? "" : ":" + format);
         }
-        path = new PlaceholderPath(resultType, format, fallback, fallbackText);
+        path = new PlaceholderPath(resultType, format, fallback, fallbackText, alignment);
+        reason = "";
         return true;
     }
 
-    private static bool TryBindParameter(IMethodSymbol method, string placeholder, out PlaceholderPath? path, out string reason)
+    private static bool TryBindParameter(IMethodSymbol method, ExpressionSyntax expression, string? format, int alignment, out PlaceholderPath? path, out string reason)
     {
         path = null;
-        if (!TrySplitFormat(placeholder, out placeholder, out var format, out reason))
+        var segments = new List<IdentifierNameSyntax>();
+        while (expression is MemberAccessExpressionSyntax { RawKind: (int)SyntaxKind.SimpleMemberAccessExpression, Name: IdentifierNameSyntax memberName } access)
         {
+            segments.Add(memberName);
+            expression = access.Expression;
+        }
+        if (expression is not IdentifierNameSyntax parameterName)
+        {
+            reason = InvalidPathReason(expression.ToString());
             return false;
         }
+        segments.Add(parameterName);
+        segments.Reverse();
 
-        var segments = placeholder.Split('.');
-
-        var parameter = method.Parameters.FirstOrDefault(p => p.Name == segments[0]);
+        var parameter = method.Parameters.FirstOrDefault(p => p.Name == segments[0].Identifier.ValueText);
         if (parameter is null)
         {
-            reason = "no parameter is named '" + segments[0] + "'";
+            reason = "no parameter is named '" + segments[0].Identifier.ValueText + "'";
             return false;
         }
 
         var members = new List<PathMember>();
         var type = parameter.Type;
-        for (var i = 1; i < segments.Length; i++)
+        for (var i = 1; i < segments.Count; i++)
         {
-            var name = segments[i].Trim();
-            if (!SyntaxFacts.IsValidIdentifier(name))
-            {
-                reason = "'" + name + "' is not a member name; a placeholder path is parameter.Member.Member";
-                return false;
-            }
+            var name = segments[i].Identifier.ValueText;
 
             var receiver = UnderlyingIfNullable(type);
             if (Member(receiver, name) is not { } member)
@@ -148,7 +155,7 @@ internal sealed class PlaceholderPath
                 return false;
             }
 
-            members.Add(new PathMember(name, CanBeNull(type)));
+            members.Add(new PathMember(segments[i].Identifier.Text, CanBeNull(type)));
             type = member switch
             {
                 IPropertySymbol property => property.Type,
@@ -157,34 +164,33 @@ internal sealed class PlaceholderPath
             };
         }
 
-        if (!ValidateFormat(type, format, out reason))
+        path = new PlaceholderPath(parameter, members, format, alignment)
         {
-            return false;
-        }
-
-        path = new PlaceholderPath(parameter, members, format);
+            RequiresTypedFormatter = format is not null && !IsFormattable(UnderlyingIfNullable(type)),
+        };
         reason = "";
         return true;
     }
 
-    private static bool TrySplitFormat(string placeholder, out string root, out string? format, out string reason)
+    private static bool TryAlignment(ExpressionSyntax expression, out int alignment)
+    {
+        var sign = 1;
+        if (expression is PrefixUnaryExpressionSyntax unary && unary.Kind() is SyntaxKind.UnaryMinusExpression or SyntaxKind.UnaryPlusExpression)
+        {
+            sign = unary.IsKind(SyntaxKind.UnaryMinusExpression) ? -1 : 1;
+            expression = unary.Operand;
+        }
+        alignment = expression is LiteralExpressionSyntax { Token.Value: int number } ? number * sign : 0;
+        return expression is LiteralExpressionSyntax { Token.Value: int };
+    }
+
+    // Preserve the existing diagnostic's offending member text, even when C# rejects the path.
+    private static string InvalidPathReason(string placeholder)
     {
         var colon = placeholder.IndexOf(':');
-        root = colon < 0 ? placeholder : placeholder.Substring(0, colon).TrimEnd();
-        format = colon < 0 ? null : placeholder.Substring(colon + 1);
-        reason = format is { Length: 0 } ? "the format after ':' is empty" : "";
-        return reason.Length == 0;
-    }
-
-    private static bool ValidateFormat(ITypeSymbol type, string? format, out string reason)
-    {
-        if (format is not null && format is not ("id" or "data") && !IsFormattable(UnderlyingIfNullable(type)))
-        {
-            reason = "'" + UnderlyingIfNullable(type).Name + "' does not implement IFormattable, so it takes no format";
-            return false;
-        }
-        reason = "";
-        return true;
+        var root = colon < 0 ? placeholder : placeholder.Substring(0, colon);
+        var member = root.Substring(root.LastIndexOf('.') + 1).Trim();
+        return "'" + member + "' is not a member name; a placeholder path is parameter.Member.Member";
     }
 
     /// <summary>
@@ -217,11 +223,17 @@ internal sealed class PlaceholderPath
     /// <summary>Formats a compile-time constant exactly as <see cref="Apply"/> formats it at run time,
     /// or returns null when the constant cannot take the format.</summary>
     public string? FormatConstant(object? value)
-        => Format is null
-            ? value?.ToString()
-            : value is System.IFormattable formattable
-                ? formattable.ToString(Format, System.Globalization.CultureInfo.InvariantCulture)
-                : null;
+    {
+        try
+        {
+            return Align(value is System.IFormattable formattable
+                ? formattable.ToString(Format, System.Globalization.CultureInfo.InvariantCulture) ?? ""
+                : value?.ToString() ?? "");
+        }
+        catch (System.FormatException) { return null; }
+    }
+
+    public string Align(string text) => Alignment < 0 ? text.PadRight(-Alignment) : text.PadLeft(Alignment);
 
     private static MemberAccessExpressionSyntax InvariantCulture
         => MemberAccessExpression(
@@ -263,7 +275,6 @@ internal sealed class PlaceholderPath
     private static bool IsFormattable(ITypeSymbol type)
         => type.AllInterfaces.Any(i => i.Name == "IFormattable" && i.ContainingNamespace?.ToDisplayString() == "System")
             || (type.Name == "IFormattable" && type.ContainingNamespace?.ToDisplayString() == "System");
-
     private static bool CanBeNull(ITypeSymbol type)
         => !type.IsValueType || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
 

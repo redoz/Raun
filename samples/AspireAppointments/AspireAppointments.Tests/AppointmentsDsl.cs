@@ -30,7 +30,7 @@ public sealed class AppointmentsWorld : IScenarioWorld<AppointmentsWorld>
 /// <summary>Arrange steps.</summary>
 public sealed class AppointmentsGiven : Given<AppointmentsWorld>
 {
-    [StepName("Given patient {$return:id ?? name} can reach the API")]
+    [StepName("Given patient {$return ?? name:id} can reach the API")]
     [return: Created]
     public async Task<Patient> PatientCanReachApi(string name)
     {

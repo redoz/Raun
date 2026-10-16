@@ -5,9 +5,9 @@ namespace Raun.Generator.Test;
 
 /// <summary>
 /// The generator builds every emitted node with <c>SyntaxFactory</c> and never assembles code as
-/// text: no <c>Parse*</c> entry point, no <c>ToString()</c>/<c>Trim()</c> round trip. Text
+/// text: no <c>Parse*</c> entry point for emitted code, no <c>ToString()</c>/<c>Trim()</c> round trip. Text
 /// concatenation is where escaping, precedence and qualification bugs hide, so this is a structural
-/// guard rather than a style preference.
+/// guard rather than a style preference. Authored template expressions have one explicit parser boundary.
 /// </summary>
 public partial class EmissionDisciplineTests
 {
@@ -42,7 +42,7 @@ public partial class EmissionDisciplineTests
     private const string StaticFactoryImport = "using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;";
 
     [Fact]
-    public void The_generator_never_parses_source_text()
+    public void Generated_code_is_never_parsed_and_only_authored_template_input_uses_a_parser()
     {
         var generatorRoot = Path.Combine(RepositoryRoot(), "src", "Raun.Generator");
         Assert.True(Directory.Exists(generatorRoot), $"generator sources not found at {generatorRoot}");
@@ -84,7 +84,11 @@ public partial class EmissionDisciplineTests
                     var isParserCall = receiver.Success
                         ? receiver.Value != "this"
                         : importsStaticFactory && !declaredHere.Contains(name);
-                    if (isParserCall)
+                    // Authored template input is the sole parser boundary. Emitted source must
+                    // still be built with SyntaxFactory; no other file or parser API is exempt.
+                    var templateInput = relative.Replace('\\', '/') == "Lowering/TemplateInterpolation.cs"
+                        && receiver.Value == "SyntaxFactory" && name == "ParseExpression";
+                    if (isParserCall && !templateInput)
                     {
                         var call = receiver.Success ? receiver.Value + "." + name : name;
                         offences.Add($"{location}: {call} — {line.Trim()}");
@@ -95,7 +99,7 @@ public partial class EmissionDisciplineTests
 
         Assert.True(
             offences.Count == 0,
-            "the generator must build syntax, never parse or concatenate source text:"
+            "generated code must be built as syntax; only authored template input may be parsed:"
                 + Environment.NewLine
                 + string.Join(Environment.NewLine, offences));
     }

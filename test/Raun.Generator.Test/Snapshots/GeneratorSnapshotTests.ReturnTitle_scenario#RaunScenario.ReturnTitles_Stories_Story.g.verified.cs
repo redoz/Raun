@@ -93,7 +93,7 @@ namespace Raun.Generated
 #line hidden
                     return (object? )__r;
                 },
-                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("Input ").AppendFormatted(((global::ReturnTitles.Seed)(__inputs.GetArgument<global::ReturnTitles.Seed>(1, () => __inputs.Get<global::ReturnTitles.Seed>(1), true))), format: "id").AppendLiteral("; output ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "fallback", true)))).AppendLiteral("; again ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "fallback", true)))).Build(),
+                FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("Input ").AppendFormatted(((global::ReturnTitles.Seed)(__inputs.GetArgument<global::ReturnTitles.Seed>(1, () => __inputs.Get<global::ReturnTitles.Seed>(1), true))), format: "id").AppendLiteral("; output ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "fallback", true))), format: "id").AppendLiteral("; again ").AppendFormatted(((string)(__inputs.GetArgument<string>(0, () => "fallback", true))), format: "data").Build(),
                 FormatCompletedTitleMessage = static (__title, __output, __formatting) =>
                 {
                     if (__output is null || __title.Parts.Count != 6)
