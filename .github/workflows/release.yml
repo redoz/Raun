@@ -62,6 +62,9 @@ jobs:
             fi
           done
 
+      - name: Test package consumption
+        run: python3 eng/test-packages.py artifacts
+
       - name: NuGet.org login
         id: nuget_login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1

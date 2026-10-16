@@ -63,8 +63,10 @@ both together.
    dotnet pack src/Raun.Aspire/Raun.Aspire.csproj -c Release -o artifacts
    ```
 
-   To try them as a consumer would, point a scratch project's `nuget.config` at `artifacts/` (with
-   `<clear/>` and nuget.org as the second source) and reference `Raun.Mtp` with version `*-*`.
+   Run `python3 eng/test-packages.py artifacts` (or `python` on Windows) to test the packages.
+   It copies both samples outside the repo, replaces framework project references with exact package
+   versions, and restores into a fresh cache. It also checks the generated entry point. Both CI and
+   release workflows run this before publishing; missing scenarios or reports fail the check.
 4. Tag with git — jj imports tags but does not create them:
 
    ```bash
