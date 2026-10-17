@@ -484,7 +484,7 @@ const renderFixture = (name, data) => {
     const classLink=heading.locator('a.group-type'),methodLink=scenarioHead.locator('a.scenario-method');
     assert.equal(await classLink.getAttribute('href'),sourceScenario.typeSourceUrl);
     assert.equal(await methodLink.getAttribute('href'),sourceScenario.sourceUrl);
-    assert.ok(await page.locator('.report-meta').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).opacity==='0' && getComputedStyle(node).fontStyle==='italic')),'Code names are italic and hidden by default');
+    assert.ok(await page.locator('.report-meta').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).opacity==='0' && getComputedStyle(node).fontStyle==='italic' && getComputedStyle(node).fontFamily===getComputedStyle(document.querySelector('.matrix-resource small')).fontFamily)),'Code names are italic monospace and hidden by default');
     const slide=await methodLink.evaluate(node=>{const m=new DOMMatrix(getComputedStyle(node).transform);return {x:m.m41,y:m.m42};});
     assert.ok(slide.x<0 && slide.y===0,'Hidden identifiers start to the left and slide horizontally');
     const assertInlineIdentifier=async(owner,labelSelector)=>{
