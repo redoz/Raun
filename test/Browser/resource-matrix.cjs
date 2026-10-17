@@ -484,15 +484,19 @@ const renderFixture = (name, data) => {
     const classLink=heading.locator('a.group-type'),methodLink=scenarioHead.locator('a.scenario-method');
     assert.equal(await classLink.getAttribute('href'),sourceScenario.typeSourceUrl);
     assert.equal(await methodLink.getAttribute('href'),sourceScenario.sourceUrl);
-    assert.ok(await page.locator('.report-meta').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).opacity==='0' && getComputedStyle(node).fontStyle==='italic' && getComputedStyle(node).fontFamily===getComputedStyle(document.querySelector('.matrix-resource small')).fontFamily)),'Code names are italic monospace and hidden by default');
+    assert.ok(await page.locator('.report-meta').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).opacity==='0' && getComputedStyle(node).fontStyle==='italic' && getComputedStyle(node).fontSize==='10.5px' && getComputedStyle(node).fontFamily===getComputedStyle(document.querySelector('.matrix-resource small')).fontFamily)),'Code names are 10.5px italic monospace and hidden by default');
     const slide=await methodLink.evaluate(node=>{const m=new DOMMatrix(getComputedStyle(node).transform);return {x:m.m41,y:m.m42};});
     assert.ok(slide.x<0 && slide.y===0,'Hidden identifiers start to the left and slide horizontally');
     const assertInlineIdentifier=async(owner,labelSelector)=>{
       const aligned=await owner.evaluate((node,labelSelector)=>{
         const title=node.querySelector(labelSelector).getBoundingClientRect(),meta=node.querySelector('.report-meta').getBoundingClientRect();
-        return {gap:meta.left+parseFloat(getComputedStyle(node.querySelector('.report-meta')).paddingLeft)-title.right,center:(meta.top+meta.bottom-title.top-title.bottom)/2};
+        const textBounds=element=>{const range=document.createRange();range.selectNodeContents(element);return range.getBoundingClientRect();};
+        const titleText=textBounds(node.querySelector(labelSelector)),codeText=textBounds(node.querySelector('.report-meta [dir=ltr]'));
+        const link=node.querySelector('.report-meta>.leading-ellipsis').getBoundingClientRect();
+        return {gap:meta.left+parseFloat(getComputedStyle(node.querySelector('.report-meta')).paddingLeft)-title.right,center:(meta.top+meta.bottom-title.top-title.bottom)/2,textCenter:(codeText.top+codeText.bottom-titleText.top-titleText.bottom)/2,hitHeight:link.height};
       },labelSelector);
       assert.ok(aligned.gap>=4 && Math.abs(aligned.center)<1,'Code identifiers end after the title and vertically centered: '+JSON.stringify(aligned));
+      assert.ok(Math.abs(aligned.textCenter)<1 && aligned.hitHeight>=22,'Code text is centered and has a larger link hit area: '+JSON.stringify(aligned));
     };
     const flyoutOpacity=async(owner)=>owner.locator('.report-meta').evaluate(async node=>{
       await Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})));
@@ -513,10 +517,15 @@ const renderFixture = (name, data) => {
     await page.waitForFunction(()=>getComputedStyle(document.querySelector('.card-head .report-meta')).opacity==='1');
     await assertInlineIdentifier(scenarioHead,'.scenario-title');
     const titleBox=await scenarioHead.locator('.scenario-title').boundingBox();
+    await page.mouse.move(titleBox.x+titleBox.width/2,titleBox.y-3);
+    assert.equal(await flyoutOpacity(scenarioHead),'1','The title has a forgiving hover margin above its text');
     await page.mouse.move(titleBox.x+titleBox.width+3,titleBox.y+titleBox.height/2);
     assert.equal(await flyoutOpacity(scenarioHead),'1','The flyout stays open while moving from the title to its source link');
     await methodLink.hover();
     assert.equal(await flyoutOpacity(scenarioHead),'1','The revealed source link remains reachable');
+    const linkBox=await methodLink.boundingBox();
+    await page.mouse.move(linkBox.x+linkBox.width/2,linkBox.y+2);
+    assert.equal(await flyoutOpacity(scenarioHead),'1','The flyout stays open in the padding above the source name');
     assert.deepEqual(await scenarioHead.evaluate(node=>{const rect=node.getBoundingClientRect();return {height:rect.height,width:rect.width};}),beforeReveal,'Revealing method names does not change layout');
     await page.mouse.move(0,0);
     assert.equal(await flyoutOpacity(scenarioHead),'0','Leaving the title and source link hides the flyout');
