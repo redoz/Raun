@@ -48,6 +48,27 @@ public class ResourceRelationshipTests
     }
 
     [Theory]
+    [InlineData(ResourceActionKind.Reference, "Reference", "Patient patient", "[Named] Patient patient", "p")]
+    [InlineData(ResourceActionKind.Consume, "Consume", "Slot slot2", "[Named] Slot slot2", "s")]
+    public async Task Named_relationship_targets_keep_one_action_and_their_lineage(ResourceActionKind kind, string verb, string original, string decorated, string key)
+    {
+        var source = Source.Replace("public sealed class Steps", "[System.ComponentModel.DisplayName(\"Reserve\")] [ResourceActionDefinition(ResourceActionKind." + kind + ")] public sealed class NamedAttribute : ResourceAttribute; public sealed class Steps", StringComparison.Ordinal)
+            .Replace(original, decorated, StringComparison.Ordinal);
+        var generated = GeneratorHarness.Run(source);
+        generated.AssertCompiles();
+        var results = await Assert.Single(generated.Definitions()).RunAsync();
+        Assert.All(results, result => Assert.Equal(StepStatus.Passed, result.Status));
+        var book = results.Single(result => result.Node.OperationName == "Book");
+        var effect = Assert.Single(book.Effects, effect => effect.Identity.Key.Value == key);
+        Assert.Equal(verb, effect.Verb.ToString());
+        Assert.Equal(LockMode.Shared, effect.Verb.ToLockMode());
+        Assert.Equal("Reserve", effect.Action!.Name);
+        Assert.Single(book.Logs, line => line.Contains("[resource] Reserve", StringComparison.Ordinal));
+        Assert.NotNull(effect.DataSnapshot);
+        Assert.Contains(book.Lineage, relation => relation.Target == effect.Identity && relation.Kind == effect.Verb);
+    }
+
+    [Theory]
     [InlineData("Booked(Patient = nameof(patient), Slot = nameof(slot2))", "Booked(Slot = nameof(slot2))", "RAUN032")]
     [InlineData("Patient = nameof(patient)", "Patient = \" \"", "RAUN032")]
     [InlineData("Slot = nameof(slot2)", "Slot = \"missing\"", "RAUN010")]

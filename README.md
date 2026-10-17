@@ -169,7 +169,7 @@ Derive its attribute from a resource role; it keeps that role's conflict rules. 
 receive only an ID can reuse the resource's earlier name. See the [action sample](samples/AppointmentTests/ResourceActionScenarios.cs)
 and [resource reference](docs/reference/resources.md) for both features.
 Domain attributes can also declare typed relationship properties: the [booking attributes](samples/AppointmentTests/BookingAttributes.cs)
-link each booking to its patient and slot; the [registry example](samples/AppointmentTests/RegistryBookingScenarios.cs) uses an opaque patient ID.
+link each booking to its patient and slot. `[Reserved]` gives Consume semantics the domain label Reserve; the [registry example](samples/AppointmentTests/RegistryBookingScenarios.cs) uses an opaque patient ID.
 
 ## Read the report when something fails
 

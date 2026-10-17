@@ -53,7 +53,7 @@ internal static class ResourceDefinitionReader
         return null;
     }
 
-    internal static string? ActionKind(int kind) => kind switch { 0 => "Create", 1 => "Load", 2 => "Read", 3 => "Edit", 4 => "Delete", _ => null };
+    internal static string? ActionKind(int kind) => kind switch { 0 => "Create", 1 => "Load", 2 => "Read", 3 => "Edit", 4 => "Delete", 5 => "Reference", 6 => "Consume", _ => null };
     internal static string? RelationKind(int kind) => kind switch { 0 => "Reference", 1 => "Consume", _ => null };
     internal static bool IsMarker(AttributeData data) => Is(data.AttributeClass, "RelationshipAttribute") || Is(data.AttributeClass, "RelationshipAttribute", 1);
     internal static bool IsBuiltin(INamedTypeSymbol type) => type.ContainingAssembly.Name == "Raun" && type.ContainingNamespace.ToDisplayString() == "Raun"

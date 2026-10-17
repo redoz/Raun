@@ -11,9 +11,10 @@ public sealed class RegisteredAttribute : CreatedAttribute;
 [DisplayName("Hold")]
 public sealed class HeldAttribute : EditedAttribute;
 
-/// <summary>The step reserves a slot for a booking. This action requires exclusive access.</summary>
+/// <summary>The step uses a slot as input to a booking. This action uses shared access and does not delete the slot.</summary>
 [DisplayName("Reserve")]
-public sealed class ReservedAttribute : EditedAttribute;
+[ResourceActionDefinition(ResourceActionKind.Consume)]
+public sealed class ReservedAttribute : ResourceAttribute;
 
 /// <summary>The step cancels a booking.</summary>
 [DisplayName("Cancel")]

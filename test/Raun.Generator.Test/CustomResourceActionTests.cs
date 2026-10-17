@@ -28,6 +28,29 @@ public sealed class CustomResourceActionTests
         Assert.Empty(GeneratorHarness.GeneratedCodeWarnings(Source(basis)));
     }
 
+    [Theory]
+    [InlineData("Reference")]
+    [InlineData("Consume")]
+    public async Task Direct_relationship_actions_support_returns_typed_keys_and_shared_parallel_access(string kind)
+    {
+        var source = Source("Read").Replace("public sealed class CustomAttribute : ReadAttribute;",
+            "[ResourceActionDefinition(ResourceActionKind." + kind + ")] public sealed class CustomAttribute : ResourceAttribute;", StringComparison.Ordinal)
+            .Replace("[Custom] Patient patient", "[Custom, ResourceKey<Patient>] string patient", StringComparison.Ordinal)
+            .Replace("await Given.Touch(patient);", "await (Given.Touch(patient.Id), Given.Observe(patient));", StringComparison.Ordinal);
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
+        var generated = GeneratorHarness.Run(source);
+        generated.AssertCompiles();
+        var results = await Assert.Single(generated.Definitions()).RunAsync();
+        Assert.All(results, result => Assert.Equal(StepStatus.Passed, result.Status));
+        var input = Assert.Single(results.Single(result => result.Node.OperationName == "Touch").Effects);
+        Assert.Equal(kind, input.Verb.ToString());
+        Assert.Null(input.DataSnapshot);
+        Assert.Equal("Domain action", input.Action!.Name);
+        var output = Assert.Single(results.Single(result => result.Node.OperationName == "Copy").Effects, effect => effect.Action is not null);
+        Assert.Equal(kind, output.Verb.ToString());
+        Assert.NotNull(output.DataSnapshot);
+    }
+
     [Fact]
     public async Task Empty_default_action_name_is_diagnosed()
     {

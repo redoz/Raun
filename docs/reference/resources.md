@@ -202,6 +202,27 @@ Use `ResourceAction.For<TAttribute>()` or `ResourceAction.For(typeof(ApprovedAtt
 for manual tracking. Applying an action to an identity does not create an object snapshot.
 See the [action sample](../../samples/AppointmentTests/ResourceActionScenarios.cs).
 
+A custom attribute can also name a Reference or Consume action directly:
+
+```csharp
+[DisplayName("Reserve")]
+[ResourceActionDefinition(ResourceActionKind.Consume)]
+public sealed class ReservedAttribute : ResourceAttribute;
+
+[return: Created(Consumes = [nameof(slot)])]
+public Task<Appointment> Book([Reserved] Slot slot) { ... }
+
+// Inside a conditional step, record only a successful reservation:
+await Context.Resources.Relate(ResourceAction.For<ReservedAttribute>(), appointment, slot);
+```
+
+Reference and Consume actions keep shared access and do not delete their target.
+When a declared relationship targets a parameter with a named action of the same kind,
+Raun records one named event and retains the lineage edge. Here the slot shows Reserve,
+with Consume semantics. The `Relate` overload accepts only Reference and Consume actions.
+Attaching a relationship to an unchanged named observation does not repeat its log or trace event.
+Changed snapshots and explicit `Apply` calls still produce observation events.
+
 ## Domain attributes with typed relationships
 
 Use a domain attribute when an operation always links the same kinds of resources.

@@ -15,7 +15,7 @@ const model = JSON.parse(payload);
 const matrixScenarioIndex=model.scenarios.findIndex(scenario=>scenario.displayName==='out-of-town patients get a travel reminder');
 assert.ok(matrixScenarioIndex>=0,'The canonical sample includes the travel reminder scenario');
 const domainEffects=model.scenarios.flatMap(scenario=>scenario.steps.flatMap(step=>step.effects));
-for(const [action,verb] of [['Register','Create'],['Hold','Edit'],['Reserve','Edit'],['Booked','Create'],['Rescheduled','Create'],['Cancel','Delete']]){
+for(const [action,verb] of [['Register','Create'],['Hold','Edit'],['Reserve','Consume'],['Booked','Create'],['Rescheduled','Create'],['Cancel','Delete']]){
   assert.ok(domainEffects.some(effect=>effect.actionName===action && effect.verb===verb),'The real sample demonstrates '+action+' with '+verb+' semantics');
 }
 for(const scenario of model.scenarios)for(const step of scenario.steps){
@@ -23,7 +23,9 @@ for(const scenario of model.scenarios)for(const step of scenario.steps){
   const reserved=step.effects.filter(effect=>effect.actionName==='Reserve');
   const slotInputs=step.effects.filter(effect=>effect.type==='Slot' && effect.verb==='Consume');
   for(const slot of slotInputs){
-    assert.ok(reserved.some(effect=>effect.resourceId===slot.resourceId && effect.verb==='Edit'),'Booking reserves the chosen slot with exclusive edit semantics');
+    assert.equal(step.effects.filter(effect=>effect.resourceId===slot.resourceId && effect.verb==='Consume').length,1,'Reservation and lineage share one Consume event');
+    assert.ok(!step.effects.some(effect=>effect.resourceId===slot.resourceId && effect.verb==='Edit'),'Reserve does not add an exclusive Edit action');
+    assert.ok(reserved.some(effect=>effect.resourceId===slot.resourceId && effect.verb==='Consume'),'Reserve keeps Consume semantics');
   }
   if(!booked)continue;
   assert.ok(scenario.references.some(edge=>edge.subjectId===booked.resourceId && edge.kind==='Reference' && edge.targetType==='Patient'),'Booked retains the patient reference');

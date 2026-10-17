@@ -6,8 +6,61 @@ public class ResourceRelationshipTests
 {
     public sealed record Patient(string Id);
     public sealed record Row(string Id);
-    public sealed record Response(string Id);
+    public sealed record Response(string Id, string? State = null);
     public sealed record Appointment(string Id);
+
+    [ResourceActionDefinition(ResourceActionKind.Consume)]
+    [System.ComponentModel.DisplayName("Reserve")]
+    private sealed class ReservedAttribute : ResourceAttribute;
+
+    [Fact]
+    public async Task Named_consume_preserves_canonical_keys_lineage_and_rejects_invalid_relations()
+    {
+        var resolver = new ResourceIdentityResolver();
+        resolver.Identify<Patient>().With<Row>(row => row.Id);
+        var resources = new ResourceContext("step", "book", resolver, TimeProvider.System);
+        var source = new ResourceIdentity(typeof(Appointment), "a");
+        var target = new ResourceIdentity(typeof(Row), "p");
+        var action = ResourceAction.For<ReservedAttribute>();
+        var observations = new List<string?>();
+        resources.AttachActionObserver((_, _, _, snapshot, _, _) => observations.Add(snapshot));
+        await resources.Apply(action, target);
+        await resources.Relate(action, source, target, typeof(Patient));
+        Assert.Single(observations);
+        var effect = Assert.Single(resources.Effects);
+        Assert.Equal("Reserve", effect.Action!.Name);
+        Assert.Equal(LifecycleVerb.Consume, effect.Verb);
+        Assert.Equal(LockMode.Shared, effect.Verb.ToLockMode());
+        Assert.Null(effect.DataSnapshot);
+        Assert.Equal(typeof(Patient), effect.Identity.Type);
+        Assert.Equal(effect.Identity, Assert.Single(resources.Lineage).Target);
+        Assert.Equal(LifecycleVerb.Consume, Assert.Single(resources.Lineage).Kind);
+        await Assert.ThrowsAsync<ArgumentException>(async () => await resources.Relate(ResourceAction.For<EditedAttribute>(), source, target));
+        await Assert.ThrowsAsync<ArgumentException>(async () => await resources.Relate(action, source, target, typeof(Appointment)));
+        Assert.Single(resources.Effects);
+        Assert.Single(resources.Lineage);
+        await resources.Apply(action, target);
+        Assert.Equal(2, observations.Count);
+    }
+
+    [Fact]
+    public async Task Named_relations_keep_changed_snapshots_but_do_not_repeat_identical_observations()
+    {
+        var resolver = new ResourceIdentityResolver();
+        resolver.Identify<Patient>().With<Response>(row => row.Id);
+        var resources = new ResourceContext("step", "book", resolver, TimeProvider.System);
+        var observations = new List<string?>();
+        resources.AttachActionObserver((_, _, _, snapshot, _, _) => observations.Add(snapshot));
+        var source = new ResourceIdentity(typeof(Appointment), "a");
+        var action = ResourceAction.For<ReservedAttribute>();
+        await resources.Apply(action, new Response("p", "before"));
+        await resources.Relate(action, source, new Response("p", "after"));
+        await resources.Relate(action, source, new Response("p", "after"));
+        Assert.Equal(2, observations.Count);
+        Assert.Contains("after", observations[1], StringComparison.Ordinal);
+        Assert.Equal(observations[1], Assert.Single(resources.Effects).DataSnapshot);
+        Assert.Single(resources.Lineage);
+    }
 
     [Fact]
     public async Task Canonical_expectations_accept_all_mapped_representations_and_data_free_keys()

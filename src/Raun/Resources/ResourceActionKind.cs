@@ -13,4 +13,8 @@ public enum ResourceActionKind
     Edit,
     /// <summary>Remove an existing resource. This access is exclusive.</summary>
     Delete,
+    /// <summary>Keep a link to an independent resource. This access is shared.</summary>
+    Reference,
+    /// <summary>Use a resource as an input to a produced resource. This access is shared and does not delete the input.</summary>
+    Consume,
 }

@@ -64,7 +64,7 @@ public sealed partial class AppointmentWhen : When
         var receipt = new DeliveryReceipt($"booking-{patient.Name}", patient.Name);
         await Context.Resources.Create(appointment);
         await Context.Resources.Reference(patient, appointment);
-        await Context.Resources.Consume(slot, appointment);
+        await Context.Resources.Relate(ResourceAction.For<ReservedAttribute>(), appointment, slot);
         await Context.Resources.Create(receipt);
         Context.Log($"Imported {appointment}; clinic row {patient:data}; confirmation {receipt}.");
         Assert.Contains(Context.Resources.Effects, effect => effect.Identity == new ResourceIdentity("clinic-confirmation", receipt.Id));

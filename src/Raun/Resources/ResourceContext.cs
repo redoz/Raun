@@ -174,6 +174,31 @@ public sealed class ResourceContext
         where TSource : notnull where TTarget : notnull
     {
         if (!Enum.IsDefined(relation)) { throw new ArgumentOutOfRangeException(nameof(relation)); }
+        return RelateCore(relation, source, target, expectedResourceType, null);
+    }
+
+    /// <summary>Record a named Reference or Consume action and its relationship.</summary>
+    /// <remarks>
+    /// The action applies to the target. Both relationship kinds use shared access and do not delete the target.
+    /// If the same named action has the same snapshot and label, Raun adds the relationship without a second log or trace event.
+    /// Changed observations and explicit Apply calls still produce events.
+    /// </remarks>
+    public ValueTask Relate<TSource, TTarget>(ResourceAction action, TSource source, TTarget target, Type? expectedResourceType = null)
+        where TSource : notnull where TTarget : notnull
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        var relation = action.Effect switch
+        {
+            LifecycleVerb.Reference => ResourceRelation.Reference,
+            LifecycleVerb.Consume => ResourceRelation.Consume,
+            _ => throw new ArgumentException("Use a Reference or Consume action for a relationship.", nameof(action)),
+        };
+        return RelateCore(relation, source, target, expectedResourceType, action);
+    }
+
+    private ValueTask RelateCore<TSource, TTarget>(ResourceRelation relation, TSource source, TTarget target, Type? expectedResourceType, ResourceAction? action)
+        where TSource : notnull where TTarget : notnull
+    {
         var sourceIdentity = _resolver.Resolve(source);
         var targetIdentity = _resolver.Resolve(target);
         if (sourceIdentity == targetIdentity) { throw new ArgumentException("A resource relationship cannot target its own canonical identity.", nameof(target)); }
@@ -181,10 +206,10 @@ public sealed class ResourceContext
             && _resolver.Normalize(new ResourceIdentity(expectedResourceType, targetIdentity.Key)).Kind != targetIdentity.Kind)
         { throw new ArgumentException("The relationship target does not belong to the expected canonical resource group.", nameof(target)); }
         var verb = relation == ResourceRelation.Reference ? LifecycleVerb.Reference : LifecycleVerb.Consume;
-        return RecordRelated(verb, targetIdentity, target is ResourceIdentity ? null : target, typeof(TTarget), [sourceIdentity]);
+        return RecordRelated(verb, targetIdentity, target is ResourceIdentity ? null : target, typeof(TTarget), [sourceIdentity], action);
     }
 
-    private ValueTask RecordRelated(LifecycleVerb kind, ResourceIdentity target, object? data, Type? sourceType, object[] subjects)
+    private ValueTask RecordRelated(LifecycleVerb kind, ResourceIdentity target, object? data, Type? sourceType, object[] subjects, ResourceAction? action = null)
     {
         target = _resolver.Normalize(target);
         var identities = (subjects ?? []).Select(subject => subject is ResourceIdentity identity
@@ -198,7 +223,7 @@ public sealed class ResourceContext
                 { throw new ArgumentException("Conflicting relationship kinds name the same canonical endpoints.", nameof(subjects)); }
             }
             // Record claims first: a refused shared target claim must not leave accepted lineage.
-            var result = Record(kind, target, data, sourceType);
+            var result = Record(kind, target, data, sourceType, action, reuseObservation: action is not null);
             foreach (var source in identities)
             {
                 if (!_lineage.Exists(edge => edge.Subject == source && edge.Target == target && edge.Kind == kind))
@@ -224,7 +249,7 @@ public sealed class ResourceContext
     internal void AttachActionObserver(Action<LifecycleVerb, ResourceIdentity, ResourceConflictException?, string?, string?, ResourceAction?> observer)
         => _observer = observer;
 
-    ValueTask Record(LifecycleVerb verb, ResourceIdentity identity, object? data, Type? sourceType = null, ResourceAction? action = null)
+    ValueTask Record(LifecycleVerb verb, ResourceIdentity identity, object? data, Type? sourceType = null, ResourceAction? action = null, bool reuseObservation = false)
     {
         identity = _resolver.Normalize(identity);
         if (action?.AttributeType is null) { action = null; }
@@ -243,7 +268,21 @@ public sealed class ResourceContext
 
         var snapshot = ResourcePresentation.Capture(data);
         var label = _labels.Resolve(_resolver, identity, sourceType ?? data?.GetType(), data);
-        _observer?.Invoke(verb, identity, null, snapshot, label, action);
+        var notify = true;
+        if (reuseObservation)
+        {
+            lock (_lock)
+            {
+                // Attaching lineage to an unchanged named action is not a second observation.
+                // Apply calls and changed snapshots must still notify logs and telemetry.
+                if (_index.TryGetValue(effectKey, out var existingIndex))
+                {
+                    var existing = _effects[existingIndex];
+                    notify = existing.Verb != verb || existing.DataSnapshot != snapshot || existing.Label != label;
+                }
+            }
+        }
+        if (notify) { _observer?.Invoke(verb, identity, null, snapshot, label, action); }
 
         lock (_lock)
         {

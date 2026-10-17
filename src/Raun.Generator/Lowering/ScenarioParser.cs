@@ -2135,7 +2135,16 @@ internal sealed class ScenarioParser
             foreach (var relation in relationships.Where(r => r.Source == source))
             {
                 if (TargetFor(relation.Target) is { } expression)
-                { claims.Add(new ResourceRoleClaim(relation.Kind, expression, IsReturn: false) { SubjectExpressions = [subjectExpression], RelationshipAttributeIdentity = relation.AttributeIdentity, RelationshipPropertyName = relation.PropertyName }); }
+                {
+                    var targetAction = relation.Target == AttributeReader.ReturnSubject ? AttributeReader.ReturnAction(method)
+                        : method.Parameters.FirstOrDefault(parameter => parameter.Name == relation.Target) is { } targetParameter
+                            ? AttributeReader.ParameterAction(targetParameter) : null;
+                    claims.Add(new ResourceRoleClaim(relation.Kind, expression, IsReturn: false)
+                    {
+                        Action = targetAction is { AttributeIdentity: not null } action && action.Verb == relation.Kind ? action : null,
+                        SubjectExpressions = [subjectExpression], RelationshipAttributeIdentity = relation.AttributeIdentity, RelationshipPropertyName = relation.PropertyName,
+                    });
+                }
             }
         }
 
