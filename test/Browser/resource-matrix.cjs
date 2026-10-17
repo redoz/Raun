@@ -268,9 +268,11 @@ const renderFixture = (name, data) => {
     assert.equal(await page.locator('.step-head .sx').count(),0,'Step titles have no number badges');
     const titleInsets=await page.locator('.step-head').evaluateAll(heads=>heads.map(head=>{
       const title=head.querySelector('.dn').getBoundingClientRect(),status=head.querySelector('.scenario-status').getBoundingClientRect();
-      return title.left-status.right;
+      const gutter=parseFloat(getComputedStyle(head).getPropertyValue('--dependency-gutter')) || 8;
+      const offset=parseFloat(getComputedStyle(head).getPropertyValue('--dependency-offset')) || 0;
+      return title.left-status.right-(gutter-8-offset);
     }));
-    assert.ok(titleInsets.every(gap=>gap>=5 && gap<=10),'Titles follow the status marker without an empty number column');
+    assert.ok(titleInsets.every(gap=>gap>=5 && gap<=10),'Titles follow the graph gutter without an empty number column');
     const expandedGaps=await page.locator('.card:not(.collapsed)+.card:not(.collapsed)').evaluateAll(async cards=>{
       await Promise.all(cards.flatMap(card=>[card,card.previousElementSibling]).map(card=>card.scenarioAnimation?.finished.catch(()=>{})));
       return cards.map(card=>card.getBoundingClientRect().top-card.previousElementSibling.getBoundingClientRect().bottom);
@@ -675,6 +677,14 @@ const renderFixture = (name, data) => {
     await graphPage.waitForSelector('.step-dependency-graph path',{state:'attached'});
     const forkEdges=await graphPage.locator('.step-dependency-graph path').evaluateAll(paths=>paths.map(path=>[Number(path.dataset.from),Number(path.dataset.to)]));
     assert.deepEqual(forkEdges,[[1,2],[1,3],[2,4],[3,4],[4,5]],'The real parallel arrangement forks and joins without connecting independent siblings');
+    const laneMarks=await graphPage.locator('.dependency-node').evaluateAll(marks=>marks.map(mark=>({name:mark.getAttribute('aria-label'),x:mark.getBoundingClientRect().left,right:mark.getBoundingClientRect().right,title:mark.parentElement.querySelector('.dn').getBoundingClientRect().left})));
+    assert.ok(laneMarks[2].x-laneMarks[1].x>=12,'Independent parallel steps occupy clearly separated graph lanes');
+    assert.equal(laneMarks[3].x,laneMarks[1].x,'The booking rejoins the main graph lane');
+    const branchRow=graphPage.locator('.step-entry').filter({has:graphPage.locator('.dependency-node[aria-label*="Given slot 01"]')});
+    await branchRow.locator('.step-expander').click();
+    assert.ok(await branchRow.evaluate(row=>Math.abs(row.querySelector('.logs').getBoundingClientRect().left-row.querySelector('.dependency-node').getBoundingClientRect().left)<1),'Expanded branch logs follow that branch’s status lane');
+    await branchRow.locator('.step-expander').click();
+    assert.ok(laneMarks.every(mark=>mark.title>=Math.max(...laneMarks.map(other=>other.right))+8),'Aligned titles leave clear space after every graph lane');
     const graphTitles=graphPage.locator('.step-entry .dn');
     const titlesBefore=await graphTitles.evaluateAll(titles=>titles.map(title=>({left:title.getBoundingClientRect().left,width:title.getBoundingClientRect().width})));
     const parallelMarks=graphPage.locator('.dependency-node');
@@ -691,6 +701,29 @@ const renderFixture = (name, data) => {
     assert.ok(merge,'The report retains both alternative merge inputs');
     for(const from of [4,5])assert.equal(await graphPage.locator(`.step-dependency-graph path[data-from="${from}"][data-to="${merge.index}"]`).count(),1,'Each alternative connects to the merge');
     assert.ok(await graphPage.locator('.dependency-inactive').count()>0,'The branch that was not taken has a subdued dashed connector');
+    const nested=structuredClone(parallel);
+    nested.scenarioId='nested-dependency-lanes';nested.displayName='nested dependency lanes';nested.resources=[];nested.references=[];
+    const names=['A','B','C','D','E','F','J','K'],dependencies=[[],[0],[0],[0],[3],[3],[1,2],[4,5,6]];
+    const stepBase=parallel.steps.find(step=>!step.isLifecycle);
+    nested.steps=names.map((name,index)=>({...stepBase,index,stepId:'nested-'+name,displayName:name,dependsOn:dependencies[index],effects:[],logs:[],logMessages:[],notes:[],noteMessages:[],attachments:[],titleMessage:{text:name,parts:[{text:name}]}}));
+    await graphPage.goto(renderFixture('step-dependency-nested',{...model,scenarios:[nested]}));
+    await graphPage.locator('.card-head').click();
+    await graphPage.waitForSelector('.step-dependency-graph path',{state:'attached'});
+    const falseConnections=await graphPage.locator('.step-dependency-graph').evaluate(svg=>{
+      const marks=Array.from(svg.closest('.scenario-drill').querySelectorAll('.dependency-node')).map((mark,index)=>({index,box:mark.getBoundingClientRect()}));
+      const collisions=[];
+      for(const path of svg.querySelectorAll('path')){
+        const unrelated=marks.filter(mark=>mark.index!==Number(path.dataset.from) && mark.index!==Number(path.dataset.to));
+        for(let offset=0;offset<=path.getTotalLength();offset+=.75){
+          const point=path.getPointAtLength(offset).matrixTransform(svg.getScreenCTM());
+          for(const mark of unrelated)if(point.x>=mark.box.left-.5 && point.x<=mark.box.right+.5 && point.y>=mark.box.top-.5 && point.y<=mark.box.bottom+.5){
+            collisions.push({from:path.dataset.from,to:path.dataset.to,unrelated:mark.index});break;
+          }
+        }
+      }
+      return collisions;
+    });
+    assert.deepEqual(falseConnections,[],'Reusing nested branch lanes does not draw an edge through an unrelated status mark');
     await graphPage.close();
     console.log('PASS: default resource matrix; every sample row and order; unchanged no-resource lists; keyboard focus; snapshots; disclosure; failures; compact lanes; source links; mobile access.');
   } finally { await browser.close(); }

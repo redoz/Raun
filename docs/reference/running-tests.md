@@ -76,7 +76,7 @@ IDEs use `--filter-uid`. MTP does not accept `--filter` or `--nologo` here.
 
 Expanded scenarios include faint dependency lines between step status marks. Hover a mark or
 focus it with the keyboard to highlight that step's predecessor and successor paths. Parallel
-branches remain separate until their join; branches that were not taken use dashed lines.
+status marks occupy separate graph lanes until their join; branches that were not taken use dashed lines.
 The lines follow expanded logs and notes without changing the step layout.
 
 ### Source navigation
