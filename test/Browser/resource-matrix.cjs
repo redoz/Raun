@@ -236,6 +236,15 @@ const renderFixture = (name, data) => {
       return cards.map(card=>card.getBoundingClientRect().top-card.previousElementSibling.getBoundingClientRect().bottom);
     });
     assert.ok(expandedGaps.length>0 && expandedGaps.every(gap=>gap>=8),'Adjacent expanded scenarios have space between their background boxes');
+    const assertNoteAlignment=async()=>{
+      const notes=await page.locator('.matrix-row>.step-notes').evaluateAll(nodes=>nodes.map(node=>{
+        const note=node.querySelector('.step-note').getBoundingClientRect(),title=node.parentElement.querySelector('.step-head .dn').getBoundingClientRect();
+        return {left:note.left-title.left,gap:note.top-title.bottom};
+      }));
+      assert.ok(notes.length>0,'The sample includes step notes');
+      assert.ok(notes.every(note=>Math.abs(note.left)<1 && note.gap>=1 && note.gap<=5),'Notes align with their titles with a small gap: '+JSON.stringify(notes));
+    };
+    await assertNoteAlignment();
     for(const theme of ['light','dark']){
       await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
       for(const [index,scenario] of model.scenarios.entries()){
@@ -344,6 +353,7 @@ const renderFixture = (name, data) => {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile document stays within the viewport');
     await first.scrollIntoViewIfNeeded();
     await page.waitForFunction(()=>document.querySelector('.card .matrix-compact'));
+    await assertNoteAlignment();
     await first.evaluate(card=>card.scrollIntoView({block:'start'}));
     await first.locator('.matrix-summary-header').click();
     const mobileLanes=page.locator('.matrix-lanes-popover:popover-open');

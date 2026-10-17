@@ -288,9 +288,12 @@
   .matrix-resource.matrix-reference{background:var(--surface-hover);border-bottom:2px dashed var(--resource-color)}
   .resource-matrix .matrix-row{position:relative;isolation:isolate;padding:0;align-items:start}
   .resource-matrix .matrix-row:last-child{border-bottom:0}
-  .resource-matrix .matrix-row>.step-head{grid-column:1;grid-row:1;grid-template-columns:12px 8px max-content minmax(0,1fr) max-content;column-gap:9px;padding:10px 10px 12px 4px;align-self:start}
+  .resource-matrix .matrix-row>.step-head{grid-column:1;grid-row:1;grid-template-columns:12px 8px max-content minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);padding:10px 10px 12px 4px;align-self:start}
   .resource-matrix .matrix-row.step-lifecycle.status-passed:not(.open)>.step-head{padding-top:2px;padding-bottom:3px}
-  .resource-matrix .matrix-row>.step-notes{grid-column:1;grid-row:2;margin:0 10px 5px 93px}
+  .resource-matrix .matrix-row:has(>.step-notes)>.step-head{padding-bottom:2px}
+  .resource-matrix .matrix-row>.step-notes{display:grid;grid-template-columns:12px 8px max-content minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);grid-column:1;grid-row:2;margin:0 10px 8px 4px}
+  .resource-matrix .matrix-row>.step-notes::before{content:"";grid-column:3;font:600 12px/1.4 var(--mono);width:calc(3ch + 12px)}
+  .resource-matrix .matrix-row>.step-notes>.step-note{grid-column:4/-1}
   .resource-matrix .matrix-row>.step-body{grid-column:1;grid-row:3;margin:0 10px 12px 25px;min-width:0}
   .matrix-cell{grid-row:1;position:relative;align-self:stretch;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:3px;padding:5px 3px;border-left:1px solid var(--border);min-height:100%}
   .matrix-continuation{position:relative;grid-row:2/4;min-width:0;align-self:stretch;border-left:1px solid var(--border)}
@@ -326,7 +329,7 @@
   .matrix-scroll-hint{display:none}
   @media(max-width:650px){
     .matrix-scroll-hint{display:block;margin:5px 0 8px;color:var(--muted);font:11px var(--sans)}
-    .resource-matrix .matrix-row>.step-head{column-gap:6px}
+    .resource-matrix .matrix-row{--step-column-gap:6px}
     .resource-matrix .matrix-row>.step-body{margin-left:22px}
     .resource-matrix .matrix-row .step-head .dm{grid-column:auto;justify-content:flex-end}
   }
