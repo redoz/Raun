@@ -60,3 +60,5 @@ relationship syntax are documented in the [main README](../README.md). The regis
 interface-first mapping path; a second mapping configuration for the same example would obscure
 that default. Provider overloads and diagnostic errors are covered by dedicated tests. These
 samples demonstrate user journeys, not every possible API permutation.
+
+The report keeps crowded resource lanes in a compact activity column. Click a symbol to inspect the full lanes in a scrollable popover. Hover over or focus a heading to reveal its italic type or method name. To try source navigation, add `--report-source-base-url "https://github.com/redoz/Raun/blob/main/"` to an example command above; the headings then link to the corresponding source lines.

@@ -12,7 +12,7 @@ namespace Raun.Reporting.Html;
 /// step, then <see cref="Build"/>. Scenarios run concurrently, so step events of different
 /// scenarios interleave; each is routed by its definition, and the report keeps the run's order.
 /// </summary>
-internal sealed class HtmlReportModelBuilder
+internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOptions = null)
 {
     private readonly List<ScenarioAccumulator> _scenarios = [];
 
@@ -61,7 +61,7 @@ internal sealed class HtmlReportModelBuilder
         // A scenario the run never launched (cancellation mid-run, a faulted sibling, a mis-declared
         // token halting further admission) has nothing to report — it never had a Status, and
         // without this filter Build() below would default it to "passed" with zero steps.
-        var scenarios = _scenarios.Where(s => s.Started).Select((s, index) => s.Build(index)).ToList();
+        var scenarios = _scenarios.Where(s => s.Started).Select((s, index) => s.Build(index, sourceOptions)).ToList();
 
         // Wall clock: earliest start to latest end over the scenarios that ran, not the sum — with
         // concurrent scenarios the sum would count overlapping time twice.
@@ -121,7 +121,7 @@ internal sealed class HtmlReportModelBuilder
 
         public void Add(StepResult result) => _results.Add(result);
 
-        public ReportScenario Build(int scenarioIndex)
+        public ReportScenario Build(int scenarioIndex, HtmlReportSourceOptions? sourceOptions)
         {
             var start = Start;
 
@@ -281,6 +281,8 @@ internal sealed class HtmlReportModelBuilder
                 DisplayName = Definition.DisplayName,
                 ClassDisplayName = Definition.ClassDisplayName,
                 MethodName = Definition.MethodName,
+                SourceUrl = sourceOptions?.GetUrl(Definition.SourceFile, Definition.SourceLine),
+                TypeSourceUrl = sourceOptions?.GetUrl(Definition.TypeSourceFile, Definition.TypeSourceLine),
                 StartedAtUtc = start.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
                 DurationMs = durationMs,
                 Status = status,

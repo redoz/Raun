@@ -74,6 +74,21 @@ Escape `%` as `%25`, `/` as `%2F`, and literal filter operators with a backslash
 IDEs use `--filter-uid`. MTP does not accept `--filter` or `--nologo` here.
 `--maximum-failed-tests` stops new scenarios; running scenarios finish.
 
+### Source navigation
+
+Resource lanes collapse to a compact activity column when they do not fit. Click its symbol to open a wider resource-lane overlay. It matches the expanded scenario’s height, keeps each lane aligned with its step, and moves with the report’s vertical scroll. Scroll horizontally or use the arrow controls to see more lanes. Escape or a click outside closes it. Type and method names appear in italics when you hover over or focus a group or scenario heading.
+
+To link those names to source, pass a file-view base URL that includes your branch or commit:
+
+```sh
+dotnet run -- --report-html --report-source-base-url "https://github.com/owner/repo/blob/commit/"
+# Azure DevOps:
+dotnet run -- --report-html --report-source-base-url "https://dev.azure.com/org/project/_git/repo?version=GCcommit"
+```
+
+Raun makes paths relative to the source file's Git checkout root. Set `--report-source-root <build-checkout-root>` when the build checkout is unavailable at report time. Files outside that root and locations without a known line remain plain text. For a custom host, pass `HtmlReportSourceOptions` as the fourth argument to `HtmlReportSink`. Source links select the class declaration for groups and the scenario method for scenarios. Omitting the base URL keeps the names as plain text.
+
+
 ## Preflight, extensions, and coverage
 
 For a custom `Program.cs`, set `<RaunGenerateProgram>false</RaunGenerateProgram>` in the project file.

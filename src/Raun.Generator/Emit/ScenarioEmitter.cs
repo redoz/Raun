@@ -208,6 +208,12 @@ internal static class ScenarioEmitter
             Set("Nodes", IdentifierName("nodes")),
         };
 
+        if (!string.IsNullOrEmpty(scenario.TypeSourceFile))
+        {
+            members.Add(Set("TypeSourceFile", Lit(scenario.TypeSourceFile)));
+            members.Add(Set("TypeSourceLine", Num(scenario.TypeSourceLine)));
+        }
+
         // A world reads per-scenario settings from the scenario method's attributes:
         // typeof(C).GetMethod("M", Instance | Static | Public | NonPublic | DeclaredOnly).
         if (scenario.DeclaringType is { } declaringType)

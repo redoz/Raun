@@ -25,6 +25,17 @@ internal static class HtmlReportPath
         return Path.Combine(dir, name);
     }
 
+    internal static Raun.Reporting.Html.HtmlReportSourceOptions? ResolveSourceOptions(IServiceProvider? services)
+    {
+        if (services is null) { return null; }
+        var options = services.GetCommandLineOptions();
+        if (!options.TryGetOptionArgumentList(HtmlReportOptionsProvider.SourceBaseUrlOption, out var values)
+            || values.Length == 0) { return null; }
+        var root = options.TryGetOptionArgumentList(HtmlReportOptionsProvider.SourceRootOption, out var roots)
+            && roots.Length > 0 ? roots[0] : null;
+        return new Raun.Reporting.Html.HtmlReportSourceOptions { BaseUrl = new Uri(values[0]), SourceRoot = root };
+    }
+
     /// <summary>Reads the inputs off the framework's MTP service provider.</summary>
     public static string? Resolve(IServiceProvider? services)
     {

@@ -185,6 +185,8 @@ Use `Context.AddAttachment` for a response body or other text you want to inspec
 [logging and attachments](docs/reference/scenario-authoring.md#notes-logs-and-attachments) and
 [report options](docs/reference/running-tests.md#reports-and-test-selection).
 
+Resource lanes that do not fit open in an overlay aligned with the scenario. Type and method names reveal in italics on hover or focus; add `--report-source-base-url` to link them to source. See [source navigation](docs/reference/running-tests.md#source-navigation).
+
 ## Bring up real infrastructure and share its capacity
 
 Use `Raun.Aspire` when your tests need an Aspire application running. It starts the AppHost once

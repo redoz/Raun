@@ -25,6 +25,10 @@ internal sealed record ReportScenario
     public required string DisplayName { get; init; }
     public string? ClassDisplayName { get; init; }
     public required string MethodName { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceUrl { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? TypeSourceUrl { get; init; }
     public required string StartedAtUtc { get; init; }
     public required double DurationMs { get; init; }
     public required string Status { get; init; }

@@ -272,6 +272,8 @@ internal sealed class ScenarioParser
             MethodName = _method.Name,
             SourceFile = Location(_syntax.Identifier, out var line),
             SourceLine = line,
+            TypeSourceFile = Location(_syntax.Ancestors().OfType<TypeDeclarationSyntax>().First().Identifier, out var typeLine),
+            TypeSourceLine = typeLine,
             Steps = [.. _steps],
             Usings = usings,
             Uses = _uses

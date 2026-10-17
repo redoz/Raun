@@ -43,6 +43,12 @@ public sealed class ScenarioDefinition
     /// <summary>1-based source line of the scenario method, or 0 if unknown.</summary>
     public int SourceLine { get; init; }
 
+    /// <summary>Source file of the declaring type, if known.</summary>
+    public string? TypeSourceFile { get; init; }
+
+    /// <summary>1-based source line of the declaring type, or 0 if unknown.</summary>
+    public int TypeSourceLine { get; init; }
+
     /// <summary>Scenario-wide timeout, or null for none.</summary>
     public TimeSpan? Timeout { get; init; }
 

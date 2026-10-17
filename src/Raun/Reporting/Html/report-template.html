@@ -276,8 +276,6 @@
   .step-entry.res-hit{background:var(--surface-hover);box-shadow:none}
 
   /* Resource history shares the existing step rows and evidence controls. */
-  .matrix-tools{display:flex;justify-content:flex-end;margin:4px 0;font:12px var(--sans)}
-  .matrix-group-toggle{border:0;background:none;color:var(--muted);font:inherit;padding:4px 6px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
   .matrix-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
   .resource-matrix{min-width:var(--matrix-min-width)}
   .resource-matrix .step-list{display:block;border-top:0}
@@ -306,7 +304,25 @@
   .matrix-connection{position:absolute;inset:0;z-index:0;width:100%;height:100%;overflow:visible;pointer-events:none}
   .matrix-connection path{fill:none;stroke:var(--resource-color);stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;opacity:.65}
   .matrix-connection .matrix-arrow{fill:var(--resource-color);stroke:none;opacity:.9}
-  .matrix-group-toggle:focus-visible,.matrix-resource:focus-visible,.matrix-event:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .matrix-summary:focus-visible,.matrix-resource:focus-visible,.matrix-event:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .matrix-summary,.matrix-summary-cell{display:none}
+  .matrix-compact>.scenario-heading-row>.matrix-resource,.matrix-compact .matrix-contents .matrix-cell,.matrix-compact .matrix-contents .matrix-continuation,.matrix-compact .matrix-contents .matrix-connection{display:none}
+  .matrix-compact>.scenario-heading-row>.matrix-summary,.matrix-compact .matrix-contents .matrix-summary-cell{display:flex}
+  .matrix-compact .matrix-summary-cell>.matrix-summary{display:block}
+  .matrix-compact .matrix-scroll-hint{display:none}
+  .matrix-summary-cell{grid-column:2;grid-row:1/4;align-self:stretch;align-items:start;justify-content:center;border-left:1px solid var(--border);padding-top:7px}
+  .matrix-summary{border:0;background:none;color:var(--muted);padding:5px 3px;font:11px var(--mono);cursor:pointer}
+  .matrix-summary:hover{color:var(--ink);background:var(--surface-hover)}
+  .matrix-summary-header{align-items:center;justify-content:center;border-left:1px solid var(--border);font-size:17px}
+  .card.collapsed .matrix-summary-header{display:none}
+  .matrix-lanes-popover{position:fixed;inset:auto;box-sizing:border-box;margin:0;padding:0;border:1px solid var(--border-strong);border-radius:3px;background:var(--surface-2);color:var(--ink);box-shadow:0 6px 24px #0004;overflow:visible}
+  .matrix-lanes-tools{position:absolute;right:0;bottom:100%;display:flex;gap:3px;padding:3px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:3px 3px 0 0}
+  .matrix-lanes-tools button{background:none;border:0;color:var(--muted);padding:2px 6px;cursor:pointer;font:13px var(--sans)}
+  .matrix-lanes-tools button:hover{color:var(--ink);background:var(--surface-hover)}
+  .matrix-lanes-popover>.matrix-panel,.matrix-lanes-popover .matrix-scroll{height:100%}
+  .matrix-lanes-popover .matrix-scroll{overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .matrix-lanes-popover .matrix-steps,.matrix-lanes-popover .matrix-scroll-hint{display:none}
+  .matrix-lanes-popover .matrix-header{background:var(--surface-2)}
   .matrix-scroll-hint{display:none}
   @media(max-width:650px){
     .matrix-scroll-hint{display:block;margin:5px 0 8px;color:var(--muted);font:11px var(--sans)}
@@ -489,6 +505,12 @@
   .report-view:has(>.tests-narrative){overflow:auto;overflow-y:scroll;scrollbar-gutter:stable;overscroll-behavior:contain}
   .tests-narrative{align-self:flex-start;width:100%;max-width:1280px;margin-inline:auto;box-sizing:border-box;min-width:0;padding:12px 20px 24px}
   .tests-class-name{display:flex;align-items:baseline;gap:6px;min-width:0;font-size:13px;font-weight:500;color:var(--muted);margin:0 0 8px}.tests-class-label{flex:none;font-size:15px;font-weight:600;color:var(--ink)}.tests-class-name .report-meta{font-size:11px}
+  .tests-class-name,.card-head .name{position:relative}
+  .tests-class-name .report-meta,.card-head .name .report-meta{position:absolute;left:0;top:100%;max-width:100%;font-size:11px;line-height:1.1;font-style:italic;opacity:0;transform:translateY(-5px);transition:opacity 140ms ease,transform 140ms ease;pointer-events:none;z-index:4}
+  .tests-class-name:hover .report-meta,.tests-class-name:focus-within .report-meta,.card-head:hover .report-meta,.card-head:focus-within .report-meta{opacity:1;transform:translateY(0);pointer-events:auto}
+  .report-meta a{color:inherit;text-decoration:none}
+  .report-meta a:hover,.report-meta a:focus-visible{text-decoration:underline}
+  @media(prefers-reduced-motion:reduce){.tests-class-name .report-meta,.card-head .name .report-meta{transition:none;transform:none}}
   .tests-narrative .group{margin:10px 0 18px}
   .coverage-scope-children{display:flex;gap:6px;flex-wrap:wrap;width:100%;max-height:76px;overflow:auto}
   .coverage-scope-children .coverage-child{width:auto;padding:4px 7px;background:var(--surface-2);border:0;font:12px var(--sans)}
@@ -635,9 +657,9 @@
         head.setAttribute("aria-expanded", String(on));
       };
       head.setAttribute("aria-expanded", String(!sec.classList.contains("collapsed")));
-      head.addEventListener("click", toggle);
+      head.addEventListener("click", event=>{if(!event.target.closest("a"))toggle();});
       head.addEventListener("keydown", (ev) => {
-        if (ev.key !== "Enter" && ev.key !== " ") return;
+        if (ev.target.closest("a") || (ev.key !== "Enter" && ev.key !== " ")) return;
         toggle(); ev.preventDefault();
       });
       const body = el("div", "group-body");
@@ -1199,9 +1221,13 @@
       const label=svgEl("text",{x:32,y:36,"text-anchor":"middle",fill:"var(--ink)","font-size":14});label.textContent=String(total);svg.appendChild(label);
       chart.appendChild(svg);chart.appendChild(legend);return chart;
     }
-    function reportIdentifierHtml(value,fullName,className){
+    function reportIdentifierHtml(value,fullName,className,sourceUrl){
       if(!value)return "";
-      return '<span class="report-meta"><span class="report-meta-dot" aria-hidden="true">&middot;</span><span class="leading-ellipsis '+className+'" title="'+esc(fullName)+'"><span dir="ltr">'+esc(value)+'</span></span></span>';
+      let address=null;
+      try{const parsed=new URL(sourceUrl);if(['https:','http:'].includes(parsed.protocol))address=parsed.href;}catch{}
+      const tag=address ? 'a' : 'span';
+      return '<span class="report-meta"><'+tag+' class="leading-ellipsis '+className+'" title="'+esc(fullName)+'"'+
+        (address ? ' href="'+esc(address)+'" target="_blank" rel="noopener noreferrer"' : '')+'><span dir="ltr">'+esc(value)+'</span></'+tag+'></span>';
     }
     function buildTestsReport(run,render){
       const narrative=el("div","tests-narrative");
@@ -1209,8 +1235,8 @@
       if(!scenarios.length)narrative.appendChild(coverageText("p","coverage-empty","No scenarios in this run."));
       for(const group of groupByClass(scenarios)){
         const section=el("section","group");
-        const heading=el("h2","tests-class-name");
-        heading.innerHTML='<span class="tests-class-label">'+esc(group.label)+'</span>'+reportIdentifierHtml(group.type,group.type,"group-type");
+        const heading=el("h2","tests-class-name");heading.tabIndex=0;
+        heading.innerHTML='<span class="tests-class-label">'+esc(group.label)+'</span>'+reportIdentifierHtml(group.type,group.type,"group-type",group.scenarios.find(sc=>sc.typeSourceUrl)?.typeSourceUrl);
         section.appendChild(heading);
         for(const sc of group.scenarios)section.appendChild(render(sc));
         narrative.appendChild(section);
@@ -1261,13 +1287,13 @@
       for(const property of ['--matrix-columns','--matrix-min-width']){
         sheet.style.setProperty(property,matrix.style.getPropertyValue(property));matrix.style.removeProperty(property);
       }
-      sheet.appendChild(header);sheet.appendChild(reveal);owner.appendChild(sheet);card.appendChild(owner);card.classList.add('matrix-card');
+      sheet.appendChild(header);sheet.appendChild(reveal);owner.appendChild(sheet);card.appendChild(owner);card.classList.add('matrix-card');panel.configureCompact?.(owner);
     }
 
     document.addEventListener("click",event=>{
       for(const panel of document.querySelectorAll(".matrix-panel")){
-        const sheet=panel.closest(".scenario-sheet");
-        const inMatrix=sheet?.contains(event.target) && event.target.closest(".matrix-cell,.matrix-resource,.matrix-connection,.matrix-group-toggle,.resource-hover");
+        const owner=panel.closest(".matrix-lanes-popover") || panel.closest(".scenario-sheet") || panel;
+        const inMatrix=owner.contains(event.target) && event.target.closest(".matrix-cell,.matrix-resource,.matrix-connection,.matrix-summary,.matrix-lanes-tools,.resource-hover");
         if(!inMatrix)panel.clearMatrixSelection?.();
       }
     },true);
@@ -1276,7 +1302,7 @@
       return resource.resourceId || resource.id || JSON.stringify([resource.type,resource.key]);
     }
 
-    function buildResourceMatrix(sc,drill){
+    function buildResourceMatrix(sc,drill,fullSize=false){
       const panel=el("div","matrix-panel"),scroll=el("div","matrix-scroll"),matrix=el("div","resource-matrix");
       scroll.tabIndex=0;scroll.setAttribute("role","region");scroll.setAttribute("aria-label","Resource activity by step for "+sc.displayName);
       const resources=new Map((sc.resources || []).map(resource=>[matrixResourceKey(resource),resource]));
@@ -1302,7 +1328,7 @@
       drill.style.marginTop="0";
       const rows=Array.from(drill.querySelector(".step-list").children);
       for(const row of rows)row.classList.add("matrix-row");
-      let selected=null,columns=[],grouped=resources.size>6;
+      let selected=null,columns=[];
       function select(){
         const column=columns.find(column=>column.key===selected);
         for(const [index,row] of rows.entries()){
@@ -1330,30 +1356,25 @@
       let connectionObserver=null;
       function renderColumns(){
         connectionObserver?.disconnect();
+        panel.disposeMatrix=()=>connectionObserver?.disconnect();
         header.querySelectorAll(".matrix-resource").forEach(node=>node.remove());
         for(const row of rows)row.querySelectorAll(".matrix-cell,.matrix-continuation,.matrix-connection").forEach(node=>node.remove());
-        const buckets=new Map();
-        for(const [key,resource] of resources){
-          const columnKey=grouped ? resource.qualifiedType || resource.type : key;
-          if(!buckets.has(columnKey))buckets.set(columnKey,{key:columnKey,resource,keys:new Set(),members:[]});
-          buckets.get(columnKey).keys.add(key);buckets.get(columnKey).members.push(resource);
-        }
-        columns=Array.from(buckets.values());
+        columns=Array.from(resources,([key,resource])=>({key,resource,keys:new Set([key]),members:[resource]}));
         const layout=panel.closest(".scenario-sheet") || matrix;
-        layout.style.setProperty("--matrix-columns",`minmax(430px,1fr) repeat(${columns.length},112px)`);
-        layout.style.setProperty("--matrix-min-width",(430+112*columns.length)+"px");
+        layout.style.setProperty("--matrix-columns",(fullSize ? "" : "minmax(430px,1fr) ")+`repeat(${columns.length},112px)`);
+        layout.style.setProperty("--matrix-min-width",((fullSize ? 0 : 430)+112*columns.length)+"px");
         columns.forEach((column,columnIndex)=>{
           const color=column.keys.size===1 ? resourceColors.get(column.keys.values().next().value) : "var(--border-strong)",button=el("button","matrix-resource");
           button.type="button";button.dataset.resourceColumn=column.key;button.style.setProperty("--resource-color",color);button.setAttribute("aria-pressed","false");
-          button.appendChild(document.createTextNode(grouped ? column.resource.type : column.resource.label || column.resource.key));
-          button.appendChild(coverageText("small","",grouped ? column.members.length+" resources" : column.resource.type));
+          button.appendChild(document.createTextNode(column.resource.label || column.resource.key));
+          button.appendChild(coverageText("small","",column.resource.type));
           const relationships=(sc.references || []).filter(reference=>
             column.keys.has(matrixResourceKey({resourceId:reference.subjectId,type:reference.subjectType,key:reference.subjectKey})) ||
             column.keys.has(matrixResourceKey({resourceId:reference.targetId,type:reference.targetType,key:reference.targetKey})));
           const relationshipText=relationships.map(reference=>reference.subjectType+" "+reference.subjectKey+" "+
             (reference.kind==="Consume" ? "consumes" : "references")+" "+reference.targetType+" "+reference.targetKey).join("; ");
           button.title=column.members.map(resource=>resource.type+": "+resource.key).join("\n")+(relationshipText ? "\n"+relationshipText : "");
-          const accessibleName=grouped ? column.resource.type+", "+column.members.length+" resources" : (column.resource.label || column.resource.key)+", "+column.resource.type;
+          const accessibleName=(column.resource.label || column.resource.key)+", "+column.resource.type;
           button.setAttribute("aria-label",accessibleName+". Highlight touching steps"+(relationshipText ? ". "+relationshipText : ""));
           button.addEventListener("click",()=>{selected=selected===column.key ? null : column.key;select();});header.appendChild(button);
           const hits=sc.steps.map(step=>(step.effects || []).filter(effect=>column.keys.has(matrixResourceKey(effect))));
@@ -1363,7 +1384,7 @@
             const cell=el("div","matrix-cell"+(track ? " matrix-track" : ""));
             if(track && index===first)cell.classList.add("matrix-track-first");
             if(track && index===last)cell.classList.add("matrix-track-last");
-            cell.dataset.resourceColumn=column.key;cell.style.gridColumn=String(columnIndex+2);cell.style.setProperty("--resource-color",color);
+            cell.dataset.resourceColumn=column.key;cell.style.gridColumn=String(columnIndex+(fullSize ? 1 : 2));cell.style.setProperty("--resource-color",color);
             for(const effect of hits[index]){
               const event=el("button","matrix-event");event.type="button";event.textContent=effect.actionName ?? effect.verb;
               event.dataset.matrixResource=matrixResourceKey(effect);event.dataset.matrixVerb=effect.verb;
@@ -1382,7 +1403,7 @@
               });cell.appendChild(event);
             }
             const continuation=el("div","matrix-continuation"+(track && index<last ? " matrix-track" : ""));continuation.setAttribute("aria-hidden","true");
-            continuation.dataset.resourceColumn=column.key;continuation.style.gridColumn=String(columnIndex+2);continuation.style.setProperty("--resource-color",color);
+            continuation.dataset.resourceColumn=column.key;continuation.style.gridColumn=String(columnIndex+(fullSize ? 1 : 2));continuation.style.setProperty("--resource-color",color);
             row.appendChild(cell);row.appendChild(continuation);
           });
         });
@@ -1432,13 +1453,89 @@
         requestAnimationFrame(drawConnections);
         select();
       }
-      if(resources.size>6){
-        const tools=el("div","matrix-tools"),toggle=coverageText("button","matrix-group-toggle","Show individual resources ("+resources.size+")");
-        toggle.type="button";toggle.setAttribute("aria-expanded","false");tools.appendChild(toggle);panel.prepend(tools);
-        toggle.addEventListener("click",()=>{
-          grouped=!grouped;selected=null;renderColumns();toggle.setAttribute("aria-expanded",String(!grouped));
-          toggle.textContent=grouped ? "Show individual resources ("+resources.size+")" : "Group resources by type";
+      if(!fullSize){
+        const summary=coverageText('button','matrix-summary matrix-summary-header','◈');
+        summary.type='button';summary.setAttribute('aria-label','Show all resource lanes');
+        summary.setAttribute('aria-haspopup','dialog');header.appendChild(summary);
+        rows.forEach((row,index)=>{
+          const effects=sc.steps[index].effects || [];
+          const cell=el('div','matrix-summary-cell');
+          if(effects.length){
+            const trigger=coverageText('button','matrix-summary','◈ '+new Set(effects.map(matrixResourceKey)).size);
+            trigger.type='button';trigger.setAttribute('aria-label','Show resource lanes for '+sc.steps[index].displayName);
+            trigger.setAttribute('aria-haspopup','dialog');cell.appendChild(trigger);
+            trigger.addEventListener('click',()=>openLanes(trigger,index));
+          }
+          row.appendChild(cell);
         });
+        summary.addEventListener('click',()=>openLanes(summary));
+        let popup=null;
+        function openLanes(trigger,index){
+          if(popup?.matches(':popover-open')){popup.hidePopover();return;}
+          popup?.disposeLanes();
+          const opened=el('section','matrix-lanes-popover');popup=opened;opened.setAttribute('popover','auto');
+          opened.setAttribute('role','dialog');opened.setAttribute('aria-label','Resource lanes for '+sc.displayName);
+          const tools=el('div','matrix-lanes-tools'),close=coverageText('button','','×');
+          close.type='button';close.setAttribute('aria-label','Close resource lanes');
+          const laneDrill=el('div','drill scenario-drill open'),list=el('div','step-list');laneDrill.appendChild(list);
+          for(const step of sc.steps){
+            const row=el('div','step-entry status-'+step.status);row.dataset.step=step.stepId;
+            row.setAttribute('aria-label',step.displayName);list.appendChild(row);
+          }
+          bindResourceMessages(laneDrill,sc);
+          const expanded=buildResourceMatrix(sc,laneDrill,true),scroller=expanded.querySelector('.matrix-scroll');
+          for(const [name,glyph,direction] of [['Scroll resource lanes left','‹',-1],['Scroll resource lanes right','›',1]]){
+            const arrow=coverageText('button','',glyph);arrow.type='button';arrow.setAttribute('aria-label',name);
+            arrow.addEventListener('click',()=>scroller.scrollBy({left:direction*224}));tools.appendChild(arrow);
+          }
+          tools.appendChild(close);opened.append(expanded,tools);
+          const card=panel.closest('.card'),sourceHeader=card.querySelector('.scenario-heading-row');
+          const overlayRows=Array.from(list.children);
+          card.appendChild(opened);opened.showPopover();trigger.setAttribute('aria-expanded','true');
+          let restoreFocus=false,disposed=false,frame=null;
+          const align=()=>{
+            frame=null;if(disposed)return;
+            if(card.classList.contains('collapsed')){opened.hidePopover();return;}
+            const rect=card.getBoundingClientRect(),width=Math.min(880,innerWidth-24,resources.size*112);
+            opened.style.top=rect.top+'px';opened.style.left=Math.max(12,Math.min(rect.right-width,innerWidth-width-12))+'px';
+            opened.style.width=width+'px';opened.style.height=rect.height+'px';
+            const visible=card.closest('.report-view')?.getBoundingClientRect() || {top:0,left:0,right:innerWidth,bottom:innerHeight};
+            const left=parseFloat(opened.style.left);
+            opened.style.clipPath=`inset(${Math.max(-tools.offsetHeight,visible.top-rect.top)}px ${Math.max(-4,left+width-visible.right)}px ${Math.max(-4,rect.bottom-visible.bottom)}px ${Math.max(-4,visible.left-left)}px)`;
+            const headingRect=sourceHeader.getBoundingClientRect();
+            expanded.querySelector('.matrix-header').style.height=headingRect.height+'px';
+            laneDrill.style.paddingTop=Math.max(0,(rows[0]?.getBoundingClientRect().top ?? headingRect.bottom)-headingRect.bottom)+'px';
+            overlayRows.forEach((row,i)=>{
+              row.style.height=rows[i].getBoundingClientRect().height+'px';
+              row.style.gridTemplateRows=getComputedStyle(rows[i]).gridTemplateRows;
+            });
+          };
+          const schedule=()=>{if(frame===null)frame=requestAnimationFrame(align);};
+          const observer=new ResizeObserver(schedule);observer.observe(card);for(const row of rows)observer.observe(row);
+          document.addEventListener('scroll',schedule,true);window.addEventListener('resize',schedule);
+          close.addEventListener('click',()=>{restoreFocus=true;opened.hidePopover();});
+          opened.addEventListener('keydown',event=>{if(event.key==='Escape')restoreFocus=true;},true);
+          opened.disposeLanes=()=>{
+            if(disposed)return;disposed=true;
+            closeResourceHover();expanded.disposeMatrix?.();observer.disconnect();if(frame!==null)cancelAnimationFrame(frame);
+            document.removeEventListener('scroll',schedule,true);window.removeEventListener('resize',schedule);
+            opened.remove();if(popup===opened)popup=null;
+            trigger.setAttribute('aria-expanded','false');if(restoreFocus)trigger.focus({preventScroll:true});
+          };
+          opened.addEventListener('toggle',event=>{if(event.newState==='closed')opened.disposeLanes();});
+          if(index!==undefined)overlayRows[index].classList.add('focus');
+          align();close.focus({preventScroll:true});
+        }
+        panel.configureCompact=owner=>{
+          const sheet=owner.querySelector('.scenario-sheet');
+          const update=()=>{
+            const compact=owner.clientWidth<430+112*resources.size+20;
+            sheet.classList.toggle('matrix-compact',compact);
+            sheet.style.setProperty('--matrix-columns',compact ? 'minmax(0,1fr) 48px' : `minmax(430px,1fr) repeat(${resources.size},112px)`);
+            sheet.style.setProperty('--matrix-min-width',compact ? '0px' : (430+112*resources.size)+'px');
+          };
+          const observer=new ResizeObserver(update);observer.observe(owner);update();
+        };
       }
       renderColumns();return panel;
     }
@@ -1457,14 +1554,14 @@
       head.setAttribute("role",workspace ? "heading" : "button");
       if(workspace)head.setAttribute("aria-level","2");
       head.innerHTML='<span class="tw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span><span class="scenario-status '+esc(sc.status)+'" role="img" aria-label="'+esc(sc.status)+'"></span>'+
-        '<span class="name"><span class="scenario-title">'+esc(sc.displayName)+'</span>'+reportIdentifierHtml(shortName(sc.methodName),sc.methodName,"scenario-method")+'</span><span class="dur">'+fmtDur(sc.durationMs)+'</span>';
+        '<span class="name"><span class="scenario-title">'+esc(sc.displayName)+'</span>'+reportIdentifierHtml(shortName(sc.methodName),sc.methodName,"scenario-method",sc.sourceUrl)+'</span><span class="dur">'+fmtDur(sc.durationMs)+'</span>';
       if(sc.waitedMs>0)head.innerHTML+='<div class="where">Queued'+(sc.waitedFor ? ' for '+esc(sc.waitedFor) : '')+' · '+fmtDur(sc.waitedMs)+'</div>';
       const toggle = () => { head.setAttribute("aria-expanded", String(!isExpanded(sc))); setExpanded(sc, !isExpanded(sc)); };
       if(!workspace){
       head.setAttribute("aria-expanded", String(isExpanded(sc)));
-      head.addEventListener("click", toggle);
+      head.addEventListener("click", event=>{if(!event.target.closest("a"))toggle();});
       head.addEventListener("keydown", (ev) => {
-        if (ev.key !== "Enter" && ev.key !== " ") return;
+        if (ev.target.closest("a") || (ev.key !== "Enter" && ev.key !== " ")) return;
         toggle(); ev.preventDefault();
       });
       }

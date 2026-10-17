@@ -30,7 +30,7 @@ public sealed class HtmlReportSink : RunEventSink
 
     private readonly string _path;
     private readonly TimeProvider _timeProvider;
-    private readonly HtmlReportModelBuilder _builder = new();
+    private readonly HtmlReportModelBuilder _builder;
 
     private readonly object _gate = new();
     private HtmlReportModel? _model;
@@ -39,8 +39,13 @@ public sealed class HtmlReportSink : RunEventSink
 
     public HtmlReportSink(string path, TimeProvider timeProvider) : this(path, timeProvider, false) { }
 
-    public HtmlReportSink(string path, TimeProvider timeProvider, bool coverageRequested)
+    public HtmlReportSink(string path, TimeProvider timeProvider, bool coverageRequested) : this(path, timeProvider, coverageRequested, null) { }
+
+    /// <summary>Creates a report sink with optional repository source links.</summary>
+    public HtmlReportSink(string path, TimeProvider timeProvider, bool coverageRequested, HtmlReportSourceOptions? sourceOptions)
     {
+        sourceOptions?.Validate();
+        _builder = new HtmlReportModelBuilder(sourceOptions);
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(timeProvider);
         _coverage = coverageRequested ? new ReportCoverage() : null;

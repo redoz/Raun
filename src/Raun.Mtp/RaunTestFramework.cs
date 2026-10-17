@@ -312,7 +312,7 @@ public class RaunTestFramework :
         {
             var coverageRequested = _coverage is not null && _services is not null
                 && (_services.GetCommandLineOptions().IsOptionSet("coverage") || _services.GetCommandLineOptions().IsOptionSet("coverlet"));
-            var report = new HtmlReportSink(reportPath, TimeProvider.System, coverageRequested);
+            var report = new HtmlReportSink(reportPath, TimeProvider.System, coverageRequested, HtmlReport.HtmlReportPath.ResolveSourceOptions(_services));
             sinks.Add(report);
             if (coverageRequested)
             {

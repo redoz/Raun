@@ -5,6 +5,20 @@ namespace Raun.Mtp.Test;
 
 public class HtmlReportOptionsProviderTests
 {
+    [Theory]
+    [InlineData("report-source-base-url", "https://github.com/org/repo/blob/main", true)]
+    [InlineData("report-source-base-url", "javascript:alert(1)", false)]
+    [InlineData("report-source-base-url", "relative", false)]
+    [InlineData("report-source-root", "", false)]
+    [InlineData("report-source-root", "/repo", true)]
+    public async Task Source_options_validate_their_arguments(string name, string value, bool valid)
+    {
+        var provider = new HtmlReport.HtmlReportOptionsProvider();
+        var option = provider.GetCommandLineOptions().Single(option => option.Name == name);
+        Assert.Equal(ArgumentArity.ExactlyOne, option.Arity);
+        Assert.Equal(valid, (await provider.ValidateOptionArgumentsAsync(option, [value])).IsValid);
+    }
+
     [Fact]
     public void Registers_the_flag_and_filename_options()
     {

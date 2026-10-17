@@ -181,6 +181,8 @@ internal sealed record ParsedScenario
     public string? ClassDisplayName { get; init; }
     public string? SourceFile { get; init; }
     public int SourceLine { get; init; }
+    public string? TypeSourceFile { get; init; }
+    public int TypeSourceLine { get; init; }
     public int TimeoutMs { get; init; }
     private readonly EquatableArray<Syn<UsingDirectiveSyntax>> _usings;
     private readonly EquatableArray<ParsedStep> _steps;
