@@ -85,7 +85,7 @@ public sealed class RegistryWhen : When<PatientRegistry>
     // links the booking to Patient, and the preceding row/domain observations supply its name.
     [StepName("When booking {patientId} in {slot}")]
     [return: Booked(Patient = nameof(patientId), Slot = nameof(slot))]
-    public Task<Appointment> BookById([ResourceKey<Patient>] string patientId, Slot slot)
+    public Task<Appointment> BookById([ResourceKey<Patient>] string patientId, [Reserved] Slot slot)
         => Task.FromResult(World.Book(patientId, slot));
 }
 

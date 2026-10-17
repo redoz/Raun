@@ -11,6 +11,10 @@ public sealed class RegisteredAttribute : CreatedAttribute;
 [DisplayName("Hold")]
 public sealed class HeldAttribute : EditedAttribute;
 
+/// <summary>The step reserves a slot for a booking. This action requires exclusive access.</summary>
+[DisplayName("Reserve")]
+public sealed class ReservedAttribute : EditedAttribute;
+
 /// <summary>The step cancels a booking.</summary>
 [DisplayName("Cancel")]
 public sealed class CancelledAttribute : DeletedAttribute;

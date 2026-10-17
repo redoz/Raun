@@ -69,7 +69,7 @@ public sealed partial class AppointmentWhen : When
     // appointment is [Deleted]; the new one consumes the slot it moves into.
     [StepName("When rescheduling {appointment} into {slot}")]
     [return: Rescheduled(Slot = nameof(slot))]
-    public Task<Appointment> Reschedule([Deleted] Appointment appointment, Slot slot)
+    public Task<Appointment> Reschedule([Deleted] Appointment appointment, [Reserved] Slot slot)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(480));
         return Task.FromResult(new Appointment(appointment.Patient, slot));

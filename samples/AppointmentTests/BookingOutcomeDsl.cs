@@ -26,6 +26,7 @@ public sealed partial class AppointmentWhen : When
             return acceptsWaitlist ? new Waitlisted(3) : new Refused("the patient declined the waitlist");
         }
 
+        await Context.Resources.Apply(ResourceAction.For<ReservedAttribute>(), slot);
         var appointment = new Appointment(patient, slot);
         await Context.Resources.Apply(ResourceAction.For<BookedAttribute>(), appointment);
         await Context.Resources.Reference(patient, appointment);

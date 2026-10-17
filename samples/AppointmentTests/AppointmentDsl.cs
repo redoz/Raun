@@ -119,7 +119,7 @@ public sealed partial class AppointmentWhen : When
 {
     [StepName("When booking {patient} in {slot}")]
     [return: Booked(Patient = nameof(patient), Slot = nameof(slot))]
-    public Task<Appointment> CreateAppointment(Patient patient, Slot slot)
+    public Task<Appointment> CreateAppointment(Patient patient, [Reserved] Slot slot)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(600));
         return Task.FromResult(new Appointment(patient, slot));
@@ -127,7 +127,7 @@ public sealed partial class AppointmentWhen : When
 
     [StepName("When urgently booking {patient} in {slot2}")]
     [return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]
-    public Task<Appointment> CreateUrgentAppointment(Patient patient, Slot slot2)
+    public Task<Appointment> CreateUrgentAppointment(Patient patient, [Reserved] Slot slot2)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(410));
         return Task.FromResult(new Appointment(patient, slot2));

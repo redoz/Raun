@@ -31,6 +31,7 @@ Scenarios run concurrently. A branch that is not taken appears as skipped.
 | Resource keys and labels | [Patient, Slot, and Appointment](AppointmentDsl.cs): identify objects and give them readable names |
 | Resource changes and links | [AppointmentWhen](AppointmentDsl.cs) and [lifecycle steps](LifecycleDsl.cs): create, load, read, edit, delete, reference, and consume |
 | IDs and alternate representations | [ResourceTrackingScenarios.ImportedBooking](ResourceTrackingScenarios.cs): treat a row, an object, and its key as the same patient |
+| Reserve a slot | [BookingAttributes](BookingAttributes.cs): `[Reserved]` uses exclusive edit access; booking relationships retain their reference and consume semantics |
 | Domain action names | [ResourceActionScenarios](ResourceActionScenarios.cs): custom action attributes, method shorthand, and manual Apply |
 | Names carried into later steps | [ResourceActionScenarios](ResourceActionScenarios.cs): a key-only audit reuses the patient name within each scenario |
 | Resource setup in code | [Program](Program.cs): typed mappings, a named resource kind, and a label selector |

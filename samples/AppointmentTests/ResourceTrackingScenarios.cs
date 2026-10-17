@@ -58,7 +58,7 @@ public sealed partial class AppointmentWhen : When
 {
     [StepName("When importing the clinic booking for {patient.Name} {{external}}")]
     [return: Created]
-    public async Task<Appointment> ImportBooking(PatientRow patient, SlotRow slot)
+    public async Task<Appointment> ImportBooking(PatientRow patient, [Reserved] SlotRow slot)
     {
         var appointment = new Appointment(new Patient(patient.Id, patient.Name, patient.City), new Slot(slot.Hour));
         var receipt = new DeliveryReceipt($"booking-{patient.Name}", patient.Name);

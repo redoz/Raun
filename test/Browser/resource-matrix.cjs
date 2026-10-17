@@ -15,11 +15,16 @@ const model = JSON.parse(payload);
 const matrixScenarioIndex=model.scenarios.findIndex(scenario=>scenario.displayName==='out-of-town patients get a travel reminder');
 assert.ok(matrixScenarioIndex>=0,'The canonical sample includes the travel reminder scenario');
 const domainEffects=model.scenarios.flatMap(scenario=>scenario.steps.flatMap(step=>step.effects));
-for(const [action,verb] of [['Register','Create'],['Hold','Edit'],['Booked','Create'],['Rescheduled','Create'],['Cancel','Delete']]){
+for(const [action,verb] of [['Register','Create'],['Hold','Edit'],['Reserve','Edit'],['Booked','Create'],['Rescheduled','Create'],['Cancel','Delete']]){
   assert.ok(domainEffects.some(effect=>effect.actionName===action && effect.verb===verb),'The real sample demonstrates '+action+' with '+verb+' semantics');
 }
 for(const scenario of model.scenarios)for(const step of scenario.steps){
   const booked=step.effects.find(effect=>effect.actionName==='Booked');
+  const reserved=step.effects.filter(effect=>effect.actionName==='Reserve');
+  const slotInputs=step.effects.filter(effect=>effect.type==='Slot' && effect.verb==='Consume');
+  for(const slot of slotInputs){
+    assert.ok(reserved.some(effect=>effect.resourceId===slot.resourceId && effect.verb==='Edit'),'Booking reserves the chosen slot with exclusive edit semantics');
+  }
   if(!booked)continue;
   assert.ok(scenario.references.some(edge=>edge.subjectId===booked.resourceId && edge.kind==='Reference' && edge.targetType==='Patient'),'Booked retains the patient reference');
   assert.ok(scenario.references.some(edge=>edge.subjectId===booked.resourceId && edge.kind==='Consume' && edge.targetType==='Slot'),'Booked consumes the chosen slot');
@@ -72,6 +77,7 @@ for(const [scenarioName,creates,expectedAssertion] of [['a booking either lands,
   const attempt=scenario.steps.find(step=>step.displayName.startsWith('When trying to book'));
   const created=attempt.effects.filter(effect=>effect.type==='Appointment' && effect.verb==='Create');
   assert.equal(created.length,creates?1:0,'Only successful conditional booking creates an appointment');
+  assert.equal(attempt.effects.filter(effect=>effect.actionName==='Reserve').length,creates?1:0,'Waitlisted and refused bookings do not reserve a slot');
   assert.equal(scenario.references.length,creates?2:0,'Only successful conditional booking records lineage');
   if(creates){
     const appointment=created[0];
