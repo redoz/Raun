@@ -1868,8 +1868,8 @@
         mark.setAttribute('aria-label',step.status+': '+step.displayName);
         mark.setAttribute('aria-description','Focus to trace this step’s dependencies.');
       }
-      // Reserve lanes for pending successors. Parallel marks occupy separate columns;
-      // a join consumes the pending branch lanes and returns to the first shared one.
+      // Reserve the original lane for a fork's join; every branch starts to its right.
+      // Pending successor reservations keep unrelated marks out of live edge lanes.
       const children=new Map(),pending=[],nodeLanes=new Map();
       for(const {from,to} of edges){
         if(!children.has(from))children.set(from,[]);
@@ -1880,10 +1880,22 @@
         let lane=pending.indexOf(step.index);
         if(lane<0){lane=pending.findIndex(value=>value===null);if(lane<0)lane=pending.length;}
         nodeLanes.set(step.index,lane);pending[lane]=null;
-        for(const child of children.get(step.index) || []){
+        const successors=children.get(step.index) || [],fork=successors.length>1;
+        if(fork){
+          const join=sc.steps.find(candidate=>candidate.index>step.index && !candidate.isLifecycle
+            && successors.every(child=>reaches(candidate.index,child)));
+          if(join && !pending.includes(join.index))pending[lane]=join.index;
+        }
+        for(const child of successors){
           if(pending.includes(child))continue;
-          let next=pending[lane]===null ? lane : pending.findIndex(value=>value===null);
-          if(next<0)next=pending.length;
+          let next;
+          if(fork){
+            next=lane+1;
+            while(next<pending.length && pending[next]!==null)next++;
+          }else{
+            next=pending[lane]===null ? lane : pending.findIndex(value=>value===null);
+            if(next<0)next=pending.length;
+          }
           pending[next]=child;
         }
       }
@@ -1919,10 +1931,10 @@
         for(const edge of edges){
           const start=positions.get(edge.from),end=positions.get(edge.to);
           if(!start || !end || end.y<=start.y)continue;
-          const top=start.y+6,bottom=end.y-6,bend=Math.min(10,(bottom-top)/3);
-          // Complete lane changes just below the source before its old lane is reused.
-          const d=start.x===end.x ? `M ${start.x} ${top} L ${end.x} ${bottom}`
-            : `M ${start.x} ${top} C ${start.x} ${top+bend} ${end.x} ${top+bend} ${end.x} ${top+2*bend} L ${end.x} ${bottom}`;
+          const top=start.y+6,bottom=end.y-6,turn=top+Math.min(10,(bottom-top)/2);
+          // Complete each L-shaped lane change before the source lane can be reused.
+          const d=start.x===end.x ? `M ${start.x} ${top} V ${bottom}`
+            : `M ${start.x} ${top} V ${turn} H ${end.x} V ${bottom}`;
           const path=svgEl('path',{d,'data-from':edge.from,'data-to':edge.to});
           path.classList.toggle('dependency-inactive',[steps.get(edge.from),steps.get(edge.to)].some(step=>['skipped','not-taken'].includes(step.status)));
           svg.appendChild(path);

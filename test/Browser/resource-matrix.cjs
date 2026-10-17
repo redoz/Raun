@@ -678,8 +678,11 @@ const renderFixture = (name, data) => {
     const forkEdges=await graphPage.locator('.step-dependency-graph path').evaluateAll(paths=>paths.map(path=>[Number(path.dataset.from),Number(path.dataset.to)]));
     assert.deepEqual(forkEdges,[[1,2],[1,3],[2,4],[3,4],[4,5]],'The real parallel arrangement forks and joins without connecting independent siblings');
     const laneMarks=await graphPage.locator('.dependency-node').evaluateAll(marks=>marks.map(mark=>({name:mark.getAttribute('aria-label'),x:mark.getBoundingClientRect().left,right:mark.getBoundingClientRect().right,title:mark.parentElement.querySelector('.dn').getBoundingClientRect().left})));
+    assert.ok(laneMarks[1].x-laneMarks[0].x>=12,'The first parallel branch is indented from the main lane too');
     assert.ok(laneMarks[2].x-laneMarks[1].x>=12,'Independent parallel steps occupy clearly separated graph lanes');
-    assert.equal(laneMarks[3].x,laneMarks[1].x,'The booking rejoins the main graph lane');
+    assert.equal(laneMarks[3].x,laneMarks[0].x,'The booking rejoins the original main lane');
+    const forkPaths=await graphPage.locator('.step-dependency-graph path').evaluateAll(paths=>paths.map(path=>path.getAttribute('d')));
+    assert.ok(forkPaths.every(d=>!/[CQ]/.test(d)) && forkPaths.some(d=>d.includes(' H ')),'Forks and joins use crisp L-shaped connectors');
     const branchRow=graphPage.locator('.step-entry').filter({has:graphPage.locator('.dependency-node[aria-label*="Given slot 01"]')});
     await branchRow.locator('.step-expander').click();
     assert.ok(await branchRow.evaluate(row=>Math.abs(row.querySelector('.logs').getBoundingClientRect().left-row.querySelector('.dependency-node').getBoundingClientRect().left)<1),'Expanded branch logs follow that branch’s status lane');
