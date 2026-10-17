@@ -406,6 +406,22 @@ isolated test, all 25 StepClassTests, and the repeated full suite passed. Hosted
 The cause is not established; this is retained as an unresolved verification follow-up rather than
 claimed repaired or attributed to key dispatch. No cancellation production change was made for it.
 
+### Investigation update — 2026-10-17
+
+The cancellation classification failure was not reproduced in 1,500 executions of the original
+scenario: 500 isolated runs, 500 alongside the full generator suite, and 500 during a parallel
+Release solution test run. Each probe compiled the clinic fixture once, created a fresh scheduler
+and cancellation source for each execution, and cleared its journal between executions. All original
+exception/status, teardown, and disposal-order assertions remained in place. The temporary stress
+loop was removed afterward; no runtime behavior or permanent test expectation was changed.
+
+Inspection covered host-to-scenario-to-step cancellation, watchdog callback draining, the
+OperationCanceledException classification filter, generated invocation, and step context lifetime.
+The retained historical logs contain passing reruns, but no original exception explaining the failure.
+The existing Assert.Null on the hanging step's exception remains to expose that detail on recurrence.
+The full solution gate passed: 1,743 succeeded, 7 expected branch skips, 0 failures (1,750 total).
+This evidence does not establish a root cause or prove a repair: keep the follow-up unresolved.
+
 ## User follow-ups for later
 
 - Resource effects tables: right-align the time column and reserve a consistent fixed width for the verb in the first column, so effect rows line up across steps and scenarios. Requested and implemented 2026-10-14: fixed-width action and time columns, right-aligned time header and values (beta.16); expanded details aligned with the step status squircle (beta.17).
