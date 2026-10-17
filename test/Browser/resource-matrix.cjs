@@ -456,12 +456,23 @@ const renderFixture = (name, data) => {
     assert.equal(await classLink.getAttribute('href'),sourceScenario.typeSourceUrl);
     assert.equal(await methodLink.getAttribute('href'),sourceScenario.sourceUrl);
     assert.ok(await page.locator('.report-meta').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).opacity==='0' && getComputedStyle(node).fontStyle==='italic')),'Code names are italic and hidden by default');
+    const slide=await methodLink.evaluate(node=>{const m=new DOMMatrix(getComputedStyle(node).transform);return {x:m.m41,y:m.m42};});
+    assert.ok(slide.x<0 && slide.y===0,'Hidden identifiers start to the left and slide horizontally');
+    const assertInlineIdentifier=async(owner,labelSelector)=>{
+      const aligned=await owner.evaluate((node,labelSelector)=>{
+        const title=node.querySelector(labelSelector).getBoundingClientRect(),meta=node.querySelector('.report-meta').getBoundingClientRect();
+        return {gap:meta.left-title.right,center:(meta.top+meta.bottom-title.top-title.bottom)/2};
+      },labelSelector);
+      assert.ok(aligned.gap>=4 && Math.abs(aligned.center)<1,'Code identifiers end after the title and vertically centered: '+JSON.stringify(aligned));
+    };
     const beforeReveal=await scenarioHead.evaluate(node=>{const rect=node.getBoundingClientRect();return {height:rect.height,width:rect.width};});
     await scenarioHead.hover();
     await page.waitForFunction(()=>getComputedStyle(document.querySelector('.card-head .report-meta')).opacity==='1');
+    await assertInlineIdentifier(scenarioHead,'.scenario-title');
     assert.deepEqual(await scenarioHead.evaluate(node=>{const rect=node.getBoundingClientRect();return {height:rect.height,width:rect.width};}),beforeReveal,'Revealing method names does not change layout');
     await heading.focus();
     await page.waitForFunction(()=>getComputedStyle(document.querySelector('.tests-class-name .report-meta')).opacity==='1');
+    await assertInlineIdentifier(heading,'.tests-class-label');
     assert.equal(await methodLink.getAttribute('target'),'_blank','Source navigation keeps the report open');
     await methodLink.focus();
     await page.waitForFunction(()=>getComputedStyle(document.querySelector('.card-head .report-meta')).opacity==='1');
