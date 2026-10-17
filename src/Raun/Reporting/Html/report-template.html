@@ -121,7 +121,7 @@
   .summary-section:focus-visible,.generated-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
   main{margin:0;padding:0}
   .card{position:relative;background:var(--surface);border:0;border-top:1px solid var(--border);border-radius:0;margin:0;padding-left:8px}
-  .card-head{display:grid;grid-template-columns:12px 12px minmax(0,1fr) max-content;align-items:center;column-gap:10px;row-gap:0;padding:12px 0;cursor:pointer;min-width:0}
+  .card-head{display:grid;grid-template-columns:12px 12px minmax(0,1fr) max-content;align-items:center;column-gap:10px;row-gap:0;padding:12px 12px 12px 0;cursor:pointer;min-width:0}
   .card:not(.collapsed){background:var(--surface-2);outline:1px solid var(--border-strong);outline-offset:-1px}
 .card:not(.collapsed)+.card,.card+.card:not(.collapsed){margin-top:8px}
   .card-head:hover{background:var(--surface-2)}
@@ -184,7 +184,7 @@
   .step-list{ display:flex; flex-direction:column; border-top:1px solid var(--border); }
   .step-entry{
     display:grid;grid-template-columns:12px 8px minmax(0,1fr) max-content;column-gap:9px;
-    border-bottom:1px solid var(--border); padding:10px 4px 12px; scroll-margin-top:18px;
+    border-bottom:1px solid var(--border); padding:10px 12px 12px 4px; scroll-margin-top:18px;
     transition:box-shadow .15s ease, background .15s ease;
   }
   .step-entry.status-failed{ background:color-mix(in srgb, var(--fail-bg) 55%, transparent); }
@@ -286,10 +286,10 @@
   .matrix-resource.matrix-reference{background:var(--surface-hover);border-bottom:2px dashed var(--resource-color)}
   .resource-matrix .matrix-row{position:relative;isolation:isolate;padding:0;align-items:start}
   .resource-matrix .matrix-row:last-child{border-bottom:0}
-  .resource-matrix .matrix-row>.step-head{grid-column:1;grid-row:1;grid-template-columns:12px 8px minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);padding:10px 10px 12px 4px;align-self:start}
+  .resource-matrix .matrix-row>.step-head{grid-column:1;grid-row:1;grid-template-columns:12px 8px minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);padding:10px 12px 12px 4px;align-self:start}
   .resource-matrix .matrix-row.step-lifecycle.status-passed:not(.open)>.step-head{padding-top:2px;padding-bottom:3px}
   .resource-matrix .matrix-row:has(>.step-notes)>.step-head{padding-bottom:2px}
-  .resource-matrix .matrix-row>.step-notes{display:grid;grid-template-columns:12px 8px minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);grid-column:1;grid-row:2;margin:0 10px 8px 4px}
+  .resource-matrix .matrix-row>.step-notes{display:grid;grid-template-columns:12px 8px minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);grid-column:1;grid-row:2;margin:0 12px 8px 4px}
   .resource-matrix .matrix-row>.step-notes>.step-note{grid-column:3/-1}
   .resource-matrix .matrix-row>.step-body{grid-column:1;grid-row:3;margin:0 10px 12px 25px;min-width:0}
   .matrix-cell{grid-row:1;position:relative;align-self:stretch;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:3px;padding:5px 3px;border-left:1px solid var(--border);min-height:100%}
@@ -336,7 +336,6 @@
   .scenario-heading-row{display:grid;grid-template-columns:var(--matrix-columns);border-bottom:1px solid var(--border)}
   .scenario-heading{display:flex;align-items:center;min-width:0}
   .scenario-heading>.card-head{flex:1;min-width:0;margin-left:-20px}
-  .card:not(.collapsed) .scenario-heading>.card-head{padding-right:12px}
   .matrix-card .card-body{padding-left:0}
   .card.collapsed .scenario-sheet{min-width:0}
   .card.collapsed .scenario-heading-row{grid-template-columns:minmax(0,1fr);border-bottom:0}

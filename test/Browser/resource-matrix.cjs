@@ -99,6 +99,15 @@ const renderFixture = (name, data) => {
     await page.goto(pathToFileURL(path.join(out, 'resource-matrix-preview.html')).href);
     await page.evaluate(() => document.fonts.ready);
     assert.deepEqual(errors, []);
+    const assertTimingInsets=async()=>{
+      const insets=await page.locator('.card-head,.step-head').evaluateAll(heads=>heads.filter(head=>head.getBoundingClientRect().height>0).map(head=>{
+        const time=head.querySelector('.dur,.dm');
+        const boundary=head.matches('.step-head') && !head.closest('.resource-matrix') ? head.closest('.step-entry') : head;
+        return boundary.getBoundingClientRect().right-time.getBoundingClientRect().right;
+      }));
+      assert.ok(insets.length>0 && insets.every(inset=>inset>=12),'Timings have at least 12px of space before their right border: '+JSON.stringify(insets));
+    };
+    await assertTimingInsets();
     const registryCard=page.locator('.card').filter({hasText:'registered patient books by ID'});
     await registryCard.locator('.card-head').click();
     const patientHeader=registryCard.getByRole('button',{name:/^Jane, Patient\./});
@@ -231,6 +240,7 @@ const renderFixture = (name, data) => {
       assert.deepEqual(stepIds, scenario.steps.map(step => step.stepId), 'Registration order is preserved');
       if (!hasResources(scenario)) assert.equal(await card.locator('.resource-matrix,.matrix-tools').count(), 0, 'Scenarios without resources retain their normal list');
     }
+    await assertTimingInsets();
     assert.equal(await page.locator('.step-head .sx').count(),0,'Step titles have no number badges');
     const titleInsets=await page.locator('.step-head').evaluateAll(heads=>heads.map(head=>{
       const title=head.querySelector('.dn').getBoundingClientRect(),status=head.querySelector('.scenario-status').getBoundingClientRect();
