@@ -511,7 +511,8 @@ const renderFixture = (name, data) => {
     for(const [index,value] of [1,2].entries()){
       await repeatEvents.nth(index).focus();
       assert.equal(await page.evaluate(()=>document.activeElement.getAttribute('data-resource-data')),JSON.stringify({Version:value}));
-      assert.ok((await page.locator('.resource-hover-event').textContent()).includes('+'+((index+1)*10).toFixed(1)+' ms'),'Inspector retains each event offset from step start');
+      assert.equal(await page.locator('.resource-hover-event').textContent(),repeatStep.effects[index].actionName ?? repeatStep.effects[index].verb,'Inspector shows the action without a step-relative timestamp');
+      assert.ok(!(await repeatEvents.nth(index).getAttribute('aria-label')).includes('from step start'),'Accessible action labels omit the timestamp too');
       await page.keyboard.press('Escape');
     }
     const actionFixture=structuredClone(model),actionScenario=actionFixture.scenarios[matrixScenarioIndex];

@@ -1395,11 +1395,9 @@
               if(effect.resourceId){event.dataset.messageResource=effect.resourceId;event.dataset.resourceActivity=effect.resourceId;}
               else{event.classList.add("res-chip");event.dataset.res=effect.type+":"+effect.key;}
               if(effect.data!=null)event.setAttribute("data-resource-data",effect.data);
-              const offset=Number(effect.offsetMs)-Number(sc.steps[index].offsetMs || 0);
-              const time=Number.isFinite(offset) ? (offset>=0 ? "+" : "")+fmtMs(offset) : "—";
-              event.dataset.resourceEvent=(effect.actionName ?? effect.verb)+" · "+time+" from step start";
+              event.dataset.resourceEvent=effect.actionName ?? effect.verb;
               event.title=(effect.actionName ?? effect.verb)+" "+effect.type+": "+effect.key;
-              event.setAttribute("aria-label",event.title+". Show evidence for step "+sc.steps[index].label+". "+time+" from step start");
+              event.setAttribute("aria-label",event.title+". Show evidence for step "+sc.steps[index].label);
               event.addEventListener("click",click=>{
                 click.stopPropagation();selected=column.key;select();
                 event.focus({preventScroll:true});
