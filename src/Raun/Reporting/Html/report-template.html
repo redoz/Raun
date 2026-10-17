@@ -1485,9 +1485,16 @@
           }
           bindResourceMessages(laneDrill,sc);
           const expanded=buildResourceMatrix(sc,laneDrill,true),scroller=expanded.querySelector('.matrix-scroll');
+          let arrowTarget=null;
+          scroller.addEventListener('scrollend',()=>{if(arrowTarget!==null && Math.abs(scroller.scrollLeft-arrowTarget)<1)arrowTarget=null;});
+          for(const event of ['wheel','pointerdown','keydown'])scroller.addEventListener(event,()=>{arrowTarget=null;});
           for(const [name,glyph,direction] of [['Scroll resource lanes left','‹',-1],['Scroll resource lanes right','›',1]]){
             const arrow=coverageText('button','',glyph);arrow.type='button';arrow.setAttribute('aria-label',name);
-            arrow.addEventListener('click',()=>scroller.scrollBy({left:direction*224}));tools.appendChild(arrow);
+            arrow.addEventListener('click',()=>{
+              const columnWidth=expanded.querySelector('.matrix-resource').getBoundingClientRect().width;
+              arrowTarget=Math.max(0,Math.min(scroller.scrollWidth-scroller.clientWidth,(arrowTarget ?? scroller.scrollLeft)+direction*columnWidth));
+              scroller.scrollTo({left:arrowTarget,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+            });tools.appendChild(arrow);
           }
           tools.appendChild(close);opened.append(expanded,tools);
           const card=panel.closest('.card'),sourceHeader=card.querySelector('.scenario-heading-row');

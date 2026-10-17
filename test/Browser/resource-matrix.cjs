@@ -450,10 +450,29 @@ const renderFixture = (name, data) => {
     assert.equal(await lanes.locator('.matrix-resource').count(),crowded.resources.length,'The popover retains every resource identity');
     const laneHeader=lanes.locator('.matrix-resource').first();
     await laneHeader.click();assert.equal(await laneHeader.getAttribute('aria-pressed'),'true','A popover lane can be selected');
+    const columnWidth=await laneHeader.evaluate(node=>node.getBoundingClientRect().width);
+    const laneScroller=lanes.locator('.matrix-scroll');
+    await laneScroller.evaluate(node=>{node.arrowPositions=[];node.addEventListener('scroll',()=>node.arrowPositions.push(node.scrollLeft));});
+    const settledScroll=()=>laneScroller.evaluate(async node=>{
+      let previous=node.scrollLeft,stable=0;
+      while(stable<4){await new Promise(requestAnimationFrame);const current=node.scrollLeft;stable=current===previous ? stable+1 : 0;previous=current;}
+      return node.scrollLeft;
+    });
     await lanes.getByRole('button',{name:'Scroll resource lanes right'}).click();
     assert.equal(await laneHeader.getAttribute('aria-pressed'),'true','Horizontal scrolling preserves the selected resource');
-    assert.ok(await lanes.locator('.matrix-scroll').evaluate(node=>node.scrollLeft>0),'Lane arrows scroll horizontally');
+    assert.equal(await settledScroll(),columnWidth,'The right arrow advances exactly one whole column');
+    assert.ok(await laneScroller.evaluate((node,width)=>node.arrowPositions.some(offset=>offset>0 && offset<width),columnWidth),'Arrow scrolling animates through intermediate positions');
     await lanes.getByRole('button',{name:'Scroll resource lanes left'}).click();
+    assert.equal(await settledScroll(),0,'The left arrow returns exactly one whole column');
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await lanes.getByRole('button',{name:'Scroll resource lanes right'}).click();
+    assert.equal(await laneScroller.evaluate(node=>node.scrollLeft),columnWidth,'Reduced-motion users get the same column movement without animation');
+    await lanes.getByRole('button',{name:'Scroll resource lanes left'}).click();
+    await page.emulateMedia({reducedMotion:'no-preference'});
+    await lanes.getByRole('button',{name:'Scroll resource lanes right'}).evaluate(button=>{button.click();button.click();});
+    assert.equal(await settledScroll(),columnWidth*2,'Rapid arrow presses retain one whole column per press');
+    await lanes.getByRole('button',{name:'Scroll resource lanes left'}).evaluate(button=>{button.click();button.click();});
+    assert.equal(await settledScroll(),0,'Rapid left presses return by the same number of columns');
     await laneHeader.click();assert.equal(await laneHeader.getAttribute('aria-pressed'),'false','Clicking the same popover lane clears its selection');
     const identityColors=await lanes.locator('.matrix-resource').evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).borderTopColor));
     assert.equal(new Set(identityColors).size,crowded.resources.length,'Resource colors do not wrap beyond the palette');
