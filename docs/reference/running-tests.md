@@ -74,6 +74,11 @@ Escape `%` as `%25`, `/` as `%2F`, and literal filter operators with a backslash
 IDEs use `--filter-uid`. MTP does not accept `--filter` or `--nologo` here.
 `--maximum-failed-tests` stops new scenarios; running scenarios finish.
 
+Expanded scenarios include faint dependency lines between step status marks. Hover a mark or
+focus it with the keyboard to highlight that step's predecessor and successor paths. Parallel
+branches remain separate until their join; branches that were not taken use dashed lines.
+The lines follow expanded logs and notes without changing the step layout.
+
 ### Source navigation
 
 Resource lanes collapse to a compact activity column when they do not fit. Click its symbol to open a wider resource-lane overlay. It matches the expanded scenario’s height, keeps each lane aligned with its step, and moves with the report’s vertical scroll. Scroll horizontally or use the arrow controls to see more lanes. Escape or a click outside closes it. Type and method names appear in italics when you hover over or focus a group or scenario heading.

@@ -183,7 +183,10 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                     OffsetMs = offset,
                     DurationMs = Ms(r.Duration),
                     Lane = lanes[i],
-                    DependsOn = r.Node.DependsOn,
+                    // The report graph includes value, ordering, guard, and merge edges.
+                    DependsOn = r.Node.DependsOn.Concat(r.Node.WaitsFor)
+                        .Concat(r.Node.Guards.Select(guard => guard.ConditionIndex))
+                        .Concat(r.Node.MergeSources).Distinct().Order().ToArray(),
                     GroupId = r.Node.GroupId,
                     Notes = r.Notes,
                     // Timer-prefixed ("+1.234s …") when the scheduler supplied offsets; plain lines otherwise.

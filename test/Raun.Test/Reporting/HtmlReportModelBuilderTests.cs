@@ -15,10 +15,11 @@ public class HtmlReportModelBuilderTests
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private static ScenarioNode Node(int index, string stepId, string phase, string template,
-        int[]? dependsOn = null, string? group = null, bool isSetup = false, bool isTeardown = false) => new()
+        int[]? dependsOn = null, string? group = null, bool isSetup = false, bool isTeardown = false, Guard[]? guards = null, int[]? mergeSources = null, int[]? waitsFor = null) => new()
     {
         Index = index, StepId = stepId, Phase = phase, OperationName = $"Op{index}",
         DisplayNameTemplate = template, DependsOn = dependsOn ?? [], GroupId = group, IsSetup = isSetup, IsTeardown = isTeardown,
+        Guards = guards ?? [], MergeSources = mergeSources ?? [], WaitsFor = waitsFor ?? [],
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 
@@ -46,6 +47,23 @@ public class HtmlReportModelBuilderTests
 
     [System.ComponentModel.DisplayName("Approve <now>")]
     private sealed class ApprovedAttribute : EditedAttribute;
+
+    [Fact]
+    public void Report_dependencies_include_branch_guards_merge_sources_and_ordering_edges()
+    {
+        var condition = Node(0, "condition", "Given", "condition");
+        var branch = Node(1, "branch", "When", "branch", guards: [new Guard(0, 0)]);
+        var merge = Node(2, "merge", "When", "merge", mergeSources: [1]);
+        var later = Node(3, "later", "Then", "later", dependsOn: [0], waitsFor: [2, 0]);
+        var definition = Def(condition, branch, merge, later);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnScenarioStarted(definition);
+        foreach (var node in definition.Nodes) { builder.OnStepFinished(definition, Result(node, T0, 1)); }
+        var steps = Assert.Single(builder.Build("now").Scenarios).Steps;
+        Assert.Equal([0], steps[1].DependsOn);
+        Assert.Equal([1], steps[2].DependsOn);
+        Assert.Equal([0, 2], steps[3].DependsOn);
+    }
 
     [Fact]
     public void Different_relationship_kinds_recorded_by_later_steps_both_survive_in_history()
