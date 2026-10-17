@@ -231,6 +231,12 @@ const renderFixture = (name, data) => {
       assert.deepEqual(stepIds, scenario.steps.map(step => step.stepId), 'Registration order is preserved');
       if (!hasResources(scenario)) assert.equal(await card.locator('.resource-matrix,.matrix-tools').count(), 0, 'Scenarios without resources retain their normal list');
     }
+    assert.equal(await page.locator('.step-head .sx').count(),0,'Step titles have no number badges');
+    const titleInsets=await page.locator('.step-head').evaluateAll(heads=>heads.map(head=>{
+      const title=head.querySelector('.dn').getBoundingClientRect(),status=head.querySelector('.scenario-status').getBoundingClientRect();
+      return title.left-status.right;
+    }));
+    assert.ok(titleInsets.every(gap=>gap>=5 && gap<=10),'Titles follow the status marker without an empty number column');
     const expandedGaps=await page.locator('.card:not(.collapsed)+.card:not(.collapsed)').evaluateAll(async cards=>{
       await Promise.all(cards.flatMap(card=>[card,card.previousElementSibling]).map(card=>card.scenarioAnimation?.finished.catch(()=>{})));
       return cards.map(card=>card.getBoundingClientRect().top-card.previousElementSibling.getBoundingClientRect().bottom);

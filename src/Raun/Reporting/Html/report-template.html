@@ -174,7 +174,7 @@
   /* a branch arm that was not chosen: a decision, not a problem, so neutral rather than amber */
   .pill.not-taken{ color:var(--muted); background:var(--inset); } .pill.not-taken .pd{ background:var(--faint); }
   .step-entry.status-not-taken .dn{ color:var(--muted); }
-  .step-entry .sx s,.step-entry .dn s{text-decoration-thickness:1px}
+  .step-entry .dn s{text-decoration-thickness:1px}
   .step-entry .dn s .message-resource{text-decoration-line:line-through;text-decoration-style:solid;text-decoration-color:currentColor;text-decoration-thickness:1px}
 
   /* ---------- DRILL PANEL (scenario-level: every step in run order) ---------- */
@@ -183,19 +183,17 @@
   .drill.open{ display:block; }
   .step-list{ display:flex; flex-direction:column; border-top:1px solid var(--border); }
   .step-entry{
-    display:grid;grid-template-columns:12px 8px max-content minmax(0,1fr) max-content;column-gap:9px;
+    display:grid;grid-template-columns:12px 8px minmax(0,1fr) max-content;column-gap:9px;
     border-bottom:1px solid var(--border); padding:10px 4px 12px; scroll-margin-top:18px;
     transition:box-shadow .15s ease, background .15s ease;
   }
   .step-entry.status-failed{ background:color-mix(in srgb, var(--fail-bg) 55%, transparent); }
   .step-entry.focus{ box-shadow:0 0 0 2px var(--accent); }
   .step-head{display:grid;grid-template-columns:subgrid;grid-column:1/-1;align-items:center;column-gap:9px;min-width:0}
-  .step-head .sx{font:600 12px/1.4 var(--mono);padding:3px 6px;width:calc(3ch + 12px);min-width:calc(3ch + 12px);text-align:right;background:#0d1420;color:#dde8f7}
   .step-head .dn{font-weight:500;font-size:14px;flex:1;min-width:0;overflow-wrap:anywhere}
   .step-lifecycle .dn{color:var(--muted);font-style:italic}
   .step-lifecycle.status-passed:not(.open){padding-top:2px;padding-bottom:3px}
   .step-lifecycle.status-passed:not(.open) .step-head>.scenario-status,
-  .step-lifecycle.status-passed:not(.open) .step-head>.sx,
   .step-lifecycle.status-passed:not(.open) .step-head>.dm{visibility:hidden}
   .step-lifecycle.status-passed:not(.open) .dn{font-size:12px}
   .step-lifecycle.status-passed .step-head{cursor:pointer}
@@ -218,7 +216,7 @@
   .resource-hover-actions button{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--ink);padding:4px 8px;font:inherit;cursor:pointer}
   .resource-hover-actions button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}.resource-hover-actions button:disabled{opacity:.5;cursor:default}
   .resource-activity-hit{background:var(--surface-hover)}
-  .step-notes{grid-column:4/-1;margin:1px 0 0;min-width:0}
+  .step-notes{grid-column:3/-1;margin:1px 0 0;min-width:0}
   .step-note{margin:0;color:var(--muted);font-size:12px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere}
   .step-head .stw{transform:rotate(-90deg)}
   .step-entry.open .step-head .stw{transform:none}
@@ -232,7 +230,7 @@
   .logs li{font:12px/1.6 var(--mono);color:var(--ink);margin:3px 0;white-space:pre-wrap;overflow-wrap:anywhere}
   .step-logs,.step-trace{margin-top:10px}.step-logs>summary,.step-trace>summary{font-size:12px;color:var(--muted);cursor:pointer}
   .detail-count{font-variant-numeric:tabular-nums;margin-left:6px}
-  @media(max-width:650px){.step-entry{column-gap:6px}.step-head{column-gap:6px;row-gap:1px}.step-head .dm{grid-column:4/-1;justify-content:flex-start}}
+  @media(max-width:650px){.step-entry{column-gap:6px}.step-head{column-gap:6px;row-gap:1px}.step-head .dm{grid-column:3/-1;justify-content:flex-start}}
   .att{ margin:4px 0; }
   .att > summary{ cursor:pointer; font-size:12px; color:var(--ink); }
   .att > summary .an{ font-weight:600; }
@@ -288,12 +286,11 @@
   .matrix-resource.matrix-reference{background:var(--surface-hover);border-bottom:2px dashed var(--resource-color)}
   .resource-matrix .matrix-row{position:relative;isolation:isolate;padding:0;align-items:start}
   .resource-matrix .matrix-row:last-child{border-bottom:0}
-  .resource-matrix .matrix-row>.step-head{grid-column:1;grid-row:1;grid-template-columns:12px 8px max-content minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);padding:10px 10px 12px 4px;align-self:start}
+  .resource-matrix .matrix-row>.step-head{grid-column:1;grid-row:1;grid-template-columns:12px 8px minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);padding:10px 10px 12px 4px;align-self:start}
   .resource-matrix .matrix-row.step-lifecycle.status-passed:not(.open)>.step-head{padding-top:2px;padding-bottom:3px}
   .resource-matrix .matrix-row:has(>.step-notes)>.step-head{padding-bottom:2px}
-  .resource-matrix .matrix-row>.step-notes{display:grid;grid-template-columns:12px 8px max-content minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);grid-column:1;grid-row:2;margin:0 10px 8px 4px}
-  .resource-matrix .matrix-row>.step-notes::before{content:"";grid-column:3;font:600 12px/1.4 var(--mono);width:calc(3ch + 12px)}
-  .resource-matrix .matrix-row>.step-notes>.step-note{grid-column:4/-1}
+  .resource-matrix .matrix-row>.step-notes{display:grid;grid-template-columns:12px 8px minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);grid-column:1;grid-row:2;margin:0 10px 8px 4px}
+  .resource-matrix .matrix-row>.step-notes>.step-note{grid-column:3/-1}
   .resource-matrix .matrix-row>.step-body{grid-column:1;grid-row:3;margin:0 10px 12px 25px;min-width:0}
   .matrix-cell{grid-row:1;position:relative;align-self:stretch;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:3px;padding:5px 3px;border-left:1px solid var(--border);min-height:100%}
   .matrix-continuation{position:relative;grid-row:2/4;min-width:0;align-self:stretch;border-left:1px solid var(--border)}
@@ -1397,7 +1394,7 @@
               if(effect.data!=null)event.setAttribute("data-resource-data",effect.data);
               event.dataset.resourceEvent=effect.actionName ?? effect.verb;
               event.title=(effect.actionName ?? effect.verb)+" "+effect.type+": "+effect.key;
-              event.setAttribute("aria-label",event.title+". Show evidence for step "+sc.steps[index].label);
+              event.setAttribute("aria-label",event.title+". Show evidence for "+sc.steps[index].displayName);
               event.addEventListener("click",click=>{
                 click.stopPropagation();selected=column.key;select();
                 event.focus({preventScroll:true});
@@ -1822,7 +1819,7 @@
     function buildScenarioDrill(sc){
       const p=el("div","drill scenario-drill");p.dataset.focus="";
       let h='<div class="step-list">';
-      for(const [index,s] of sc.steps.entries()){
+      for(const s of sc.steps){
         let b="";
         if(s.skipReason)b+='<p class="skipnote">'+esc(s.skipReason)+'</p>';
         if(s.exception)b+='<div class="sec"><h4>Exception</h4><pre class="exc">'+esc(s.exception)+'</pre></div>';
@@ -1834,17 +1831,16 @@
         if(s.attachments?.length)b+='<div class="sec">'+s.attachments.map(a=>'<details class="att"><summary><span class="an">'+esc(a.name)+'</span><span class="asz">'+attSize(a.value)+'</span></summary><pre class="att-body">'+esc(a.value)+'</pre></details>').join('')+'</div>';
         const skipped=s.status==='skipped' || s.status==='not-taken';
         const strike=text=>skipped ? '<s>'+text+'</s>' : text;
-        const phase=String(s.phase || '').toLowerCase(), number=s.label === "" ? "0" : (s.label ?? (Number.isFinite(s.index) ? s.index+1 : index+1));
+        const phase=String(s.phase || '').toLowerCase();
         const status=['passed','failed','skipped'].includes(s.status) ? s.status : 'skipped';
         const cls='step-entry status-'+s.status+' ph-'+phase+(s.isLifecycle ? ' step-lifecycle' : '')+(b ? ' has-body' : '')+(b && s.status==='failed' ? ' open' : '');
         const bodyId=b ? 'step-details-'+(++stepDetailSequence) : '';
         const lifecycleToggle=s.isLifecycle && s.status==='passed';
         const control=b ? 'step-expander' : 'lifecycle-toggle';
-        const controlLabel=b ? 'Toggle details for step '+number : 'Toggle metadata for '+s.displayName;
+        const controlLabel=b ? 'Toggle details for '+s.displayName : 'Toggle metadata for '+s.displayName;
         h+='<div class="'+cls+'" data-step="'+esc(s.stepId)+'"><div class="step-head">'+
           (b || lifecycleToggle ? '<button type="button" class="'+control+'" aria-label="'+esc(controlLabel)+'" aria-expanded="'+String(s.status==='failed')+'"'+(bodyId ? ' aria-controls="'+bodyId+'"' : '')+'><span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span></button>' : '<span class="stw" aria-hidden="true"></span>')+
           '<span class="scenario-status '+status+'" role="img" aria-label="'+esc(s.status)+'"></span>'+
-          '<span class="sx" aria-label="Step '+esc(number)+', '+esc(s.status)+'">'+strike('#'+esc(number))+'</span>'+
           '<span class="dn">'+strike(stepTitleHtml(s,sc))+'</span><span class="dm">'+(Number.isFinite(s.offsetMs) ? '<span class="step-offset" title="Time from scenario start">+'+fmtDur(s.offsetMs)+'</span>' : '')+'<span class="step-duration" title="Step duration">'+fmtDur(s.durationMs)+'</span></span></div>'+stepNotesHtml(s.notes,s.noteMessages,sc)+
           (b ? '<div class="step-body" id="'+bodyId+'">'+b+'</div>' : '')+'</div>';
       }

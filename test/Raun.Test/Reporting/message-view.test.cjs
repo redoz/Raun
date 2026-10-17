@@ -218,12 +218,12 @@ test('phase coloring uses matching authored prefix once with chevron before stat
  const head=p.querySelector('.step-head');
  assert.equal(head.querySelector('.ph-chip'),null);
  assert.equal(head.querySelector('.pill'),null);
- assert.match(nodeText(head),/#13/);
+ assert.doesNotMatch(nodeText(head),/#13/);
  assert.ok(head.children[0].classList.contains('step-expander') || head.children[0].classList.contains('stw'));
  assert.ok(head.children[1].classList.contains('scenario-status'));
  assert.ok(head.children[1].classList.contains('passed'));
  assert.equal(head.children[1].getAttribute('aria-label'),'passed');
- assert.equal(head.querySelector('.sx').classList.contains('number-passed'),false);
+ assert.equal(head.querySelector('.sx'),null);
  assert.ok(head.querySelector('.phase-given'));
  const mismatched=scope.buildScenarioDrill({...scenario,steps:[{...current,phase:'When'}]});
  assert.equal(mismatched.querySelector('.phase-given'),null);
@@ -365,26 +365,25 @@ test('snapshot presentation hides unused serializer IDs without removing real ID
  assert.deepEqual(JSON.parse(scope.formatResourceSnapshot(cycle)),JSON.parse(cycle));
 });
 
-test('lifecycle rows stay visible with setup zero and explicit muted styling without changing status',()=>{
+test('lifecycle rows stay visible without number badges and retain their lifecycle status',()=>{
  const rows=[{...step('setup',{}),label:'0',isLifecycle:true,displayName:'Setup',titleMessage:undefined},{...step('given',{}),label:'1',displayName:'Teardown',titleMessage:undefined},{...step('teardown',{}),label:'2',isLifecycle:true,status:'failed',displayName:'Cleanup',titleMessage:undefined}];
  const p=scope.buildScenarioDrill({...scenario,steps:rows});
  const entries=p.querySelectorAll('.step-entry');assert.equal(entries.length,3);
- assert.equal(nodeText(entries[0].querySelector('.sx')),'#0');
- assert.equal(nodeText(entries[1].querySelector('.sx')),'#1');
+ assert.equal(entries[0].querySelector('.sx'),null);
+ assert.equal(entries[1].querySelector('.sx'),null);
  assert.ok(entries[0].classList.contains('step-lifecycle'));
  assert.equal(entries[1].classList.contains('step-lifecycle'),false);
  assert.ok(entries[2].classList.contains('step-lifecycle'));assert.ok(entries[2].querySelector('.scenario-status.failed'));
 });
 
-test('skipped and not-taken step numbers and names are struck through without removing resource links',()=>{
+test('skipped and not-taken step names are struck through without removing resource links',()=>{
  const rows=['skipped','not-taken','passed','failed'].map(status=>({...step(status,message('Named resource')),status}));
  const view=scope.buildScenarioDrill({...scenario,steps:rows});
  const entries=view.querySelectorAll('.step-entry');
  for(let i=0;i<entries.length;i++){
-  const number=entries[i].querySelector('.sx'), name=entries[i].querySelector('.dn');
-  assert.equal(Boolean(number.querySelector('s')),i<2);
+  const name=entries[i].querySelector('.dn');
+  assert.equal(entries[i].querySelector('.sx'),null);
   assert.equal(Boolean(name.querySelector('s')),i<2);
-  assert.equal(nodeText(number),'#1');
   assert.equal(nodeText(name),'Named resource');
   assert.ok(name.querySelector('[data-message-resource]'));
  }
@@ -401,7 +400,7 @@ test('successful lifecycle rows without a body reveal metadata from both their n
  entry.querySelector('.dn').dispatch('click');
  assert.equal(entry.classList.contains('open'),true);
  assert.equal(control.getAttribute('aria-expanded'),'true');
- assert.equal(nodeText(entry.querySelector('.sx')),'#0');
+ assert.equal(entry.querySelector('.sx'),null);
  assert.ok(entry.querySelector('.scenario-status.passed'));
  control.dispatch('click');
  assert.equal(entry.classList.contains('open'),false);
