@@ -123,7 +123,7 @@
   .card{position:relative;background:var(--surface);border:0;border-top:1px solid var(--border);border-radius:0;margin:0;padding-left:8px}
   .card-head{display:grid;grid-template-columns:12px 12px minmax(0,1fr) max-content;align-items:center;column-gap:10px;row-gap:0;padding:12px 0;cursor:pointer;min-width:0}
   .card:not(.collapsed){background:var(--surface-2);outline:1px solid var(--border-strong);outline-offset:-1px}
-.card:not(.collapsed)+.card:not(.collapsed){margin-top:8px}
+.card:not(.collapsed)+.card,.card+.card:not(.collapsed){margin-top:8px}
   .card-head:hover{background:var(--surface-2)}
   .card-head:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
   .card-head .tw,.step-head .stw{display:grid;place-items:center;color:var(--muted);width:12px;height:12px;line-height:1;flex:none}

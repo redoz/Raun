@@ -242,6 +242,25 @@ const renderFixture = (name, data) => {
       return cards.map(card=>card.getBoundingClientRect().top-card.previousElementSibling.getBoundingClientRect().bottom);
     });
     assert.ok(expandedGaps.length>0 && expandedGaps.every(gap=>gap>=8),'Adjacent expanded scenarios have space between their background boxes');
+    const neighborGroup=page.locator('.group').filter({has:page.locator('.card + .card')}).first();
+    const upper=neighborGroup.locator('.card').nth(0),lower=neighborGroup.locator('.card').nth(1);
+    const neighborGeometry=()=>neighborGroup.locator('.card').evaluateAll(cards=>cards.slice(0,2).map(card=>{const r=card.getBoundingClientRect();return {top:r.top,bottom:r.bottom};}));
+    const assertNeighborGap=async(hovered)=>{
+      const before=await neighborGeometry();
+      assert.ok(before[1].top-before[0].bottom>=8,'Expanded scenarios have a gap next to collapsed neighbors');
+      await hovered.hover();
+      assert.deepEqual(await neighborGeometry(),before,'Hovering a neighbor must not change the scenario layout');
+    };
+    await lower.locator('.card-head').click();
+    await lower.evaluate(async card=>{await card.scenarioAnimation?.finished.catch(()=>{});});
+    await assertNeighborGap(lower);
+    await lower.locator('.card-head').click();
+    await upper.locator('.card-head').click();
+    await upper.evaluate(async card=>{await card.scenarioAnimation?.finished.catch(()=>{});});
+    await lower.evaluate(async card=>{await card.scenarioAnimation?.finished.catch(()=>{});});
+    await assertNeighborGap(upper);
+    await upper.locator('.card-head').click();
+    await upper.evaluate(async card=>{await card.scenarioAnimation?.finished.catch(()=>{});});
     const assertNoteAlignment=async()=>{
       const notes=await page.locator('.matrix-row>.step-notes').evaluateAll(nodes=>nodes.map(node=>{
         const note=node.querySelector('.step-note').getBoundingClientRect(),title=node.parentElement.querySelector('.step-head .dn').getBoundingClientRect();
