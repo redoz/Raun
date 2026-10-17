@@ -490,15 +490,39 @@ const renderFixture = (name, data) => {
     const assertInlineIdentifier=async(owner,labelSelector)=>{
       const aligned=await owner.evaluate((node,labelSelector)=>{
         const title=node.querySelector(labelSelector).getBoundingClientRect(),meta=node.querySelector('.report-meta').getBoundingClientRect();
-        return {gap:meta.left-title.right,center:(meta.top+meta.bottom-title.top-title.bottom)/2};
+        return {gap:meta.left+parseFloat(getComputedStyle(node.querySelector('.report-meta')).paddingLeft)-title.right,center:(meta.top+meta.bottom-title.top-title.bottom)/2};
       },labelSelector);
       assert.ok(aligned.gap>=4 && Math.abs(aligned.center)<1,'Code identifiers end after the title and vertically centered: '+JSON.stringify(aligned));
     };
+    const flyoutOpacity=async(owner)=>owner.locator('.report-meta').evaluate(async node=>{
+      await Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})));
+      return getComputedStyle(node).opacity;
+    });
+    await scenarioHead.locator('.dur').hover();
+    assert.equal(await flyoutOpacity(scenarioHead),'0','Hovering the timing does not reveal the method name');
+    await scenarioHead.locator('.dur').click();
+    await scenarioHead.evaluate(async head=>{await head.closest('.card').scenarioAnimation?.finished.catch(()=>{});});
+    assert.equal(await flyoutOpacity(scenarioHead),'0','Pointer focus on the row does not reveal the method name');
+    const headingBox=await heading.boundingBox();
+    await heading.hover({position:{x:headingBox.width-2,y:headingBox.height/2}});
+    assert.equal(await flyoutOpacity(heading),'0','Hovering empty group heading space does not reveal the type name');
+    await heading.locator('.tests-class-label').hover();
+    assert.equal(await flyoutOpacity(heading),'1','Hovering the group title reveals the type name');
     const beforeReveal=await scenarioHead.evaluate(node=>{const rect=node.getBoundingClientRect();return {height:rect.height,width:rect.width};});
-    await scenarioHead.hover();
+    await scenarioHead.locator('.scenario-title').hover();
     await page.waitForFunction(()=>getComputedStyle(document.querySelector('.card-head .report-meta')).opacity==='1');
     await assertInlineIdentifier(scenarioHead,'.scenario-title');
+    const titleBox=await scenarioHead.locator('.scenario-title').boundingBox();
+    await page.mouse.move(titleBox.x+titleBox.width+3,titleBox.y+titleBox.height/2);
+    assert.equal(await flyoutOpacity(scenarioHead),'1','The flyout stays open while moving from the title to its source link');
+    await methodLink.hover();
+    assert.equal(await flyoutOpacity(scenarioHead),'1','The revealed source link remains reachable');
     assert.deepEqual(await scenarioHead.evaluate(node=>{const rect=node.getBoundingClientRect();return {height:rect.height,width:rect.width};}),beforeReveal,'Revealing method names does not change layout');
+    await page.mouse.move(0,0);
+    assert.equal(await flyoutOpacity(scenarioHead),'0','Leaving the title and source link hides the flyout');
+    await page.keyboard.press('Tab');
+    await scenarioHead.focus();
+    assert.equal(await flyoutOpacity(scenarioHead),'1','Keyboard focus can still reveal method links');
     await heading.focus();
     await page.waitForFunction(()=>getComputedStyle(document.querySelector('.tests-class-name .report-meta')).opacity==='1');
     await assertInlineIdentifier(heading,'.tests-class-label');
