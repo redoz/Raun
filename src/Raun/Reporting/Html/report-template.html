@@ -552,10 +552,13 @@
   .flow-content .step-entry>.step-body{margin-left:calc(var(--step-body-inset,0px) + var(--step-flow-depth,1)*12px)}
   .step-head{position:relative;isolation:isolate}
   .gantt-track{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+  .step-entry:not(.matrix-row)>.step-head>.gantt-track{top:-10px;bottom:-12px}
+  .step-entry:not(.matrix-row):is(.open,:has(>.step-notes),:has(>.step-prerequisites:not([hidden])))>.step-head>.gantt-track{bottom:0}
   .step-gantt{display:block;flex:none;padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
   .step-gantt:hover,.step-gantt[aria-expanded="true"]{color:var(--ink)}
   .step-gantt:focus-visible{outline:1px solid var(--muted);outline-offset:3px}
   .step-lifecycle.status-passed:not(.open) .gantt-track{visibility:hidden}
+  .step-lifecycle.status-passed:not(.open):not(.matrix-row)>.step-head>.gantt-track{top:-2px;bottom:-3px}
   .gantt-bar{position:absolute;inset-block:0;min-width:2px;background:var(--muted);opacity:.12;pointer-events:none}
   .status-failed .gantt-bar{background:var(--fail);opacity:.14}
   .dependency-related .gantt-bar{opacity:.22}
