@@ -1929,6 +1929,7 @@
         ...sc.steps.filter(step=>['passed','failed'].includes(step.status)).map(step=>
           Number.isFinite(step.offsetMs) && Number.isFinite(step.durationMs) ? Math.max(0,step.offsetMs)+Math.max(0,step.durationMs) : 0));
       const chevron='<span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span>';
+      const showTiming=sc.steps.filter(step=>!step.isLifecycle && !((step.isBranchBinding || step.isValueMerge) && step.status!=='failed')).length>1;
       const stack=[],branches=[];
       for(const step of sc.steps){
         const row=rows.get(step.stepId),guards=(step.guards || []).filter(guard=>byIndex.has(guard.conditionIndex));
@@ -1991,7 +1992,7 @@
         const start=Math.max(0,step.offsetMs),duration=Math.max(0,step.durationMs);
         axis.title=timed ? '+'+fmtDur(start)+' to +'+fmtDur(start+duration)+' / '+fmtDur(duration) : step.status+' / did not run';
         axis.setAttribute('aria-label','Timing and prerequisites for '+step.displayName+': '+axis.title);
-        if(timed){
+        if(timed && showTiming){
           const bar=el('span','gantt-bar');bar.setAttribute('aria-hidden','true');
           const left='min('+(100*start/scale)+'%,calc(100% - 2px))';
           bar.style.left=left;bar.style.width=(100*duration/scale)+'%';
