@@ -37,6 +37,17 @@ async function assertBranchIndentation(page){
   if(position.chevronLeft!==null){assert.ok(baseChevron);assert.ok(Math.abs(position.chevronLeft-baseChevron.chevronLeft-position.depth*12)<1,'Step chevron follows the same branch indentation as its status and title');}
  }
 }
+async function assertResourceCrossesHeading(root,heading,resourceId,expected){
+ const bounds=await heading.boundingBox();assert.ok(bounds);
+ const crosses=await root.evaluate((node,{bounds,resourceId})=>{
+  const path=Array.from(node.querySelectorAll('.matrix-track-bridges path')).find(path=>path.dataset.resourceColumn===resourceId);
+  const cell=Array.from(node.querySelectorAll('.matrix-cell')).filter(cell=>cell.dataset.resourceColumn===resourceId).map(cell=>cell.getBoundingClientRect()).find(box=>box.width>0);
+  if(!path || !cell)return false;
+  const inverse=path.getScreenCTM().inverse(),x=(cell.left+cell.right)/2;
+  return [.1,.5,.9].every(fraction=>path.isPointInStroke(new DOMPoint(x,bounds.y+bounds.height*fraction).matrixTransform(inverse)));
+ },{bounds,resourceId});
+ assert.equal(crosses,expected,'Resource lifelines cross structural headings only while their lifetime continues');
+}
 function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSync(file,template.replace('/*__RAUN_REPORT_JSON__*/',JSON.stringify({...model,scenarios:[data]}).replaceAll('<','\\u003C')));return pathToFileURL(file).href;}
 (async()=>{const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:{})});try{
  const page=await browser.newPage({viewport:{width:1200,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -201,10 +212,22 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await page.locator('.matrix-summary-header').click();
  const dialog=page.getByRole('dialog',{name:'Resource lanes for '+priority.displayName});await dialog.waitFor({state:'visible'});
  await page.waitForFunction(()=>{const dialog=document.querySelector('.matrix-lanes-popover');const card=dialog.closest('.card');return Array.from(dialog.querySelectorAll('.matrix-row')).every(row=>{const source=Array.from(card.querySelectorAll('.scenario-drill:not(.matrix-lanes-popover .scenario-drill) .step-entry')).find(n=>n.dataset.step===row.dataset.step);if(!source)return false;const a=source.getBoundingClientRect(),b=row.getBoundingClientRect();return a.height===0?b.height===0:Math.abs(a.top-b.top)<1 && Math.abs(a.height-b.height)<1;});});
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await assertResourceCrossesHeading(dialog,page.locator('.flow-branch[data-arm="1"] > .flow-heading'),priority.resources.find(resource=>resource.type==='Appointment').id,true);
  await dialog.getByRole('button',{name:'Close resource lanes',exact:true}).click();
  await page.setViewportSize({width:1200,height:1000});await page.emulateMedia({colorScheme:'dark'});
  await page.goto(render('real-conditional-dark',priority)+'?theme=dark');await page.locator('.card-head').click();
  await page.locator('.card').evaluate(async n=>{if(n.scenarioAnimation)await n.scenarioAnimation.finished;});
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ const otherwiseHeading=page.locator('.flow-branch[data-arm="1"] > .flow-heading');
+ const appointmentId=priority.resources.find(resource=>resource.type==='Appointment').id,patientId=priority.resources.find(resource=>resource.type==='Patient').id;
+ await assertResourceCrossesHeading(page.locator('.scenario-drill'),otherwiseHeading,appointmentId,true);
+ await assertResourceCrossesHeading(page.locator('.scenario-drill'),otherwiseHeading,patientId,false);
+ await otherwiseHeading.locator('button').click();
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await assertResourceCrossesHeading(page.locator('.scenario-drill'),otherwiseHeading,appointmentId,true);
+ await otherwiseHeading.locator('button').click();
+
  await page.screenshot({path:path.join(out,'conditional-dark.png'),fullPage:true});
  const waitlisted=model.scenarios.find(s=>s.displayName==='a patient whose booking waits is put on the waitlist');
  await page.goto(render('real-waitlisted-dark',waitlisted)+'?theme=dark');

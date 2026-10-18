@@ -316,6 +316,9 @@
   .matrix-compact .matrix-contents .scenario-drill::after{display:none}
   .step-logs{margin-top:0}.step-logs>.logs{margin-top:0}
   .matrix-cell.matrix-track::before,.matrix-continuation.matrix-track::before{content:"";position:absolute;width:1px;inset:0 auto 0 50%;transform:translateX(-50%);background:color-mix(in srgb,var(--resource-color) 32%,transparent);z-index:0}
+  .matrix-track-bridges{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:0}
+  .matrix-track-bridges path{fill:none;stroke:color-mix(in srgb,var(--resource-color) 32%,transparent);stroke-width:1}
+  .matrix-compact .matrix-contents .matrix-track-bridges{display:none}
   .matrix-cell.matrix-track-first::before{top:50%}
   .matrix-cell.matrix-track-last::before{bottom:50%}
   .matrix-event{position:relative;z-index:1;font:11px/1.5 var(--sans);color:var(--ink);background:var(--surface);border:1px solid color-mix(in srgb,var(--resource-color) 45%,var(--border));border-radius:3px;padding:1px 5px;max-width:100%;overflow-wrap:anywhere;cursor:pointer}
@@ -1458,6 +1461,9 @@
         panel.disposeMatrix=()=>connectionObserver?.disconnect();
         header.querySelectorAll(".matrix-resource").forEach(node=>node.remove());
         for(const row of rows)row.querySelectorAll(".matrix-cell,.matrix-continuation,.matrix-connection").forEach(node=>node.remove());
+        drill.querySelector(':scope > .matrix-track-bridges')?.remove();
+        const bridgeLayer=svgEl('svg',{class:'matrix-track-bridges','aria-hidden':'true'}),bridgeColumns=[];
+        drill.appendChild(bridgeLayer);
         columns=Array.from(resources,([key,resource])=>({key,resource,keys:new Set([key]),members:[resource]}));
         const layout=panel.closest(".scenario-sheet") || matrix;
         layout.style.setProperty("--matrix-columns",(fullSize ? "" : "minmax(430px,1fr) ")+`repeat(${columns.length},112px)`);
@@ -1478,9 +1484,11 @@
           button.addEventListener("click",()=>{selected=selected===column.key ? null : column.key;select();});header.appendChild(button);
           const hits=sc.steps.map(step=>(step.effects || []).filter(effect=>column.keys.has(matrixResourceKey(effect))));
           const first=hits.findIndex(effects=>effects.length),last=hits.findLastIndex(effects=>effects.length);
+          const trackCells=[];
           rows.forEach((row,index)=>{
             const track=column.keys.size===1 && first<last && index>=first && index<=last;
             const cell=el("div","matrix-cell"+(track ? " matrix-track" : ""));
+            if(track)trackCells.push({row,cell});
             if(track && index===first)cell.classList.add("matrix-track-first");
             if(track && index===last)cell.classList.add("matrix-track-last");
             cell.dataset.resourceColumn=column.key;cell.style.gridColumn=String(columnIndex+(fullSize ? 1 : 2));cell.style.setProperty("--resource-color",color);
@@ -1503,6 +1511,10 @@
             continuation.dataset.resourceColumn=column.key;continuation.style.gridColumn=String(columnIndex+(fullSize ? 1 : 2));continuation.style.setProperty("--resource-color",color);
             row.appendChild(cell);row.appendChild(continuation);
           });
+          if(trackCells.length>1){
+            const path=svgEl('path');path.dataset.resourceColumn=column.key;path.style.setProperty('--resource-color',color);
+            bridgeLayer.appendChild(path);bridgeColumns.push({path,cells:trackCells});
+          }
         });
         // Anchor connectors to badge edges, not assumed text widths or the expanded row's midpoint.
         const connections=[];
@@ -1524,6 +1536,19 @@
           }
         });
         const drawConnections=()=>{
+          const sheet=drill.getBoundingClientRect();
+          bridgeLayer.setAttribute('viewBox','0 0 '+Math.max(1,sheet.width)+' '+Math.max(1,sheet.height));
+          for(const {path,cells} of bridgeColumns){
+            const visible=cells.map(({row,cell})=>({row:row.getBoundingClientRect(),cell:cell.getBoundingClientRect()})).filter(({row,cell})=>row.height>0 && cell.width>0);
+            const segments=[];
+            for(let index=1;index<visible.length;index++){
+              const previous=visible[index-1],next=visible[index];
+              if(next.row.top<=previous.row.bottom)continue;
+              const x=(previous.cell.left+previous.cell.right)/2-sheet.left;
+              segments.push('M '+x+' '+(previous.row.bottom-sheet.top)+' V '+(next.row.top-sheet.top));
+            }
+            path.setAttribute('d',segments.join(' '));
+          }
           for(const row of rows){
             const bundle=connections.filter(connection=>connection.row===row);
             if(!bundle.length)continue;
@@ -1545,6 +1570,7 @@
           }
         };
         connectionObserver=new ResizeObserver(drawConnections);
+        connectionObserver.observe(drill);
         for(const row of rows){connectionObserver.observe(row);for(const event of row.querySelectorAll(".matrix-event"))connectionObserver.observe(event);}
         document.fonts.ready.then(drawConnections);
         requestAnimationFrame(drawConnections);
