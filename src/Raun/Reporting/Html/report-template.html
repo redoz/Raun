@@ -182,14 +182,27 @@
   .drill{ display:none; margin-top:10px; }
   .drill.open{ display:block; }
   .scenario-drill{position:relative}
-  .step-dependency-graph{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:2}
-  .step-dependency-graph path{fill:none;stroke:var(--muted);stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;opacity:.4;transition:opacity .12s ease;vector-effect:non-scaling-stroke}
-  .step-dependency-graph .dependency-inactive{stroke-dasharray:2 3;opacity:.2}
-  .step-dependency-graph.dependency-tracing path{opacity:.06}
-  .step-dependency-graph.dependency-tracing .dependency-active{opacity:.85}
-  .step-head>.dependency-node{position:relative;z-index:3;outline-offset:3px;justify-self:start;transform:translateX(var(--dependency-offset,0px))}
+  .step-head>.scenario-status{grid-column:2;grid-row:1;justify-self:start}
+  .step-head>.dependency-node{outline-offset:3px}
   .step-head>.dependency-node:focus-visible{outline:1px solid var(--muted)}
-  @media(prefers-reduced-motion:reduce){.step-dependency-graph path{transition:none}}
+  .step-dependency-pixels{grid-column:2;grid-row:1;justify-self:start;align-self:center;margin-left:18px;width:var(--dependency-window);overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+  .step-dependency-pixels::-webkit-scrollbar{display:none}
+  .dependency-pixel-track{position:relative;width:var(--dependency-track-width);height:14px}
+  .dependency-pixel-track::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,var(--muted) 1px,transparent 1px);background-size:8px 1px;background-position:4px center;background-repeat:repeat-x;opacity:.12}
+  .dependency-cell{position:absolute;top:0;display:grid;place-items:center;box-sizing:border-box;width:8px;height:14px;border:0;padding:0;background:none;color:var(--dependency-color);opacity:.68;border-radius:2px}
+  button.dependency-cell{cursor:pointer}
+  .dependency-cell::before{content:"";display:block;box-sizing:border-box;width:1px;height:1px;background:var(--muted);opacity:.2}
+  .dependency-link::before{width:5px;height:5px;background:currentColor;opacity:1;border-radius:1px}
+  .dependency-ordering::before{width:5px;height:2px;border:0;background:currentColor}
+  .dependency-alternative::before{width:6px;height:6px;border:1px solid currentColor;background:none}
+  .dependency-condition::before{width:5px;height:5px;transform:rotate(45deg);background:currentColor;opacity:1}
+  .dependency-self::before{width:6px;height:6px;border:1px solid currentColor;background:none;opacity:1}
+  .dependency-inactive{opacity:.25}
+  .dependency-cell.dependency-active{opacity:1;background:var(--surface-hover)}
+  .dependency-cell.dependency-dim{opacity:.2}
+  .dependency-cell:focus-visible{outline:1px solid var(--ink);outline-offset:-1px}
+  .step-entry.dependency-related:not(.status-failed){background:color-mix(in srgb,var(--surface-hover) 55%,transparent)}
+  .step-entry.dependency-related>.step-head>.scenario-status{outline:1px solid var(--muted);outline-offset:2px}
   .step-list{ display:flex; flex-direction:column; border-top:1px solid var(--border); }
   .step-entry{
     display:grid;grid-template-columns:12px var(--dependency-gutter,8px) minmax(0,1fr) max-content;column-gap:9px;
@@ -232,7 +245,7 @@
   .step-entry.has-body .step-head{cursor:pointer}
   .step-expander,.lifecycle-toggle{border:0;background:none;padding:3px 0;color:var(--muted);font:inherit;cursor:pointer;flex:none}
   .step-expander:focus-visible,.lifecycle-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
-  .step-body{grid-column:2/-1;display:none;margin:8px 0 0 var(--dependency-offset,0px);min-width:0}
+  .step-body{grid-column:2/-1;display:none;margin:8px 0 0;min-width:0}
   .step-entry.open .step-body{display:block}
   .sec{margin-top:10px}.sec h4{margin:0 0 6px;font-size:12px;font-weight:500;color:var(--muted)}
   .logs{margin:7px 0 0;padding:0;list-style:none}
@@ -300,7 +313,7 @@
   .resource-matrix .matrix-row:has(>.step-notes)>.step-head{padding-bottom:2px}
   .resource-matrix .matrix-row>.step-notes{display:grid;grid-template-columns:12px var(--dependency-gutter,8px) minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);grid-column:1;grid-row:2;margin:0 12px 8px 4px}
   .resource-matrix .matrix-row>.step-notes>.step-note{grid-column:3/-1}
-  .resource-matrix .matrix-row>.step-body{grid-column:1;grid-row:3;margin:0 10px 12px calc(25px + var(--dependency-offset,0px));min-width:0}
+  .resource-matrix .matrix-row>.step-body{grid-column:1;grid-row:3;margin:0 10px 12px 25px;min-width:0}
   .matrix-cell{grid-row:1;position:relative;align-self:stretch;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:3px;padding:5px 3px;border-left:1px solid var(--border);min-height:100%}
   .matrix-continuation{position:relative;grid-row:2/4;min-width:0;align-self:stretch;border-left:1px solid var(--border)}
   .step-logs{margin-top:0}.step-logs>.logs{margin-top:0}
@@ -336,7 +349,7 @@
   @media(max-width:650px){
     .matrix-scroll-hint{display:block;margin:5px 0 8px;color:var(--muted);font:11px var(--sans)}
     .resource-matrix .matrix-row{--step-column-gap:6px}
-    .resource-matrix .matrix-row>.step-body{margin-left:calc(22px + var(--dependency-offset,0px))}
+    .resource-matrix .matrix-row>.step-body{margin-left:22px}
     .resource-matrix .matrix-row .step-head .dm{grid-column:auto;justify-content:flex-end}
   }
 
@@ -1835,115 +1848,87 @@
         return messageHtml({parts:[part]},sc);
       }).join("");
     }
-    // The graph follows actual row geometry; opening logs must not move its endpoints off the marks.
+    // One stable column per step avoids routing lines through unrelated rows.
     function bindStepDependencies(drill,sc){
-      const steps=new Map(sc.steps.map(step=>[step.index,step]));
-      const parents=new Map(sc.steps.map(step=>[step.index,(step.dependsOn || []).filter(id=>steps.has(id))]));
-      const reaches=(from,to,seen=new Set())=>{
-        if(from===to)return true;
-        if(seen.has(from))return false;
-        seen.add(from);return (parents.get(from) || []).some(parent=>reaches(parent,to,seen));
-      };
-      // Draw the immediate graph rather than every redundant ordering edge back to Setup.
-      const edges=[];
-      for(const step of sc.steps){
-        if(step.isLifecycle)continue;
-        const inputs=parents.get(step.index);
-        for(const from of inputs){
-          if(steps.get(from).isLifecycle || inputs.some(other=>other!==from && reaches(other,from)))continue;
-          edges.push({from,to:step.index});
-        }
-      }
-      if(!edges.length)return;
-      const svg=svgEl('svg',{class:'step-dependency-graph','aria-hidden':'true'});
-      drill.appendChild(svg);
-      const rows=new Map(),marks=new Map();
-      for(const row of drill.querySelectorAll('.step-entry')){
-        const step=sc.steps.find(step=>step.stepId===row.dataset.step);
-        const mark=row.querySelector('.step-head>.scenario-status');
-        if(!step || step.isLifecycle || !mark)continue;
-        rows.set(step.index,row);marks.set(step.index,mark);
-        mark.classList.add('dependency-node');mark.tabIndex=0;
-        mark.title='Trace dependencies for '+step.displayName;
-        mark.setAttribute('aria-label',step.status+': '+step.displayName);
-        mark.setAttribute('aria-description','Focus to trace this step’s dependencies.');
-      }
-      // Reserve the original lane for a fork's join; every branch starts to its right.
-      // Pending successor reservations keep unrelated marks out of live edge lanes.
-      const children=new Map(),pending=[],nodeLanes=new Map();
-      for(const {from,to} of edges){
-        if(!children.has(from))children.set(from,[]);
-        children.get(from).push(to);
-      }
-      for(const step of sc.steps){
-        if(!marks.has(step.index))continue;
-        let lane=pending.indexOf(step.index);
-        if(lane<0){lane=pending.findIndex(value=>value===null);if(lane<0)lane=pending.length;}
-        nodeLanes.set(step.index,lane);pending[lane]=null;
-        const successors=children.get(step.index) || [],fork=successors.length>1;
-        if(fork){
-          const join=sc.steps.find(candidate=>candidate.index>step.index && !candidate.isLifecycle
-            && successors.every(child=>reaches(candidate.index,child)));
-          if(join && !pending.includes(join.index))pending[lane]=join.index;
-        }
-        for(const child of successors){
-          if(pending.includes(child))continue;
-          let next;
-          if(fork){
-            next=lane+1;
-            while(next<pending.length && pending[next]!==null)next++;
-          }else{
-            next=pending[lane]===null ? lane : pending.findIndex(value=>value===null);
-            if(next<0)next=pending.length;
-          }
-          pending[next]=child;
-        }
-      }
-      const laneCount=Math.max(...nodeLanes.values())+1;
-      const laneSpacing=14;
-      drill.style.setProperty('--dependency-gutter',(8+(laneCount-1)*laneSpacing)+'px');
-      for(const [index,row] of rows)row.style.setProperty('--dependency-offset',(nodeLanes.get(index)*laneSpacing)+'px');
-      let hovered=null,focused=null;
+      const steps=sc.steps.filter(step=>!step.isLifecycle);
+      if(steps.length<2)return;
+      const windowWidth=Math.min(96,steps.length*8);
+      drill.style.setProperty('--dependency-window',windowWidth+'px');
+      drill.style.setProperty('--dependency-track-width',(steps.length*8)+'px');
+      drill.style.setProperty('--dependency-gutter',(18+windowWidth)+'px');
+      const byId=new Map(steps.map(step=>[step.stepId,step])),byIndex=new Map(steps.map(step=>[step.index,step]));
+      const positions=new Map(steps.map((step,index)=>[step.index,index])),rows=new Map(),cells=[],windows=[];
+      const colors=new Map(steps.map((step,index)=>{
+        const hue=(210+index*137.508)%360;
+        return [step.index,`light-dark(hsl(${hue} 35% 43%),hsl(${hue} 35% 68%))`];
+      }));
+      let hovered=null,focused=null,scrollOffset=0;
       const trace=()=>{
-        const selected=hovered ?? focused;
-        svg.classList.toggle('dependency-tracing',selected!==null);
-        for(const path of svg.children){
-          const from=Number(path.dataset.from),to=Number(path.dataset.to);
-          path.classList.toggle('dependency-active',selected!==null &&
-            (reaches(selected,to) && reaches(selected,from) || reaches(to,selected) && reaches(from,selected)));
+        const selected=hovered ?? focused,related=new Set();
+        if(selected){
+          if(selected.node!==undefined){
+            related.add(selected.node);
+            for(const cell of cells)if(cell.link && (cell.from===selected.node || cell.to===selected.node)){related.add(cell.from);related.add(cell.to);}
+          }else{related.add(selected.from);related.add(selected.to);}
         }
+        for(const cell of cells){
+          const active=Boolean(selected && (selected.node!==undefined
+            ? cell.from===selected.node || cell.link && cell.to===selected.node
+            : cell.from===selected.from && (cell.to===selected.to || !cell.link)));
+          cell.element.classList.toggle('dependency-active',active);
+          cell.element.classList.toggle('dependency-dim',Boolean(selected) && !active);
+        }
+        for(const [index,row] of rows)row.classList.toggle('dependency-related',related.has(index));
       };
-      for(const [index,mark] of marks){
-        mark.addEventListener('pointerenter',()=>{hovered=index;trace();});
-        mark.addEventListener('pointerleave',()=>{hovered=null;trace();});
-        mark.addEventListener('focus',()=>{focused=index;trace();});
-        mark.addEventListener('blur',()=>{focused=null;trace();});
+      const bind=(element,selection)=>{
+        element.addEventListener('pointerenter',()=>{hovered=selection;trace();});
+        element.addEventListener('pointerleave',()=>{hovered=null;trace();});
+        element.addEventListener('focus',()=>{focused=selection;trace();});
+        element.addEventListener('blur',()=>{focused=null;trace();});
+      };
+      const labels={dependency:'step dependency',ordering:'must finish before',condition:'branch condition',alternative:'alternative merge input'};
+      for(const row of drill.querySelectorAll('.step-entry')){
+        const step=byId.get(row.dataset.step),head=row.querySelector('.step-head'),mark=head?.querySelector('.scenario-status');
+        if(!step || !mark)continue;
+        rows.set(step.index,row);
+        mark.classList.add('dependency-node');mark.tabIndex=0;
+        mark.setAttribute('aria-label',step.status+': '+step.displayName);
+        mark.setAttribute('aria-description','Focus to highlight this step’s dependencies.');
+        mark.title='Highlight dependencies for '+step.displayName;bind(mark,{node:step.index});
+        const viewport=el('div','step-dependency-pixels'),track=el('div','dependency-pixel-track');
+        viewport.dataset.columns=String(steps.length);
+        viewport.setAttribute('role','group');viewport.setAttribute('aria-label','Dependencies for '+step.displayName);
+        viewport.title='Columns follow step order. Scroll sideways to see more columns.';
+        const dependencies=step.dependencies ?? (step.dependsOn || []).map(index=>({index,kind:'dependency'}));
+        const targets=new Map([[step.index,new Set()]]);
+        for(const edge of dependencies){
+          if(!byIndex.has(edge.index))continue;
+          if(!targets.has(edge.index))targets.set(edge.index,new Set());
+          targets.get(edge.index).add(edge.kind);
+        }
+        for(const [index,kindsSet] of Array.from(targets).sort((a,b)=>positions.get(a[0])-positions.get(b[0]))){
+          const column=byIndex.get(index),kinds=Array.from(kindsSet);
+          const self=column.index===step.index,link=kinds.length>0;
+          const cell=el('button','dependency-cell');
+          cell.dataset.column=String(column.index);cell.style.setProperty('--dependency-color',colors.get(column.index));
+          cell.style.left=(positions.get(column.index)*8)+'px';
+          cell.type='button';cell.dataset.from=String(column.index);cell.dataset.to=String(step.index);
+          const text=self ? 'Current step: '+step.displayName : column.displayName+' → '+step.displayName+' ('+kinds.map(kind=>labels[kind] || kind).join(', ')+')';
+          cell.title=text;cell.setAttribute('aria-label',text);
+          cell.classList.add(self ? 'dependency-self' : 'dependency-link');
+          for(const kind of kinds)cell.classList.add('dependency-'+kind);
+          cell.classList.toggle('dependency-inactive',[column,step].some(item=>['skipped','not-taken'].includes(item.status)));
+          bind(cell,self ? {node:step.index} : {from:column.index,to:step.index});
+          cells.push({element:cell,from:column.index,to:step.index,link});track.appendChild(cell);
+        }
+        viewport.appendChild(track);head.appendChild(viewport);windows.push(viewport);
+        viewport.addEventListener('scroll',()=>{
+          if(viewport.scrollLeft===scrollOffset)return;
+          scrollOffset=viewport.scrollLeft;
+          for(const other of windows)if(other!==viewport)other.scrollLeft=scrollOffset;
+        });
       }
-      const draw=()=>{
-        const bounds=drill.getBoundingClientRect();
-        if(!bounds.width || !bounds.height)return;
-        const positions=new Map(Array.from(marks,([index,mark])=>{
-          const box=mark.getBoundingClientRect();
-          return [index,{x:box.left-bounds.left+box.width/2,y:box.top-bounds.top+box.height/2}];
-        }));
-        svg.setAttribute('viewBox',`0 0 ${bounds.width} ${bounds.height}`);
-        svg.replaceChildren();
-        for(const edge of edges){
-          const start=positions.get(edge.from),end=positions.get(edge.to);
-          if(!start || !end || end.y<=start.y)continue;
-          const top=start.y+6,bottom=end.y-6,turn=top+Math.min(10,(bottom-top)/2);
-          // Complete each L-shaped lane change before the source lane can be reused.
-          const d=start.x===end.x ? `M ${start.x} ${top} V ${bottom}`
-            : `M ${start.x} ${top} V ${turn} H ${end.x} V ${bottom}`;
-          const path=svgEl('path',{d,'data-from':edge.from,'data-to':edge.to});
-          path.classList.toggle('dependency-inactive',[steps.get(edge.from),steps.get(edge.to)].some(step=>['skipped','not-taken'].includes(step.status)));
-          svg.appendChild(path);
-        }
-        trace();
-      };
-      const observer=new ResizeObserver(draw);observer.observe(drill);
-      for(const row of rows.values())observer.observe(row);
-      document.fonts.ready.then(draw);requestAnimationFrame(draw);
+      drill.addEventListener('keydown',event=>{if(event.key==='Escape'){hovered=null;focused=null;trace();}});
     }
     // every step of a scenario, in registration order, with local progressive disclosure
     function buildScenarioDrill(sc){

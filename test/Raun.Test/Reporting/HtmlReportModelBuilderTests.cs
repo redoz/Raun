@@ -63,6 +63,12 @@ public class HtmlReportModelBuilderTests
         Assert.Equal([0], steps[1].DependsOn);
         Assert.Equal([1], steps[2].DependsOn);
         Assert.Equal([0, 2], steps[3].DependsOn);
+        using var branchJson = JsonDocument.Parse(JsonSerializer.Serialize(steps[1]));
+        Assert.Equal("condition", branchJson.RootElement.GetProperty("Dependencies")[0].GetProperty("Kind").GetString());
+        using var mergeJson = JsonDocument.Parse(JsonSerializer.Serialize(steps[2]));
+        Assert.Equal("alternative", mergeJson.RootElement.GetProperty("Dependencies")[0].GetProperty("Kind").GetString());
+        using var orderingJson = JsonDocument.Parse(JsonSerializer.Serialize(steps[3]));
+        Assert.Equal(["dependency", "ordering", "ordering"], orderingJson.RootElement.GetProperty("Dependencies").EnumerateArray().Select(item => item.GetProperty("Kind").GetString()));
     }
 
     [Fact]

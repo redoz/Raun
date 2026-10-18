@@ -74,11 +74,11 @@ Escape `%` as `%25`, `/` as `%2F`, and literal filter operators with a backslash
 IDEs use `--filter-uid`. MTP does not accept `--filter` or `--nologo` here.
 `--maximum-failed-tests` stops new scenarios; running scenarios finish.
 
-Expanded scenarios include faint dependency lines between step status marks. Hover a mark or
-focus it with the keyboard to highlight that step's predecessor and successor paths. Parallel
-status marks indent into separate lanes with L-shaped connectors; their join returns to the original lane.
-Branches that were not taken use dashed lines.
-The lines follow expanded logs and notes without changing the step layout.
+Expanded scenarios include a small dependency pixel matrix next to the status marks. Each column
+represents a step in narrative order. A hollow square marks the current step; colored cells name its
+dependencies. Diamonds mark branch conditions, hollow dependency cells mark alternative merge inputs,
+and short bars mark ordering constraints. Untaken paths stay present but muted. Hover or focus a cell
+to name the connection and highlight its two steps. Wide matrices scroll sideways with all rows aligned.
 
 ### Source navigation
 

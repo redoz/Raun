@@ -63,6 +63,9 @@ internal sealed record ReportStep
     public required double DurationMs { get; init; }
     public required int Lane { get; init; }
     public required IReadOnlyList<int> DependsOn { get; init; }
+    // Ordinary and legacy rows use DependsOn; special control-flow rows retain each edge kind.
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ReportDependency>? Dependencies { get; init; }
     public string? GroupId { get; init; }
     public IReadOnlyList<string> Notes { get; init; } = [];
     public required IReadOnlyList<string> Logs { get; init; }
@@ -79,6 +82,8 @@ internal sealed record ReportStep
     /// <summary>Text attachments the step recorded via <c>ctx.AddAttachment</c>, by name.</summary>
     public IReadOnlyList<ReportAttachment> Attachments { get; init; } = [];
 }
+
+internal sealed record ReportDependency(int Index, string Kind);
 
 internal sealed record ReportMessage
 {
