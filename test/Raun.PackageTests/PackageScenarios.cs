@@ -47,8 +47,8 @@ public sealed class PackageGiven : Given
     public Task<PackageFeed> BuiltPackages() => Task.FromResult(PackageConsumer.FindFeed());
 
     [StepName("Given {sample} consumes {feed} in isolation")]
-    [return: Created(References = [nameof(feed)])]
-    public Task<PackageConsumer> IsolatedConsumer([Read] PackageFeed feed, string sample)
+    [return: Isolated]
+    public Task<PackageConsumer> IsolatedConsumer([Isolated.Feed] PackageFeed feed, string sample)
     {
         var consumer = PackageConsumer.Prepare(feed, sample, Context);
         Context.Log($"Created {consumer} from {feed} in {consumer.Root}");
@@ -71,13 +71,13 @@ public sealed class PackageWhen : When
         => consumer.DotnetAsync(Context, "build", consumer.Project, "-c", "Release", "--no-restore", "-p:UseSharedCompilation=false", "-nr:false");
 
     [StepName("When running {consumer}", TimeoutMs = 600000)]
-    [return: Created(References = [nameof(consumer)])]
-    public Task<ConsumerReport> Running([Read] PackageConsumer consumer)
+    [return: Reported]
+    public Task<ConsumerReport> Running([Reported.Consumer] PackageConsumer consumer)
         => consumer.RunWithReportAsync(Context, collectCoverage: false);
 
     [StepName("When running {consumer} with code coverage", TimeoutMs = 600000)]
-    [return: Created(References = [nameof(consumer)])]
-    public Task<ConsumerReport> RunningWithCoverage([Read] PackageConsumer consumer)
+    [return: Reported]
+    public Task<ConsumerReport> RunningWithCoverage([Reported.Consumer] PackageConsumer consumer)
         => consumer.RunWithReportAsync(Context, collectCoverage: true);
 }
 

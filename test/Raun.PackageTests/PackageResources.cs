@@ -19,3 +19,17 @@ public sealed record ConsumerReport(string File, string Consumer) : IResource<Co
 
 public sealed class RestoredAttribute : UpdatedAttribute;
 public sealed class BuiltAttribute : UpdatedAttribute;
+
+/// <summary>Create an isolated consumer and link it to its package feed.</summary>
+public sealed class Isolated : CreatedAttribute
+{
+    /// <summary>Read the package feed used to configure the consumer.</summary>
+    public sealed class FeedAttribute : ResourceLinkAttribute<PackageFeed, ReadAttribute>;
+}
+
+/// <summary>Create a report and link it to the consumer that produced it.</summary>
+public sealed class Reported : CreatedAttribute
+{
+    /// <summary>Read the consumer that produced the report.</summary>
+    public sealed class ConsumerAttribute : ResourceLinkAttribute<PackageConsumer, ReadAttribute>;
+}

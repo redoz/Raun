@@ -83,7 +83,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         {
             using var archive = ZipFile.OpenRead(file);
             using var stream = archive.Entries.Single(e => e.FullName.EndsWith(".nuspec", StringComparison.Ordinal)).Open();
-            var metadata = XDocument.Read(stream).Descendants().Single(e => e.Name.LocalName == "metadata");
+            var metadata = XDocument.Load(stream).Descendants().Single(e => e.Name.LocalName == "metadata");
             var id = metadata.Elements().Single(e => e.Name.LocalName == "id").Value;
             if (PackageIds.Contains(id))
                 Assert.True(versions.TryAdd(id, metadata.Elements().Single(e => e.Name.LocalName == "version").Value), $"Duplicate package: {id}");
@@ -138,7 +138,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
                 ? linuxLock : Path.Combine(originalDirectory, "packages.lock.json");
             using var dependencies = JsonDocument.Parse(File.ReadAllText(lockFile));
             var resolved = dependencies.RootElement.GetProperty("dependencies").GetProperty("net10.0");
-            var document = XDocument.Read(project);
+            var document = XDocument.Load(project);
             foreach (var item in document.Root!.Elements().SelectMany(g => g.Elements()).ToArray())
             {
                 switch (item.Name.LocalName)
