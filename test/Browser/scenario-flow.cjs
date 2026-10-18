@@ -21,11 +21,16 @@ async function assertBranchIndentation(page){
  const positions=await page.locator('.step-head').evaluateAll(heads=>heads.flatMap(head=>{
   const mark=head.querySelector('.scenario-status'),title=head.querySelector('.dn'),chevron=head.querySelector('.step-expander,.lifecycle-toggle');
   if(!head.getBoundingClientRect().height || getComputedStyle(mark).visibility==='hidden')return [];
-  return [{depth:Number(head.parentElement.style.getPropertyValue('--step-flow-depth') || 0),left:mark.getBoundingClientRect().left,chevronLeft:chevron?.getBoundingClientRect().left ?? null,
+  return [{depth:Number(head.parentElement.style.getPropertyValue('--step-flow-depth') || 0),left:mark.getBoundingClientRect().left,controlLeft:head.firstElementChild.getBoundingClientRect().left,chevronLeft:chevron?.getBoundingClientRect().left ?? null,
    gap:title.getBoundingClientRect().left+parseFloat(getComputedStyle(title).paddingLeft)-mark.getBoundingClientRect().right}];
  }));
  const base=positions.find(position=>position.depth===0);assert.ok(base);
  const baseChevron=positions.find(position=>position.depth===0 && position.chevronLeft!==null);
+ const headings=await page.locator('.flow-branch').evaluateAll(branches=>branches.flatMap(branch=>{
+  const toggle=branch.querySelector(':scope > .flow-heading .flow-toggle');
+  return toggle.getBoundingClientRect().height ? [{depth:Number(branch.style.getPropertyValue('--flow-depth')),left:toggle.getBoundingClientRect().left}] : [];
+ }));
+ for(const heading of headings)assert.ok(Math.abs(heading.left-base.controlLeft-heading.depth*12)<1,'Branch heading stays at its parent indentation level');
  for(const position of positions){
   assert.ok(Math.abs(position.left-base.left-position.depth*12)<1,'Status squircle follows each branch indentation level');
   assert.ok(Math.abs(position.gap-base.gap)<1,'Status and title keep their normal spacing at every depth');
@@ -58,6 +63,7 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  assert.equal(await page.locator('.step-dependency-pixels').count(),0);
  await page.screenshot({path:path.join(out,'nested.png'),fullPage:true});
  await page.setViewportSize({width:390,height:1000});
+ await assertBranchIndentation(page);
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile has no horizontal page overflow');
  const mobileAxis=await book.locator('.gantt-track').boundingBox();assert.ok(mobileAxis.width>=56,'Mobile keeps a readable timing strip');
  await page.goto(render('real-parallel',base));await page.locator('.card-head').click();assert.ok(await page.locator('.gantt-bar').count()>0);
