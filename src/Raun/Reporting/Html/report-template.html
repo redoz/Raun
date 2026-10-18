@@ -132,7 +132,8 @@
   .step-head>.scenario-status{width:8px;height:8px;border-radius:3px}
   .scenario-status.passed{background:var(--pass)}
   .scenario-status.failed{background:var(--fail)}
-  .scenario-status.skipped,.scenario-status.not-taken{background:light-dark(#d3a21e,#e9c478)}
+  .scenario-status.skipped{background:light-dark(#d3a21e,#e9c478)}
+  .scenario-status.not-taken{background:var(--faint)}
   .card-head .name{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0;font-size:14px;font-weight:500}.scenario-title{min-width:0;overflow-wrap:anywhere}.card-head .report-meta{max-width:40%}
   .card-head .dur{flex:none;white-space:nowrap;text-align:right}
   .card-body{padding:0 0 0 20px}
@@ -2015,7 +2016,7 @@
         const skipped=s.status==='skipped' || s.status==='not-taken';
         const strike=text=>skipped ? '<s>'+text+'</s>' : text;
         const phase=String(s.phase || '').toLowerCase();
-        const status=['passed','failed','skipped'].includes(s.status) ? s.status : 'skipped';
+        const status=s.status==='not-taken' || s.status==='skipped' && s.skipReason?.startsWith('not taken:') ? 'not-taken' : ['passed','failed','skipped'].includes(s.status) ? s.status : 'skipped';
         const cls='step-entry status-'+s.status+' ph-'+phase+(s.isLifecycle ? ' step-lifecycle' : '')+(b ? ' has-body' : '')+(b && s.status==='failed' ? ' open' : '');
         const bodyId=b ? 'step-details-'+(++stepDetailSequence) : '';
         const lifecycleToggle=s.isLifecycle && s.status==='passed';
