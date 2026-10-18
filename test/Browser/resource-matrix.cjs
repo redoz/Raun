@@ -331,8 +331,16 @@ const renderFixture = (name, data) => {
       }));
       assert.ok(notes.length>0,'The sample includes step notes');
       assert.ok(notes.every(note=>Math.abs(note.left)<1 && note.gap>=1 && note.gap<=5),'Notes align with their titles with a small gap: '+JSON.stringify(notes));
+      const backgrounds=await page.locator('.step-entry:has(>.step-notes)').evaluateAll(rows=>rows.filter(row=>row.getBoundingClientRect().height>0).map(row=>{
+        const track=row.querySelector('.gantt-track').getBoundingClientRect(),notes=row.querySelector('.step-notes').getBoundingClientRect(),cell=Array.from(row.querySelectorAll('.matrix-cell,.matrix-summary-cell')).map(cell=>cell.getBoundingClientRect()).find(box=>box.width>0);
+        return {name:row.dataset.step,top:track.top,noteTop:notes.top,bottom:track.bottom,noteBottom:notes.bottom,right:track.right,cellLeft:cell?.left,ok:track.top<=notes.top && track.bottom>=notes.bottom && (!cell || track.right<=cell.left+.1)};
+      }));
+      assert.ok(backgrounds.length && backgrounds.every(item=>item.ok),'Timing backgrounds include the complete note and stop before the resource matrix: '+JSON.stringify(backgrounds.filter(item=>!item.ok)));
     };
     await assertNoteAlignment();
+    await page.setViewportSize({width:560,height:1100});
+    await assertNoteAlignment();
+    await page.setViewportSize({width:1600,height:1100});
     for(const theme of ['light','dark']){
       await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
       for(const [index,scenario] of model.scenarios.entries()){

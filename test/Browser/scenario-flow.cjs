@@ -43,7 +43,7 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await page.goto(render('nested',fixture));await page.locator('.card-head').click();
  await assertBranchIndentation(page);
  assert.equal(await page.locator('.step-gantt').count(),8,'Every step has a timing strip on the same axis');
- const backgroundBounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const row=h.getBoundingClientRect(),entry=h.parentElement,outer=entry.getBoundingClientRect(),track=h.querySelector('.gantt-track')?.getBoundingClientRect();const padded=!entry.classList.contains('matrix-row'),details=entry.matches('.open,:has(>.step-notes),:has(>.step-prerequisites:not([hidden]))');return Boolean(track && Math.abs(track.left-row.left)<1 && Math.abs(track.right-row.right)<1 && Math.abs(track.top-(padded?outer.top:row.top))<1 && Math.abs(track.bottom-(padded&&!details?outer.bottom-parseFloat(getComputedStyle(entry).borderBottomWidth):row.bottom))<1);}));
+ const backgroundBounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const row=h.getBoundingClientRect(),entry=h.parentElement,outer=entry.getBoundingClientRect(),track=h.parentElement.querySelector('.gantt-track')?.getBoundingClientRect();const padded=!entry.classList.contains('matrix-row'),details=entry.matches('.open,:has(>.step-notes),:has(>.step-prerequisites:not([hidden]))');return Boolean(track && Math.abs(track.left-row.left)<1 && Math.abs(track.right-row.right)<1 && Math.abs(track.top-(padded?outer.top:row.top))<1 && Math.abs(track.bottom-(padded&&!details?outer.bottom-parseFloat(getComputedStyle(entry).borderBottomWidth):row.bottom))<1);}));
  assert.ok(backgroundBounds.every(Boolean),'Timing fills each title-row background');
  const geometry=await page.locator('.gantt-track').evaluateAll(nodes=>nodes.map(n=>{const b=n.querySelector('.gantt-bar'),r=n.getBoundingClientRect(),x=b?.getBoundingClientRect();return {left:r.left,width:r.width,start:x?(x.left-r.left)/r.width:null,end:x?(x.right-r.left)/r.width:null};}));
  assert.ok(geometry.filter(g=>g.width>0).every(g=>Math.abs(g.left-geometry[0].left)<1),'Timing axes align across nested branches');
@@ -85,6 +85,16 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  assert.equal(await loggedSetup.locator('.step-expander').getAttribute('aria-expanded'),'true','Lifecycle log disclosure matches its visible state');
  await loggedSetup.evaluate(async row=>{await row.stepAnimation?.finished;});
  assert.ok(await loggedSetup.locator('.step-body').isVisible(),'Navigating to lifecycle evidence opens its logs');
+ const noted={...fixture,steps:[step(0,'Given a patient exists',0,100,[],[],{notes:['A long note belongs to the step summary and wraps onto more than one line when the available width is narrow.\nA second line remains part of the same summary.'],logs:['Detailed evidence stays outside the timing background.']}),step(1,'Then the patient is ready',100,50,[0])]};
+ await page.goto(render('notes-background',noted));await page.locator('.card-head').click();
+ const notedRow=page.locator('[data-step="flow-0"]');
+ for(const width of [1200,560]){
+  await page.setViewportSize({width,height:1100});
+  assert.ok(await notedRow.evaluate(row=>{const track=row.querySelector('.gantt-track').getBoundingClientRect(),note=row.querySelector('.step-notes').getBoundingClientRect();return track.top<=note.top && track.bottom>=note.bottom;}),'Non-matrix timing backgrounds include multiline notes');
+ }
+ await notedRow.locator('.step-expander').click();await notedRow.evaluate(async row=>{await row.stepAnimation?.finished;});
+ assert.ok(await notedRow.evaluate(row=>row.querySelector('.gantt-track').getBoundingClientRect().bottom<=row.querySelector('.step-body').getBoundingClientRect().top),'Expanded logs remain outside the summary timing background');
+ await page.setViewportSize({width:390,height:1000});
  const timedFixture={...fixture,steps:[step(0,'Then instant completion',1000,0),step(1,'Then blocked',0,0,[],[],{status:'skipped',skipReason:'dependency failed: earlier'})]};
  await page.goto(render('zero-duration',timedFixture));await page.locator('.card-head').click();
  const zero=await page.locator('.gantt-track').first().evaluate(n=>{const a=n.getBoundingClientRect(),b=n.querySelector('.gantt-bar').getBoundingClientRect();return {right:b.right-a.right,width:b.width};});
@@ -137,7 +147,7 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await branchRow.locator('.step-expander').click();
  assert.ok(priority.steps.some(step=>step.isValueMerge),'Real compiler merges carry report metadata');
  for(const merge of priority.steps.filter(step=>step.isValueMerge && step.status!=='failed'))assert.equal(await page.locator('[data-step="'+merge.stepId+'"]').isVisible(),false,'Real conditional value merges do not add visible rows');
- const matrixBackgrounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const track=h.querySelector('.gantt-track').getBoundingClientRect(),cell=h.parentElement.querySelector('.matrix-cell,.matrix-summary-cell').getBoundingClientRect();return track.right<=cell.left+.1;}));
+ const matrixBackgrounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const track=h.parentElement.querySelector('.gantt-track').getBoundingClientRect(),cell=Array.from(h.parentElement.querySelectorAll('.matrix-cell,.matrix-summary-cell')).map(cell=>cell.getBoundingClientRect()).find(box=>box.width>0);return track.right<=cell.left+.1;}));
  assert.ok(matrixBackgrounds.every(Boolean),'Timing backgrounds stop before the resource matrix');
  await page.locator('.matrix-summary-header').click();
  const dialog=page.getByRole('dialog',{name:'Resource lanes for '+priority.displayName});await dialog.waitFor({state:'visible'});
