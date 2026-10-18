@@ -2182,7 +2182,7 @@
               const head=participant.querySelector('.step-head').getBoundingClientRect(),y=(head.top+head.bottom)/2-origin.top;
               const source=byId.get(participant.dataset.step);
               const kind=participant===row ? 'join' : latest!==-Infinity && end(source)===latest ? 'last' : 'finished';
-              const points=kind==='finished' ? [[x-2,y-2],[x+2,y+2],[x-2,y+2],[x+2,y-2]]
+              const points=kind==='finished' ? [[x-3,y-3],[x+3,y+3],[x-3,y+3],[x+3,y-3]]
                 : kind==='last' ? [[x-6,y-3],[x-2,y],[x-6,y+3]] : [[x+2,y-3],[x+6,y],[x+2,y+3]];
               const d=points.map(([px,py],index)=>(index===0 || kind==='finished' && index===2 ? 'M ' : 'L ')+bounded(px)+' '+py).join(' ');
               join.group.appendChild(svgEl('path',{'class':'gantt-join-marker','data-source-step':source.stepId,'data-kind':kind,d}));
