@@ -10,6 +10,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE to an existing Chromium executable.
 Generate a sample report with the normal AppointmentTests command plus --report-html, then run:
 
     node test/Browser/resource-matrix.cjs /absolute/path/to/raun-report.html
+    node test/Browser/scenario-flow.cjs /absolute/path/to/raun-report.html
 
 An optional second argument selects the output directory (default: artifacts/resource-matrix).
 The command preserves every sample row and its order, checks ordinary lists for no-resource
@@ -19,3 +20,6 @@ to the output directory.
 
 Failure, crowded-resource, and differing title/event snapshot cases are clearly named fixtures
 derived from the sample. They do not change the sample's actual results.
+
+The scenario-flow checks cover the shared timing axis, observed parallel overlap, joins, nested if/switch
+branches, untaken alternatives, named prerequisites, keyboard navigation and narrow layouts.

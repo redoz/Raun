@@ -66,6 +66,10 @@ internal sealed record ReportStep
     // Ordinary and legacy rows use DependsOn; special control-flow rows retain each edge kind.
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ReportDependency>? Dependencies { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Raun.Model.Guard>? Guards { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Arms { get; init; }
     public string? GroupId { get; init; }
     public IReadOnlyList<string> Notes { get; init; } = [];
     public required IReadOnlyList<string> Logs { get; init; }

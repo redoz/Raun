@@ -15,6 +15,7 @@ class Node {
  removeAttribute(k){delete this.attributes[k];}
  getAttribute(k){if(k.startsWith('data-'))return this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]??null;return this.attributes[k]??null;}
  appendChild(n){if(n.parentElement)n.parentElement.children=n.parentElement.children.filter(child=>child!==n);n.parentElement=this;this.children.push(n);return n;} append(...nodes){nodes.forEach(n=>this.appendChild(n));}
+ prepend(...nodes){for(const n of [...nodes].reverse()){if(n.parentElement)n.parentElement.children=n.parentElement.children.filter(child=>child!==n);n.parentElement=this;this.children.unshift(n);}}
  replaceChildren(...nodes){this.children=[];this.append(...nodes);} remove(){if(this.parentElement)this.parentElement.children=this.parentElement.children.filter(n=>n!==this);}
  getBoundingClientRect(){return {x:0,y:0,left:0,top:0,right:0,bottom:0,width:0,height:0};}
  showPopover(){this.popoverOpen=true;}
@@ -351,7 +352,8 @@ test('scenario and group headings keep compact identifiers alongside the display
  const wait=head.querySelector('.where');assert.ok(wait);assert.equal(wait.parentElement,head);
  assert.equal(nodeText(wait),'Queued for Schedule · 59.0 ms');
  const timing=app.querySelector('.step-head').querySelector('.dm');
- assert.equal(nodeText(timing.querySelector('.step-offset')),'+59.0 ms');
+ assert.equal(timing.querySelector('.step-offset'),null);
+ assert.match(timing.querySelector('.step-gantt').title,/^\+59\.0 ms to \+62\.0 ms/);
  assert.equal(nodeText(timing.querySelector('.step-duration')),'3.0 ms');
 });
 

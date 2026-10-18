@@ -15,11 +15,11 @@ public class HtmlReportModelBuilderTests
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private static ScenarioNode Node(int index, string stepId, string phase, string template,
-        int[]? dependsOn = null, string? group = null, bool isSetup = false, bool isTeardown = false, Guard[]? guards = null, int[]? mergeSources = null, int[]? waitsFor = null) => new()
+        int[]? dependsOn = null, string? group = null, bool isSetup = false, bool isTeardown = false, Guard[]? guards = null, int[]? mergeSources = null, int[]? waitsFor = null, string[]? arms = null) => new()
     {
         Index = index, StepId = stepId, Phase = phase, OperationName = $"Op{index}",
         DisplayNameTemplate = template, DependsOn = dependsOn ?? [], GroupId = group, IsSetup = isSetup, IsTeardown = isTeardown,
-        Guards = guards ?? [], MergeSources = mergeSources ?? [], WaitsFor = waitsFor ?? [],
+        Arms = arms ?? [], Guards = guards ?? [], MergeSources = mergeSources ?? [], WaitsFor = waitsFor ?? [],
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 
@@ -69,6 +69,24 @@ public class HtmlReportModelBuilderTests
         Assert.Equal("alternative", mergeJson.RootElement.GetProperty("Dependencies")[0].GetProperty("Kind").GetString());
         using var orderingJson = JsonDocument.Parse(JsonSerializer.Serialize(steps[3]));
         Assert.Equal(["dependency", "ordering", "ordering"], orderingJson.RootElement.GetProperty("Dependencies").EnumerateArray().Select(item => item.GetProperty("Kind").GetString()));
+    }
+
+    [Fact]
+    public void Report_preserves_nested_branch_paths_and_source_arm_labels()
+    {
+        var outer = Node(0, "outer", "When", "priority", arms: ["if (priority)", "else"]);
+        var inner = Node(1, "inner", "When", "outcome", guards: [new Guard(0, 0)], arms: ["case Booked booked", "default"]);
+        var leaf = Node(2, "leaf", "Then", "verified", guards: [new Guard(0, 0), new Guard(1, 1)]);
+        var definition = Def(outer, inner, leaf);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnScenarioStarted(definition);
+        foreach (var node in definition.Nodes) { builder.OnStepFinished(definition, Result(node, T0, 1)); }
+        var steps = Assert.Single(builder.Build("branches").Scenarios).Steps;
+        using var condition = JsonDocument.Parse(JsonSerializer.Serialize(steps[1]));
+        Assert.Equal(["case Booked booked", "default"], condition.RootElement.GetProperty("Arms").EnumerateArray().Select(item => item.GetString()));
+        using var branch = JsonDocument.Parse(JsonSerializer.Serialize(steps[2]));
+        Assert.Equal([0, 1], branch.RootElement.GetProperty("Guards").EnumerateArray().Select(item => item.GetProperty("ConditionIndex").GetInt32()));
+        Assert.Equal([0, 1], branch.RootElement.GetProperty("Guards").EnumerateArray().Select(item => item.GetProperty("Arm").GetInt32()));
     }
 
     [Fact]

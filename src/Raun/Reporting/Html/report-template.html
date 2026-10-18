@@ -185,22 +185,6 @@
   .step-head>.scenario-status{grid-column:2;grid-row:1;justify-self:start}
   .step-head>.dependency-node{outline-offset:3px}
   .step-head>.dependency-node:focus-visible{outline:1px solid var(--muted)}
-  .step-dependency-pixels{grid-column:2;grid-row:1;justify-self:start;align-self:center;margin-left:18px;width:var(--dependency-window);overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
-  .step-dependency-pixels::-webkit-scrollbar{display:none}
-  .dependency-pixel-track{position:relative;width:var(--dependency-track-width);height:14px}
-  .dependency-pixel-track::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,var(--muted) 1px,transparent 1px);background-size:8px 1px;background-position:4px center;background-repeat:repeat-x;opacity:.12}
-  .dependency-cell{position:absolute;top:0;display:grid;place-items:center;box-sizing:border-box;width:8px;height:14px;border:0;padding:0;background:none;color:var(--dependency-color);opacity:.68;border-radius:2px}
-  button.dependency-cell{cursor:pointer}
-  .dependency-cell::before{content:"";display:block;box-sizing:border-box;width:1px;height:1px;background:var(--muted);opacity:.2}
-  .dependency-link::before{width:5px;height:5px;background:currentColor;opacity:1;border-radius:1px}
-  .dependency-ordering::before{width:5px;height:2px;border:0;background:currentColor}
-  .dependency-alternative::before{width:6px;height:6px;border:1px solid currentColor;background:none}
-  .dependency-condition::before{width:5px;height:5px;transform:rotate(45deg);background:currentColor;opacity:1}
-  .dependency-self::before{width:6px;height:6px;border:1px solid currentColor;background:none;opacity:1}
-  .dependency-inactive{opacity:.25}
-  .dependency-cell.dependency-active{opacity:1;background:var(--surface-hover)}
-  .dependency-cell.dependency-dim{opacity:.2}
-  .dependency-cell:focus-visible{outline:1px solid var(--ink);outline-offset:-1px}
   .step-entry.dependency-related:not(.status-failed){background:color-mix(in srgb,var(--surface-hover) 55%,transparent)}
   .step-entry.dependency-related>.step-head>.scenario-status{outline:1px solid var(--muted);outline-offset:2px}
   .step-list{ display:flex; flex-direction:column; border-top:1px solid var(--border); }
@@ -307,7 +291,7 @@
   .matrix-resource[aria-pressed="true"]{background:var(--surface-hover);box-shadow:inset 0 -2px var(--resource-color)}
   .matrix-resource.matrix-reference{background:var(--surface-hover);border-bottom:2px dashed var(--resource-color)}
   .resource-matrix .matrix-row{position:relative;isolation:isolate;padding:0;align-items:start}
-  .resource-matrix .matrix-row:last-child{border-bottom:0}
+  .resource-matrix .step-list>.matrix-row:last-child{border-bottom:0}
   .resource-matrix .matrix-row>.step-head{grid-column:1;grid-row:1;grid-template-columns:12px var(--dependency-gutter,8px) minmax(0,1fr) max-content;column-gap:var(--step-column-gap,9px);padding:10px 12px 12px 4px;align-self:start}
   .resource-matrix .matrix-row.step-lifecycle.status-passed:not(.open)>.step-head{padding-top:2px;padding-bottom:3px}
   .resource-matrix .matrix-row:has(>.step-notes)>.step-head{padding-bottom:2px}
@@ -548,6 +532,29 @@
     .coverage-findings>.coverage-splitter{display:none}.coverage-offenders{border-bottom:1px solid var(--border)}
     .coverage-toolbar{margin-left:0}.coverage-stage{padding:6px 12px}
   }
+  .flow-branch{position:relative;min-width:0}
+  .flow-branch::before{content:"";position:absolute;left:calc(40px + var(--flow-depth)*12px);top:30px;bottom:6px;width:1px;background:var(--border-strong);pointer-events:none}
+  .flow-heading{padding:9px 12px 4px calc(25px + var(--flow-depth)*12px);color:var(--muted)}
+  .flow-toggle{display:flex;align-items:center;gap:7px;flex-wrap:wrap;border:0;padding:3px 0;background:none;color:inherit;font:12px/1.4 var(--sans);cursor:pointer;text-align:left}
+  .flow-toggle .stw{display:grid;place-items:center;width:12px;height:12px;transform:rotate(-90deg);transition:transform .15s}
+  .flow-toggle[aria-expanded="true"] .stw{transform:none}
+  .flow-not-taken{color:var(--faint);font-style:italic;margin-left:3px}
+  .step-entry[hidden],.flow-content[hidden],.step-prerequisites[hidden]{display:none!important}
+  .flow-content .step-head>.dn{padding-left:calc(var(--step-flow-depth,1)*12px)}
+  .step-gantt{position:relative;display:block;flex:none;width:clamp(64px,10vw,120px);height:20px;padding:0;border:0;border-radius:3px;background:repeating-linear-gradient(to right,var(--border) 0 1px,transparent 1px 25%);color:var(--muted);cursor:pointer}
+  .step-gantt:hover,.step-gantt[aria-expanded="true"]{background-color:var(--surface-hover)}
+  .gantt-bar{position:absolute;top:7px;height:6px;min-width:2px;border-radius:2px;background:var(--muted);opacity:.65;pointer-events:none}
+  .status-failed .gantt-bar{background:var(--fail);opacity:1}
+  .dependency-related .gantt-bar{opacity:1}
+  .step-head .step-duration{display:inline-block;min-width:48px;text-align:right}
+  .step-prerequisites{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 9px;grid-column:3/-1;margin-top:6px;color:var(--muted);font:12px/1.5 var(--sans);min-width:0}
+  .predecessor-link{background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;text-decoration-color:var(--border-strong);text-underline-offset:2px;font:inherit;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+  .resource-matrix .matrix-row>.step-prerequisites{grid-column:1;grid-row:4;margin:0 12px 10px 34px}
+  .resource-matrix .matrix-continuation{grid-row:2/5}
+  .resource-matrix .matrix-summary-cell{grid-row:1/5}
+  @media(max-width:650px){.step-head .dm{grid-column:auto;justify-content:flex-end}.step-gantt{width:64px}.step-head .step-duration{min-width:40px}.step-head .dm{gap:5px}.flow-heading{padding-left:22px}.flow-branch::before{left:calc(34px + var(--flow-depth)*12px)}}
+  @media(prefers-reduced-motion:reduce){.flow-toggle .stw{transition:none}}
+
 </style>
 </head>
 <body>
@@ -1351,7 +1358,7 @@
       matrix.appendChild(header);matrix.appendChild(drill);scroll.appendChild(matrix);
       panel.appendChild(coverageText("p","matrix-scroll-hint","Scroll sideways to follow resource history."));panel.appendChild(scroll);
       drill.style.marginTop="0";
-      const rows=Array.from(drill.querySelector(".step-list").children);
+      const rows=Array.from(drill.querySelectorAll(".step-list .step-entry"));
       for(const row of rows)row.classList.add("matrix-row");
       let selected=null,columns=[];
       function select(){
@@ -1535,9 +1542,15 @@
             const headingRect=sourceHeader.getBoundingClientRect();
             expanded.querySelector('.matrix-header').style.height=headingRect.height+'px';
             laneDrill.style.paddingTop=Math.max(0,(rows[0]?.getBoundingClientRect().top ?? headingRect.bottom)-headingRect.bottom)+'px';
+            let previousBottom=rows[0]?.getBoundingClientRect().top ?? headingRect.bottom;
             overlayRows.forEach((row,i)=>{
-              row.style.height=rows[i].getBoundingClientRect().height+'px';
+              const bounds=rows[i].getBoundingClientRect();
+              row.hidden=bounds.height===0;
+              if(row.hidden)return;
+              row.style.marginTop=Math.max(0,bounds.top-previousBottom)+'px';
+              row.style.height=bounds.height+'px';
               row.style.gridTemplateRows=getComputedStyle(rows[i]).gridTemplateRows;
+              previousBottom=bounds.bottom;
             });
           };
           const schedule=()=>{if(frame===null)frame=requestAnimationFrame(align);};
@@ -1618,6 +1631,7 @@
           entry.classList.toggle("focus", entry.dataset.step === stepId);
         const entry = drill.querySelector('.step-entry[data-step="' + stepId + '"]');
         if (entry && (entry.classList.contains("has-body") || entry.querySelector(".lifecycle-toggle"))){entry.classList.add("open");entry.querySelector(".step-expander,.lifecycle-toggle").setAttribute("aria-expanded","true");}
+        if(entry)for(const branch of drill.querySelectorAll('.flow-branch'))if(branch.querySelector('.flow-content').contains(entry)){branch.querySelector('.flow-content').hidden=false;branch.querySelector('.flow-toggle').setAttribute('aria-expanded','true');}
         if (entry && scroll) entry.scrollIntoView({ block: "nearest" });
         return true;
       }
@@ -1629,8 +1643,8 @@
       // opener for the pre-expand pass: open the drill focused on a step
       openers.push({ scenarioId: sc.scenarioId, open: (stepId) => focusStep(stepId, { scroll: false }) });
 
+      bindScenarioFlow(drill,sc);
       if(!workspace)installScenarioMatrix(card,head,body,drillHost,sc,drill);
-      bindStepDependencies(drill,sc);
       return card;
     }
 
@@ -1848,87 +1862,86 @@
         return messageHtml({parts:[part]},sc);
       }).join("");
     }
-    // One stable column per step avoids routing lines through unrelated rows.
-    function bindStepDependencies(drill,sc){
-      const steps=sc.steps.filter(step=>!step.isLifecycle);
-      if(steps.length<2)return;
-      const windowWidth=Math.min(96,steps.length*8);
-      drill.style.setProperty('--dependency-window',windowWidth+'px');
-      drill.style.setProperty('--dependency-track-width',(steps.length*8)+'px');
-      drill.style.setProperty('--dependency-gutter',(18+windowWidth)+'px');
-      const byId=new Map(steps.map(step=>[step.stepId,step])),byIndex=new Map(steps.map(step=>[step.index,step]));
-      const positions=new Map(steps.map((step,index)=>[step.index,index])),rows=new Map(),cells=[],windows=[];
-      const colors=new Map(steps.map((step,index)=>{
-        const hue=(210+index*137.508)%360;
-        return [step.index,`light-dark(hsl(${hue} 35% 43%),hsl(${hue} 35% 68%))`];
-      }));
-      let hovered=null,focused=null,scrollOffset=0;
-      const trace=()=>{
-        const selected=hovered ?? focused,related=new Set();
-        if(selected){
-          if(selected.node!==undefined){
-            related.add(selected.node);
-            for(const cell of cells)if(cell.link && (cell.from===selected.node || cell.to===selected.node)){related.add(cell.from);related.add(cell.to);}
-          }else{related.add(selected.from);related.add(selected.to);}
+    // Timing describes observed execution. Guard paths describe source control flow.
+    function bindScenarioFlow(drill,sc){
+      const list=drill.querySelector('.step-list'),byIndex=new Map(sc.steps.map(step=>[step.index,step]));
+      const rows=new Map(Array.from(list.children,row=>[row.dataset.step,row]));
+      const scale=Math.max(1,Number.isFinite(sc.durationMs) ? sc.durationMs : 0,
+        ...sc.steps.filter(step=>['passed','failed'].includes(step.status)).map(step=>
+          Number.isFinite(step.offsetMs) && Number.isFinite(step.durationMs) ? Math.max(0,step.offsetMs)+Math.max(0,step.durationMs) : 0));
+      const chevron='<span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span>';
+      const stack=[],branches=[];
+      for(const step of sc.steps){
+        const row=rows.get(step.stepId),guards=(step.guards || []).filter(guard=>byIndex.has(guard.conditionIndex));
+        row.style.setProperty('--step-flow-depth',guards.length);
+        let common=0;
+        while(common<stack.length && common<guards.length && stack[common].condition===guards[common].conditionIndex && stack[common].arm===guards[common].arm)common++;
+        stack.length=common;
+        for(let depth=common;depth<guards.length;depth++){
+          const guard=guards[depth],condition=byIndex.get(guard.conditionIndex);
+          const section=el('section','flow-branch'),heading=el('div','flow-heading'),button=el('button','flow-toggle'),content=el('div','flow-content');
+          section.dataset.condition=String(guard.conditionIndex);section.dataset.arm=String(guard.arm);
+          section.style.setProperty('--flow-depth',depth);
+          content.id='flow-branch-'+(++stepDetailSequence);button.type='button';button.setAttribute('aria-controls',content.id);
+          button.innerHTML=chevron;
+          button.appendChild(document.createTextNode(condition.arms?.[guard.arm] || (guard.arm===-1 ? 'No matching arm' : 'Branch '+(guard.arm+1))));
+          button.title='Branch of '+condition.displayName;
+          heading.appendChild(button);section.append(heading,content);
+          (stack.at(-1)?.content || list).appendChild(section);
+          const entry={condition:guard.conditionIndex,arm:guard.arm,section,button,content};
+          stack.push(entry);branches.push(entry);
+          button.addEventListener('click',()=>{content.hidden=!content.hidden;button.setAttribute('aria-expanded',String(!content.hidden));});
         }
-        for(const cell of cells){
-          const active=Boolean(selected && (selected.node!==undefined
-            ? cell.from===selected.node || cell.link && cell.to===selected.node
-            : cell.from===selected.from && (cell.to===selected.to || !cell.link)));
-          cell.element.classList.toggle('dependency-active',active);
-          cell.element.classList.toggle('dependency-dim',Boolean(selected) && !active);
-        }
-        for(const [index,row] of rows)row.classList.toggle('dependency-related',related.has(index));
-      };
-      const bind=(element,selection)=>{
-        element.addEventListener('pointerenter',()=>{hovered=selection;trace();});
-        element.addEventListener('pointerleave',()=>{hovered=null;trace();});
-        element.addEventListener('focus',()=>{focused=selection;trace();});
-        element.addEventListener('blur',()=>{focused=null;trace();});
-      };
-      const labels={dependency:'step dependency',ordering:'must finish before',condition:'branch condition',alternative:'alternative merge input'};
-      for(const row of drill.querySelectorAll('.step-entry')){
-        const step=byId.get(row.dataset.step),head=row.querySelector('.step-head'),mark=head?.querySelector('.scenario-status');
-        if(!step || !mark)continue;
-        rows.set(step.index,row);
-        mark.classList.add('dependency-node');mark.tabIndex=0;
-        mark.setAttribute('aria-label',step.status+': '+step.displayName);
-        mark.setAttribute('aria-description','Focus to highlight this step’s dependencies.');
-        mark.title='Highlight dependencies for '+step.displayName;bind(mark,{node:step.index});
-        const viewport=el('div','step-dependency-pixels'),track=el('div','dependency-pixel-track');
-        viewport.dataset.columns=String(steps.length);
-        viewport.setAttribute('role','group');viewport.setAttribute('aria-label','Dependencies for '+step.displayName);
-        viewport.title='Columns follow step order. Scroll sideways to see more columns.';
-        const dependencies=step.dependencies ?? (step.dependsOn || []).map(index=>({index,kind:'dependency'}));
-        const targets=new Map([[step.index,new Set()]]);
-        for(const edge of dependencies){
-          if(!byIndex.has(edge.index))continue;
-          if(!targets.has(edge.index))targets.set(edge.index,new Set());
-          targets.get(edge.index).add(edge.kind);
-        }
-        for(const [index,kindsSet] of Array.from(targets).sort((a,b)=>positions.get(a[0])-positions.get(b[0]))){
-          const column=byIndex.get(index),kinds=Array.from(kindsSet);
-          const self=column.index===step.index,link=kinds.length>0;
-          const cell=el('button','dependency-cell');
-          cell.dataset.column=String(column.index);cell.style.setProperty('--dependency-color',colors.get(column.index));
-          cell.style.left=(positions.get(column.index)*8)+'px';
-          cell.type='button';cell.dataset.from=String(column.index);cell.dataset.to=String(step.index);
-          const text=self ? 'Current step: '+step.displayName : column.displayName+' → '+step.displayName+' ('+kinds.map(kind=>labels[kind] || kind).join(', ')+')';
-          cell.title=text;cell.setAttribute('aria-label',text);
-          cell.classList.add(self ? 'dependency-self' : 'dependency-link');
-          for(const kind of kinds)cell.classList.add('dependency-'+kind);
-          cell.classList.toggle('dependency-inactive',[column,step].some(item=>['skipped','not-taken'].includes(item.status)));
-          bind(cell,self ? {node:step.index} : {from:column.index,to:step.index});
-          cells.push({element:cell,from:column.index,to:step.index,link});track.appendChild(cell);
-        }
-        viewport.appendChild(track);head.appendChild(viewport);windows.push(viewport);
-        viewport.addEventListener('scroll',()=>{
-          if(viewport.scrollLeft===scrollOffset)return;
-          scrollOffset=viewport.scrollLeft;
-          for(const other of windows)if(other!==viewport)other.scrollLeft=scrollOffset;
-        });
+        (stack.at(-1)?.content || list).appendChild(row);
       }
-      drill.addEventListener('keydown',event=>{if(event.key==='Escape'){hovered=null;focused=null;trace();}});
+      const byId=new Map(sc.steps.map(step=>[step.stepId,step]));
+      for(const branch of branches){
+        const members=Array.from(branch.content.querySelectorAll('.step-entry'),row=>byId.get(row.dataset.step));
+        const notTaken=members.length>0 && members.every(step=>step.status==='not-taken' || step.status==='skipped' && step.skipReason?.startsWith('not taken:'));
+        branch.content.hidden=notTaken;branch.button.setAttribute('aria-expanded',String(!notTaken));
+        if(notTaken)branch.button.appendChild(coverageText('span','flow-not-taken','not taken'));
+      }
+      const highlight=step=>{
+        const related=new Set([step.index,...(step.dependsOn || [])]);
+        for(const candidate of sc.steps)rows.get(candidate.stepId).classList.toggle('dependency-related',related.has(candidate.index));
+      };
+      const clear=()=>{for(const row of rows.values())row.classList.remove('dependency-related');};
+      for(const step of sc.steps){
+        const row=rows.get(step.stepId),head=row.querySelector('.step-head'),timing=head.querySelector('.dm');
+        head.querySelector('.step-offset')?.remove();
+        const axis=el('button','step-gantt');axis.type='button';axis.setAttribute('aria-expanded','false');
+        const timed=['passed','failed'].includes(step.status) && Number.isFinite(step.offsetMs) && Number.isFinite(step.durationMs);
+        const start=Math.max(0,step.offsetMs),duration=Math.max(0,step.durationMs);
+        axis.title=timed ? '+'+fmtDur(start)+' to +'+fmtDur(start+duration)+' / '+fmtDur(duration) : step.status+' / did not run';
+        axis.setAttribute('aria-label','Timing and prerequisites for '+step.displayName+': '+axis.title);
+        if(timed){
+          const bar=el('span','gantt-bar');bar.setAttribute('aria-hidden','true');
+          const left='min('+(100*start/scale)+'%,calc(100% - 2px))';
+          bar.style.left=left;bar.style.width=(100*duration/scale)+'%';
+          bar.style.maxWidth='calc(100% - '+left+')';axis.appendChild(bar);
+        }
+        timing.prepend(axis);
+        const panel=el('div','step-prerequisites');panel.hidden=true;panel.id='step-prerequisites-'+(++stepDetailSequence);
+        axis.setAttribute('aria-controls',panel.id);
+        panel.appendChild(coverageText('span','',step.dependsOn?.length ? 'After:' : 'No prerequisites'));
+        for(const index of step.dependsOn || []){
+          const predecessor=byIndex.get(index);if(!predecessor)continue;
+          const link=coverageText('button','predecessor-link',predecessor.displayName);link.type='button';link.dataset.from=String(index);link.dataset.to=String(step.index);
+          const kinds=step.dependencies?.filter(edge=>edge.index===index).map(edge=>edge.kind) || ['dependency'];
+          link.title=kinds.join(', ');
+          link.addEventListener('click',()=>{
+            const target=rows.get(predecessor.stepId);
+            for(const branch of branches)if(branch.content.contains(target)){branch.content.hidden=false;branch.button.setAttribute('aria-expanded','true');}
+            if(predecessor.isLifecycle){target.classList.add('open');target.querySelector('.step-expander,.lifecycle-toggle')?.setAttribute('aria-expanded','true');}
+            const control=target.querySelector('.step-gantt');control.focus({preventScroll:true});target.scrollIntoView({block:'nearest',behavior:'instant'});highlight(predecessor);
+          });panel.appendChild(link);
+        }
+        row.appendChild(panel);
+        axis.addEventListener('click',()=>{panel.hidden=!panel.hidden;axis.setAttribute('aria-expanded',String(!panel.hidden));if(panel.hidden)clear();else highlight(step);});
+        axis.addEventListener('pointerenter',()=>highlight(step));axis.addEventListener('pointerleave',clear);
+        axis.addEventListener('focus',()=>highlight(step));axis.addEventListener('blur',clear);
+      }
+      drill.addEventListener('keydown',event=>{if(event.key==='Escape'){const owner=event.target.closest?.('.step-prerequisites')?.parentElement;owner?.querySelector('.step-gantt').focus({preventScroll:true});for(const row of rows.values()){row.querySelector('.step-prerequisites').hidden=true;row.querySelector('.step-gantt').setAttribute('aria-expanded','false');}clear();}});
     }
     // every step of a scenario, in registration order, with local progressive disclosure
     function buildScenarioDrill(sc){

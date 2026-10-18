@@ -46,6 +46,7 @@ jobs:
         run: |
           dotnet run --project samples/AppointmentTests/AppointmentTests.csproj -c Release --no-build -- --report-html --results-directory "$PWD/artifacts/matrix-sample"
           node test/Browser/resource-matrix.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
+          node test/Browser/scenario-flow.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
 
       - name: Pack
         run: |

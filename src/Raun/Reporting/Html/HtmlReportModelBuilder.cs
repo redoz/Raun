@@ -193,6 +193,8 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                             .Concat(r.Node.Guards.Select(guard => new ReportDependency(guard.ConditionIndex, "condition")))
                             .Concat(r.Node.MergeSources.Select(index => new ReportDependency(index, "alternative")))
                             .Distinct().ToArray(),
+                    Guards = r.Node.Guards.Count == 0 ? null : r.Node.Guards,
+                    Arms = r.Node.Arms.Count == 0 ? null : r.Node.Arms,
                     GroupId = r.Node.GroupId,
                     Notes = r.Notes,
                     // Timer-prefixed ("+1.234s …") when the scheduler supplied offsets; plain lines otherwise.
