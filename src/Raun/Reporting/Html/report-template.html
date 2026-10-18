@@ -2157,7 +2157,7 @@
         axis.addEventListener('focus',()=>highlight(step));axis.addEventListener('blur',clear);
       }
       const joins=sc.steps.map(step=>({step,sources:prerequisites(step).filter(source=>!source.isLifecycle && !rows.get(source.stepId).hidden)}))
-        .filter(join=>join.sources.length>1 && rows.get(join.step.stepId).querySelector('.gantt-bar'));
+        .filter(join=>!join.step.isLifecycle && !rows.get(join.step.stepId).hidden && join.sources.length>0 && rows.get(join.step.stepId).querySelector('.gantt-bar'));
       if(joins.length){
         const overlay=svgEl('svg',{'class':'gantt-joins','aria-hidden':'true'});
         for(const join of joins){
@@ -2171,7 +2171,7 @@
             join.group.replaceChildren();
             const row=rows.get(join.step.stepId),track=row.querySelector('.gantt-track').getBoundingClientRect();
             const sources=join.sources.map(source=>rows.get(source.stepId)).filter(source=>source.getBoundingClientRect().height>0);
-            if(!track.width || !track.height || sources.length<2)continue;
+            if(!track.width || !track.height || !sources.length)continue;
             const bar=row.querySelector('.gantt-bar').getBoundingClientRect(),x=bar.left-origin.left;
             const participants=[...sources,row],line=svgEl('g',{'class':'gantt-join-line'});
             join.group.appendChild(line);

@@ -234,7 +234,13 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await page.locator('.card').evaluate(async n=>{await n.scenarioAnimation?.finished;});
  const importer=bulk.steps.find(step=>step.displayName==='When importing the users'),join=page.locator('.gantt-join[data-join-step="'+importer.stepId+'"]');
  assert.equal(await join.count(),1,'A collection fan-in has one merge guide');
- assert.equal(await page.locator('.gantt-join').count(),1,'Setup dependencies and the single-predecessor assertion do not create joins');
+ assert.equal(await page.locator('.gantt-join').count(),2,'Both multiple and single dependencies have guides; Setup dependencies do not');
+ const assertion=bulk.steps.find(step=>step.displayName.startsWith('Then the import'));
+ const singleJoin=page.locator('.gantt-join[data-join-step="'+assertion.stepId+'"]');
+ assert.deepEqual(JSON.parse(await singleJoin.getAttribute('data-join-sources')),[importer.stepId],'The assertion connects to its sole data prerequisite');
+ const singleMarkers=await singleJoin.locator('.gantt-join-marker').evaluateAll(nodes=>nodes.map(node=>({step:node.dataset.sourceStep,kind:node.dataset.kind})));
+ assert.deepEqual(singleMarkers,[{step:importer.stepId,kind:'last'},{step:assertion.stepId,kind:'join'}],'Single dependencies have an incoming and outgoing arrow');
+ assert.equal(await singleJoin.locator('.gantt-join-segment:not(.is-solid)').count(),0,'Both single-dependency segments are solid');
  const userSteps=bulk.steps.filter(step=>step.displayName.startsWith('Given user '));
  assert.deepEqual(JSON.parse(await join.getAttribute('data-join-sources')),userSteps.map(step=>step.stepId),'Merge guides use all data predecessors and exclude Setup');
  const assertJoinBounds=async()=>{
