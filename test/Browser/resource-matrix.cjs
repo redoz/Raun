@@ -331,6 +331,7 @@ const renderFixture = (name, data) => {
     await expander.click();
     assert.equal(await expander.getAttribute('aria-expanded'), 'true');
     const expandedRow=expander.locator('xpath=ancestor::*[contains(@class,"step-entry")][1]');
+    await expandedRow.evaluate(async row=>{await row.stepAnimation?.finished;});
     assert.equal(await expandedRow.locator('.step-logs summary').count(),0,'Logs do not require a second disclosure control');
     assert.ok(await expandedRow.locator('.logs').isVisible(),'Logs are directly visible when the step expands');
     assert.ok(await expandedRow.evaluate(row=>Math.abs(row.querySelector('.logs').getBoundingClientRect().left-row.querySelector('.step-head>.scenario-status').getBoundingClientRect().left)<1),'Log text aligns vertically with the step status marker');
@@ -340,8 +341,23 @@ const renderFixture = (name, data) => {
         const box=column.getBoundingClientRect();return box.top<=body.top && box.bottom>=body.bottom && getComputedStyle(column).borderLeftStyle==='solid';
       });
     }),'Resource column borders continue alongside expanded step details');
+    await expandedRow.evaluate(async row=>{
+      await row.stepAnimation?.finished;
+      const control=row.querySelector('.step-expander');control.click();
+      const closing=row.stepAnimation;closing.pause();closing.currentTime=80;
+      const middle=row.querySelector('.step-body').getBoundingClientRect().height;
+      control.click();await row.stepAnimation?.finished;
+      if(!row.classList.contains('open') || row.querySelector('.step-body').inert || middle<=0)throw new Error('Rapid disclosure reversal must retain open, interactive evidence');
+    });
     await expander.click();
+    await expandedRow.evaluate(async row=>{await row.stepAnimation?.finished;});
     assert.ok(await first.locator('.matrix-scroll').evaluate(node => node.scrollHeight) <= before + 2, 'Collapsing evidence removes its space');
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await expander.click();
+    assert.ok(await expandedRow.evaluate(row=>!row.stepAnimation && !row.querySelector('.step-body').inert),'Reduced motion expands evidence immediately');
+    await expander.click();
+    assert.ok(await expandedRow.evaluate(row=>!row.stepAnimation && row.querySelector('.step-body').inert),'Reduced motion collapses evidence immediately');
+    await page.emulateMedia({reducedMotion:'no-preference'});
     assert.equal(await page.locator('.matrix-clear').count(),0,'No Clear selection control');
     const relation=page.locator('.matrix-connection').first();
     assert.ok(await relation.isVisible(),'Resource inputs connect to Create before selecting a resource');
@@ -442,6 +458,7 @@ const renderFixture = (name, data) => {
     const lanes=page.getByRole('dialog',{name:'Resource lanes for '+crowded.displayName});
     assert.ok(await lanes.isVisible(),'Activity opens a resource lane popover');
     const assertLaneAlignment=async()=>{
+      await page.locator('.card .scenario-scroll .step-entry').evaluateAll(async rows=>{await Promise.all(rows.map(row=>row.stepAnimation?.finished));await new Promise(requestAnimationFrame);});
       const geometry=await lanes.evaluate(popup=>{
         const card=popup.closest('.card'),source=card.querySelector('.scenario-sheet'),a=card.getBoundingClientRect(),b=popup.getBoundingClientRect();
         const original=Array.from(source.querySelectorAll('.step-entry')),overlay=Array.from(popup.querySelectorAll('.step-entry'));

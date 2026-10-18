@@ -83,6 +83,7 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await lifecycleFirst.getByRole('button',{name:'Setup',exact:true}).click();
  const loggedSetup=page.locator('[data-step="'+setupWithLogs.stepId+'"]');
  assert.equal(await loggedSetup.locator('.step-expander').getAttribute('aria-expanded'),'true','Lifecycle log disclosure matches its visible state');
+ await loggedSetup.evaluate(async row=>{await row.stepAnimation?.finished;});
  assert.ok(await loggedSetup.locator('.step-body').isVisible(),'Navigating to lifecycle evidence opens its logs');
  const timedFixture={...fixture,steps:[step(0,'Then instant completion',1000,0),step(1,'Then blocked',0,0,[],[],{status:'skipped',skipReason:'dependency failed: earlier'})]};
  await page.goto(render('zero-duration',timedFixture));await page.locator('.card-head').click();
