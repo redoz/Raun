@@ -2172,8 +2172,8 @@
             if(!track.width || !track.height || sources.length<2)continue;
             const bar=row.querySelector('.gantt-bar').getBoundingClientRect(),x=bar.left-origin.left;
             const participants=[...sources,row],boxes=participants.map(participant=>participant.querySelector('.gantt-track').getBoundingClientRect());
-            const top=Math.min(...boxes.map(box=>box.top))-origin.top,bottom=Math.max(...boxes.map(box=>box.bottom))-origin.top;
-            join.group.appendChild(svgEl('path',{'class':'gantt-join-line',d:'M '+x+' '+top+' V '+bottom}));
+            const segments=boxes.map(box=>'M '+x+' '+(box.top-origin.top)+' V '+(box.bottom-origin.top)).join(' ');
+            join.group.appendChild(svgEl('path',{'class':'gantt-join-line',d:segments}));
             for(const participant of participants){
               const head=participant.querySelector('.step-head').getBoundingClientRect(),y=(head.top+head.bottom)/2-origin.top;
               const left=Math.max(track.left-origin.left,x-3),right=Math.min(track.right-origin.left,x+3);

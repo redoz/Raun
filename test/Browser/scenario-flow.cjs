@@ -250,6 +250,18 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await assertJoinBounds();await page.screenshot({path:path.join(out,'bulk-join-dark.png'),fullPage:true});
  await page.setViewportSize({width:390,height:1000});await assertJoinBounds();
  await page.setViewportSize({width:1200,height:1000});
+ const unrelated=step(100,'Given an unrelated service is ready',0,50,[bulk.steps[0].index]);
+ const withUnrelated={...bulk,steps:[...bulk.steps.slice(0,2),unrelated,...bulk.steps.slice(2)]};
+ await page.goto(render('bulk-join-unrelated',withUnrelated)+'?theme=dark');await page.locator('.card-head').click();
+ await page.locator('.card').evaluate(async n=>{await n.scenarioAnimation?.finished;});
+ await assertJoinBounds();
+ const crossesUnrelated=await join.evaluate((node,id)=>{
+  const line=node.querySelector('.gantt-join-line'),box=document.querySelector('.step-entry[data-step="'+id+'"] .gantt-track').getBoundingClientRect(),x=line.getBoundingClientRect().left;
+  const transform=line.getScreenCTM().inverse();
+  for(let y=box.top+1;y<box.bottom-1;y+=.5)if(line.isPointInStroke(new DOMPoint(x,y).matrixTransform(transform)))return true;
+  return false;
+ },unrelated.stepId);
+ assert.equal(crossesUnrelated,false,'Merge guides leave unrelated rows blank');
  const waitlisted=model.scenarios.find(s=>s.displayName==='a patient whose booking waits is put on the waitlist');
  await page.goto(render('real-waitlisted-dark',waitlisted)+'?theme=dark');
  if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();
