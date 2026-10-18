@@ -1862,15 +1862,19 @@
 
     function stepTitleHtml(step,sc){
       const phase=String(step.phase || "").toLowerCase();
+      const builtin=["given","when","then"].includes(phase);
+      const hue=Array.from(phase).reduce((hash,character)=>(hash*31+character.codePointAt(0))%360,0);
+      const phaseStyle=builtin ? '' : ' style="color:light-dark(hsl('+hue+' 55% 38%),hsl('+hue+' 55% 65%))"';
       const message=step.titleMessage || {parts:[{text:step.displayName || ""}]};
       const parts=message.parts || [{text:message.text || step.displayName || ""}];
       let first=true;
       return parts.map(part=>{
-        const text=String(part.text || ""), match=first && !part.resourceId && /^(\s*)(Given|When|Then)(?=\s|$)/i.exec(text);
+        const text=String(part.text || ""), trimmed=text.trimStart(), prefix=trimmed.slice(0,phase.length);
+        const matches=first && !part.resourceId && phase && prefix.toLowerCase()===phase && (!trimmed[phase.length] || /\s/.test(trimmed[phase.length]));
         if(text.trim())first=false;
-        if(match && match[2].toLowerCase()===phase){
-          const suffix={...part,text:text.slice(match[0].length)};
-          return esc(match[1])+'<span class="phase-'+phase+'">'+esc(match[2])+'</span>'+messageHtml({parts:[suffix]},sc);
+        if(matches){
+          const whitespace=text.slice(0,text.length-trimmed.length),suffix={...part,text:trimmed.slice(phase.length)};
+          return esc(whitespace)+'<span class="'+(builtin ? 'phase-'+phase : 'phase-custom')+'"'+phaseStyle+'>'+esc(prefix)+'</span>'+messageHtml({parts:[suffix]},sc);
         }
         return messageHtml({parts:[part]},sc);
       }).join("");
