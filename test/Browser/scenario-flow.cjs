@@ -266,6 +266,11 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  };
  const expectedMarkers=userSteps.map((step,index)=>({step:step.stepId,kind:index===2 ? 'last' : 'finished'})).concat({step:importer.stepId,kind:'join'});
  await assertJoinBounds();await assertJoinMarkers(expectedMarkers);
+ const hoverPoint=await join.locator('.gantt-join-segment').first().boundingBox();
+ await page.mouse.move(hoverPoint.x+3,hoverPoint.y+10);
+ assert.equal(await join.evaluate(node=>node.classList.contains('is-hovered')),true,'Hovering near a segment highlights the complete dependency guide');
+ await page.mouse.move(20,100);
+ assert.equal(await join.evaluate(node=>node.classList.contains('is-hovered')),false,'Leaving the guide clears its highlight');
  await page.screenshot({path:path.join(out,'bulk-join-dark.png'),fullPage:true});
  await page.setViewportSize({width:390,height:1000});await assertJoinBounds();
  await page.setViewportSize({width:1200,height:1000});

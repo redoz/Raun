@@ -587,6 +587,7 @@
   .gantt-join-line{stroke-dasharray:3 4}
   .gantt-join-segment.is-solid{stroke-dasharray:none}
   .gantt-join-marker{opacity:.75;stroke-linecap:round;stroke-linejoin:round}
+  .gantt-join.is-hovered :is(.gantt-join-line,.gantt-join-marker){stroke:var(--ink);opacity:.85}
   .gantt-bar{position:absolute;inset-block:0;min-width:2px;background:var(--muted);opacity:.12;pointer-events:none}
   .status-failed .gantt-bar{background:var(--fail);opacity:.14}
   .dependency-related .gantt-bar{opacity:.22}
@@ -2194,6 +2195,16 @@
         const observer=new ResizeObserver(drawJoins);observer.observe(drill);
         for(const row of rows.values()){observer.observe(row);observer.observe(row.querySelector('.gantt-track'));}
         requestAnimationFrame(drawJoins);document.fonts?.ready.then(drawJoins);
+        const highlightJoin=selected=>{for(const join of joins)join.group.classList.toggle('is-hovered',join===selected);};
+        drill.addEventListener('pointermove',event=>{
+          let selected=null,nearest=6;
+          for(const join of joins)for(const segment of join.group.querySelectorAll('.gantt-join-segment')){
+            const box=segment.getBoundingClientRect(),distance=Math.abs(event.clientX-box.left);
+            if(box.height && event.clientY>=box.top && event.clientY<=box.bottom && distance<nearest){selected=join;nearest=distance;}
+          }
+          highlightJoin(selected);
+        });
+        drill.addEventListener('pointerleave',()=>highlightJoin(null));
       }
       drill.addEventListener('keydown',event=>{if(event.key==='Escape'){const owner=event.target.closest?.('.step-prerequisites')?.parentElement;owner?.querySelector('.step-gantt').focus({preventScroll:true});for(const row of rows.values()){row.querySelector('.step-prerequisites').hidden=true;row.querySelector('.step-gantt').setAttribute('aria-expanded','false');}clear();}});
     }
