@@ -250,6 +250,8 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const assertJoinMarkers=async expected=>{
   const markers=await join.locator('.gantt-join-marker').evaluateAll(nodes=>nodes.map(node=>({step:node.dataset.sourceStep,kind:node.dataset.kind})));
   assert.deepEqual(markers,expected,'Join markers distinguish completed dependencies, the last finishers, and the joining step');
+  const segments=await join.locator('.gantt-join-segment').evaluateAll(nodes=>nodes.map(node=>({step:node.dataset.sourceStep,solid:getComputedStyle(node).strokeDasharray==='none'})));
+  assert.deepEqual(segments,expected.map(marker=>({step:marker.step,solid:marker.kind!=='finished'})),'Only the last-finisher and joining rows use solid vertical lines');
   const positions=await join.evaluate(node=>{
    const x=node.querySelector('.gantt-join-line').getBoundingClientRect().left;
    return Array.from(node.querySelectorAll('.gantt-join-marker'),marker=>{const box=marker.getBoundingClientRect();return {kind:marker.dataset.kind,left:box.left-x,right:box.right-x};});
@@ -273,7 +275,7 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const crossesUnrelated=await join.evaluate((node,id)=>{
   const line=node.querySelector('.gantt-join-line'),box=document.querySelector('.step-entry[data-step="'+id+'"] .gantt-track').getBoundingClientRect(),x=line.getBoundingClientRect().left;
   const transform=line.getScreenCTM().inverse();
-  for(let y=box.top+1;y<box.bottom-1;y+=.5)if(line.isPointInStroke(new DOMPoint(x,y).matrixTransform(transform)))return true;
+  for(let y=box.top+1;y<box.bottom-1;y+=.5)if(Array.from(line.querySelectorAll('path')).some(segment=>segment.isPointInStroke(new DOMPoint(x,y).matrixTransform(transform))))return true;
   return false;
  },unrelated.stepId);
  assert.equal(crossesUnrelated,false,'Merge guides leave unrelated rows blank');
