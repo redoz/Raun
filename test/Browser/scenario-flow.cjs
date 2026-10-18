@@ -229,6 +229,27 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await otherwiseHeading.locator('button').click();
 
  await page.screenshot({path:path.join(out,'conditional-dark.png'),fullPage:true});
+ const bulk=model.scenarios.find(s=>s.displayName==='bulk user import via LINQ');assert.ok(bulk);
+ await page.goto(render('bulk-join',bulk)+'?theme=dark');await page.locator('.card-head').click();
+ await page.locator('.card').evaluate(async n=>{await n.scenarioAnimation?.finished;});
+ const importer=bulk.steps.find(step=>step.displayName==='When importing the users'),join=page.locator('.gantt-join[data-join-step="'+importer.stepId+'"]');
+ assert.equal(await join.count(),1,'A collection fan-in has one merge guide');
+ assert.equal(await page.locator('.gantt-join').count(),1,'Setup dependencies and the single-predecessor assertion do not create joins');
+ const userSteps=bulk.steps.filter(step=>step.displayName.startsWith('Given user '));
+ assert.deepEqual(JSON.parse(await join.getAttribute('data-join-sources')),userSteps.map(step=>step.stepId),'Merge guides use all data predecessors and exclude Setup');
+ const assertJoinBounds=async()=>{
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const geometry=await join.evaluate((node,ids)=>{
+    const line=node.querySelector('.gantt-join-line'),bounds=line.getBoundingClientRect(),row=document.querySelector('.step-entry[data-step="'+node.dataset.joinStep+'"]'),track=row.querySelector('.gantt-track').getBoundingClientRect(),bar=row.querySelector('.gantt-bar').getBoundingClientRect();
+    const participants=ids.map(id=>document.querySelector('.step-entry[data-step="'+id+'"] .gantt-track').getBoundingClientRect());
+    return {x:bounds.left,start:bar.left,top:bounds.top,bottom:bounds.bottom,first:Math.min(...participants.map(box=>box.top)),last:track.bottom,right:track.right,dashed:getComputedStyle(line).strokeDasharray,ticks:node.querySelectorAll('.gantt-join-tick').length};
+  },userSteps.map(step=>step.stepId));
+  assert.ok(Math.abs(geometry.x-geometry.start)<1 && geometry.top<=geometry.first+.5 && geometry.bottom>=geometry.last-.5,'The join guide spans all source rows through the importer at its start time: '+JSON.stringify(geometry));
+  assert.ok(geometry.x<geometry.right && geometry.dashed!=='none' && geometry.ticks===4,'The guide stays in the timing area and marks the three sources plus join');
+ };
+ await assertJoinBounds();await page.screenshot({path:path.join(out,'bulk-join-dark.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:1000});await assertJoinBounds();
+ await page.setViewportSize({width:1200,height:1000});
  const waitlisted=model.scenarios.find(s=>s.displayName==='a patient whose booking waits is put on the waitlist');
  await page.goto(render('real-waitlisted-dark',waitlisted)+'?theme=dark');
  if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();

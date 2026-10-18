@@ -185,7 +185,7 @@
   .drill-host{ margin-top:4px; }
   .drill{ display:none; margin-top:10px; }
   .drill.open{ display:block; }
-  .scenario-drill{position:relative}
+  .scenario-drill{position:relative;isolation:isolate}
   .step-head>.scenario-status{grid-column:2;grid-row:1;justify-self:start}
   .step-head>.dependency-node{outline-offset:3px}
   .step-head>.dependency-node:focus-visible{outline:1px solid var(--muted)}
@@ -582,6 +582,9 @@
   .step-gantt:focus-visible{outline:1px solid var(--muted);outline-offset:3px}
   .step-lifecycle.status-passed:not(.open) .gantt-track{visibility:hidden}
   .step-lifecycle.status-passed:not(.open):not(.matrix-row)>.gantt-track{margin-block:-2px -3px}
+  .gantt-joins{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden;z-index:-1}
+  .gantt-join-line,.gantt-join-tick{fill:none;stroke:var(--muted);stroke-width:1;opacity:.5}
+  .gantt-join-line{stroke-dasharray:3 4}
   .gantt-bar{position:absolute;inset-block:0;min-width:2px;background:var(--muted);opacity:.12;pointer-events:none}
   .status-failed .gantt-bar{background:var(--fail);opacity:.14}
   .dependency-related .gantt-bar{opacity:.22}
@@ -2150,6 +2153,37 @@
         axis.addEventListener('click',()=>{panel.hidden=!panel.hidden;axis.setAttribute('aria-expanded',String(!panel.hidden));if(panel.hidden)clear();else highlight(step);});
         axis.addEventListener('pointerenter',()=>highlight(step));axis.addEventListener('pointerleave',clear);
         axis.addEventListener('focus',()=>highlight(step));axis.addEventListener('blur',clear);
+      }
+      const joins=sc.steps.map(step=>({step,sources:prerequisites(step).filter(source=>!source.isLifecycle && !rows.get(source.stepId).hidden)}))
+        .filter(join=>join.sources.length>1 && rows.get(join.step.stepId).querySelector('.gantt-bar'));
+      if(joins.length){
+        const overlay=svgEl('svg',{'class':'gantt-joins','aria-hidden':'true'});
+        for(const join of joins){
+          join.group=svgEl('g',{'class':'gantt-join','data-join-step':join.step.stepId,'data-join-sources':JSON.stringify(join.sources.map(source=>source.stepId))});
+          overlay.appendChild(join.group);
+        }
+        drill.appendChild(overlay);
+        const drawJoins=()=>{
+          const origin=drill.getBoundingClientRect();
+          for(const join of joins){
+            join.group.replaceChildren();
+            const row=rows.get(join.step.stepId),track=row.querySelector('.gantt-track').getBoundingClientRect();
+            const sources=join.sources.map(source=>rows.get(source.stepId)).filter(source=>source.getBoundingClientRect().height>0);
+            if(!track.width || !track.height || sources.length<2)continue;
+            const bar=row.querySelector('.gantt-bar').getBoundingClientRect(),x=bar.left-origin.left;
+            const participants=[...sources,row],boxes=participants.map(participant=>participant.querySelector('.gantt-track').getBoundingClientRect());
+            const top=Math.min(...boxes.map(box=>box.top))-origin.top,bottom=Math.max(...boxes.map(box=>box.bottom))-origin.top;
+            join.group.appendChild(svgEl('path',{'class':'gantt-join-line',d:'M '+x+' '+top+' V '+bottom}));
+            for(const participant of participants){
+              const head=participant.querySelector('.step-head').getBoundingClientRect(),y=(head.top+head.bottom)/2-origin.top;
+              const left=Math.max(track.left-origin.left,x-3),right=Math.min(track.right-origin.left,x+3);
+              join.group.appendChild(svgEl('path',{'class':'gantt-join-tick',d:'M '+left+' '+y+' H '+right}));
+            }
+          }
+        };
+        const observer=new ResizeObserver(drawJoins);observer.observe(drill);
+        for(const row of rows.values()){observer.observe(row);observer.observe(row.querySelector('.gantt-track'));}
+        requestAnimationFrame(drawJoins);document.fonts?.ready.then(drawJoins);
       }
       drill.addEventListener('keydown',event=>{if(event.key==='Escape'){const owner=event.target.closest?.('.step-prerequisites')?.parentElement;owner?.querySelector('.step-gantt').focus({preventScroll:true});for(const row of rows.values()){row.querySelector('.step-prerequisites').hidden=true;row.querySelector('.step-gantt').setAttribute('aria-expanded','false');}clear();}});
     }
