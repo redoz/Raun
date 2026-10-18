@@ -82,18 +82,27 @@ internal static class ResourceDefinitionReader
         while (hierarchy.Count > 0)
         {
             var owner = MetadataOwner(hierarchy.Pop(), compilation);
-            foreach (var member in owner.GetMembers())
+            var members = owner.GetMembers();
+            foreach (var member in members.OfType<INamedTypeSymbol>())
             {
                 var name = RoleName(member.Name);
                 if (roles.ContainsKey(name))
                 { issues.Add(new("RAUN031", member, "A member cannot hide an inherited resource role.")); continue; }
-                if (member is not INamedTypeSymbol marker || LinkBase(marker) is not { } link) { continue; }
+                var marker = member;
+                if (LinkBase(marker) is not { } link) { continue; }
                 if (string.IsNullOrWhiteSpace(name) || marker.IsAbstract || marker.Arity != 0 || marker.DeclaredAccessibility != Accessibility.Public
                     || link.TypeArguments[1] is not INamedTypeSymbol action || action.IsAbstract || Kind(action) is null || DefinitionCount(action) != 1
                     || ResourceCodeModel.Closed(owner) && (!ResourceCodeModel.Closed(marker)
                         || !ResourceCodeModel.Closed(link.TypeArguments[0]) || !ResourceCodeModel.Closed(action)))
                 { issues.Add(new("RAUN031", marker, "Use a public, closed resource role with a concrete resource action.")); continue; }
                 roles.Add(name, new(name, owner, marker, link.TypeArguments[0], action));
+            }
+            // Reflection discovers nested role types before it validates ordinary members.
+            // Use that same two-pass rule so source and metadata declaration order are irrelevant.
+            foreach (var member in members.Where(member => member is not INamedTypeSymbol))
+            {
+                if (roles.ContainsKey(RoleName(member.Name)))
+                { issues.Add(new("RAUN031", member, "A member cannot hide a resource role.")); }
             }
         }
         return roles.Values.OrderBy(role => role.PropertyName, StringComparer.Ordinal).ToImmutableArray();

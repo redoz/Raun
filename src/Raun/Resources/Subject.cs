@@ -4,10 +4,10 @@ namespace Raun;
 public static class Subject
 {
     /// <summary>
-    /// The step's own return value, as a lineage <i>target</i> — used when a <c>[Updated]</c> parameter
-    /// references/consumes the resource the step returns. The value is a reserved token no C# parameter
-    /// can be named. MUST stay identical to
-    /// <c>Raun.Generator.Lowering.AttributeReader.ReturnSubject</c> (separate assembly).
+    /// Select the step's return value as the source of a raw resource link.
+    /// Use this token in LinkAttribute.Source when the owning action applies to the return value.
+    /// A parameter cannot have this name. Keep this value identical to
+    /// Raun.Generator.Lowering.AttributeReader.ReturnSubject in the compiler assembly.
     /// </summary>
     public const string Return = "<return>";
 }

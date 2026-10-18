@@ -147,4 +147,42 @@ public class ResourceRelationshipTests
         var consumer = GeneratorHarness.Run("using Raun; using System.Threading.Tasks; " + Source[start..], "Consumer", MetadataReference.CreateFromImage(library.Image));
         Assert.Contains(consumer.GeneratorDiagnostics, d => d.Id == "RAUN031");
     }
+    [Fact]
+    public async Task Raw_links_cannot_borrow_roles_from_an_applied_derived_action()
+    {
+        var source = Source.Replace("[Booked.Patient]", "[Read, Link<CreatedAttribute>(\"Patient\")]", StringComparison.Ordinal);
+        Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), diagnostic => diagnostic.Id == "RAUN032");
+    }
+
+    [Fact]
+    public async Task Raw_links_can_use_inherited_roles_on_a_derived_source_action()
+    {
+        var source = Source.Replace("public sealed class Booked", "public class Booked", StringComparison.Ordinal)
+            .Replace("public sealed class Operations", "public sealed class SpecialBooked : Booked; public sealed class Operations", StringComparison.Ordinal)
+            .Replace("[return: Booked]", "[return: SpecialBooked]", StringComparison.Ordinal)
+            .Replace("[Booked.Patient]", "[Read, Link<Booked>(\"Patient\")]", StringComparison.Ordinal);
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
+        var generated = GeneratorHarness.Run(source); generated.AssertCompiles();
+        var book = (await Assert.Single(generated.Definitions()).RunAsync()).Single(result => result.Node.OperationName == "Book");
+        Assert.Equal(StepStatus.Passed, book.Status);
+        Assert.Equal(["Patient", "Slot"], book.Links.Select(link => link.Role));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Role_member_collisions_are_invalid_in_any_order_and_in_referenced_metadata(bool memberFirst)
+    {
+        const string member = "public string Patient { get; set; } = \"\";";
+        var source = memberFirst
+            ? Source.Replace("class Booked : CreatedAttribute {", "class Booked : CreatedAttribute { " + member, StringComparison.Ordinal)
+            : Source.Replace("public sealed class SlotAttribute", member + " public sealed class SlotAttribute", StringComparison.Ordinal);
+        Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), diagnostic => diagnostic.Id == "RAUN031");
+        var start = source.IndexOf("public sealed class Stories", StringComparison.Ordinal);
+        var library = GeneratorHarness.Run(source[..start], "CollidingRoles"); library.AssertCompiles();
+        Assert.Throws<ArgumentException>(() => ResourceAction.For(library.Assembly!.GetType("Booked")!));
+        var consumer = GeneratorHarness.Run("using Raun; using System.Threading.Tasks; " + source[start..], "Consumer", MetadataReference.CreateFromImage(library.Image));
+        Assert.Contains(consumer.GeneratorDiagnostics, diagnostic => diagnostic.Id == "RAUN031");
+    }
+
 }

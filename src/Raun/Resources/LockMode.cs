@@ -1,8 +1,8 @@
 namespace Raun;
 
 /// <summary>
-/// The conflict class a <see cref="ResourceEffect"/> implies: <c>Read</c>/<c>Read</c>/<c>Reference</c>/
-/// <c>Consume</c> are <see cref="Shared"/>; <c>Create</c>/<c>Update</c>/<c>Delete</c> are
+/// The access mode required by a <see cref="ResourceEffect"/>. Read uses <see cref="Shared"/> access.
+/// Create, Update, and Delete use
 /// <see cref="Exclusive"/>. Two effects on one identity conflict when at least one is exclusive. The
 /// <see cref="ResourceLedger"/> uses this to <em>detect</em> conflicting access between steps that
 /// nothing orders; no lock is ever taken and nothing waits. The <see cref="Raun.Scheduling.ContentionGate"/>

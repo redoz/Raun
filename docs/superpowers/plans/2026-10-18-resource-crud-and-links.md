@@ -77,5 +77,14 @@ Own report model/builder/template and log/span resource consumers, browser/JS te
 - [x] Build Raun.slnx with zero warnings; run focused resource/generator suites then dotnet test Raun.slnx.
 - [x] Run the existing Node report tests and both browser harnesses with real sample output; run the Aspire sample through its existing test path.
 - [x] Search live source for obsolete public APIs and verify code-fix integration seams were not overwritten.
-- [ ] Obtain one independent whole-change review, fix material findings with regressions, and record exact evidence.
-- [ ] Commit/push the green core change; keep Astra's separate code-fix branch separate until independently ready. No release.
+- [x] Obtain one independent whole-change review, fix material findings with regressions, and record exact evidence.
+- [x] Commit/push the green core change; keep Astra's separate code-fix branch separate until independently ready. No release.
+
+## Completion evidence
+
+Core implementation: 3537a48. Independent Astra High review and fixes are recorded in
+[the final review](../../reviews/2026-10-18-resource-model-review.md). Both Important findings were
+reproduced with failing regressions and fixed. Final `dotnet test Raun.slnx`: 1756 total, 1749 passed,
+seven expected branch skips, zero failures. Build: zero warnings/errors. 72 Node report tests and
+both browser harnesses passed on the regenerated appointment report; the real Aspire sample passed.
+Code-fix integration stays on its independently verified branch. No release was created.

@@ -45,7 +45,7 @@ internal static class RelationshipReader
                 if (candidates.Length != 1)
                 { issues.Add(new("RAUN032", target, "Bind the link to exactly one action application. Use Source when the owner is ambiguous.")); continue; }
                 var applied = candidates[0];
-                var schema = ResourceDefinitionReader.Schema(applied.Type, issues, compilation);
+                var schema = ResourceDefinitionReader.Schema(owner, issues, compilation);
                 var role = schema.FirstOrDefault(r => r.PropertyName == roleName);
                 if (role.ResourceType is null)
                 { issues.Add(new("RAUN032", target, "The owner does not declare resource role '" + roleName + "'.")); continue; }
