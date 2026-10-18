@@ -19,15 +19,17 @@ const fixture={...base,scenarioId:'flow',displayName:'Nested booking flow',durat
 async function branchText(locator){return locator.evaluate(n=>Array.from(n.childNodes).filter(x=>x.nodeType===3).map(x=>x.textContent).join('').trim());}
 async function assertBranchIndentation(page){
  const positions=await page.locator('.step-head').evaluateAll(heads=>heads.flatMap(head=>{
-  const mark=head.querySelector('.scenario-status'),title=head.querySelector('.dn');
+  const mark=head.querySelector('.scenario-status'),title=head.querySelector('.dn'),chevron=head.querySelector('.step-expander,.lifecycle-toggle');
   if(!head.getBoundingClientRect().height || getComputedStyle(mark).visibility==='hidden')return [];
-  return [{depth:Number(head.parentElement.style.getPropertyValue('--step-flow-depth') || 0),left:mark.getBoundingClientRect().left,
+  return [{depth:Number(head.parentElement.style.getPropertyValue('--step-flow-depth') || 0),left:mark.getBoundingClientRect().left,chevronLeft:chevron?.getBoundingClientRect().left ?? null,
    gap:title.getBoundingClientRect().left+parseFloat(getComputedStyle(title).paddingLeft)-mark.getBoundingClientRect().right}];
  }));
  const base=positions.find(position=>position.depth===0);assert.ok(base);
+ const baseChevron=positions.find(position=>position.depth===0 && position.chevronLeft!==null);
  for(const position of positions){
   assert.ok(Math.abs(position.left-base.left-position.depth*12)<1,'Status squircle follows each branch indentation level');
   assert.ok(Math.abs(position.gap-base.gap)<1,'Status and title keep their normal spacing at every depth');
+  if(position.chevronLeft!==null){assert.ok(baseChevron);assert.ok(Math.abs(position.chevronLeft-baseChevron.chevronLeft-position.depth*12)<1,'Step chevron follows the same branch indentation as its status and title');}
  }
 }
 function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSync(file,template.replace('/*__RAUN_REPORT_JSON__*/',JSON.stringify({...model,scenarios:[data]}).replaceAll('<','\\u003C')));return pathToFileURL(file).href;}

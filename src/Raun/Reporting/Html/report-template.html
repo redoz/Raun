@@ -541,6 +541,7 @@
   .step-entry[hidden],.flow-content[hidden],.step-prerequisites[hidden]{display:none!important}
   .flow-content .step-entry{--dependency-gutter:calc(8px + var(--step-flow-depth,1)*12px)}
   .flow-content .step-head>.scenario-status{margin-left:calc(var(--step-flow-depth,1)*12px)}
+  .flow-content .step-head>.step-expander,.flow-content .step-head>.lifecycle-toggle{translate:calc(var(--step-flow-depth,1)*12px) 0}
   .flow-content .step-entry>.step-body{margin-left:calc(var(--step-body-inset,0px) + var(--step-flow-depth,1)*12px)}
   .step-head{position:relative;isolation:isolate}
   .gantt-track{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
