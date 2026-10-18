@@ -53,6 +53,8 @@ internal sealed record ReportStep
     public required string Label { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
     public bool IsLifecycle { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsBranchBinding { get; init; }
     public required string Phase { get; init; }
     public required string DisplayName { get; init; }
     public ReportMessage? TitleMessage { get; init; }

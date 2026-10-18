@@ -1634,6 +1634,7 @@
         for (const entry of drill.querySelectorAll(".step-entry"))
           entry.classList.toggle("focus", entry.dataset.step === stepId);
         const entry = drill.querySelector('.step-entry[data-step="' + stepId + '"]');
+        if(entry)entry.hidden=false;
         if (entry && (entry.classList.contains("has-body") || entry.querySelector(".lifecycle-toggle"))){entry.classList.add("open");entry.querySelector(".step-expander,.lifecycle-toggle").setAttribute("aria-expanded","true");}
         if(entry)for(const branch of drill.querySelectorAll('.flow-branch'))if(branch.querySelector('.flow-content').contains(entry)){branch.querySelector('.flow-content').hidden=false;branch.querySelector('.flow-toggle').setAttribute('aria-expanded','true');}
         if (entry && scroll) entry.scrollIntoView({ block: "nearest" });
@@ -1866,6 +1867,19 @@
         return messageHtml({parts:[part]},sc);
       }).join("");
     }
+    // Only simplify unambiguous declaration patterns. Keep complex patterns intact.
+    function readableBranch(condition,arm){
+      const source=condition?.arms?.[arm] || '';
+      if(source==='else' || source==='default')return 'Otherwise';
+      if(source==='if')return 'If '+String(condition.displayName).replace(/^(Given|When|Then)\s+/i,'');
+      if(source.startsWith('if '))return 'If '+source.slice(3);
+      const pattern=source.replace(/^(case|is)\s+/,'');
+      const declaration=pattern.match(/^((?:global::)?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+@?[A-Za-z_]\w*$/);
+      const keywords=new Set(['not','and','or','true','false','null','var']);
+      const label=declaration && !keywords.has(declaration[1]) ? declaration[1] : pattern;
+      if(source.startsWith('is '))return 'Matches '+label;
+      return label || (arm===-1 ? 'No matching outcome' : 'Branch '+(arm+1));
+    }
     // Timing describes observed execution. Guard paths describe source control flow.
     function bindScenarioFlow(drill,sc){
       const list=drill.querySelector('.step-list'),byIndex=new Map(sc.steps.map(step=>[step.index,step]));
@@ -1877,6 +1891,7 @@
       const stack=[],branches=[];
       for(const step of sc.steps){
         const row=rows.get(step.stepId),guards=(step.guards || []).filter(guard=>byIndex.has(guard.conditionIndex));
+        row.hidden=Boolean(step.isBranchBinding && step.status!=='failed');
         row.style.setProperty('--step-flow-depth',guards.length);
         let common=0;
         while(common<stack.length && common<guards.length && stack[common].condition===guards[common].conditionIndex && stack[common].arm===guards[common].arm)common++;
@@ -1888,8 +1903,8 @@
           section.style.setProperty('--flow-depth',depth);
           content.id='flow-branch-'+(++stepDetailSequence);button.type='button';button.setAttribute('aria-controls',content.id);
           button.innerHTML=chevron;
-          button.appendChild(document.createTextNode(condition.arms?.[guard.arm] || (guard.arm===-1 ? 'No matching arm' : 'Branch '+(guard.arm+1))));
-          button.title='Branch of '+condition.displayName;
+          button.appendChild(document.createTextNode(readableBranch(condition,guard.arm)));
+          button.title=(condition.arms?.[guard.arm] || 'No matching arm')+' / '+condition.displayName;
           heading.appendChild(button);section.append(heading,content);
           (stack.at(-1)?.content || list).appendChild(section);
           const entry={condition:guard.conditionIndex,arm:guard.arm,section,button,content};
@@ -1930,11 +1945,13 @@
         panel.appendChild(coverageText('span','',step.dependsOn?.length ? 'After:' : 'No prerequisites'));
         for(const index of step.dependsOn || []){
           const predecessor=byIndex.get(index);if(!predecessor)continue;
-          const link=coverageText('button','predecessor-link',predecessor.displayName);link.type='button';link.dataset.from=String(index);link.dataset.to=String(step.index);
+          const bindingGuard=predecessor.isBranchBinding ? predecessor.guards?.at(-1) : null;
+          const label=bindingGuard ? readableBranch(byIndex.get(bindingGuard.conditionIndex),bindingGuard.arm)+' (matched value)' : predecessor.displayName;
+          const link=coverageText('button','predecessor-link',label);link.type='button';link.dataset.from=String(index);link.dataset.to=String(step.index);
           const kinds=step.dependencies?.filter(edge=>edge.index===index).map(edge=>edge.kind) || ['dependency'];
           link.title=kinds.join(', ');
           link.addEventListener('click',()=>{
-            const target=rows.get(predecessor.stepId);
+            const target=rows.get(predecessor.stepId);target.hidden=false;
             for(const branch of branches)if(branch.content.contains(target)){branch.content.hidden=false;branch.button.setAttribute('aria-expanded','true');}
             if(predecessor.isLifecycle){target.classList.add('open');target.querySelector('.step-expander,.lifecycle-toggle')?.setAttribute('aria-expanded','true');}
             const control=target.querySelector('.step-gantt');control.focus({preventScroll:true});target.scrollIntoView({block:'nearest',behavior:'instant'});highlight(predecessor);

@@ -72,6 +72,27 @@ public class HtmlReportModelBuilderTests
     }
 
     [Fact]
+    public void Report_marks_only_synthetic_pattern_binding_rows_as_branch_plumbing()
+    {
+        var binding = new ScenarioNode
+        {
+            Index = 0, StepId = "binding", Phase = "When", OperationName = "Case",
+            DisplayNameTemplate = "case Waitlisted waitlisted", IsSynthetic = true, DependsOn = [],
+            Invoke = (_, _) => Task.FromResult<object?>(null),
+        };
+        var ordinary = Node(1, "ordinary", "Then", "case Waitlisted waitlisted");
+        var definition = Def(binding, ordinary);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnScenarioStarted(definition);
+        foreach (var node in definition.Nodes) { builder.OnStepFinished(definition, Result(node, T0, 1)); }
+        var steps = Assert.Single(builder.Build("binding").Scenarios).Steps;
+        using var hidden = JsonDocument.Parse(JsonSerializer.Serialize(steps[0]));
+        Assert.True(hidden.RootElement.GetProperty("IsBranchBinding").GetBoolean());
+        using var visible = JsonDocument.Parse(JsonSerializer.Serialize(steps[1]));
+        Assert.False(visible.RootElement.TryGetProperty("IsBranchBinding", out _));
+    }
+
+    [Fact]
     public void Report_preserves_nested_branch_paths_and_source_arm_labels()
     {
         var outer = Node(0, "outer", "When", "priority", arms: ["if (priority)", "else"]);

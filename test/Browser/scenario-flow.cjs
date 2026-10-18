@@ -16,6 +16,7 @@ const fixture={...base,scenarioId:'flow',displayName:'Nested booking flow',durat
  step(6,'When using standard booking',0,0,[1],[{conditionIndex:1,arm:1}],{status:'skipped',skipReason:'not taken: else'}),
  step(7,'When booking Jane',500,500,[4,2])
 ]};
+async function branchText(locator){return locator.evaluate(n=>Array.from(n.childNodes).filter(x=>x.nodeType===3).map(x=>x.textContent).join('').trim());}
 function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSync(file,template.replace('/*__RAUN_REPORT_JSON__*/',JSON.stringify({...model,scenarios:[data]}).replaceAll('<','\\u003C')));return pathToFileURL(file).href;}
 (async()=>{const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:{})});try{
  const page=await browser.newPage({viewport:{width:1200,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -66,6 +67,29 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const zero=await page.locator('.gantt-track').first().evaluate(n=>{const a=n.getBoundingClientRect(),b=n.querySelector('.gantt-bar').getBoundingClientRect();return {right:b.right-a.right,width:b.width};});
  assert.ok(zero.width>=2 && zero.right<=.1,'Zero-duration marks remain visible inside the shared axis');
  assert.equal(await page.locator('.gantt-bar').count(),1,'Blocked steps do not look as though they executed');
+ const readable={...fixture,scenarioId:'readable-branches',steps:[
+ step(0,'Given Alice is a priority case',0,100,[],[],{arms:['if','else']}),
+ step(1,'When booking urgently',100,100,[0],[{conditionIndex:0,arm:0}]),
+ step(2,'When booking normally',0,0,[0],[{conditionIndex:0,arm:1}],{status:'skipped',skipReason:'not taken: else'}),
+ step(3,'When trying to book',200,100,[],[],{arms:['case Waitlisted waitlisted','case not null','default']}),
+ step(4,'«case Waitlisted waitlisted»',300,0,[3],[{conditionIndex:3,arm:0}],{isBranchBinding:true}),
+ step(5,'Then Jane is on the waitlist',300,100,[4],[{conditionIndex:3,arm:0}]),
+ step(6,'Then a value was returned',0,0,[3],[{conditionIndex:3,arm:1}],{status:'skipped',skipReason:'not taken: case not null'}),
+ step(7,'Then nothing matched',0,0,[3],[{conditionIndex:3,arm:2}],{status:'skipped',skipReason:'not taken: default'})]};
+ await page.goto(render('readable-branches',readable));if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();await page.locator('.card').evaluate(async n=>{if(n.scenarioAnimation)await n.scenarioAnimation.finished;});
+ assert.equal(await branchText(page.locator('.flow-toggle').first()),'If Alice is a priority case','Boolean branch uses the actual readable condition');
+ assert.equal(await branchText(page.locator('.flow-branch[data-condition="0"][data-arm="1"] > .flow-heading button')),'Otherwise');
+ const matched=page.locator('.flow-branch[data-condition="3"][data-arm="0"] > .flow-heading button');
+ assert.equal(await branchText(matched),'Waitlisted','Simple outcome labels omit C# case and the binding variable');
+ assert.ok((await matched.getAttribute('title')).includes('case Waitlisted waitlisted'),'Exact source label remains available');
+ assert.equal(await page.locator('[data-step="flow-4"]').isVisible(),false,'Successful pattern-binding plumbing does not repeat the branch heading');
+ await page.locator('[data-step="flow-5"] .step-gantt').click();
+ const bindingLink=page.locator('[data-step="flow-5"] .predecessor-link');assert.equal(await bindingLink.innerText(),'Waitlisted (matched value)');await bindingLink.click();
+ assert.ok(await page.locator('[data-step="flow-4"]').isVisible(),'Explicit prerequisite navigation can reveal binding evidence');
+ assert.equal(await branchText(page.locator('.flow-branch[data-condition="3"][data-arm="1"] > .flow-heading button')),'not null','Negated patterns must not be mistaken for a type and variable');
+ const failedBinding=structuredClone(readable);failedBinding.scenarioId='failed-binding';failedBinding.steps[4].status='failed';failedBinding.steps[4].exception='Pattern extraction failed';
+ await page.goto(render('failed-binding',failedBinding));if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();
+ assert.ok(await page.locator('[data-step="flow-4"]').isVisible(),'Failed binding plumbing remains visible for diagnosis');
  const priority=model.scenarios.find(s=>s.displayName==='priority patients get an urgent appointment');
  await page.goto(render('real-conditional',priority));await page.locator('.card-head').click();
  const matrixBackgrounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const track=h.querySelector('.gantt-track').getBoundingClientRect(),cell=h.parentElement.querySelector('.matrix-cell,.matrix-summary-cell').getBoundingClientRect();return track.right<=cell.left+.1;}));
@@ -78,5 +102,12 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await page.goto(render('real-conditional-dark',priority)+'?theme=dark');await page.locator('.card-head').click();
  await page.locator('.card').evaluate(async n=>{if(n.scenarioAnimation)await n.scenarioAnimation.finished;});
  await page.screenshot({path:path.join(out,'conditional-dark.png'),fullPage:true});
+ const waitlisted=model.scenarios.find(s=>s.displayName==='a patient whose booking waits is put on the waitlist');
+ await page.goto(render('real-waitlisted-dark',waitlisted)+'?theme=dark');
+ if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();
+ await page.locator('.card').evaluate(async n=>{if(n.scenarioAnimation)await n.scenarioAnimation.finished;});
+ const selected=page.locator('.flow-toggle[aria-expanded="true"]');assert.equal(await branchText(selected),'Waitlisted','The real waitlist scenario has one readable outcome heading');
+ for(const binding of waitlisted.steps.filter(s=>s.isBranchBinding && s.status!=='failed'))assert.equal(await page.locator('[data-step="'+binding.stepId+'"]').isVisible(),false,'Real compiler case bindings do not duplicate business headings');
+ await page.screenshot({path:path.join(out,'waitlisted-dark.png'),fullPage:true});
  assert.deepEqual(errors,[]);console.log('PASS scenario flow: shared timing, parallel overlap, join, nested if/switch, untaken disclosure, named predecessors, navigation, mobile and real sample.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
