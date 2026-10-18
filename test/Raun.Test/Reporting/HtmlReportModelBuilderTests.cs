@@ -92,6 +92,28 @@ public class HtmlReportModelBuilderTests
         Assert.False(visible.RootElement.TryGetProperty("IsBranchBinding", out _));
     }
 
+    [Theory]
+    [InlineData("Merge")]
+    [InlineData("Unchanged")]
+    public void Report_marks_only_synthetic_value_merges_as_plumbing(string operation)
+    {
+        var merge = new ScenarioNode
+        {
+            Index = 0, StepId = "merge", Phase = "When", OperationName = operation,
+            DisplayNameTemplate = "merge appointment", IsSynthetic = true, DependsOn = [],
+            Invoke = (_, _) => Task.FromResult<object?>(null),
+        };
+        var ordinary = Node(1, "ordinary", "Then", "merge appointment");
+        var definition = Def(merge, ordinary);
+        var builder = new HtmlReportModelBuilder(); builder.OnScenarioStarted(definition);
+        foreach (var node in definition.Nodes) { builder.OnStepFinished(definition, Result(node, T0, 1)); }
+        var steps = Assert.Single(builder.Build("merge").Scenarios).Steps;
+        using var hidden = JsonDocument.Parse(JsonSerializer.Serialize(steps[0]));
+        Assert.True(hidden.RootElement.GetProperty("IsValueMerge").GetBoolean());
+        using var visible = JsonDocument.Parse(JsonSerializer.Serialize(steps[1]));
+        Assert.False(visible.RootElement.TryGetProperty("IsValueMerge", out _));
+    }
+
     [Fact]
     public void Report_preserves_nested_branch_paths_and_source_arm_labels()
     {

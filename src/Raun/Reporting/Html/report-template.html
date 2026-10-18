@@ -1891,7 +1891,7 @@
       const stack=[],branches=[];
       for(const step of sc.steps){
         const row=rows.get(step.stepId),guards=(step.guards || []).filter(guard=>byIndex.has(guard.conditionIndex));
-        row.hidden=Boolean(step.isBranchBinding && step.status!=='failed');
+        row.hidden=Boolean((step.isBranchBinding || step.isValueMerge) && step.status!=='failed');
         row.style.setProperty('--step-flow-depth',guards.length);
         let common=0;
         while(common<stack.length && common<guards.length && stack[common].condition===guards[common].conditionIndex && stack[common].arm===guards[common].arm)common++;
@@ -1920,8 +1920,23 @@
         branch.content.hidden=notTaken;branch.button.setAttribute('aria-expanded',String(!notTaken));
         if(notTaken)branch.button.appendChild(coverageText('span','flow-not-taken','not taken'));
       }
+      const prerequisites=step=>{
+        const result=[],seen=new Set();
+        const visit=index=>{
+          if(seen.has(index))return;seen.add(index);
+          const predecessor=byIndex.get(index);if(!predecessor)return;
+          if(predecessor.isValueMerge && predecessor.status!=='failed'){
+            for(const source of predecessor.dependsOn || []){
+              const candidate=byIndex.get(source);
+              if(candidate && candidate.status!=='not-taken' && !(candidate.status==='skipped' && candidate.skipReason?.startsWith('not taken:')))visit(source);
+            }
+          }else result.push(predecessor);
+        };
+        for(const index of step.dependsOn || [])visit(index);
+        return result;
+      };
       const highlight=step=>{
-        const related=new Set([step.index,...(step.dependsOn || [])]);
+        const related=new Set([step.index,...prerequisites(step).map(predecessor=>predecessor.index)]);
         for(const candidate of sc.steps)rows.get(candidate.stepId).classList.toggle('dependency-related',related.has(candidate.index));
       };
       const clear=()=>{for(const row of rows.values())row.classList.remove('dependency-related');};
@@ -1943,8 +1958,8 @@
         const panel=el('div','step-prerequisites');panel.hidden=true;panel.id='step-prerequisites-'+(++stepDetailSequence);
         axis.setAttribute('aria-controls',panel.id);
         panel.appendChild(coverageText('span','',step.dependsOn?.length ? 'After:' : 'No prerequisites'));
-        for(const index of step.dependsOn || []){
-          const predecessor=byIndex.get(index);if(!predecessor)continue;
+        for(const predecessor of prerequisites(step)){
+          const index=predecessor.index;
           const bindingGuard=predecessor.isBranchBinding ? predecessor.guards?.at(-1) : null;
           const label=bindingGuard ? readableBranch(byIndex.get(bindingGuard.conditionIndex),bindingGuard.arm)+' (matched value)' : predecessor.displayName;
           const link=coverageText('button','predecessor-link',label);link.type='button';link.dataset.from=String(index);link.dataset.to=String(step.index);

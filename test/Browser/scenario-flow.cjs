@@ -67,6 +67,20 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const zero=await page.locator('.gantt-track').first().evaluate(n=>{const a=n.getBoundingClientRect(),b=n.querySelector('.gantt-bar').getBoundingClientRect();return {right:b.right-a.right,width:b.width};});
  assert.ok(zero.width>=2 && zero.right<=.1,'Zero-duration marks remain visible inside the shared axis');
  assert.equal(await page.locator('.gantt-bar').count(),1,'Blocked steps do not look as though they executed');
+ const merged={...fixture,scenarioId:'merged-value',steps:[
+ step(0,'When booking Alice',0,100),
+ step(1,'«merge appointment»',100,0,[0],[],{isValueMerge:true}),
+ step(2,'Then Alice has an appointment',100,50,[1])]};
+ await page.goto(render('merged-value',merged));await page.locator('.card-head .tw').click();
+ assert.equal(await page.locator('[data-step="flow-1"]').isVisible(),false,'Successful value merge plumbing is hidden');
+ await page.locator('[data-step="flow-2"] .step-gantt').click();
+ assert.equal(await page.locator('[data-step="flow-2"] .predecessor-link').innerText(),'When booking Alice','Prerequisites bypass successful merge plumbing');
+ await page.locator('[data-step="flow-2"] .predecessor-link').click();
+ assert.ok(await page.locator('[data-step="flow-0"] .step-gantt').evaluate(n=>n===document.activeElement));
+ assert.equal(await page.locator('[data-step="flow-1"]').isVisible(),false);
+ const failedMerge=structuredClone(merged);failedMerge.scenarioId='failed-merge';failedMerge.steps[1].status='failed';failedMerge.steps[1].exception='No selected branch value';
+ await page.goto(render('failed-merge',failedMerge));await page.locator('.card-head .tw').click();
+ assert.ok(await page.locator('[data-step="flow-1"]').isVisible(),'Failed merge remains visible for diagnosis');
  const readable={...fixture,scenarioId:'readable-branches',steps:[
  step(0,'Given Alice is a priority case',0,100,[],[],{arms:['if','else']}),
  step(1,'When booking urgently',100,100,[0],[{conditionIndex:0,arm:0}]),
@@ -92,6 +106,8 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  assert.ok(await page.locator('[data-step="flow-4"]').isVisible(),'Failed binding plumbing remains visible for diagnosis');
  const priority=model.scenarios.find(s=>s.displayName==='priority patients get an urgent appointment');
  await page.goto(render('real-conditional',priority));await page.locator('.card-head').click();
+ assert.ok(priority.steps.some(step=>step.isValueMerge),'Real compiler merges carry report metadata');
+ for(const merge of priority.steps.filter(step=>step.isValueMerge && step.status!=='failed'))assert.equal(await page.locator('[data-step="'+merge.stepId+'"]').isVisible(),false,'Real conditional value merges do not add visible rows');
  const matrixBackgrounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const track=h.querySelector('.gantt-track').getBoundingClientRect(),cell=h.parentElement.querySelector('.matrix-cell,.matrix-summary-cell').getBoundingClientRect();return track.right<=cell.left+.1;}));
  assert.ok(matrixBackgrounds.every(Boolean),'Timing backgrounds stop before the resource matrix');
  await page.locator('.matrix-summary-header').click();

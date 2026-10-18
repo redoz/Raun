@@ -683,8 +683,9 @@ const renderFixture = (name, data) => {
       await graphPage.locator('.card-head').click();
       assert.ok(await graphPage.locator('.flow-branch').count()>=2,'Real if/switch source arms have branch regions');
       assert.ok(await graphPage.locator('.flow-toggle[aria-expanded="false"]').count()>0,'Untaken branches are folded');
-      const expected=scenario.steps.flatMap(step=>step.dependsOn.map(from=>[from,step.index]));
-      assert.deepEqual(await graphPage.locator('.predecessor-link').evaluateAll(links=>links.map(link=>[Number(link.dataset.from),Number(link.dataset.to)])),expected,'Grouping retains guard, ordering and merge dependencies');
+      const transparent=new Set(scenario.steps.filter(step=>step.isValueMerge && step.status!=='failed').map(step=>step.index));
+      const expected=scenario.steps.flatMap(step=>step.dependsOn.filter(from=>!transparent.has(from)).map(from=>[from,step.index]));
+      assert.deepEqual(await graphPage.locator('.predecessor-link').evaluateAll(links=>links.map(link=>[Number(link.dataset.from),Number(link.dataset.to)])),expected,'Grouping retains guard, ordering and real branch prerequisites without synthetic merge links');
     }
     const nested=structuredClone(parallel);
     nested.scenarioId='nested-dependencies';nested.displayName='nested dependencies';nested.resources=[];nested.links=[];

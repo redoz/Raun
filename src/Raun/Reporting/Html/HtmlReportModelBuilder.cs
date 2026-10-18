@@ -172,6 +172,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                     Label = r.Node.IsSetup ? "0" : labels[r.Node.Index],
                     IsLifecycle = r.Node.IsSetup || r.Node.IsTeardown,
                     IsBranchBinding = r.Node.IsSynthetic && r.Node.OperationName == "Case",
+                    IsValueMerge = r.Node.IsSynthetic && r.Node.OperationName is "Merge" or "Unchanged",
                     Phase = r.Node.Phase,
                     DisplayName = r.DisplayName,
                     TitleMessage = Message(r.TitleMessage),
