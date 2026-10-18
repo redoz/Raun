@@ -270,26 +270,60 @@ const renderFixture = (name, data) => {
       await Promise.all(cards.flatMap(card=>[card,card.previousElementSibling]).map(card=>card.scenarioAnimation?.finished.catch(()=>{})));
       return cards.map(card=>card.getBoundingClientRect().top-card.previousElementSibling.getBoundingClientRect().bottom);
     });
-    assert.ok(expandedGaps.length>0 && expandedGaps.every(gap=>gap>=8),'Adjacent expanded scenarios have space between their background boxes');
+    assert.ok(expandedGaps.length>0 && expandedGaps.every(gap=>Math.abs(gap-16)<1),'Adjacent expanded scenarios have space between their background boxes');
     const neighborGroup=page.locator('.group').filter({has:page.locator('.card + .card')}).first();
     const upper=neighborGroup.locator('.card').nth(0),lower=neighborGroup.locator('.card').nth(1);
-    const neighborGeometry=()=>neighborGroup.locator('.card').evaluateAll(cards=>cards.slice(0,2).map(card=>{const r=card.getBoundingClientRect();return {top:r.top,bottom:r.bottom};}));
-    const assertNeighborGap=async(hovered)=>{
-      const before=await neighborGeometry();
-      assert.ok(before[1].top-before[0].bottom>=8,'Expanded scenarios have a gap next to collapsed neighbors');
-      await hovered.hover();
-      assert.deepEqual(await neighborGeometry(),before,'Hovering a neighbor must not change the scenario layout');
+    const settleNeighbors=()=>neighborGroup.locator('.card').evaluateAll(async cards=>{
+      await Promise.all(cards.flatMap(card=>card.getAnimations({subtree:true})).map(animation=>animation.finished.catch(()=>{})));
+    });
+    const setNeighborStates=async(first,second)=>{
+      await neighborGroup.locator('.card').evaluateAll((cards,states)=>{
+        states.forEach((open,index)=>{if(cards[index].classList.contains('collapsed')===open)cards[index].querySelector('.card-head').click();});
+      },[first,second]);
+      await settleNeighbors();
     };
-    await lower.locator('.card-head').click();
-    await lower.evaluate(async card=>{await card.scenarioAnimation?.finished.catch(()=>{});});
-    await assertNeighborGap(lower);
-    await lower.locator('.card-head').click();
-    await upper.locator('.card-head').click();
-    await upper.evaluate(async card=>{await card.scenarioAnimation?.finished.catch(()=>{});});
-    await lower.evaluate(async card=>{await card.scenarioAnimation?.finished.catch(()=>{});});
-    await assertNeighborGap(upper);
-    await upper.locator('.card-head').click();
-    await upper.evaluate(async card=>{await card.scenarioAnimation?.finished.catch(()=>{});});
+    const neighborGeometry=()=>neighborGroup.locator('.card').evaluateAll(cards=>cards.slice(0,2).map(card=>{
+      const box=card.getBoundingClientRect(),head=card.querySelector('.card-head').getBoundingClientRect(),style=getComputedStyle(card);
+      const origin=card.parentElement.getBoundingClientRect().top;return {top:box.top-origin,bottom:box.bottom-origin,height:box.height,marginTop:parseFloat(style.marginTop),marginBottom:parseFloat(style.marginBottom),padding:style.padding,headTop:head.top-box.top,headHeight:head.height};
+    }));
+    for(const width of [1600,560]){
+      await page.setViewportSize({width,height:1100});
+      if(width===560)await upper.locator('.scenario-title').evaluate(title=>title.textContent='A wrapped scenario title that remains stable when the neighboring scenario is expanded or collapsed');
+      await setNeighborStates(false,false);
+      const collapsed=await neighborGeometry();
+      for(const [first,second,gap] of [[false,false,0],[true,false,8],[false,true,8],[true,true,16]]){
+        await setNeighborStates(first,second);const geometry=await neighborGeometry();
+        assert.ok(Math.abs(geometry[1].top-geometry[0].bottom-gap)<1,'Scenario margins add independently: '+JSON.stringify({width,first,second,gap,geometry}));
+        for(const [index,open] of [first,second].entries()){
+          assert.equal(geometry[index].marginTop,open?8:0);assert.equal(geometry[index].marginBottom,open?8:0);
+          if(!open)for(const property of ['height','padding','headTop','headHeight'])assert.equal(geometry[index][property],collapsed[index][property],'A collapsed neighbor keeps its own '+property);
+        }
+        const before=await neighborGeometry();await (first?lower:upper).hover();
+        assert.deepEqual(await neighborGeometry(),before,'Hover changes appearance without moving scenario geometry');
+        await (first?lower:upper).locator('.card-head').focus();
+        assert.deepEqual(await neighborGeometry(),before,'Focus does not change scenario spacing');
+      }
+      const edgeMargins=await neighborGroup.locator('.card').evaluateAll(cards=>[cards[0],cards.at(-1)].map(card=>{const style=getComputedStyle(card);return {open:!card.classList.contains('collapsed'),top:parseFloat(style.marginTop),bottom:parseFloat(style.marginBottom)};}));
+      for(const edge of edgeMargins){assert.equal(edge.top,edge.open?8:0);assert.equal(edge.bottom,edge.open?8:0);}
+    }
+    await page.setViewportSize({width:1600,height:1100});
+    await setNeighborStates(false,false);
+    const marginMotion=await lower.evaluate(async card=>{
+      const head=card.querySelector('.card-head'),measure=()=>{const s=getComputedStyle(card);return {top:parseFloat(s.marginTop),bottom:parseFloat(s.marginBottom),body:card.querySelector('.scenario-reveal').getBoundingClientRect().height};};
+      head.click();const opening=card.scenarioAnimation;opening.pause();opening.currentTime=0;const start=measure();
+      opening.currentTime=80;const middle=measure();
+      head.click();const closing=card.scenarioAnimation;closing.pause();closing.currentTime=0;const reversed=measure();
+      closing.play();await closing.finished;const end=measure();
+      return {start,middle,reversed,end,stale:card.classList.contains('is-animating') || Boolean(card.scenarioAnimation)};
+    });
+    assert.deepEqual(marginMotion.start,{top:0,bottom:0,body:0},'Opening starts at the current collapsed geometry');
+    assert.ok(marginMotion.middle.top>0 && marginMotion.middle.top<8 && marginMotion.middle.top===marginMotion.middle.bottom && marginMotion.middle.body>0,'Margins and body expand together');
+    for(const key of ['top','bottom','body'])assert.ok(Math.abs(marginMotion.middle[key]-marginMotion.reversed[key])<1,'Reversal keeps current '+key);
+    assert.deepEqual(marginMotion.end,{top:0,bottom:0,body:0});assert.equal(marginMotion.stale,false);
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await setNeighborStates(true,true);assert.equal((await neighborGeometry())[0].marginBottom,8);
+    assert.equal(await lower.evaluate(card=>card.getAnimations({subtree:true}).length),0,'Reduced motion applies spacing immediately');
+    await page.emulateMedia({reducedMotion:'no-preference'});
     const assertNoteAlignment=async()=>{
       const notes=await page.locator('.matrix-row>.step-notes').evaluateAll(nodes=>nodes.map(node=>{
         const note=node.querySelector('.step-note').getBoundingClientRect(),title=node.parentElement.querySelector('.step-head .dn').getBoundingClientRect();

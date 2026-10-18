@@ -1,6 +1,6 @@
 # Report Expansion Spacing Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Do not start implementation until the user has reviewed this saved plan.
+> **Execution:** Approved by the user. Plan committed first as bfbe921; implemented inline using superpowers:executing-plans, with one final independent review.
 
 **Goal:** Give expanded scenarios their own animated external spacing without changing neighboring rows.
 
@@ -56,12 +56,12 @@ transitionScenario(card,on) already animates .scenario-reveal. Keep that entry p
 
 **Interfaces:** Consumes real report fixtures and .card/.card-head/.scenario-reveal; produces geometry assertions against the contract rather than specific CSS selectors.
 
-- [ ] Replace the current “gap >= 8px” checks with all four state combinations: 0px, 8px, 8px, 16px, within 1px tolerance after settling.
-- [ ] Record collapsed neighbor height, computed padding and margins, and title bounds relative to its box; assert equality after its neighbor expands and after hover/focus.
-- [ ] Check first/last scenario margins and repeat at mobile width with a wrapped title.
-- [ ] Pause disclosure at 0ms, 80ms, and 160ms: external margins and body height must start at current values, move together, and settle exactly. Reverse midway and verify correct final state.
-- [ ] Repeat with reduced motion: no running disclosure animations; correct immediate state.
-- [ ] Run the matrix browser harness and confirm these checks expose the current sibling-driven behavior before implementation.
+- [x] Replace the current “gap >= 8px” checks with all four state combinations: 0px, 8px, 8px, 16px, within 1px tolerance after settling.
+- [x] Record collapsed neighbor height, computed padding and margins, and title bounds relative to its box; assert equality after its neighbor expands and after hover/focus.
+- [x] Check first/last scenario margins and repeat at mobile width with a wrapped title.
+- [x] Pause disclosure at 0ms, 80ms, and 160ms: external margins and body height must start at current values, move together, and settle exactly. Reverse midway and verify correct final state.
+- [x] Repeat with reduced motion: no running disclosure animations; correct immediate state.
+- [x] Run the matrix browser harness and confirm these checks expose the current sibling-driven behavior before implementation.
 
 ## Task 2: Give each scenario its own margin transition
 
@@ -69,24 +69,24 @@ transitionScenario(card,on) already animates .scenario-reveal. Keep that entry p
 
 **Interfaces:** Preserve transitionScenario(card,on), card.scenarioAnimation, aria-expanded, and the existing report DOM/control semantics.
 
-- [ ] Make the scenario list a column flex container with no list gap. Preserve group headings and registration order.
-- [ ] Replace sibling spacing rules with .card margins 0 and expanded .card margins 8px top/bottom. Remove floating separator pseudo-element rules.
-- [ ] Keep padding and the background/outline on the scenario box. Do not change collapsed row height or add internal spacing to compensate.
-- [ ] Animate both owned margins together with the existing reveal height, using the specified timing/easing and a coordinated completion/cancellation path. Retain current measured geometry on reversal; clear temporary styles on completion.
-- [ ] Preserve immediate reduced-motion behavior and unchanged geometry on hover/focus.
-- [ ] Run the Task 1 checks and the existing scenario-flow harness; fix causes without weakening branch, timing, dependency, or matrix assertions.
+- [x] Make the scenario list a column flex container with no list gap. Preserve group headings and registration order.
+- [x] Replace sibling spacing rules with .card margins 0 and expanded .card margins 8px top/bottom. Remove floating separator pseudo-element rules.
+- [x] Keep padding and the background/outline on the scenario box. Do not change collapsed row height or add internal spacing to compensate.
+- [x] Animate both owned margins together with the existing reveal height, using the specified timing/easing and a coordinated completion/cancellation path. Retain current measured geometry on reversal; clear temporary styles on completion.
+- [x] Preserve immediate reduced-motion behavior and unchanged geometry on hover/focus.
+- [x] Run the Task 1 checks and the existing scenario-flow harness; fix causes without weakening branch, timing, dependency, or matrix assertions.
 
 ## Task 3: Verify the complete interaction and refresh the preview
 
 **Files:** test/Browser/resource-matrix.cjs, test/Browser/scenario-flow.cjs; report template only if a regression needs correction.
 
-- [ ] Verify the lane overlay aligns with the scenario box, excluding margins, during and after expansion. Opening the popover must not change the report's geometry.
-- [ ] Run: node test/Browser/resource-matrix.cjs artifacts/latest-report/raun-report.html.
-- [ ] Run: node test/Browser/scenario-flow.cjs artifacts/latest-report/raun-report.html.
-- [ ] Inspect one desktop and one mobile reference containing collapsed/expanded neighbors, consecutive expanded scenarios, branches, notes, and expanded evidence.
-- [ ] Refresh the local report from the verified template and existing real-run payload; no .NET rerun is needed for this presentation-only change.
-- [ ] Run git diff --check. Confirm the implementation removes sibling exceptions and does not change internal row spacing.
-- [ ] Commit and push once verified. No release.
+- [x] Verify the lane overlay aligns with the scenario box, excluding margins, during and after expansion. Opening the popover must not change the report's geometry.
+- [x] Run: node test/Browser/resource-matrix.cjs artifacts/latest-report/raun-report.html.
+- [x] Run: node test/Browser/scenario-flow.cjs artifacts/latest-report/raun-report.html.
+- [x] Inspect one desktop and one mobile reference containing collapsed/expanded neighbors, consecutive expanded scenarios, branches, notes, and expanded evidence.
+- [x] Refresh the local report from the verified template and existing real-run payload; no .NET rerun is needed for this presentation-only change.
+- [x] Run git diff --check. Confirm the implementation removes sibling exceptions and does not change internal row spacing.
+- [x] Commit and push once verified. No release.
 
 ## Deferred work
 
@@ -94,4 +94,12 @@ Combining condition steps with If headings is a separate feature. Do not change 
 
 ## Status
 
-Planning only. The report implementation and preview have not been changed by this plan. No worker has been dispatched. Review this contract before starting Task 1.
+Implementation complete. The plan was committed before production changes. Exact gap assertions failed on the baseline, then passed after implementation.
+
+Verification: both Playwright harnesses passed; all 72 report JavaScript tests passed. Checks cover exact additive margins, unchanged collapsed neighbors, hover/focus, first/last margins, mobile wrapped titles, animation midpoints and reversal, reduced motion, and resource lane alignment. Desktop/mobile references were inspected.
+
+Final independent Astra High review: sound; no blocking or actionable correctness findings. Changed-line endings were normalized after review, then git diff --check passed. Neighbor-only movement of an already-open lane popover without source resizing is a pre-existing limitation, unchanged and deferred.
+
+Implementation rulings: the active report needed the existing group-body wrapper to establish flex ownership. The lightweight message-view harness also needed to load the real transitionStep helper in reduced-motion mode; broader verification exposed four stale ReferenceErrors from the earlier step-disclosure change. Existing assertions were retained.
+
+No runtime/model changes and no release.
