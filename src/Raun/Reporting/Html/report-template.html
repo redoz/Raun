@@ -583,8 +583,9 @@
   .step-lifecycle.status-passed:not(.open) .gantt-track{visibility:hidden}
   .step-lifecycle.status-passed:not(.open):not(.matrix-row)>.gantt-track{margin-block:-2px -3px}
   .gantt-joins{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden;z-index:-1}
-  .gantt-join-line,.gantt-join-tick{fill:none;stroke:var(--muted);stroke-width:1;opacity:.5}
+  .gantt-join-line,.gantt-join-marker{fill:none;stroke:var(--muted);stroke-width:1;opacity:.5}
   .gantt-join-line{stroke-dasharray:3 4}
+  .gantt-join-marker{opacity:.75;stroke-linecap:round;stroke-linejoin:round}
   .gantt-bar{position:absolute;inset-block:0;min-width:2px;background:var(--muted);opacity:.12;pointer-events:none}
   .status-failed .gantt-bar{background:var(--fail);opacity:.14}
   .dependency-related .gantt-bar{opacity:.22}
@@ -2174,10 +2175,17 @@
             const participants=[...sources,row],boxes=participants.map(participant=>participant.querySelector('.gantt-track').getBoundingClientRect());
             const segments=boxes.map(box=>'M '+x+' '+(box.top-origin.top)+' V '+(box.bottom-origin.top)).join(' ');
             join.group.appendChild(svgEl('path',{'class':'gantt-join-line',d:segments}));
+            const end=source=>Number.isFinite(source.offsetMs) && Number.isFinite(source.durationMs) ? source.offsetMs+source.durationMs : -Infinity;
+            const latest=Math.max(...join.sources.map(end));
+            const bounded=value=>Math.max(track.left-origin.left,Math.min(track.right-origin.left,value));
             for(const participant of participants){
               const head=participant.querySelector('.step-head').getBoundingClientRect(),y=(head.top+head.bottom)/2-origin.top;
-              const left=Math.max(track.left-origin.left,x-3),right=Math.min(track.right-origin.left,x+3);
-              join.group.appendChild(svgEl('path',{'class':'gantt-join-tick',d:'M '+left+' '+y+' H '+right}));
+              const source=byId.get(participant.dataset.step);
+              const kind=participant===row ? 'join' : latest!==-Infinity && end(source)===latest ? 'last' : 'finished';
+              const points=kind==='finished' ? [[x-2,y-2],[x+2,y+2],[x-2,y+2],[x+2,y-2]]
+                : kind==='last' ? [[x-6,y-3],[x-2,y],[x-6,y+3]] : [[x+2,y-3],[x+6,y],[x+2,y+3]];
+              const d=points.map(([px,py],index)=>(index===0 || kind==='finished' && index===2 ? 'M ' : 'L ')+bounded(px)+' '+py).join(' ');
+              join.group.appendChild(svgEl('path',{'class':'gantt-join-marker','data-source-step':source.stepId,'data-kind':kind,d}));
             }
           }
         };

@@ -242,14 +242,29 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
   const geometry=await join.evaluate((node,ids)=>{
     const line=node.querySelector('.gantt-join-line'),bounds=line.getBoundingClientRect(),row=document.querySelector('.step-entry[data-step="'+node.dataset.joinStep+'"]'),track=row.querySelector('.gantt-track').getBoundingClientRect(),bar=row.querySelector('.gantt-bar').getBoundingClientRect();
     const participants=ids.map(id=>document.querySelector('.step-entry[data-step="'+id+'"] .gantt-track').getBoundingClientRect());
-    return {x:bounds.left,start:bar.left,top:bounds.top,bottom:bounds.bottom,first:Math.min(...participants.map(box=>box.top)),last:track.bottom,right:track.right,dashed:getComputedStyle(line).strokeDasharray,ticks:node.querySelectorAll('.gantt-join-tick').length};
+    return {x:bounds.left,start:bar.left,top:bounds.top,bottom:bounds.bottom,first:Math.min(...participants.map(box=>box.top)),last:track.bottom,right:track.right,dashed:getComputedStyle(line).strokeDasharray,ticks:node.querySelectorAll('.gantt-join-marker').length};
   },userSteps.map(step=>step.stepId));
   assert.ok(Math.abs(geometry.x-geometry.start)<1 && geometry.top<=geometry.first+.5 && geometry.bottom>=geometry.last-.5,'The join guide spans all source rows through the importer at its start time: '+JSON.stringify(geometry));
   assert.ok(geometry.x<geometry.right && geometry.dashed!=='none' && geometry.ticks===4,'The guide stays in the timing area and marks the three sources plus join');
  };
- await assertJoinBounds();await page.screenshot({path:path.join(out,'bulk-join-dark.png'),fullPage:true});
+ const assertJoinMarkers=async expected=>{
+  const markers=await join.locator('.gantt-join-marker').evaluateAll(nodes=>nodes.map(node=>({step:node.dataset.sourceStep,kind:node.dataset.kind})));
+  assert.deepEqual(markers,expected,'Join markers distinguish completed dependencies, the last finishers, and the joining step');
+  const positions=await join.evaluate(node=>{
+   const x=node.querySelector('.gantt-join-line').getBoundingClientRect().left;
+   return Array.from(node.querySelectorAll('.gantt-join-marker'),marker=>{const box=marker.getBoundingClientRect();return {kind:marker.dataset.kind,left:box.left-x,right:box.right-x};});
+  });
+  for(const marker of positions)assert.ok(marker.kind==='finished' ? marker.left<0 && marker.right>0 : marker.kind==='last' ? marker.right<0 : marker.left>0,'Crosses straddle the line; last-finisher arrows precede it and joining arrows follow it');
+ };
+ const expectedMarkers=userSteps.map((step,index)=>({step:step.stepId,kind:index===2 ? 'last' : 'finished'})).concat({step:importer.stepId,kind:'join'});
+ await assertJoinBounds();await assertJoinMarkers(expectedMarkers);
+ await page.screenshot({path:path.join(out,'bulk-join-dark.png'),fullPage:true});
  await page.setViewportSize({width:390,height:1000});await assertJoinBounds();
  await page.setViewportSize({width:1200,height:1000});
+ const tied={...bulk,steps:bulk.steps.map(step=>step.stepId===userSteps[1].stepId ? {...step,durationMs:userSteps[2].offsetMs+userSteps[2].durationMs-step.offsetMs} : step)};
+ await page.goto(render('bulk-join-tied',tied)+'?theme=dark');await page.locator('.card-head').click();
+ await page.locator('.card').evaluate(async n=>{await n.scenarioAnimation?.finished;});
+ await assertJoinBounds();await assertJoinMarkers(expectedMarkers.map(marker=>marker.step===userSteps[1].stepId ? {...marker,kind:'last'} : marker));
  const unrelated=step(100,'Given an unrelated service is ready',0,50,[bulk.steps[0].index]);
  const withUnrelated={...bulk,steps:[...bulk.steps.slice(0,2),unrelated,...bulk.steps.slice(2)]};
  await page.goto(render('bulk-join-unrelated',withUnrelated)+'?theme=dark');await page.locator('.card-head').click();
