@@ -218,7 +218,13 @@
   .resource-hover-title{display:flex;align-items:baseline;gap:6px;white-space:nowrap;font-weight:600;font-size:13px}
   .resource-hover-type{max-width:50%;flex:none;overflow:hidden;text-overflow:ellipsis}
   .resource-hover-id{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font:12px var(--mono)}
-  .resource-hover pre{max-height:200px;overflow:auto;margin:8px 0;padding:8px;background:var(--surface-2);font:12px/1.45 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+  .resource-hover pre{max-height:200px;overflow:auto;margin:8px 0;padding:8px;background:var(--surface-2);font:12px/1.65 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--border);border-radius:3px;tab-size:2}
+  .resource-json-token{appearance:none;border:0;border-radius:2px;padding:0;margin:0;background:none;color:inherit;font:inherit;line-height:inherit;text-align:left;white-space:inherit;overflow-wrap:inherit;cursor:copy;vertical-align:baseline}
+  .resource-json-key{color:color-mix(in srgb,var(--ph-given) 75%,var(--ink))}.resource-json-string{color:color-mix(in srgb,var(--ph-then) 75%,var(--ink))}.resource-json-number,.resource-json-boolean{color:color-mix(in srgb,var(--ph-when) 75%,var(--ink))}.resource-json-null,.resource-json-punctuation{color:var(--muted)}
+  .resource-json-token:hover{background:var(--surface-hover);box-shadow:0 1px 0 currentColor}.resource-json-token:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+  .resource-hover [data-copy-state="copied"]{background:var(--pass-bg);color:var(--pass-text)}.resource-hover [data-copy-state="failed"]{background:var(--fail-bg);color:var(--fail-text)}
+  .resource-hover-actions{align-items:center}.resource-hover-actions .resource-copy-object{display:inline-flex;align-items:center;justify-content:center;padding:5px;color:var(--muted);margin-left:auto}.resource-copy-object svg{fill:none;stroke:currentColor;stroke-width:1.25}
+  .resource-copy-status{width:66px;flex:none;color:var(--muted);font-size:11px}
   .resource-hover-event{display:block;margin-top:6px;color:var(--muted)}
   .resource-hover-empty,.resource-hover-truncated{display:block;margin:8px 0;color:var(--muted)}
   .resource-hover-actions{display:flex;gap:6px;margin-top:8px}
@@ -1767,14 +1773,14 @@
       document.body.appendChild(input);
       try{input.select();if(!document.execCommand?.("copy"))throw new Error("Clipboard unavailable");}finally{input.remove();}
     }
-    function formatResourceSnapshot(value){
+    function formatResourceSnapshot(value,keepTrackingIds=false){
       if(value===null)return null;
       try{JSON.parse(value);}catch{return value;}
       // Remove unused serializer tracking IDs from the view, keeping exact numeric tokens and raw copying.
       // Shared/cyclic graphs retain their IDs so $ref still has an identifiable target.
       const tokens=value.match(/"(?:\\.|[^"\\])*"|[^\s]/g) || [];
       const isKey=(token,index,name)=>token[0]==='"' && tokens[index+1]===":" && JSON.parse(token)===name;
-      if(!tokens.some((token,index)=>isKey(token,index,"$ref"))){
+      if(!keepTrackingIds && !tokens.some((token,index)=>isKey(token,index,"$ref"))){
         const visible=[];
         for(let index=0;index<tokens.length;index++){
           if(isKey(tokens[index],index,"$id") && tokens[index+2]?.[0]==='"'){
@@ -1808,6 +1814,39 @@
       }
       return output;
     }
+    function resourceSnapshotHtml(value){
+      try{JSON.parse(value);}catch{return esc(value);}
+      // Parse token boundaries, not numeric values: copying must never round captured numbers.
+      const tokens=value.match(/"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\]:,]/g);
+      let index=0;
+      const read=()=>{
+        const start=index,token=tokens[index++],items=[];
+        if(token==="{" || token==="["){
+          while(tokens[index]!=="}" && tokens[index]!=="]"){
+            const key=token==="{" ? tokens[index++] : null;
+            if(key!==null)index++;
+            items.push({key,value:read()});
+            if(tokens[index]===",")index++;
+          }
+          index++;
+        }
+        return {token,items,raw:tokens.slice(start,index).join("")};
+      };
+      const root=read(),hideIds=!tokens.some((token,i)=>token[0]==='"' && tokens[i+1]===":" && JSON.parse(token)==="$ref");
+      const button=(text,value,kind,label)=>'<button type="button" class="resource-json-token resource-json-'+kind+'" data-resource-copy="token" data-copy-text="'+esc(value)+'" title="'+esc(label)+'" aria-label="'+esc(label)+'">'+esc(text)+'</button>';
+      const render=(node,depth)=>{
+        const composite=node.token==="{" || node.token==="[";
+        const kind=composite ? "punctuation" : node.token[0]==='"' ? "string" : node.token==="null" ? "null" : /^(true|false)$/.test(node.token) ? "boolean" : "number";
+        const copy=composite ? formatResourceSnapshot(node.raw,true) : kind==="string" ? JSON.parse(node.token) : node.token;
+        const opening=button(node.token,copy,kind,composite ? "Copy "+(node.token==="{" ? "object" : "array")+" value" : "Copy value: "+copy);
+        if(!composite)return opening;
+        const items=node.items.filter(item=>!(hideIds && item.key!==null && JSON.parse(item.key)==="$id" && item.value.token[0]==='"'));
+        const closing=node.token==="{" ? "}" : "]";
+        if(!items.length)return opening+closing;
+        return opening+"\n"+items.map(item=>"  ".repeat(depth+1)+(item.key===null ? "" : button(item.key,JSON.parse(item.key),"key","Copy property name: "+JSON.parse(item.key))+": ")+render(item.value,depth+1)).join(",\n")+"\n"+"  ".repeat(depth)+closing;
+      };
+      return render(root,0);
+    }
     function bindResourceHover(root,sc){
       const show=ev=>{
         if(bindResourceHover.active && ev.target.closest?.(".resource-hover")===bindResourceHover.active.card){clearTimeout(bindResourceHover.active.timer);return;}
@@ -1819,19 +1858,26 @@
         closeResourceHover();
         const resource=matches[0],captured=chip.getAttribute("data-resource-data");
         const truncated=chip.getAttribute("data-resource-truncated")==="true";
-        const display=formatResourceSnapshot(captured);
+        const display=captured===null ? null : resourceSnapshotHtml(captured);
         const card=el("span","resource-hover"),id="resource-hover-"+(++messageInspectorSequence);
         card.id=id;card.setAttribute("role","dialog");card.setAttribute("aria-label","Resource details");card.setAttribute("popover","manual");
         card.innerHTML='<span class="resource-hover-title" title="'+esc(resource.type+' · '+resource.key)+'"><span class="resource-hover-type">'+esc(resource.type)+'</span><span class="report-meta-dot"> · </span><span class="resource-hover-id">'+esc(resource.key)+'</span></span>'+
           (chip.dataset.resourceEvent ? '<span class="resource-hover-event">'+esc(chip.dataset.resourceEvent)+'</span>' : '')+
-          (captured===null ? '<span class="resource-hover-empty">No captured data</span>' : '<pre>'+esc(display)+'</pre>')+
+          (captured===null ? '<span class="resource-hover-empty">No captured data</span>' : '<pre>'+display+'</pre>')+
           (truncated ? '<span class="resource-hover-truncated">Captured data is truncated</span>' : '')+
-          '<span class="resource-hover-actions"><button type="button" data-resource-copy="id">Copy ID</button><button type="button" data-resource-copy="data">Copy data</button></span>';
+          '<span class="resource-hover-actions"><button type="button" data-resource-copy="id">Copy ID</button><span class="resource-copy-status" role="status" aria-live="polite"></span><button type="button" class="resource-copy-object" data-resource-copy="data" aria-label="Copy entire object" title="Copy entire object"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11H2V2h8v1"/></svg></button></span>';
         const copyId=card.querySelector('[data-resource-copy="id"]'),copyData=card.querySelector('[data-resource-copy="data"]');
         copyData.disabled=captured===null;
-        for(const [button,value] of [[copyId,String(resource.key)],[copyData,captured]])button.addEventListener("click",async event=>{
-          event.stopPropagation();if(value===null)return;
-          try{await copyResourceText(value);button.textContent="Copied";}catch{button.textContent="Copy failed";}
+        for(const button of card.querySelectorAll('[data-resource-copy]'))button.addEventListener("click",async event=>{
+          event.stopPropagation();
+          const value=button===copyId ? String(resource.key) : button===copyData ? formatResourceSnapshot(captured,true) : button.getAttribute("data-copy-text");
+          if(value===null)return;
+          clearTimeout(button.copyFeedbackTimer);
+          if(button.copyFeedbackTitle===undefined)button.copyFeedbackTitle=button.getAttribute("title");
+          const title=button.copyFeedbackTitle,status=card.querySelector(".resource-copy-status");
+          try{await copyResourceText(value);button.setAttribute("data-copy-state","copied");button.setAttribute("title","Copied");status.textContent="Copied";}
+          catch{button.setAttribute("data-copy-state","failed");button.setAttribute("title","Copy failed");status.textContent="Copy failed";}
+          button.copyFeedbackTimer=setTimeout(()=>{button.removeAttribute("data-copy-state");if(title===null)button.removeAttribute("title");else button.setAttribute("title",title);status.textContent="";},1600);
         });
         card.addEventListener("click",event=>event.stopPropagation());
         chip.parentElement.appendChild(card);card.showPopover();chip.setAttribute("aria-describedby",id);

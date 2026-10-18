@@ -297,7 +297,7 @@ test('identity-only resource focus never borrows data from another reference',()
 });
 
 
-test('each resource reference displays its own raw snapshot and copies it without pretty-print changes',async()=>{
+test('each resource reference displays its own snapshot and copies complete formatted JSON',async()=>{
  const copied=[];scope.navigator={clipboard:{writeText:async value=>copied.push(value)}};
  const named={...resource,type:'Appointment',qualifiedType:'Ns.AppointmentDto'};
  const before='{"$id":"1","state":"before"}',after='{"$id":"1","state":"after"}';
@@ -312,7 +312,7 @@ test('each resource reference displays its own raw snapshot and copies it withou
  assert.equal(JSON.parse(nodeText(card.querySelector('pre'))).$id,undefined);
  assert.equal(JSON.parse(nodeText(card.querySelector('pre'))).state,'before');
  card.querySelector('[data-resource-copy="data"]').dispatch('click');await new Promise(setImmediate);
- assert.deepEqual(copied,[before]);
+ assert.deepEqual(copied,[scope.formatResourceSnapshot(before,true)]);
  references[1].dispatch('focusin');card=p.querySelector('.resource-hover');
  assert.equal(JSON.parse(nodeText(card.querySelector('pre'))).state,'after');
  dispatchDocument('keydown',references[1],'Escape');
@@ -448,4 +448,32 @@ test('evidence glyphs only exist for available categories and errors open as log
  assert.equal(entries[1].querySelector('.step-logs-toggle'),null);assert.ok(entries[1].querySelector('.step-attachments-toggle'));
  assert.equal(entries[2].classList.contains('open'),true);assert.equal(entries[2].querySelector('.step-logs-toggle').getAttribute('aria-expanded'),'true');
  assert.match(nodeText(entries[2].querySelector('.step-body')),/Failure details/);
+});
+
+
+test('resource JSON tokens copy names, raw strings, precise values and complete subtrees',async()=>{
+ const copied=[];scope.navigator={clipboard:{writeText:async value=>copied.push(value)}};
+ const raw=String.raw`{"$id":"1","name":"Alice \"A\" <script>","count":9007199254740993,"active":true,"nothing":null,"nested":{"$id":"2","items":["first",0.10000000000000000001]}}`;
+ const p=scope.buildScenarioDrill({...scenario,steps:[step('tokens',{parts:[{text:'resource',resourceId:resource.id,data:raw}]})]});
+ const chip=p.querySelector('[data-message-resource]');chip.dispatch('focusin');
+ const card=p.querySelector('.resource-hover');
+ const keys=card.querySelectorAll('.resource-json-key');
+ assert.deepEqual(keys.map(nodeText),['"name"','"count"','"active"','"nothing"','"nested"','"items"']);
+ assert.equal(card.querySelector('script'),null);
+ const tokens=card.querySelectorAll('[data-resource-copy="token"]');
+ for(const text of ['name','Alice "A" <script>','9007199254740993','true','null']){
+  const token=tokens.find(token=>token.getAttribute('data-copy-text')===text);assert.ok(token,text);
+  assert.ok(token.getAttribute('aria-label'));assert.ok(token.getAttribute('title'));
+  token.dispatch('click');await new Promise(setImmediate);assert.equal(copied.at(-1),text);
+  assert.equal(token.getAttribute('data-copy-state'),'copied');
+ }
+ const nested=tokens.find(token=>{try{return JSON.parse(token.getAttribute('data-copy-text')).items;}catch{return false;}});
+ assert.ok(nested);nested.dispatch('click');await new Promise(setImmediate);
+ assert.match(copied.at(-1),/9007199254740993|0\.10000000000000000001/);
+ assert.equal(JSON.parse(copied.at(-1)).$id,'2');
+ card.querySelector('[data-resource-copy="data"]').dispatch('click');await new Promise(setImmediate);
+ assert.equal(copied.at(-1),scope.formatResourceSnapshot(raw,true));
+ assert.equal(JSON.parse(copied.at(-1)).$id,'1');
+ assert.equal(chip.getAttribute('aria-pressed'),'false');
+ dispatchDocument('keydown',chip,'Escape');
 });
