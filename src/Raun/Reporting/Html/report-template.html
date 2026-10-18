@@ -540,9 +540,10 @@
     .coverage-findings>.coverage-splitter{display:none}.coverage-offenders{border-bottom:1px solid var(--border)}
     .coverage-toolbar{margin-left:0}.coverage-stage{padding:6px 12px}
   }
-  .flow-branch{--flow-status-inset:25px;position:relative;min-width:0;border-bottom:1px solid var(--border)}
+  .flow-branch,.flow-condition{--flow-status-inset:25px}
+  .flow-branch{position:relative;min-width:0;border-bottom:1px solid var(--border)}
   .flow-branch.flow-arm-continues{border-image:linear-gradient(to right,transparent calc(var(--flow-status-inset) + (var(--flow-depth) + 1)*12px),var(--border) 0) 1}
-  @media(max-width:650px){.flow-branch{--flow-status-inset:22px}}
+  @media(max-width:650px){.flow-branch,.flow-condition{--flow-status-inset:22px}}
   .flow-content>:nth-last-child(1 of :not([hidden])){border-bottom:0}
   .flow-heading{padding:9px 12px 4px calc(4px + var(--flow-depth)*12px);color:var(--muted)}
   .flow-toggle{display:flex;align-items:center;gap:7px;flex-wrap:wrap;border:0;padding:3px 0;background:none;color:inherit;font:12px/1.4 var(--sans);cursor:pointer;text-align:left}
@@ -553,8 +554,14 @@
   .step-entry[hidden],.flow-content[hidden],.step-prerequisites[hidden]{display:none!important}
   .flow-content .step-entry{--dependency-gutter:calc(8px + var(--step-flow-depth,1)*12px);border-image:linear-gradient(to right,transparent calc(var(--flow-status-inset) + var(--step-flow-depth,1)*12px),var(--border) 0) 1}
   .flow-content .step-head>.scenario-status{margin-left:calc(var(--step-flow-depth,1)*12px)}
-  .flow-content .step-head>.step-expander,.flow-content .step-head>.lifecycle-toggle{translate:calc(var(--step-flow-depth,1)*12px) 0}
+  .flow-content .step-head>.step-expander,.flow-content .step-head>.lifecycle-toggle,.flow-content .step-head>.flow-condition-toggle{translate:calc(var(--step-flow-depth,1)*12px) 0}
   .flow-content .step-entry>.step-body{margin-left:calc(var(--step-body-inset,0px) + var(--step-flow-depth,1)*12px)}
+  .flow-integrated:has(>.flow-content[hidden]){display:none}
+  .step-entry.flow-condition{border-image:linear-gradient(to right,transparent calc(var(--flow-status-inset) + (var(--step-flow-depth,0) + 1)*12px),var(--border) 0) 1}
+  .step-entry.flow-condition .flow-condition-toggle[aria-expanded="false"] .stw{transform:rotate(-90deg)}
+  .step-entry.flow-condition .flow-condition-toggle[aria-expanded="true"] .stw{transform:none}
+  .flow-condition-title[role="button"]{cursor:pointer}
+  .flow-condition-title:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
   .step-head{position:relative;isolation:isolate}
   .gantt-track{position:relative;grid-column:1/-1;grid-row:1/3;align-self:stretch;min-height:0;z-index:-1;pointer-events:none;overflow:hidden}
   .matrix-row>.gantt-track{grid-column:1}
@@ -1341,7 +1348,7 @@
       const style=body && getComputedStyle(body),top=visible ? style.marginTop : '0px',bottom=visible ? style.marginBottom : '0px';
       entry.stepAnimation?.cancel();entry.stepAnimation=null;
       entry.classList.toggle('open',on);entry.classList.remove('step-animating');
-      entry.querySelector('.step-expander,.lifecycle-toggle')?.setAttribute('aria-expanded',String(on));
+      entry.querySelector('.step-expander,.lifecycle-toggle,.flow-condition-title')?.setAttribute('aria-expanded',String(on));
       if(!body)return;
       body.inert=!on;
       if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
@@ -1685,7 +1692,7 @@
         const entry = drill.querySelector('.step-entry[data-step="' + stepId + '"]');
         if(entry)entry.hidden=false;
         if (entry && (entry.classList.contains("has-body") || entry.querySelector(".lifecycle-toggle")))transitionStep(entry,true);
-        if(entry)for(const branch of drill.querySelectorAll('.flow-branch'))if(branch.querySelector('.flow-content').contains(entry)){branch.querySelector('.flow-content').hidden=false;branch.querySelector('.flow-toggle').setAttribute('aria-expanded','true');}
+        if(entry)for(const branch of drill.querySelectorAll('.flow-branch'))if(branch.querySelector('.flow-content').contains(entry)){branch.querySelector('.flow-content').hidden=false;branch.flowToggle.setAttribute('aria-expanded','true');}
         if (entry && scroll) entry.scrollIntoView({ block: "nearest" });
         return true;
       }
@@ -1920,6 +1927,24 @@
         return messageHtml({parts:[part]},sc);
       }).join("");
     }
+    function ifTitleMessage(step){
+      const message=step.titleMessage || {parts:[{text:step.displayName || ""}]};
+      const phase=String(step.phase || ""),original=message.parts || [{text:message.text || step.displayName || ""}];
+      if(original.find(part=>part.resourceId || String(part.text || "").trim())?.resourceId){
+        const parts=[{text:'If '},...original];return {text:parts.map(part=>part.text || '').join(''),parts};
+      }
+      let prefixed=false;
+      const parts=original.map(part=>{
+        if(prefixed || part.resourceId || !String(part.text || "").trim())return part;
+        prefixed=true;
+        const text=String(part.text),trimmed=text.trimStart(),whitespace=text.slice(0,text.length-trimmed.length);
+        const matches=phase && trimmed.slice(0,phase.length).toLowerCase()===phase.toLowerCase() && (!trimmed[phase.length] || /\s/.test(trimmed[phase.length]));
+        const title=matches ? 'If'+trimmed.slice(phase.length) : /^If(?=\s|$)/i.test(trimmed) ? trimmed : 'If '+trimmed;
+        return {...part,text:whitespace+title};
+      });
+      if(!prefixed)parts.unshift({text:'If '});
+      return {text:parts.map(part=>part.text || '').join(''),parts};
+    }
     // Only simplify unambiguous declaration patterns. Keep complex patterns intact.
     function readableBranch(condition,arm){
       const source=condition?.arms?.[arm] || '';
@@ -1942,6 +1967,13 @@
           Number.isFinite(step.offsetMs) && Number.isFinite(step.durationMs) ? Math.max(0,step.offsetMs)+Math.max(0,step.durationMs) : 0));
       const chevron='<span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span>';
       const showTiming=sc.steps.filter(step=>!step.isLifecycle && !((step.isBranchBinding || step.isValueMerge) && step.status!=='failed')).length>1;
+      const conditionTitles=new Map(),integratedConditions=new Set();
+      for(const step of sc.steps)if(step.arms?.some(arm=>arm==='if' || arm.startsWith('if '))){
+        const message=ifTitleMessage(step),row=rows.get(step.stepId),title=row.querySelector('.dn');
+        const html=stepTitleHtml({...step,phase:'',titleMessage:message,displayName:message.text},sc);
+        title.innerHTML=['skipped','not-taken'].includes(step.status) ? '<s>'+html+'</s>' : html;
+        conditionTitles.set(step.index,message.text);
+      }
       const stack=[],branches=[];
       for(const step of sc.steps){
         const row=rows.get(step.stepId),guards=(step.guards || []).filter(guard=>byIndex.has(guard.conditionIndex));
@@ -1959,9 +1991,25 @@
           button.innerHTML=chevron;
           button.appendChild(document.createTextNode(readableBranch(condition,guard.arm)));
           button.title=(condition.arms?.[guard.arm] || 'No matching arm')+' / '+condition.displayName;
-          heading.appendChild(button);section.append(heading,content);
+          const integrated=conditionTitles.has(condition.index) && (condition.arms?.[guard.arm]==='if' || condition.arms?.[guard.arm]?.startsWith('if ')) && !integratedConditions.has(condition.index);
+          if(integrated){
+            integratedConditions.add(condition.index);section.classList.add('flow-integrated');
+            const conditionRow=rows.get(condition.stepId),head=conditionRow.querySelector('.step-head'),title=head.querySelector('.dn');
+            conditionRow.classList.add('flow-condition');
+            button.classList.add('flow-condition-toggle');button.innerHTML=chevron;
+            button.setAttribute('aria-label','Toggle branch: '+conditionTitles.get(condition.index));
+            head.firstElementChild.replaceWith(button);
+            if(conditionRow.classList.contains('has-body')){
+              title.classList.add('flow-condition-title');title.tabIndex=0;title.setAttribute('role','button');
+              title.setAttribute('aria-label','Toggle details for '+conditionTitles.get(condition.index));
+              title.setAttribute('aria-expanded',String(conditionRow.classList.contains('open')));
+              title.setAttribute('aria-controls',conditionRow.querySelector('.step-body').id);
+            }
+            section.appendChild(content);
+          }else{heading.appendChild(button);section.append(heading,content);}
+          section.flowToggle=button;
           (stack.at(-1)?.content || list).appendChild(section);
-          const entry={condition:guard.conditionIndex,arm:guard.arm,section,button,content};
+          const entry={condition:guard.conditionIndex,arm:guard.arm,section,button,content,integrated};
           stack.push(entry);branches.push(entry);
           button.addEventListener('click',()=>{content.hidden=!content.hidden;button.setAttribute('aria-expanded',String(!content.hidden));});
         }
@@ -1974,7 +2022,7 @@
         const members=Array.from(branch.content.querySelectorAll('.step-entry'),row=>byId.get(row.dataset.step));
         const notTaken=members.length>0 && members.every(step=>step.status==='not-taken' || step.status==='skipped' && step.skipReason?.startsWith('not taken:'));
         branch.content.hidden=notTaken;branch.button.setAttribute('aria-expanded',String(!notTaken));
-        if(notTaken)branch.button.appendChild(coverageText('span','flow-not-taken','not taken'));
+        if(notTaken)(branch.integrated ? rows.get(byIndex.get(branch.condition).stepId).querySelector('.dn') : branch.button).appendChild(coverageText('span','flow-not-taken','not taken'));
       }
       const prerequisites=step=>{
         const result=[],seen=new Set();
@@ -2017,7 +2065,7 @@
         for(const predecessor of prerequisites(step)){
           const index=predecessor.index;
           const bindingGuard=predecessor.isBranchBinding ? predecessor.guards?.at(-1) : null;
-          const label=bindingGuard ? readableBranch(byIndex.get(bindingGuard.conditionIndex),bindingGuard.arm)+' (matched value)' : predecessor.displayName;
+          const label=bindingGuard ? readableBranch(byIndex.get(bindingGuard.conditionIndex),bindingGuard.arm)+' (matched value)' : conditionTitles.get(predecessor.index) || predecessor.displayName;
           const link=coverageText('button','predecessor-link',label);link.type='button';link.dataset.from=String(index);link.dataset.to=String(step.index);
           const kinds=step.dependencies?.filter(edge=>edge.index===index).map(edge=>edge.kind) || ['dependency'];
           link.title=kinds.join(', ');
@@ -2071,6 +2119,10 @@
         const control=ev.target.closest("button,a[href],input,select,textarea,summary");
         if(control && !control.classList.contains("step-expander") && !control.classList.contains("lifecycle-toggle"))return;
         transitionStep(head.parentElement,!head.parentElement.classList.contains("open"));
+      });
+      p.addEventListener('keydown',event=>{
+        if(!event.target.matches?.('.flow-condition-title') || !['Enter',' '].includes(event.key))return;
+        event.preventDefault();event.target.click();
       });
       return p;
     }

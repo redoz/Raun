@@ -28,7 +28,7 @@ async function assertBranchIndentation(page){
  const baseChevron=positions.find(position=>position.depth===0 && position.chevronLeft!==null);
  const headings=await page.locator('.flow-branch').evaluateAll(branches=>branches.flatMap(branch=>{
   const toggle=branch.querySelector(':scope > .flow-heading .flow-toggle');
-  return toggle.getBoundingClientRect().height ? [{depth:Number(branch.style.getPropertyValue('--flow-depth')),left:toggle.getBoundingClientRect().left}] : [];
+  return toggle?.getBoundingClientRect().height ? [{depth:Number(branch.style.getPropertyValue('--flow-depth')),left:toggle.getBoundingClientRect().left}] : [];
  }));
  for(const heading of headings)assert.ok(Math.abs(heading.left-base.controlLeft-heading.depth*12)<1,'Branch heading stays at its parent indentation level');
  for(const position of positions){
@@ -58,7 +58,7 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const book=page.locator('[data-step="flow-7"]');await book.locator('.step-gantt').click();
  assert.ok(await book.getByRole('button',{name:'Given slot 01 is available',exact:true}).isVisible(),'Dependencies are named on demand');
  assert.equal(await book.locator('.step-body:visible').count(),0,'Timing disclosure does not open logs');
- await outer.locator(':scope > .flow-heading button').click();await book.getByRole('button',{name:'When approving Jane',exact:true}).click();
+ await page.locator('[data-step="flow-1"] .flow-condition-toggle').click();await book.getByRole('button',{name:'When approving Jane',exact:true}).click();
  assert.ok(await page.locator('[data-step="flow-4"]').isVisible(),'Dependency navigation reveals collapsed ancestors');
  assert.equal(await page.locator('.step-dependency-pixels').count(),0);
  await page.screenshot({path:path.join(out,'nested.png'),fullPage:true});
@@ -115,7 +115,7 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await page.goto(render('failed-merge',failedMerge));await page.locator('.card-head .tw').click();
  assert.ok(await page.locator('[data-step="flow-1"]').isVisible(),'Failed merge remains visible for diagnosis');
  const readable={...fixture,scenarioId:'readable-branches',steps:[
- step(0,'Given Alice is a priority case',0,100,[],[],{arms:['if','else']}),
+ step(0,'Given Alice is a priority case',0,100,[],[],{arms:['if','else'],logs:['Evaluated the priority condition']}),
  step(1,'When booking urgently',100,100,[0],[{conditionIndex:0,arm:0}]),
  step(2,'When booking normally',0,0,[0],[{conditionIndex:0,arm:1}],{status:'skipped',skipReason:'not taken: else'}),
  step(3,'When trying to book',200,100,[],[],{arms:['case Waitlisted waitlisted','case not null','default']}),
@@ -124,7 +124,19 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  step(6,'Then a value was returned',0,0,[3],[{conditionIndex:3,arm:1}],{status:'skipped',skipReason:'not taken: case not null'}),
  step(7,'Then nothing matched',0,0,[3],[{conditionIndex:3,arm:2}],{status:'skipped',skipReason:'not taken: default'})]};
  await page.goto(render('readable-branches',readable));if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();await page.locator('.card').evaluate(async n=>{if(n.scenarioAnimation)await n.scenarioAnimation.finished;});
- assert.equal(await branchText(page.locator('.flow-toggle').first()),'If Alice is a priority case','Boolean branch uses the actual readable condition');
+ const conditionRow=page.locator('[data-step="flow-0"]'),conditionTitle=conditionRow.locator('.dn');
+ assert.equal(await conditionTitle.innerText(),'If Alice is a priority case','The condition step itself supplies the If title');
+ assert.equal(await page.locator('.flow-heading').filter({hasText:'If Alice is a priority case'}).count(),0,'No duplicate If heading');
+ assert.equal(await conditionRow.locator('.step-gantt').count(),1,'The If row retains timing');
+ await conditionTitle.focus();await page.keyboard.press('Enter');await conditionRow.evaluate(async row=>{await row.stepAnimation?.finished;});
+ assert.ok(await conditionRow.locator('.step-body').isVisible(),'Condition title opens evidence by keyboard');
+ await conditionRow.locator('.flow-condition-toggle').click();
+ assert.equal(await page.locator('[data-step="flow-1"]').isVisible(),false,'The condition chevron folds its branch');
+ assert.ok(await conditionRow.locator('.step-body').isVisible(),'Branch folding leaves condition evidence open');
+ await conditionRow.locator('.flow-condition-toggle').click();
+ assert.ok(await page.locator('[data-step="flow-1"]').isVisible(),'The condition chevron reveals its children');
+ assert.deepEqual(await page.locator('.step-entry').evaluateAll(rows=>rows.map(row=>row.dataset.step)),readable.steps.map(step=>step.stepId),'Folding and evidence preserve registration order');
+ assert.equal(await page.locator('#model').evaluate(node=>JSON.parse(node.textContent).scenarios[0].steps[0].displayName),'Given Alice is a priority case','Original test names remain unchanged');
  assert.equal(await branchText(page.locator('.flow-branch[data-condition="0"][data-arm="1"] > .flow-heading button')),'Otherwise');
  const matched=page.locator('.flow-branch[data-condition="3"][data-arm="0"] > .flow-heading button');
  assert.equal(await branchText(matched),'Waitlisted','Simple outcome labels omit C# case and the binding variable');
@@ -134,12 +146,36 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const bindingLink=page.locator('[data-step="flow-5"] .predecessor-link');assert.equal(await bindingLink.innerText(),'Waitlisted (matched value)');await bindingLink.click();
  assert.ok(await page.locator('[data-step="flow-4"]').isVisible(),'Explicit prerequisite navigation can reveal binding evidence');
  assert.equal(await branchText(page.locator('.flow-branch[data-condition="3"][data-arm="1"] > .flow-heading button')),'not null','Negated patterns must not be mistaken for a type and variable');
+ const untaken=structuredClone(readable);untaken.scenarioId='false-if';untaken.steps[1].status='skipped';untaken.steps[1].skipReason='not taken: if';untaken.steps[2].status='passed';untaken.steps[2].skipReason=null;
+ await page.goto(render('false-if',untaken));await page.locator('.card-head').click();
+ const falseCondition=page.locator('[data-step="flow-0"]');
+ assert.ok(await falseCondition.isVisible(),'A false condition remains visible with its own result');
+ assert.equal(await falseCondition.locator('.flow-condition-toggle').getAttribute('aria-expanded'),'false');
+ assert.equal(await page.locator('[data-step="flow-1"]').isVisible(),false);
+ assert.ok(await page.locator('[data-step="flow-2"]').isVisible(),'Otherwise remains independently visible');
+ await falseCondition.locator('.flow-condition-toggle').click();assert.ok(await page.locator('[data-step="flow-1"]').isVisible(),'Untaken true-arm evidence remains inspectable');
+ const nestedIf={...fixture,scenarioId:'nested-if',steps:[
+ step(0,'Given the patient is eligible',0,10,[],[],{arms:['if','else']}),
+ step(1,'Eventually the slot is ready',10,10,[0],[{conditionIndex:0,arm:0}],{phase:'Eventually',arms:['if','else']}),
+ step(2,'When booking',20,10,[1],[{conditionIndex:0,arm:0},{conditionIndex:1,arm:0}]),
+ step(3,'Then the slot is unavailable',0,0,[1],[{conditionIndex:0,arm:0},{conditionIndex:1,arm:1}],{status:'skipped',skipReason:'not taken: else'}),
+ step(4,'Then the patient is ineligible',0,0,[0],[{conditionIndex:0,arm:1}],{status:'skipped',skipReason:'not taken: else'})]};
+ await page.goto(render('nested-if',nestedIf));await page.locator('.card-head').click();
+ assert.equal(await page.locator('[data-step="flow-1"] .dn').innerText(),'If the slot is ready','Custom phase prefixes also become If');
+ await page.locator('[data-step="flow-1"] .flow-condition-toggle').click();assert.equal(await page.locator('[data-step="flow-2"]').isVisible(),false);
+ await page.locator('[data-step="flow-0"] .flow-condition-toggle').click();assert.equal(await page.locator('[data-step="flow-1"]').isVisible(),false);
+ await page.locator('[data-step="flow-0"] .flow-condition-toggle').click();assert.ok(await page.locator('[data-step="flow-1"]').isVisible());
+ assert.equal(await page.locator('[data-step="flow-2"]').isVisible(),false,'Outer disclosure preserves the nested branch state');
  const failedBinding=structuredClone(readable);failedBinding.scenarioId='failed-binding';failedBinding.steps[4].status='failed';failedBinding.steps[4].exception='Pattern extraction failed';
  await page.goto(render('failed-binding',failedBinding));if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();
  assert.ok(await page.locator('[data-step="flow-4"]').isVisible(),'Failed binding plumbing remains visible for diagnosis');
  const priority=model.scenarios.find(s=>s.displayName==='priority patients get an urgent appointment');
  await page.goto(render('real-conditional',priority));await page.locator('.card-head').click();
  await assertBranchIndentation(page);
+ const realCondition=priority.steps.find(step=>step.arms?.includes('if')),realIf=page.locator('[data-step="'+realCondition.stepId+'"]');
+ assert.ok((await realIf.locator('.dn').innerText()).startsWith('If Alice'),'The real condition has one readable If title');
+ assert.equal(await realIf.locator('.matrix-event[data-matrix-effect="Read"]').count(),1,'The condition Read stays on the If row');
+ assert.ok(await realIf.locator('.dn .message-resource').count()>0,'The condition preserves its linked resource label');
  const branchWithLogs=priority.steps.find(step=>step.guards?.length && step.status==='passed' && step.logs.length);
  assert.ok(branchWithLogs,'Real branch has log evidence');
  const branchRow=page.locator('[data-step="'+branchWithLogs.stepId+'"]');await branchRow.locator('.step-expander').click();
