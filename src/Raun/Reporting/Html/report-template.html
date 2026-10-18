@@ -300,6 +300,9 @@
   .resource-matrix .matrix-row>.step-body{grid-column:1;grid-row:3;margin:0 10px 12px 25px;min-width:0}
   .matrix-cell{grid-row:1;position:relative;align-self:stretch;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:3px;padding:5px 3px;border-left:1px solid var(--border);min-height:100%}
   .matrix-continuation{position:relative;grid-row:2/4;min-width:0;align-self:stretch;border-left:1px solid var(--border)}
+  .resource-matrix .scenario-drill::after{content:"";position:absolute;inset:0 0 0 auto;width:var(--matrix-lane-width);background:repeating-linear-gradient(to right,var(--border) 0 1px,transparent 1px 112px);pointer-events:none;z-index:2}
+  .resource-matrix .matrix-cell,.resource-matrix .matrix-continuation{border-left-color:transparent}
+  .matrix-compact .matrix-contents .scenario-drill::after{display:none}
   .step-logs{margin-top:0}.step-logs>.logs{margin-top:0}
   .matrix-cell.matrix-track::before,.matrix-continuation.matrix-track::before{content:"";position:absolute;width:1px;inset:0 auto 0 50%;transform:translateX(-50%);background:color-mix(in srgb,var(--resource-color) 32%,transparent);z-index:0}
   .matrix-cell.matrix-track-first::before{top:50%}
@@ -1365,6 +1368,7 @@
       header.appendChild(title);
       matrix.appendChild(header);matrix.appendChild(drill);scroll.appendChild(matrix);
       panel.appendChild(coverageText("p","matrix-scroll-hint","Scroll sideways to follow resource history."));panel.appendChild(scroll);
+      drill.style.setProperty("--matrix-lane-width",(resources.size*112)+"px");
       drill.style.marginTop="0";
       const rows=Array.from(drill.querySelectorAll(".step-list .step-entry"));
       for(const row of rows)row.classList.add("matrix-row");
