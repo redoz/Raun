@@ -21,7 +21,9 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const page=await browser.newPage({viewport:{width:1200,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(render('nested',fixture));await page.locator('.card-head').click();
  assert.equal(await page.locator('.step-gantt').count(),8,'Every step has a timing strip on the same axis');
- const geometry=await page.locator('.step-gantt').evaluateAll(nodes=>nodes.map(n=>{const b=n.querySelector('.gantt-bar'),r=n.getBoundingClientRect(),x=b?.getBoundingClientRect();return {left:r.left,width:r.width,start:x?(x.left-r.left)/r.width:null,end:x?(x.right-r.left)/r.width:null};}));
+ const backgroundBounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const row=h.getBoundingClientRect(),track=h.querySelector('.gantt-track')?.getBoundingClientRect();return Boolean(track && Math.abs(track.left-row.left)<1 && Math.abs(track.right-row.right)<1 && Math.abs(track.top-row.top)<1 && Math.abs(track.bottom-row.bottom)<1);}));
+ assert.ok(backgroundBounds.every(Boolean),'Timing fills each title-row background');
+ const geometry=await page.locator('.gantt-track').evaluateAll(nodes=>nodes.map(n=>{const b=n.querySelector('.gantt-bar'),r=n.getBoundingClientRect(),x=b?.getBoundingClientRect();return {left:r.left,width:r.width,start:x?(x.left-r.left)/r.width:null,end:x?(x.right-r.left)/r.width:null};}));
  assert.ok(geometry.filter(g=>g.width>0).every(g=>Math.abs(g.left-geometry[0].left)<1),'Timing axes align across nested branches');
  assert.ok(Math.abs(geometry[1].start-.1)<.01 && Math.abs(geometry[2].start-.1)<.01,'Parallel setup bars share their actual start');
  assert.ok(Math.abs(geometry[7].start-.5)<.01 && Math.abs(geometry[7].end-1)<.01,'Join timing uses scenario time, not row-relative time');
@@ -40,7 +42,7 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  await page.screenshot({path:path.join(out,'nested.png'),fullPage:true});
  await page.setViewportSize({width:390,height:1000});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile has no horizontal page overflow');
- const mobileAxis=await book.locator('.step-gantt').boundingBox();assert.ok(mobileAxis.width>=56,'Mobile keeps a readable timing strip');
+ const mobileAxis=await book.locator('.gantt-track').boundingBox();assert.ok(mobileAxis.width>=56,'Mobile keeps a readable timing strip');
  await page.goto(render('real-parallel',base));await page.locator('.card-head').click();assert.ok(await page.locator('.gantt-bar').count()>0);
  const first=page.locator('.step-entry:not(.step-lifecycle)').first();await first.locator('.step-gantt').click();
  const setupLink=first.getByRole('button',{name:'Setup',exact:true});await setupLink.focus();await setupLink.press('Escape');
@@ -61,11 +63,13 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  assert.ok(await loggedSetup.locator('.step-body').isVisible(),'Navigating to lifecycle evidence opens its logs');
  const timedFixture={...fixture,steps:[step(0,'Then instant completion',1000,0),step(1,'Then blocked',0,0,[],[],{status:'skipped',skipReason:'dependency failed: earlier'})]};
  await page.goto(render('zero-duration',timedFixture));await page.locator('.card-head').click();
- const zero=await page.locator('.step-gantt').first().evaluate(n=>{const a=n.getBoundingClientRect(),b=n.querySelector('.gantt-bar').getBoundingClientRect();return {right:b.right-a.right,width:b.width};});
+ const zero=await page.locator('.gantt-track').first().evaluate(n=>{const a=n.getBoundingClientRect(),b=n.querySelector('.gantt-bar').getBoundingClientRect();return {right:b.right-a.right,width:b.width};});
  assert.ok(zero.width>=2 && zero.right<=.1,'Zero-duration marks remain visible inside the shared axis');
  assert.equal(await page.locator('.gantt-bar').count(),1,'Blocked steps do not look as though they executed');
  const priority=model.scenarios.find(s=>s.displayName==='priority patients get an urgent appointment');
  await page.goto(render('real-conditional',priority));await page.locator('.card-head').click();
+ const matrixBackgrounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const track=h.querySelector('.gantt-track').getBoundingClientRect(),cell=h.parentElement.querySelector('.matrix-cell,.matrix-summary-cell').getBoundingClientRect();return track.right<=cell.left+.1;}));
+ assert.ok(matrixBackgrounds.every(Boolean),'Timing backgrounds stop before the resource matrix');
  await page.locator('.matrix-summary-header').click();
  const dialog=page.getByRole('dialog',{name:'Resource lanes for '+priority.displayName});await dialog.waitFor({state:'visible'});
  await page.waitForFunction(()=>{const dialog=document.querySelector('.matrix-lanes-popover');const card=dialog.closest('.card');return Array.from(dialog.querySelectorAll('.matrix-row')).every(row=>{const source=Array.from(card.querySelectorAll('.scenario-drill:not(.matrix-lanes-popover .scenario-drill) .step-entry')).find(n=>n.dataset.step===row.dataset.step);if(!source)return false;const a=source.getBoundingClientRect(),b=row.getBoundingClientRect();return a.height===0?b.height===0:Math.abs(a.top-b.top)<1 && Math.abs(a.height-b.height)<1;});});

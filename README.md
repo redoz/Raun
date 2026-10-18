@@ -173,9 +173,9 @@ link each booking to its patient and slot. `[Reserved]` gives Consume semantics 
 
 ## Read the report when something fails
 
-Use the HTML report to inspect a failure or share a run. It includes step results, a resource matrix, and errors. A shared Gantt strip shows when steps ran and
+Use the HTML report to inspect a failure or share a run. It includes step results, a resource matrix, and errors. Gantt bars behind the step titles show when steps ran and
 which overlapped. Nested `if` / `switch` branches keep their source labels; untaken branches are folded
-and can be expanded. Select a timing strip to inspect named prerequisites or jump to an earlier step. Add `.Note(...)` to explain why a step matters. Use logs for values and events observed during it:
+and can be expanded. Select a step duration to inspect named prerequisites or jump to an earlier step. Add `.Note(...)` to explain why a step matters. Use logs for values and events observed during it:
 
 ```csharp
 Context.Log($"{endpoint}: {(int)status} {status}");

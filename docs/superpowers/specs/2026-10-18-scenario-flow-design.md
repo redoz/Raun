@@ -16,3 +16,5 @@ Implementation checklist:
 - [x] One final reviewer, fix material findings, commit and push. No release.
 
 Verification: full solution 1,752 tests (1,745 passed, 7 expected branch skips); zero-warning build; 72 report JavaScript tests; both report browser harnesses. Final independent staff review found lifecycle navigation and Escape focus issues; both corrected and covered by browser regressions. Zero-duration marks and nested resource-overlay alignment also verified.
+
+2026-10-18 refinement: render the shared Gantt axis as a muted background across each title row, stopping at the resource matrix. Keep text, resource links and log disclosures above the background. The duration is the timing/prerequisite button; no separate timing column. Verify full-row bounds, aligned axes, matrix exclusion and keyboard interactions.

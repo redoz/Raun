@@ -541,18 +541,22 @@
   .flow-not-taken{color:var(--faint);font-style:italic;margin-left:3px}
   .step-entry[hidden],.flow-content[hidden],.step-prerequisites[hidden]{display:none!important}
   .flow-content .step-head>.dn{padding-left:calc(var(--step-flow-depth,1)*12px)}
-  .step-gantt{position:relative;display:block;flex:none;width:clamp(64px,10vw,120px);height:20px;padding:0;border:0;border-radius:3px;background:repeating-linear-gradient(to right,var(--border) 0 1px,transparent 1px 25%);color:var(--muted);cursor:pointer}
-  .step-gantt:hover,.step-gantt[aria-expanded="true"]{background-color:var(--surface-hover)}
-  .gantt-bar{position:absolute;top:7px;height:6px;min-width:2px;border-radius:2px;background:var(--muted);opacity:.65;pointer-events:none}
-  .status-failed .gantt-bar{background:var(--fail);opacity:1}
-  .dependency-related .gantt-bar{opacity:1}
+  .step-head{position:relative;isolation:isolate}
+  .gantt-track{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+  .step-gantt{display:block;flex:none;padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
+  .step-gantt:hover,.step-gantt[aria-expanded="true"]{color:var(--ink)}
+  .step-gantt:focus-visible{outline:1px solid var(--muted);outline-offset:3px}
+  .step-lifecycle.status-passed:not(.open) .gantt-track{visibility:hidden}
+  .gantt-bar{position:absolute;inset-block:0;min-width:2px;background:var(--muted);opacity:.12;pointer-events:none}
+  .status-failed .gantt-bar{background:var(--fail);opacity:.14}
+  .dependency-related .gantt-bar{opacity:.22}
   .step-head .step-duration{display:inline-block;min-width:48px;text-align:right}
   .step-prerequisites{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 9px;grid-column:3/-1;margin-top:6px;color:var(--muted);font:12px/1.5 var(--sans);min-width:0}
   .predecessor-link{background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;text-decoration-color:var(--border-strong);text-underline-offset:2px;font:inherit;text-align:left;cursor:pointer;overflow-wrap:anywhere}
   .resource-matrix .matrix-row>.step-prerequisites{grid-column:1;grid-row:4;margin:0 12px 10px 34px}
   .resource-matrix .matrix-continuation{grid-row:2/5}
   .resource-matrix .matrix-summary-cell{grid-row:1/5}
-  @media(max-width:650px){.step-head .dm{grid-column:auto;justify-content:flex-end}.step-gantt{width:64px}.step-head .step-duration{min-width:40px}.step-head .dm{gap:5px}.flow-heading{padding-left:22px}.flow-branch::before{left:calc(34px + var(--flow-depth)*12px)}}
+  @media(max-width:650px){.step-head .dm{grid-column:auto;justify-content:flex-end}.step-head .step-duration{min-width:40px}.step-head .dm{gap:5px}.flow-heading{padding-left:22px}.flow-branch::before{left:calc(34px + var(--flow-depth)*12px)}}
   @media(prefers-reduced-motion:reduce){.flow-toggle .stw{transition:none}}
 
 </style>
@@ -1909,7 +1913,7 @@
       for(const step of sc.steps){
         const row=rows.get(step.stepId),head=row.querySelector('.step-head'),timing=head.querySelector('.dm');
         head.querySelector('.step-offset')?.remove();
-        const axis=el('button','step-gantt');axis.type='button';axis.setAttribute('aria-expanded','false');
+        const axis=el('button','step-gantt'),track=el('div','gantt-track');axis.type='button';axis.setAttribute('aria-expanded','false');track.setAttribute('aria-hidden','true');
         const timed=['passed','failed'].includes(step.status) && Number.isFinite(step.offsetMs) && Number.isFinite(step.durationMs);
         const start=Math.max(0,step.offsetMs),duration=Math.max(0,step.durationMs);
         axis.title=timed ? '+'+fmtDur(start)+' to +'+fmtDur(start+duration)+' / '+fmtDur(duration) : step.status+' / did not run';
@@ -1918,9 +1922,9 @@
           const bar=el('span','gantt-bar');bar.setAttribute('aria-hidden','true');
           const left='min('+(100*start/scale)+'%,calc(100% - 2px))';
           bar.style.left=left;bar.style.width=(100*duration/scale)+'%';
-          bar.style.maxWidth='calc(100% - '+left+')';axis.appendChild(bar);
+          bar.style.maxWidth='calc(100% - '+left+')';track.appendChild(bar);
         }
-        timing.prepend(axis);
+        axis.appendChild(timing.querySelector('.step-duration'));timing.prepend(axis);head.appendChild(track);
         const panel=el('div','step-prerequisites');panel.hidden=true;panel.id='step-prerequisites-'+(++stepDetailSequence);
         axis.setAttribute('aria-controls',panel.id);
         panel.appendChild(coverageText('span','',step.dependsOn?.length ? 'After:' : 'No prerequisites'));
