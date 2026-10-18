@@ -532,9 +532,10 @@
     .coverage-findings>.coverage-splitter{display:none}.coverage-offenders{border-bottom:1px solid var(--border)}
     .coverage-toolbar{margin-left:0}.coverage-stage{padding:6px 12px}
   }
-  .flow-branch{position:relative;min-width:0}
+  .flow-branch{position:relative;min-width:0;border-bottom:1px solid var(--border)}
+  .flow-branch.flow-arm-continues{border-image:linear-gradient(to right,transparent calc(4px + (var(--flow-depth) + 1)*12px),var(--border) 0) 1}
+  .flow-content>:nth-last-child(1 of :not([hidden])){border-bottom:0}
   .flow-heading{padding:9px 12px 4px calc(4px + var(--flow-depth)*12px);color:var(--muted)}
-  .flow-heading:has(>.flow-toggle[aria-expanded="false"]){border-bottom:1px solid var(--border)}
   .flow-toggle{display:flex;align-items:center;gap:7px;flex-wrap:wrap;border:0;padding:3px 0;background:none;color:inherit;font:12px/1.4 var(--sans);cursor:pointer;text-align:left}
   .flow-toggle .stw{display:grid;place-items:center;width:12px;height:12px;transform:rotate(-90deg);transition:transform .15s}
   .flow-toggle[aria-expanded="true"] .stw{transform:none}
@@ -1917,7 +1918,9 @@
         (stack.at(-1)?.content || list).appendChild(row);
       }
       const byId=new Map(sc.steps.map(step=>[step.stepId,step]));
+      const finalArms=new Map(branches.map(branch=>[branch.condition,branch]));
       for(const branch of branches){
+        branch.section.classList.toggle("flow-arm-continues",finalArms.get(branch.condition)!==branch);
         const members=Array.from(branch.content.querySelectorAll('.step-entry'),row=>byId.get(row.dataset.step));
         const notTaken=members.length>0 && members.every(step=>step.status==='not-taken' || step.status==='skipped' && step.skipReason?.startsWith('not taken:'));
         branch.content.hidden=notTaken;branch.button.setAttribute('aria-expanded',String(!notTaken));
