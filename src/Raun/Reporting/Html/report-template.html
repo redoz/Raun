@@ -1875,7 +1875,7 @@
       let first=true;
       return parts.map(part=>{
         const text=String(part.text || ""), trimmed=text.trimStart(), prefix=trimmed.slice(0,phase.length);
-        const matches=first && !part.resourceId && phase && prefix.toLowerCase()===phase && (!trimmed[phase.length] || /\s/.test(trimmed[phase.length]));
+        const matches=!step.isLifecycle && first && !part.resourceId && phase && prefix.toLowerCase()===phase && (!trimmed[phase.length] || /\s/.test(trimmed[phase.length]));
         if(text.trim())first=false;
         if(matches){
           const whitespace=text.slice(0,text.length-trimmed.length),suffix={...part,text:trimmed.slice(phase.length)};
