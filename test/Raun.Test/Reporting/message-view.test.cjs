@@ -151,7 +151,7 @@ test('complete report script renders typed messages on first paint in declaratio
  head.dispatch('click');assert.equal(card.classList.contains('collapsed'),false);
  head.dispatch('click');assert.equal(card.classList.contains('collapsed'),true);
  assert.equal(vm.runInContext('fmtMs(1.234567)',context),'1.2 ms');
- const expander=report.querySelector('.step-expander');assert.equal(expander.getAttribute('aria-expanded'),'false');
+ const expander=report.querySelector('.step-logs-toggle');assert.equal(expander.getAttribute('aria-expanded'),'false');
  vm.runInContext("openers[0].open('s');",context);assert.equal(expander.getAttribute('aria-expanded'),'true');
  assert.equal(report.querySelector('.step-head').getAttribute('aria-expanded'),null);
 });
@@ -162,11 +162,11 @@ test('title resource controls have no interactive ancestor',()=>{
  for(const node of title.querySelectorAll('button'))
   assert.equal(node.parentElement.closest('button,[role="button"],a[href],summary,input,select,textarea'),null);
  assert.equal(head.getAttribute('role'),null);assert.equal(head.getAttribute('tabindex'),null);
- const expander=head.querySelector('.step-expander');assert.equal(expander.tag,'button');
- assert.equal(expander.parentElement,title.parentElement);assert.equal(expander.getAttribute('aria-expanded'),'false');
- assert.equal(expander.getAttribute('aria-controls'),p.querySelector('.step-body').id);
+ const expander=head.querySelector('.step-logs-toggle');assert.equal(expander.tag,'button');
+ assert.equal(expander.closest('.step-head'),head);assert.equal(expander.getAttribute('aria-expanded'),'false');
+ assert.equal(expander.getAttribute('aria-controls'),p.querySelector('[data-evidence-panel="logs"]').id);
 });
-test('native Enter and Space activate only their own resource or expander once',()=>{
+test('native Enter and Space activate only their own resource or evidence glyph once',()=>{
  for(const key of ['Enter',' ']){
   const p=scope.buildScenarioDrill({...scenario,steps:[step('s',message('key'))]}),entry=p.querySelector('.step-entry');
   const chip=entry.querySelector('[data-message-resource]');
@@ -174,7 +174,7 @@ test('native Enter and Space activate only their own resource or expander once',
   assert.equal(entry.classList.contains('res-hit'),false);assert.equal(entry.classList.contains('open'),false);
   // Native button activation synthesizes one click; production must not duplicate it in keydown.
   chip.dispatch('click');assert.equal(entry.classList.contains('res-hit'),true);assert.equal(entry.classList.contains('open'),false);
-  const expander=entry.querySelector('.step-expander');assert.ok(expander);
+  const expander=entry.querySelector('.step-logs-toggle');assert.ok(expander);
   const expandKey=expander.dispatch('keydown',{key});assert.equal(expandKey.prevented,undefined);
   assert.equal(entry.classList.contains('open'),false);
   expander.dispatch('click');assert.equal(entry.classList.contains('open'),true);assert.equal(expander.getAttribute('aria-expanded'),'true');
@@ -205,7 +205,7 @@ test('expanded steps show logs directly and preserve notes without duplicate res
  const current=step('s',message('Seed:key'));current.offsetMs=100;
  current.effects=[{effect:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:103,data:'<old>'}];
  const p=scope.buildScenarioDrill({...scenario,steps:[current]});
- const entry=p.querySelector('.step-entry');entry.querySelector('.step-expander').dispatch('click');
+ const entry=p.querySelector('.step-entry');entry.querySelector('.step-logs-toggle').dispatch('click');
  assert.equal(entry.classList.contains('open'),true);
  const body=entry.querySelector('.step-body');
  assert.ok(body.querySelector('div.step-logs'),'logs appear without a second disclosure');
@@ -214,14 +214,14 @@ test('expanded steps show logs directly and preserve notes without duplicate res
  assert.ok(p.querySelector('.step-note'));
 });
 
-test('phase coloring uses matching authored prefix once with chevron before status',()=>{
+test('phase coloring uses matching authored prefix once with an empty flow gutter before status',()=>{
  const current={...step('s',{text:'Given Seed:key',parts:[{text:'Given '},{text:'Seed:key',resourceId:resource.id}]}),phase:'Given',index:12,label:'13'};
  const p=scope.buildScenarioDrill({...scenario,steps:[current]});
  const head=p.querySelector('.step-head');
  assert.equal(head.querySelector('.ph-chip'),null);
  assert.equal(head.querySelector('.pill'),null);
  assert.doesNotMatch(nodeText(head),/#13/);
- assert.ok(head.children[0].classList.contains('step-expander') || head.children[0].classList.contains('stw'));
+ assert.ok(head.children[0].classList.contains('stw'));
  assert.ok(head.children[1].classList.contains('scenario-status'));
  assert.ok(head.children[1].classList.contains('passed'));
  assert.equal(head.children[1].getAttribute('aria-label'),'passed');
@@ -392,29 +392,23 @@ test('skipped and not-taken step names are struck through without removing resou
  }
 });
 
-test('successful lifecycle rows without a body reveal metadata from both their name and a keyboard-accessible control',()=>{
+test('successful lifecycle rows without evidence have no disclosure control',()=>{
  const current={...step('setup',{}),label:'0',isLifecycle:true,displayName:'Setup',titleMessage:undefined,
   notes:[],noteMessages:[],logs:[],logMessages:[],effects:[]};
  const view=scope.buildScenarioDrill({...scenario,steps:[current]}),entry=view.querySelector('.step-entry');
- const control=entry.querySelector('.lifecycle-toggle');
- assert.ok(control);assert.equal(control.tag,'button');
- assert.equal(control.getAttribute('aria-expanded'),'false');
+ assert.equal(entry.querySelector('.step-evidence-toggle,.lifecycle-toggle'),null);
  assert.equal(entry.querySelector('.step-body'),null);
  entry.querySelector('.dn').dispatch('click');
- assert.equal(entry.classList.contains('open'),true);
- assert.equal(control.getAttribute('aria-expanded'),'true');
+ assert.equal(entry.classList.contains('open'),false);
  assert.equal(entry.querySelector('.sx'),null);
  assert.ok(entry.querySelector('.scenario-status.passed'));
- control.dispatch('click');
- assert.equal(entry.classList.contains('open'),false);
- assert.equal(control.getAttribute('aria-expanded'),'false');
 });
 
 test('lifecycle disclosure retains its body and failed lifecycle rows stay fully revealed',()=>{
  const rows=[{...step('teardown',{}),label:'2',isLifecycle:true,displayName:'Teardown',titleMessage:undefined,logs:['Cleanup finished'],logMessages:[]},
   {...step('failed',{}),label:'0',isLifecycle:true,status:'failed',displayName:'Setup',titleMessage:undefined,exception:'Startup failed'}];
  const view=scope.buildScenarioDrill({...scenario,steps:rows}),entries=view.querySelectorAll('.step-entry');
- entries[0].querySelector('.step-expander').dispatch('click');
+ entries[0].querySelector('.step-logs-toggle').dispatch('click');
  assert.equal(entries[0].classList.contains('open'),true);
  assert.match(nodeText(entries[0].querySelector('.step-body')),/Cleanup finished/);
  assert.equal(entries[1].classList.contains('open'),true);
@@ -428,4 +422,30 @@ test('ordinary steps named Setup do not acquire compact lifecycle controls',()=>
  const entry=scope.buildScenarioDrill({...scenario,steps:[current]}).querySelector('.step-entry');
  assert.equal(entry.classList.contains('step-lifecycle'),false);
  assert.equal(entry.querySelector('.lifecycle-toggle'),null);
+});
+
+
+test('evidence glyphs independently show logs and attachments without title disclosure',()=>{
+ const current={...step('evidence',message('patient')),attachments:[{name:'response.txt',value:'Captured response'}]};
+ const view=scope.buildScenarioDrill({...scenario,steps:[current]}),entry=view.querySelector('.step-entry'),head=entry.querySelector('.step-head');
+ const logs=head.querySelector('.step-logs-toggle'),attachments=head.querySelector('.step-attachments-toggle');
+ assert.ok(logs);assert.ok(attachments);assert.equal(nodeText(logs),'');assert.equal(nodeText(attachments),'');
+ assert.equal(head.querySelector('.step-expander,.lifecycle-toggle'),null);assert.ok(head.children[0].classList.contains('stw'));
+ head.querySelector('.dn').dispatch('click');assert.equal(entry.classList.contains('open'),false,'Titles do not disclose evidence');
+ logs.dispatch('click');assert.equal(entry.classList.contains('open'),true);assert.equal(logs.getAttribute('aria-expanded'),'true');assert.equal(attachments.getAttribute('aria-expanded'),'false');
+ assert.equal(entry.querySelector('[data-evidence-panel="logs"]').hidden,false);assert.equal(entry.querySelector('[data-evidence-panel="attachments"]').hidden,true);
+ attachments.dispatch('click');assert.equal(entry.classList.contains('open'),true);assert.equal(logs.getAttribute('aria-expanded'),'false');assert.equal(attachments.getAttribute('aria-expanded'),'true');
+ assert.equal(entry.querySelector('[data-evidence-panel="logs"]').hidden,true);assert.equal(entry.querySelector('[data-evidence-panel="attachments"]').hidden,false);
+ attachments.dispatch('click');assert.equal(entry.classList.contains('open'),false);assert.equal(attachments.getAttribute('aria-expanded'),'false');
+});
+
+test('evidence glyphs only exist for available categories and errors open as log details',()=>{
+ const empty={...step('empty',{}),notes:[],noteMessages:[],logs:[],logMessages:[],effects:[]};
+ const onlyAttachment={...empty,stepId:'attachment',attachments:[{name:'result.txt',value:'Result'}]};
+ const failed={...empty,stepId:'failed',status:'failed',exception:'Failure details'};
+ const view=scope.buildScenarioDrill({...scenario,steps:[empty,onlyAttachment,failed]}),entries=view.querySelectorAll('.step-entry');
+ assert.equal(entries[0].querySelector('.step-evidence-toggle'),null);
+ assert.equal(entries[1].querySelector('.step-logs-toggle'),null);assert.ok(entries[1].querySelector('.step-attachments-toggle'));
+ assert.equal(entries[2].classList.contains('open'),true);assert.equal(entries[2].querySelector('.step-logs-toggle').getAttribute('aria-expanded'),'true');
+ assert.match(nodeText(entries[2].querySelector('.step-body')),/Failure details/);
 });

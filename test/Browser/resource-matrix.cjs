@@ -243,9 +243,9 @@ const renderFixture = (name, data) => {
     const beforeScrollWidth=await scenarioPanel.evaluate(panel=>panel.clientWidth);
     await page.locator('.card').nth(matrixScenarioIndex).locator('.card-head').click();
     assert.equal(await scenarioPanel.evaluate(panel=>panel.clientWidth),beforeScrollWidth,'Expanding a scenario cannot shift the content width');
-    await page.locator('.card').nth(matrixScenarioIndex).locator('.step-expander').first().click();
+    await page.locator('.card').nth(matrixScenarioIndex).locator('.step-logs-toggle').first().click();
     assert.equal(await scenarioPanel.evaluate(panel=>panel.clientWidth),beforeScrollWidth,'Expanding step evidence cannot shift the content width');
-    await page.locator('.card').nth(matrixScenarioIndex).locator('.step-expander').first().click();
+    await page.locator('.card').nth(matrixScenarioIndex).locator('.step-logs-toggle').first().click();
     await page.locator('.card').nth(matrixScenarioIndex).locator('.card-head').click();
     await page.setViewportSize({width:1600,height:1100});
     for (const [index, scenario] of model.scenarios.entries()) {
@@ -369,7 +369,7 @@ const renderFixture = (name, data) => {
     assert.deepEqual(trackIssues,[],'Resource lines stop at their first and last events');
     const first = page.locator('.card').nth(matrixScenarioIndex);
     const before = await first.locator('.matrix-scroll').evaluate(node => node.scrollHeight);
-    const expander = first.locator('.step-entry.has-body:not(.step-lifecycle) .step-expander').first();
+    const expander = first.locator('.step-entry.has-body:not(.step-lifecycle) .step-logs-toggle').first();
     await expander.click();
     assert.equal(await expander.getAttribute('aria-expanded'), 'true');
     const expandedRow=expander.locator('xpath=ancestor::*[contains(@class,"step-entry")][1]');
@@ -385,7 +385,7 @@ const renderFixture = (name, data) => {
     }),'Resource column borders continue alongside expanded step details');
     await expandedRow.evaluate(async row=>{
       await row.stepAnimation?.finished;
-      const control=row.querySelector('.step-expander');control.click();
+      const control=row.querySelector('.step-logs-toggle');control.click();
       const closing=row.stepAnimation;closing.pause();closing.currentTime=80;
       const middle=row.querySelector('.step-body').getBoundingClientRect().height;
       control.click();await row.stepAnimation?.finished;
@@ -409,7 +409,7 @@ const renderFixture = (name, data) => {
       return Math.abs(a.height-row.clientHeight)<1 && /^M [^ ]+ [^ ]+ H [^ ]+$/.test(svg.querySelector('path').getAttribute('d'));
     }),'Connections follow measured badge edges with straight routing behind resource labels');
     const connectionRow=relation.locator('xpath=..');
-    await connectionRow.locator('.step-expander').click();
+    await connectionRow.locator('.step-logs-toggle').click();
     await page.waitForTimeout(40);
     assert.ok(await relation.evaluate(svg=>{
       const row=svg.closest('.matrix-row'),bounds=row.getBoundingClientRect();
@@ -419,7 +419,7 @@ const renderFixture = (name, data) => {
       return Math.abs(svg.getBoundingClientRect().height-row.clientHeight)<1 &&
         Math.abs(center-((source.top+source.bottom)/2-bounds.top))<1;
     }),'Expanded logs preserve badge-aligned connections instead of moving them to the row midpoint');
-    await connectionRow.locator('.step-expander').click();
+    await connectionRow.locator('.step-logs-toggle').click();
     assert.ok(await page.locator('.matrix-continuation.matrix-track').count()>0,'Resource lifelines continue alongside logs');
     assert.ok(await page.locator('.matrix-continuation.matrix-track').first().evaluate(cell=>{
       const line=getComputedStyle(cell,'::before');return Math.abs(parseFloat(line.left)-cell.clientWidth/2)<1;
@@ -453,7 +453,7 @@ const renderFixture = (name, data) => {
     await first.getByRole('button',{name:/^Update Patient:.*Show evidence/}).click();
     assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-resource-data')),editEffect.data,'Matrix action focuses its event snapshot, not a title reference');
     await page.keyboard.press('Escape');
-    const open = first.locator('.step-entry.open .step-expander');
+    const open = first.locator('.step-entry.open .step-logs-toggle');
     while(await open.count())await open.first().click();
     await page.locator('body').dispatchEvent('click');
     await first.screenshot({ path: path.join(out, 'resource-matrix-desktop.png') });
@@ -515,11 +515,11 @@ const renderFixture = (name, data) => {
     await page.waitForFunction(()=>{const popup=document.querySelector('.matrix-lanes-popover');return Math.abs(popup.getBoundingClientRect().top-popup.closest('.card').getBoundingClientRect().top)<2;});
     await assertLaneAlignment();
     assert.ok(await lanes.evaluate(popup=>{const bar=document.querySelector('.appbar'),a=bar.getBoundingClientRect(),p=popup.getBoundingClientRect();return bar.contains(document.elementFromPoint(p.right-10,a.top+a.height/2));}),'The scrolling overlay cannot cover application toolbar controls');
-    await page.locator('.card .scenario-scroll .step-expander').first().focus();
+    await page.locator('.card .scenario-scroll .step-logs-toggle').first().focus();
     await page.keyboard.press('Enter');
     await page.waitForFunction(()=>{const popup=document.querySelector('.matrix-lanes-popover');return Math.abs(popup.getBoundingClientRect().height-popup.closest('.card').getBoundingClientRect().height)<2;});
     await assertLaneAlignment();
-    await page.locator('.card .scenario-scroll .step-expander').first().focus();
+    await page.locator('.card .scenario-scroll .step-logs-toggle').first().focus();
     await page.keyboard.press('Enter');
     await page.waitForFunction(()=>{const popup=document.querySelector('.matrix-lanes-popover');return Math.abs(popup.getBoundingClientRect().height-popup.closest('.card').getBoundingClientRect().height)<2;});
 
@@ -682,7 +682,7 @@ const renderFixture = (name, data) => {
     repeatStep.effects=[{...seedEffect,effect:'Read',data:'{"Version":1}',offsetMs:repeatStep.offsetMs+10},{...seedEffect,effect:'Read',data:'{"Version":2}',offsetMs:repeatStep.offsetMs+20}];
     await page.goto(renderFixture('resource-matrix-event-snapshots',repeated));await page.locator('.card-head').click();
     const onlyEffects=page.locator('.step-entry').filter({has:page.locator('.matrix-event')}).first();
-    assert.equal(await onlyEffects.locator('.step-body,.step-expander').count(),0,'Resource events alone no longer create a redundant expansion panel');
+    assert.equal(await onlyEffects.locator('.step-body,.step-logs-toggle').count(),0,'Resource events alone no longer create a redundant expansion panel');
     const repeatEvents=onlyEffects.locator('.matrix-event');assert.equal(await repeatEvents.count(),2,'Repeated actions retain both captured states');
     for(const [index,value] of [1,2].entries()){
       await repeatEvents.nth(index).focus();

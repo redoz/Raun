@@ -19,7 +19,7 @@ const fixture={...base,scenarioId:'flow',displayName:'Nested booking flow',durat
 async function branchText(locator){return locator.evaluate(n=>Array.from(n.childNodes).filter(x=>x.nodeType===3).map(x=>x.textContent).join('').trim());}
 async function assertBranchIndentation(page){
  const positions=await page.locator('.step-head').evaluateAll(heads=>heads.flatMap(head=>{
-  const mark=head.querySelector('.scenario-status'),title=head.querySelector('.dn'),chevron=head.querySelector('.step-expander,.lifecycle-toggle');
+  const mark=head.querySelector('.scenario-status'),title=head.querySelector('.dn'),chevron=head.querySelector('.flow-condition-toggle');
   if(!head.getBoundingClientRect().height || getComputedStyle(mark).visibility==='hidden')return [];
   return [{depth:Number(head.parentElement.style.getPropertyValue('--step-flow-depth') || 0),left:mark.getBoundingClientRect().left,controlLeft:head.firstElementChild.getBoundingClientRect().left,chevronLeft:chevron?.getBoundingClientRect().left ?? null,
    gap:title.getBoundingClientRect().left+parseFloat(getComputedStyle(title).paddingLeft)-mark.getBoundingClientRect().right}];
@@ -79,21 +79,32 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const lifecycle=structuredClone(base),setupWithLogs=lifecycle.steps.find(s=>s.isLifecycle && s.displayName==='Setup');
  setupWithLogs.logs=['World ready'];setupWithLogs.logMessages=[];
  await page.goto(render('lifecycle-logs',lifecycle));await page.locator('.card-head').click();
+ assert.ok(await page.locator('[data-step="'+setupWithLogs.stepId+'"] .step-logs-toggle').isVisible(),'Lifecycle evidence glyphs remain visible while the step is collapsed');
  const lifecycleFirst=page.locator('.step-entry:not(.step-lifecycle)').first();await lifecycleFirst.locator('.step-gantt').click();
  await lifecycleFirst.getByRole('button',{name:'Setup',exact:true}).click();
  const loggedSetup=page.locator('[data-step="'+setupWithLogs.stepId+'"]');
- assert.equal(await loggedSetup.locator('.step-expander').getAttribute('aria-expanded'),'true','Lifecycle log disclosure matches its visible state');
+ assert.equal(await loggedSetup.locator('.step-logs-toggle').getAttribute('aria-expanded'),'true','Lifecycle log disclosure matches its visible state');
  await loggedSetup.evaluate(async row=>{await row.stepAnimation?.finished;});
  assert.ok(await loggedSetup.locator('.step-body').isVisible(),'Navigating to lifecycle evidence opens its logs');
- const noted={...fixture,steps:[step(0,'Given a patient exists',0,100,[],[],{notes:['A long note belongs to the step summary and wraps onto more than one line when the available width is narrow.\nA second line remains part of the same summary.'],logs:['Detailed evidence stays outside the timing background.']}),step(1,'Then the patient is ready',100,50,[0])]};
+ const noted={...fixture,steps:[step(0,'Given a patient exists',0,100,[],[],{notes:['A long note belongs to the step summary and wraps onto more than one line when the available width is narrow.\nA second line remains part of the same summary.'],logs:['Detailed evidence stays outside the timing background.'],attachments:[{name:'response.txt',value:'A captured response'}]}),step(1,'Then the patient is ready',100,50,[0])]};
  await page.goto(render('notes-background',noted));await page.locator('.card-head').click();
  const notedRow=page.locator('[data-step="flow-0"]');
  for(const width of [1200,560]){
   await page.setViewportSize({width,height:1100});
   assert.ok(await notedRow.evaluate(row=>{const track=row.querySelector('.gantt-track').getBoundingClientRect(),note=row.querySelector('.step-notes').getBoundingClientRect();return track.top<=note.top && track.bottom>=note.bottom;}),'Non-matrix timing backgrounds include multiline notes');
  }
- await notedRow.locator('.step-expander').click();await notedRow.evaluate(async row=>{await row.stepAnimation?.finished;});
+ await notedRow.locator('.step-logs-toggle').click();await notedRow.evaluate(async row=>{await row.stepAnimation?.finished;});
  assert.ok(await notedRow.evaluate(row=>row.querySelector('.gantt-track').getBoundingClientRect().bottom<=row.querySelector('.step-body').getBoundingClientRect().top),'Expanded logs remain outside the summary timing background');
+ assert.equal(await notedRow.locator('.step-head > .stw svg').count(),0,'Ordinary steps have no disclosure chevron');
+ assert.equal(await notedRow.locator('.step-evidence-toggle').allTextContents().then(texts=>texts.join('')),'','Glyph controls contain no counters or labels');
+ await notedRow.locator('.step-attachments-toggle').focus();await page.keyboard.press('Space');await notedRow.evaluate(async row=>{await row.stepAnimation?.finished;});
+ assert.ok(await notedRow.locator('[data-evidence-panel="attachments"]').isVisible(),'Paperclip reveals attachments by keyboard');
+ assert.equal(await notedRow.locator('[data-evidence-panel="logs"]').isVisible(),false,'Selecting attachments hides the log panel');
+ assert.equal(await notedRow.locator('.step-logs-toggle').getAttribute('aria-expanded'),'false');
+ assert.equal(await notedRow.locator('.step-attachments-toggle').getAttribute('aria-expanded'),'true');
+ await notedRow.locator('.att summary').click();assert.ok(await notedRow.locator('.att-body').isVisible(),'Captured files remain readable');
+ await notedRow.locator('.step-attachments-toggle').click();await notedRow.evaluate(async row=>{await row.stepAnimation?.finished;});
+ assert.equal(await notedRow.locator('.step-body').isVisible(),false,'Clicking the active glyph closes its panel');
  await page.setViewportSize({width:390,height:1000});
  const timedFixture={...fixture,steps:[step(0,'Then instant completion',1000,0),step(1,'Then blocked',0,0,[],[],{status:'skipped',skipReason:'dependency failed: earlier'})]};
  await page.goto(render('zero-duration',timedFixture));await page.locator('.card-head').click();
@@ -128,8 +139,9 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  assert.equal(await conditionTitle.innerText(),'If Alice is a priority case','The condition step itself supplies the If title');
  assert.equal(await page.locator('.flow-heading').filter({hasText:'If Alice is a priority case'}).count(),0,'No duplicate If heading');
  assert.equal(await conditionRow.locator('.step-gantt').count(),1,'The If row retains timing');
- await conditionTitle.focus();await page.keyboard.press('Enter');await conditionRow.evaluate(async row=>{await row.stepAnimation?.finished;});
- assert.ok(await conditionRow.locator('.step-body').isVisible(),'Condition title opens evidence by keyboard');
+ await conditionTitle.click();assert.equal(await conditionRow.locator('.step-body').isVisible(),false,'Condition titles do not disclose evidence');
+ await conditionRow.locator('.step-logs-toggle').focus();await page.keyboard.press('Enter');await conditionRow.evaluate(async row=>{await row.stepAnimation?.finished;});
+ assert.ok(await conditionRow.locator('.step-body').isVisible(),'The log glyph opens condition evidence by keyboard');
  await conditionRow.locator('.flow-condition-toggle').click();
  assert.equal(await page.locator('[data-step="flow-1"]').isVisible(),false,'The condition chevron folds its branch');
  assert.ok(await conditionRow.locator('.step-body').isVisible(),'Branch folding leaves condition evidence open');
@@ -176,11 +188,12 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  assert.ok((await realIf.locator('.dn').innerText()).startsWith('If Alice'),'The real condition has one readable If title');
  assert.equal(await realIf.locator('.matrix-event[data-matrix-effect="Read"]').count(),1,'The condition Read stays on the If row');
  assert.ok(await realIf.locator('.dn .message-resource').count()>0,'The condition preserves its linked resource label');
+ assert.equal(await realIf.locator('.dn').getAttribute('role'),null,'Condition titles do not wrap resource links in an interactive ancestor');
  const branchWithLogs=priority.steps.find(step=>step.guards?.length && step.status==='passed' && step.logs.length);
  assert.ok(branchWithLogs,'Real branch has log evidence');
- const branchRow=page.locator('[data-step="'+branchWithLogs.stepId+'"]');await branchRow.locator('.step-expander').click();
+ const branchRow=page.locator('[data-step="'+branchWithLogs.stepId+'"]');await branchRow.locator('.step-logs-toggle').click();
  assert.ok(await branchRow.evaluate(row=>Math.abs(row.querySelector('.step-body').getBoundingClientRect().left-row.querySelector('.scenario-status').getBoundingClientRect().left)<1),'Expanded branch evidence stays aligned with its indented status');
- await branchRow.locator('.step-expander').click();
+ await branchRow.locator('.step-logs-toggle').click();
  assert.ok(priority.steps.some(step=>step.isValueMerge),'Real compiler merges carry report metadata');
  for(const merge of priority.steps.filter(step=>step.isValueMerge && step.status!=='failed'))assert.equal(await page.locator('[data-step="'+merge.stepId+'"]').isVisible(),false,'Real conditional value merges do not add visible rows');
  const matrixBackgrounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const track=h.parentElement.querySelector('.gantt-track').getBoundingClientRect(),cell=Array.from(h.parentElement.querySelectorAll('.matrix-cell,.matrix-summary-cell')).map(cell=>cell.getBoundingClientRect()).find(box=>box.width>0);return track.right<=cell.left+.1;}));

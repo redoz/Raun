@@ -204,9 +204,8 @@
   .step-lifecycle .dn{color:var(--muted);font-style:italic}
   .step-lifecycle.status-passed:not(.open){padding-top:2px;padding-bottom:3px}
   .step-lifecycle.status-passed:not(.open) .step-head>.scenario-status,
-  .step-lifecycle.status-passed:not(.open) .step-head>.dm{visibility:hidden}
+  .step-lifecycle.status-passed:not(.open) .step-duration{visibility:hidden}
   .step-lifecycle.status-passed:not(.open) .dn{font-size:12px}
-  .step-lifecycle.status-passed .step-head{cursor:pointer}
   .phase-given{color:var(--ph-given)}.phase-when{color:var(--ph-when)}.phase-then{color:var(--ph-then)}
   .phase-given,.phase-when,.phase-then{text-decoration:none}
   .step-head .dm{display:flex;align-items:center;justify-content:flex-end;gap:8px;font:12px/1.4 var(--sans);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
@@ -229,10 +228,11 @@
   .step-notes{grid-column:3/-1;grid-row:2;margin:1px 0 0;min-width:0}
   .step-note{margin:0;color:var(--muted);font-size:12px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere}
   .step-head .stw{transform:rotate(-90deg)}
-  .step-entry.open .step-head .stw{transform:none}
-  .step-entry.has-body .step-head{cursor:pointer}
-  .step-expander,.lifecycle-toggle{border:0;background:none;padding:3px 0;color:var(--muted);font:inherit;cursor:pointer;flex:none}
-  .step-expander:focus-visible,.lifecycle-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+  .step-evidence{display:inline-flex;align-items:center;gap:2px}
+  .step-evidence-toggle{display:inline-flex;align-items:center;justify-content:center;flex:none;padding:3px;border:0;border-radius:3px;background:none;color:var(--muted);cursor:pointer}
+  .step-evidence-toggle:hover,.step-evidence-toggle[aria-expanded="true"]{background:var(--surface-hover);color:var(--ink)}
+  .step-evidence-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .step-evidence-panel[hidden]{display:none!important}
   .step-body{grid-column:2/-1;grid-row:3;display:none;margin:8px 0 0;min-width:0}
   .step-entry.open .step-body{display:block}
   .step-entry.step-animating>.step-body{display:block;overflow:hidden}
@@ -554,14 +554,12 @@
   .step-entry[hidden],.flow-content[hidden],.step-prerequisites[hidden]{display:none!important}
   .flow-content .step-entry{--dependency-gutter:calc(8px + var(--step-flow-depth,1)*12px);border-image:linear-gradient(to right,transparent calc(var(--flow-status-inset) + var(--step-flow-depth,1)*12px),var(--border) 0) 1}
   .flow-content .step-head>.scenario-status{margin-left:calc(var(--step-flow-depth,1)*12px)}
-  .flow-content .step-head>.step-expander,.flow-content .step-head>.lifecycle-toggle,.flow-content .step-head>.flow-condition-toggle{translate:calc(var(--step-flow-depth,1)*12px) 0}
+  .flow-content .step-head>.flow-condition-toggle{translate:calc(var(--step-flow-depth,1)*12px) 0}
   .flow-content .step-entry>.step-body{margin-left:calc(var(--step-body-inset,0px) + var(--step-flow-depth,1)*12px)}
   .flow-integrated:has(>.flow-content[hidden]){display:none}
   .step-entry.flow-condition{border-image:linear-gradient(to right,transparent calc(var(--flow-status-inset) + (var(--step-flow-depth,0) + 1)*12px),var(--border) 0) 1}
   .step-entry.flow-condition .flow-condition-toggle[aria-expanded="false"] .stw{transform:rotate(-90deg)}
   .step-entry.flow-condition .flow-condition-toggle[aria-expanded="true"] .stw{transform:none}
-  .flow-condition-title[role="button"]{cursor:pointer}
-  .flow-condition-title:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
   .step-head{position:relative;isolation:isolate}
   .gantt-track{position:relative;grid-column:1/-1;grid-row:1/3;align-self:stretch;min-height:0;z-index:-1;pointer-events:none;overflow:hidden}
   .matrix-row>.gantt-track{grid-column:1}
@@ -1342,14 +1340,17 @@
       animation.finished.then(()=>{if(card.scenarioAnimation===animation){card.classList.remove('is-animating');card.scenarioAnimation=null;}},()=>{});
     }
 
-    function transitionStep(entry,on){
-      const body=entry.querySelector(':scope > .step-body'),visible=body && getComputedStyle(body).display!=='none';
+    function transitionStep(entry,on,requestedKind){
+      const body=entry.querySelector(':scope > .step-body');if(!body)return;
+      const visible=getComputedStyle(body).display!=='none';
       const start=visible ? body.getBoundingClientRect().height : 0;
       const style=body && getComputedStyle(body),top=visible ? style.marginTop : '0px',bottom=visible ? style.marginBottom : '0px';
       entry.stepAnimation?.cancel();entry.stepAnimation=null;
       entry.classList.toggle('open',on);entry.classList.remove('step-animating');
-      entry.querySelector('.step-expander,.lifecycle-toggle,.flow-condition-title')?.setAttribute('aria-expanded',String(on));
-      if(!body)return;
+      const kind=requestedKind || entry.dataset.evidenceKind || entry.querySelector('.step-evidence-toggle')?.dataset.evidence;
+      entry.dataset.evidenceKind=kind;
+      if(on)for(const panel of body.querySelectorAll('[data-evidence-panel]'))panel.hidden=panel.dataset.evidencePanel!==kind;
+      for(const control of entry.querySelectorAll('.step-evidence-toggle'))control.setAttribute('aria-expanded',String(on && control.dataset.evidence===kind));
       body.inert=!on;
       if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
       const end=on ? body.getBoundingClientRect().height : 0,target=getComputedStyle(body);
@@ -1691,7 +1692,7 @@
           entry.classList.toggle("focus", entry.dataset.step === stepId);
         const entry = drill.querySelector('.step-entry[data-step="' + stepId + '"]');
         if(entry)entry.hidden=false;
-        if (entry && (entry.classList.contains("has-body") || entry.querySelector(".lifecycle-toggle")))transitionStep(entry,true);
+        if (entry?.classList.contains("has-body"))transitionStep(entry,true);
         if(entry)for(const branch of drill.querySelectorAll('.flow-branch'))if(branch.querySelector('.flow-content').contains(entry)){branch.querySelector('.flow-content').hidden=false;branch.flowToggle.setAttribute('aria-expanded','true');}
         if (entry && scroll) entry.scrollIntoView({ block: "nearest" });
         return true;
@@ -1999,12 +2000,6 @@
             button.classList.add('flow-condition-toggle');button.innerHTML=chevron;
             button.setAttribute('aria-label','Toggle branch: '+conditionTitles.get(condition.index));
             head.firstElementChild.replaceWith(button);
-            if(conditionRow.classList.contains('has-body')){
-              title.classList.add('flow-condition-title');title.tabIndex=0;title.setAttribute('role','button');
-              title.setAttribute('aria-label','Toggle details for '+conditionTitles.get(condition.index));
-              title.setAttribute('aria-expanded',String(conditionRow.classList.contains('open')));
-              title.setAttribute('aria-controls',conditionRow.querySelector('.step-body').id);
-            }
             section.appendChild(content);
           }else{heading.appendChild(button);section.append(heading,content);}
           section.flowToggle=button;
@@ -2058,7 +2053,7 @@
           bar.style.left=left;bar.style.width=(100*duration/scale)+'%';
           bar.style.maxWidth='calc(100% - '+left+')';track.appendChild(bar);
         }
-        axis.appendChild(timing.querySelector('.step-duration'));timing.prepend(axis);row.appendChild(track);
+        axis.appendChild(timing.querySelector('.step-duration'));timing.appendChild(axis);row.appendChild(track);
         const panel=el('div','step-prerequisites');panel.hidden=true;panel.id='step-prerequisites-'+(++stepDetailSequence);
         axis.setAttribute('aria-controls',panel.id);
         panel.appendChild(coverageText('span','',step.dependsOn?.length ? 'After:' : 'No prerequisites'));
@@ -2084,6 +2079,11 @@
       drill.addEventListener('keydown',event=>{if(event.key==='Escape'){const owner=event.target.closest?.('.step-prerequisites')?.parentElement;owner?.querySelector('.step-gantt').focus({preventScroll:true});for(const row of rows.values()){row.querySelector('.step-prerequisites').hidden=true;row.querySelector('.step-gantt').setAttribute('aria-expanded','false');}clear();}});
     }
     // every step of a scenario, in registration order, with local progressive disclosure
+    function evidenceToggleHtml(kind,name,panelId,open){
+      const label=kind==='logs' ? 'Logs and details' : 'Attachments';
+      const glyph=kind==='logs' ? '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>' : '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l10-10a4 4 0 0 1 5.66 5.66l-10 10a2 2 0 0 1-2.83-2.83l9.19-9.19"/>';
+      return '<button type="button" class="step-evidence-toggle step-'+kind+'-toggle" data-evidence="'+kind+'" title="'+label+'" aria-label="'+esc(label+' for '+name)+'" aria-controls="'+panelId+'" aria-expanded="'+String(open)+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+glyph+'</svg></button>';
+    }
     function buildScenarioDrill(sc){
       const p=el("div","drill scenario-drill");p.dataset.focus="";
       let h='<div class="step-list">';
@@ -2096,33 +2096,28 @@
           b+='<div class="step-logs"><ul class="logs">'+logs.map(line=>'<li>'+line+'</li>').join('')+'</ul></div>';
         }
         if(s.traceId)b+='<details class="step-trace"><summary>Trace</summary><pre class="att-body">'+esc(s.traceId)+(s.spanId ? '\nSpan '+esc(s.spanId) : '')+'</pre></details>';
-        if(s.attachments?.length)b+='<div class="sec">'+s.attachments.map(a=>'<details class="att"><summary><span class="an">'+esc(a.name)+'</span><span class="asz">'+attSize(a.value)+'</span></summary><pre class="att-body">'+esc(a.value)+'</pre></details>').join('')+'</div>';
+        const attachments=s.attachments?.length ? '<div class="sec">'+s.attachments.map(a=>'<details class="att"><summary><span class="an">'+esc(a.name)+'</span><span class="asz">'+attSize(a.value)+'</span></summary><pre class="att-body">'+esc(a.value)+'</pre></details>').join('')+'</div>' : '';
+        const hasBody=Boolean(b || attachments),initialKind=hasBody && s.status==='failed' ? (b ? 'logs' : 'attachments') : '';
         const skipped=s.status==='skipped' || s.status==='not-taken';
         const strike=text=>skipped ? '<s>'+text+'</s>' : text;
         const phase=String(s.phase || '').toLowerCase();
         const status=s.status==='not-taken' || s.status==='skipped' && s.skipReason?.startsWith('not taken:') ? 'not-taken' : ['passed','failed','skipped'].includes(s.status) ? s.status : 'skipped';
-        const cls='step-entry status-'+s.status+' ph-'+phase+(s.isLifecycle ? ' step-lifecycle' : '')+(b ? ' has-body' : '')+(b && s.status==='failed' ? ' open' : '');
-        const bodyId=b ? 'step-details-'+(++stepDetailSequence) : '';
-        const lifecycleToggle=s.isLifecycle && s.status==='passed';
-        const control=b ? 'step-expander' : 'lifecycle-toggle';
-        const controlLabel=b ? 'Toggle details for '+s.displayName : 'Toggle metadata for '+s.displayName;
-        h+='<div class="'+cls+'" data-step="'+esc(s.stepId)+'"><div class="step-head">'+
-          (b || lifecycleToggle ? '<button type="button" class="'+control+'" aria-label="'+esc(controlLabel)+'" aria-expanded="'+String(s.status==='failed')+'"'+(bodyId ? ' aria-controls="'+bodyId+'"' : '')+'><span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span></button>' : '<span class="stw" aria-hidden="true"></span>')+
+        const cls='step-entry status-'+s.status+' ph-'+phase+(s.isLifecycle ? ' step-lifecycle' : '')+(hasBody ? ' has-body' : '')+(hasBody && s.status==='failed' ? ' open' : '');
+        const bodyId=hasBody ? 'step-details-'+(++stepDetailSequence) : '';
+        const controls=(b ? evidenceToggleHtml('logs',s.displayName,bodyId+'-logs',initialKind==='logs') : '')+
+          (attachments ? evidenceToggleHtml('attachments',s.displayName,bodyId+'-attachments',initialKind==='attachments') : '');
+        const panel=(kind,html)=>'<div class="step-evidence-panel" data-evidence-panel="'+kind+'" id="'+bodyId+'-'+kind+'"'+(initialKind===kind ? '' : ' hidden')+'>'+html+'</div>';
+        h+='<div class="'+cls+'" data-step="'+esc(s.stepId)+'"'+(initialKind ? ' data-evidence-kind="'+initialKind+'"' : '')+'><div class="step-head">'+
+          '<span class="stw" aria-hidden="true"></span>'+
           '<span class="scenario-status '+status+'" role="img" aria-label="'+esc(s.status)+'"></span>'+
-          '<span class="dn">'+strike(stepTitleHtml(s,sc))+'</span><span class="dm">'+(Number.isFinite(s.offsetMs) ? '<span class="step-offset" title="Time from scenario start">+'+fmtDur(s.offsetMs)+'</span>' : '')+'<span class="step-duration" title="Step duration">'+fmtDur(s.durationMs)+'</span></span></div>'+stepNotesHtml(s.notes,s.noteMessages,sc)+
-          (b ? '<div class="step-body" id="'+bodyId+'">'+b+'</div>' : '')+'</div>';
+          '<span class="dn">'+strike(stepTitleHtml(s,sc))+'</span><span class="dm">'+(controls ? '<span class="step-evidence">'+controls+'</span>' : '')+(Number.isFinite(s.offsetMs) ? '<span class="step-offset" title="Time from scenario start">+'+fmtDur(s.offsetMs)+'</span>' : '')+'<span class="step-duration" title="Step duration">'+fmtDur(s.durationMs)+'</span></span></div>'+stepNotesHtml(s.notes,s.noteMessages,sc)+
+          (hasBody ? '<div class="step-body" id="'+bodyId+'"'+(initialKind ? '' : ' inert')+'>'+(b ? panel('logs',b) : '')+(attachments ? panel('attachments',attachments) : '')+'</div>' : '')+'</div>';
       }
       p.innerHTML=h+'</div>';bindResourceMessages(p,sc);
-      p.addEventListener("click",ev=>{
-        if(!ev.target.closest || ev.target.closest(".res-chip,.resource-mention,details"))return;
-        const head=ev.target.closest(".step-entry.has-body > .step-head,.step-entry.step-lifecycle.status-passed > .step-head");if(!head)return;
-        const control=ev.target.closest("button,a[href],input,select,textarea,summary");
-        if(control && !control.classList.contains("step-expander") && !control.classList.contains("lifecycle-toggle"))return;
-        transitionStep(head.parentElement,!head.parentElement.classList.contains("open"));
-      });
-      p.addEventListener('keydown',event=>{
-        if(!event.target.matches?.('.flow-condition-title') || !['Enter',' '].includes(event.key))return;
-        event.preventDefault();event.target.click();
+      p.addEventListener('click',event=>{
+        const control=event.target.closest?.('button[data-evidence]');if(!control)return;
+        const entry=control.closest('.step-entry'),kind=control.dataset.evidence;
+        transitionStep(entry,!entry.classList.contains('open') || entry.dataset.evidenceKind!==kind,kind);
       });
       return p;
     }
