@@ -172,7 +172,7 @@ public sealed class CoverletReaderTests
             File.WriteAllText(Path.Combine(directory, "testconfig.json"), """{"platformOptions":{"coverlet":{"include":"[General]*"}}}""");
             File.WriteAllText(Path.Combine(directory, "Fixture.testconfig.json"), """{"platformOptions":{"coverlet":{"include":"[Fixture]*", "exclude":"[Fixture]FileExcluded", "excludeByFile":"**/File.cs", "excludeByAttribute":"FileIgnored", "singleHit":true}}}""");
             var output = Path.Combine(directory, "Fixture.dll");
-            var fileScope = CoverletSettingsReader.Load(output, directory, _ => null, _ => false);
+            var fileScope = CoverletSettingsReader.Read(output, directory, _ => null, _ => false);
             Assert.True(fileScope.IncludesCoverletType("Fixture", "Included"));
             Assert.False(fileScope.IncludesCoverletType("General", "Included"));
             Assert.True(fileScope.CoverletSingleHit);
@@ -182,7 +182,7 @@ public sealed class CoverletReaderTests
                 ["coverlet-include"] = ["[Cli]*"], ["coverlet-exclude"] = ["[Cli]CliExcluded"],
                 ["coverlet-exclude-by-file"] = ["**/Cli.cs"], ["coverlet-exclude-by-attribute"] = ["CliIgnored"],
             };
-            var cli = CoverletSettingsReader.Load(output, directory, option => arguments.GetValueOrDefault(option), option => option == "coverlet-include-test-assembly");
+            var cli = CoverletSettingsReader.Read(output, directory, option => arguments.GetValueOrDefault(option), option => option == "coverlet-include-test-assembly");
             Assert.True(cli.IncludeTestAssembly);
             Assert.True(cli.IncludesCoverletType("Cli", "Included"));
             Assert.False(cli.IncludesCoverletType("Fixture", "Included"));

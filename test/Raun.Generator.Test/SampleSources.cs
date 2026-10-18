@@ -188,7 +188,7 @@ public static class SampleSources
         """;
 
     // A resource-aware DSL: User/Slot/Appointment are CRTP IResource<> records with KeyFor, and the
-    // steps carry role attributes ([Created]/[Edited]/[Read] on the return value or parameters) the
+    // steps carry role attributes ([Created]/[Updated]/[Read] on the return value or parameters) the
     // generator lowers into ctx.Resources.* calls.
     public const string ResourceDsl =
         """
@@ -231,11 +231,15 @@ public static class SampleSources
             }
         }
 
+        public sealed class Booked : CreatedAttribute {
+            public sealed class UserAttribute : ResourceLinkAttribute<User, ReadAttribute>;
+            public sealed class SlotAttribute : ResourceLinkAttribute<Slot, UpdatedAttribute>;
+        }
         public sealed partial class ResourceWhen : When<NoWorld>
         {
             [StepName("suspending the user")]
-            [return: Edited]
-            public async Task<User> Suspend([Edited] User user)
+            [return: Updated]
+            public async Task<User> Suspend([Updated] User user)
             {
                 await Task.Yield();
                 return user;
@@ -243,15 +247,15 @@ public static class SampleSources
 
             [StepName("booking a slot")]
             [return: Created]
-            public async Task<Appointment> Book([Read] User user, [Edited] Slot slot)
+            public async Task<Appointment> Book([Read] User user, [Updated] Slot slot)
             {
                 await Task.Yield();
                 return new Appointment(user, slot);
             }
 
             [StepName("booking with lineage")]
-            [return: Created(References = [nameof(user)], Consumes = [nameof(slot)])]
-            public async Task<Appointment> BookWithLineage(User user, Slot slot)
+            [return: Booked]
+            public async Task<Appointment> BookWithLineage([Booked.User] User user, [Booked.Slot] Slot slot)
             {
                 await Task.Yield();
                 return new Appointment(user, slot);
@@ -289,7 +293,7 @@ public static class SampleSources
         """;
 
     // Scenario appended to ResourceDsl: exercises When.Book's multi-role parameter list
-    // ([Read] User, [Edited] Slot) plus [return: Created], locking in param-loop ordering
+    // ([Read] User, [Updated] Slot) plus [return: Created], locking in param-loop ordering
     // and param-before-return emit order.
     public const string BookingScenario =
         """

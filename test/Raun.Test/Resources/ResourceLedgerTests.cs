@@ -33,16 +33,16 @@ public class ResourceLedgerTests
     public void Unordered_exclusive_claims_on_one_identity_conflict()
     {
         var ledger = Ledger();
-        ledger.Claim(0, "rename jane", Jane, LifecycleVerb.Edit);
+        ledger.Claim(0, "rename jane", Jane, ResourceEffect.Update);
 
         var ex = Assert.Throws<ResourceConflictException>(
-            () => ledger.Claim(1, "delete jane", Jane, LifecycleVerb.Delete));
+            () => ledger.Claim(1, "delete jane", Jane, ResourceEffect.Delete));
 
         Assert.Equal(Jane, ex.Identity);
         Assert.Equal("delete jane", ex.StepDisplayName);
-        Assert.Equal(LifecycleVerb.Delete, ex.Verb);
+        Assert.Equal(ResourceEffect.Delete, ex.Effect);
         Assert.Equal("rename jane", ex.OtherStepDisplayName);
-        Assert.Equal(LifecycleVerb.Edit, ex.OtherVerb);
+        Assert.Equal(ResourceEffect.Update, ex.OtherEffect);
         Assert.Contains("rename jane", ex.Message, StringComparison.Ordinal);
         Assert.Contains("delete jane", ex.Message, StringComparison.Ordinal);
         Assert.Contains("User:jane@x", ex.Message, StringComparison.Ordinal);
@@ -52,47 +52,46 @@ public class ResourceLedgerTests
     public void Unordered_exclusive_against_shared_conflicts_in_either_order()
     {
         var first = Ledger();
-        first.Claim(0, "read", Jane, LifecycleVerb.Read);
-        Assert.Throws<ResourceConflictException>(() => first.Claim(1, "edit", Jane, LifecycleVerb.Edit));
+        first.Claim(0, "read", Jane, ResourceEffect.Read);
+        Assert.Throws<ResourceConflictException>(() => first.Claim(1, "edit", Jane, ResourceEffect.Update));
 
         var second = Ledger();
-        second.Claim(0, "edit", Jane, LifecycleVerb.Edit);
-        Assert.Throws<ResourceConflictException>(() => second.Claim(1, "read", Jane, LifecycleVerb.Read));
+        second.Claim(0, "edit", Jane, ResourceEffect.Update);
+        Assert.Throws<ResourceConflictException>(() => second.Claim(1, "read", Jane, ResourceEffect.Read));
     }
 
     [Fact]
     public void Unordered_shared_claims_coexist()
     {
         var ledger = Ledger();
-        ledger.Claim(0, "read", Jane, LifecycleVerb.Read);
-        ledger.Claim(1, "load", Jane, LifecycleVerb.Load);
-        ledger.Claim(1, "reference", Jane, LifecycleVerb.Reference);
-        ledger.Claim(0, "consume", Jane, LifecycleVerb.Consume);
+        ledger.Claim(0, "read", Jane, ResourceEffect.Read);
+        ledger.Claim(1, "load", Jane, ResourceEffect.Read);
+
     }
 
     [Fact]
     public void Different_identities_never_conflict()
     {
         var ledger = Ledger();
-        ledger.Claim(0, "edit jane", Jane, LifecycleVerb.Edit);
-        ledger.Claim(1, "edit bob", Bob, LifecycleVerb.Edit);
+        ledger.Claim(0, "edit jane", Jane, ResourceEffect.Update);
+        ledger.Claim(1, "edit bob", Bob, ResourceEffect.Update);
     }
 
     [Fact]
     public void The_same_step_may_claim_one_identity_repeatedly()
     {
         var ledger = Ledger();
-        ledger.Claim(0, "book", Jane, LifecycleVerb.Read);
-        ledger.Claim(0, "book", Jane, LifecycleVerb.Edit);
-        ledger.Claim(0, "book", Jane, LifecycleVerb.Edit);
+        ledger.Claim(0, "book", Jane, ResourceEffect.Read);
+        ledger.Claim(0, "book", Jane, ResourceEffect.Update);
+        ledger.Claim(0, "book", Jane, ResourceEffect.Update);
     }
 
     [Fact]
     public void Steps_ordered_by_a_dependency_never_conflict()
     {
         var ledger = Ledger();
-        ledger.Claim(1, "create", Jane, LifecycleVerb.Create);
-        ledger.Claim(2, "delete", Jane, LifecycleVerb.Delete); // 2 depends on 1
+        ledger.Claim(1, "create", Jane, ResourceEffect.Create);
+        ledger.Claim(2, "delete", Jane, ResourceEffect.Delete); // 2 depends on 1
     }
 
     [Fact]
@@ -100,8 +99,8 @@ public class ResourceLedgerTests
     {
         // 0 -> 1 -> 2 -> 3: node 3 is ordered after node 0 through two hops.
         var ledger = new ResourceLedger([Node(0), Node(1, [0]), Node(2, [1]), Node(3, [2])]);
-        ledger.Claim(0, "create", Jane, LifecycleVerb.Create);
-        ledger.Claim(3, "delete", Jane, LifecycleVerb.Delete);
+        ledger.Claim(0, "create", Jane, ResourceEffect.Create);
+        ledger.Claim(3, "delete", Jane, ResourceEffect.Delete);
     }
 
     [Fact]
@@ -117,8 +116,8 @@ public class ResourceLedgerTests
             Node(4, dependsOn: [3]),
         ]);
 
-        ledger.Claim(1, "arm edit", Jane, LifecycleVerb.Edit);
-        ledger.Claim(4, "after merge delete", Jane, LifecycleVerb.Delete);
+        ledger.Claim(1, "arm edit", Jane, ResourceEffect.Update);
+        ledger.Claim(4, "after merge delete", Jane, ResourceEffect.Delete);
     }
 
     [Fact]
@@ -126,8 +125,8 @@ public class ResourceLedgerTests
     {
         // 1 is guarded on 0 but declares no DependsOn edge to it.
         var ledger = new ResourceLedger([Node(0), Node(1, guards: [new Guard(0, 0)])]);
-        ledger.Claim(0, "condition reads", Jane, LifecycleVerb.Edit);
-        ledger.Claim(1, "guarded edit", Jane, LifecycleVerb.Edit);
+        ledger.Claim(0, "condition reads", Jane, ResourceEffect.Update);
+        ledger.Claim(1, "guarded edit", Jane, ResourceEffect.Update);
     }
 
     [Fact]
@@ -135,7 +134,7 @@ public class ResourceLedgerTests
     {
         // The dependent may claim first; the producer's later claim is still ordered.
         var ledger = Ledger();
-        ledger.Claim(2, "dependent", Jane, LifecycleVerb.Edit);
-        ledger.Claim(1, "producer", Jane, LifecycleVerb.Edit);
+        ledger.Claim(2, "dependent", Jane, ResourceEffect.Update);
+        ledger.Claim(1, "producer", Jane, ResourceEffect.Update);
     }
 }

@@ -11,10 +11,10 @@ internal readonly record struct SourceSpan(
     string File, int StartLine, int StartChar, int EndLine, int EndChar);
 
 /// <summary>
-/// A single resource role lowered from a <c>[Created]/[Loaded]/[Read]/[Edited]/[Deleted]</c> attribute
+/// A single resource role lowered from a <c>[Created]/[Read]/[Read]/[Updated]/[Deleted]</c> attribute
 /// on a step's parameter or return value, or a <c>Reference</c>/<c>Consume</c> claim synthesized from a
-/// producer's <c>References</c>/<c>Consumes</c> lineage. <see cref="Verb"/> is the runtime
-/// <c>ResourceContext</c> method name (Read/Load/Create/Edit/Delete/Reference/Consume);
+/// producer's <c>References</c>/<c>Consumes</c> lineage. <see cref="Effect"/> is the runtime
+/// <c>ResourceContext</c> method name (Read/Read/Create/Update/Delete/Reference/Consume);
 /// <see cref="Expression"/> is the rewritten argument expression (in terms of <c>__inputs</c>) for a
 /// parameter role, the lineage target's expression for a synthesized claim, or <c>__r</c> for a return role.
 /// </summary>
@@ -23,14 +23,14 @@ internal readonly record struct ResourceRoleClaim
     private readonly Syn<ExpressionSyntax> _expression;
     private readonly EquatableArray<Syn<ExpressionSyntax>> _subjectExpressions;
 
-    public ResourceRoleClaim(string Verb, ExpressionSyntax Expression, bool IsReturn)
+    public ResourceRoleClaim(string Effect, ExpressionSyntax Expression, bool IsReturn)
     {
-        this.Verb = Verb;
+        this.Effect = Effect;
         _expression = Expression;
         this.IsReturn = IsReturn;
     }
 
-    public string Verb { get; init; }
+    public string Effect { get; init; }
     public ResourceRoleMetadata? Action { get; init; }
     public string? RelationshipAttributeIdentity { get; init; }
     public string? RelationshipPropertyName { get; init; }

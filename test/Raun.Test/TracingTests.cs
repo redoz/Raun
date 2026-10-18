@@ -189,7 +189,7 @@ public class TracingTests
         var events = span.Events.ToList();
         Assert.Equal([RaunTelemetry.Events.Log, RaunTelemetry.Events.Resource, RaunTelemetry.Events.Log], events.Select(e => e.Name));
         Assert.Contains(events[0].Tags, t => t.Key == "message" && (string?)t.Value == "before");
-        Assert.Contains(events[1].Tags, t => t.Key == "verb" && (string?)t.Value == "Create");
+        Assert.Contains(events[1].Tags, t => t.Key == "effect" && (string?)t.Value == "Create");
         Assert.Contains(events[1].Tags, t => t.Key == "identity" && (string?)t.Value == "User:jane@x");
         Assert.Contains(events[2].Tags, t => t.Key == "message" && (string?)t.Value == "after");
     }

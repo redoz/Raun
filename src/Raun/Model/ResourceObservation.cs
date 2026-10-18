@@ -4,12 +4,12 @@ namespace Raun.Model;
 /// One symbolic effect a step declared on a resource: the trace event powering the report's resource
 /// lane and debugging ("which step deleted User:123?").
 /// </summary>
-public sealed record ResourceEffect
+public sealed record ResourceObservation
 {
-    /// <summary>The lifecycle verb the step declared (Create/Load/Read/Edit/Delete).</summary>
-    public required LifecycleVerb Verb { get; init; }
+    /// <summary>The resource operation declared by the step: Create, Read, Update, or Delete.</summary>
+    public required ResourceEffect Effect { get; init; }
 
-    /// <summary>The optional domain action. The base Verb still controls access.</summary>
+    /// <summary>The optional domain action. The base Effect still controls access.</summary>
     public ResourceAction? Action { get; init; }
 
     /// <summary>The resource identity the effect targets.</summary>
@@ -36,6 +36,6 @@ public sealed record ResourceEffect
     /// <summary>When the effect was recorded.</summary>
     public System.DateTimeOffset Timestamp { get; init; }
 
-    /// <summary>The reader/writer mode this verb implies.</summary>
-    public LockMode Mode => Verb.ToLockMode();
+    /// <summary>The access mode required by this effect.</summary>
+    public LockMode Mode => Effect.ToLockMode();
 }

@@ -43,7 +43,7 @@ public sealed class PackageScenarios : Scenarios
 public sealed class PackageGiven : Given
 {
     [StepName("Given the locally built {$return}")]
-    [return: Loaded]
+    [return: Read]
     public Task<PackageFeed> BuiltPackages() => Task.FromResult(PackageConsumer.FindFeed());
 
     [StepName("Given {sample} consumes {feed} in isolation")]

@@ -28,6 +28,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.InvalidResourceDefinition,
         Descriptors.InvalidRelationshipProperty,
         Descriptors.InvalidResourceRelationship,
+        Descriptors.MissingResourceLink,
         Descriptors.InvalidResourceAction,
         Descriptors.AmbiguousResourceRole,
         Descriptors.ResourceRoleWithoutResult,
@@ -455,9 +456,9 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
             context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[problem.Id],
                 problem.Subject.Locations.FirstOrDefault() ?? method.GetLocation(), problem.Subject.Name, problem.Reason));
         }
-        foreach (var issue in RelationshipReader.Read(symbol).Issues)
+        foreach (var issue in RelationshipReader.Read(symbol, context.Compilation).Issues)
         {
-            context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[issue.Id], issue.Subject.Locations.FirstOrDefault(),
+            context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[issue.Id], issue.Location ?? issue.Subject.Locations.FirstOrDefault(), issue.Properties,
                 issue.Id == "RAUN010" ? issue.Reason : issue.Subject.Name, issue.Id == "RAUN010" ? symbol.Name : issue.Reason));
         }
         if (HasAttribute(symbol, "StepNameAttribute") || symbol.Parameters.Any(parameter => AttributeReader.ResourceKeyType(parameter) is not null)
@@ -556,7 +557,6 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     {
         var paramNames = method.Parameters.Select(p => p.Name).ToImmutableHashSet();
 
-        var coveredByLineage = RelationshipReader.Read(method).Relationships.Select(r => r.Target).ToImmutableHashSet();
 
         foreach (var parameter in method.Parameters)
         {
@@ -567,9 +567,8 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
                 context.ReportDiagnostic(Diagnostic.Create(Descriptors.InvalidResourceKeyParameter,
                     parameter.Locations.FirstOrDefault(), parameter.Name, parameter.Type.ToDisplayString()));
             }
-            if ((IsResourceType(parameter.Type) || AttributeReader.ResourceKeyType(parameter) is not null)
-                && AttributeReader.ParameterRole(parameter) is null
-                && !coveredByLineage.Contains(parameter.Name))
+            if (ResourceCodeModel.TryGetParameter(context.Compilation, parameter, out _)
+                && AttributeReader.ParameterRole(parameter) is null)
             {
                 var location = parameter.Locations.FirstOrDefault() ?? method.Locations.FirstOrDefault() ?? Location.None;
                 context.ReportDiagnostic(Diagnostic.Create(
@@ -579,7 +578,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
 
         if (SymbolHelpers.TryUnwrapReturn(method.ReturnType, out var resultType)
             && resultType is not null
-            && IsResourceType(resultType)
+            && ResourceCodeModel.TryGetReturn(context.Compilation, method, out _)
             && AttributeReader.ReturnRole(method) is null)
         {
             var location = method.Locations.FirstOrDefault() ?? Location.None;
@@ -588,16 +587,6 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         }
 
     }
-
-    /// <summary>
-    /// True when <paramref name="type"/> participates in the resource model — i.e. it implements
-    /// <c>Raun.IResource&lt;TSelf&gt;</c> (arity 1) or <c>Raun.IResourceIdentity</c>. A trailing
-    /// <c>Raun.ScenarioContext</c> param is naturally excluded.
-    /// </summary>
-    private static bool IsResourceType(ITypeSymbol type)
-        => type.AllInterfaces.Any(i =>
-            i.ContainingNamespace?.ToDisplayString(SymbolHelpers.NoGlobal) == "Raun"
-            && ((i.Name == "IResource" || i.Name == "IResourceAlternate") || i.Name == "IResourceIdentity"));
 
     private static bool HasAttribute(IMethodSymbol method, string attributeName)
         => method.GetAttributes().Any(a =>

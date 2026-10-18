@@ -153,23 +153,44 @@ Use resources when you need to follow the same patient, booking, or other entity
 A resource's `IResource<T>.KeyFor` supplies its identity. Step attributes describe its use:
 
 ```csharp
-[StepName("When creating an appointment")]
-[return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
-public Task<Appointment> CreateAppointment(Patient patient, Slot slot)
+public sealed class Reserved : UpdatedAttribute;
+public sealed class Booked : CreatedAttribute
+{
+    public sealed class PatientAttribute : ResourceLinkAttribute<Patient, ReadAttribute>;
+    public sealed class SlotAttribute : ResourceLinkAttribute<Slot, Reserved>;
+}
+
+[StepName("When booking {patient} in {slot}")]
+[return: Booked]
+public Task<Appointment> CreateAppointment(
+    [Booked.Patient] Patient patient, [Booked.Slot] Slot slot)
 ```
 
-This [booking step](samples/AppointmentTests/AppointmentDsl.cs) creates an appointment linked to
-the patient and slot. `[Read]`, `[Edited]`, and `[Deleted]` describe access to existing resources.
-Raun detects conflicting parallel access and links resource uses in the report. The
-[tracking sample](samples/AppointmentTests/ResourceTrackingScenarios.cs) shows labels, captured data,
-alternate representations, and key-only parameters. Map alternate representations when an API response
-and database row describe the same entity; use a key-only parameter when a step receives just its ID.
-Use a custom action when a domain name such as Approve explains a change better than Edit.
-Derive its attribute from a resource role; it keeps that role's conflict rules. Later steps that
-receive only an ID can reuse the resource's earlier name. See the [action sample](samples/AppointmentTests/ResourceActionScenarios.cs)
-and [resource reference](docs/reference/resources.md) for both features.
-Domain attributes can also declare typed relationship properties: the [booking attributes](samples/AppointmentTests/BookingAttributes.cs)
-link each booking to its patient and slot. `[Reserved]` gives Consume semantics the domain label Reserve; the [registry example](samples/AppointmentTests/RegistryBookingScenarios.cs) uses an opaque patient ID.
+This [booking step](samples/AppointmentTests/AppointmentDsl.cs) reads a patient, reserves a slot,
+and creates an appointment linked to both. The four effects are **Create, Read, Update, Delete**:
+Read allows shared access; the other three require exclusive access. `[Seed]` records a Create
+with the label Seed for data inserted behind the scenes. Use `[Created]` for creation through the system.
+The step code performs the real operation; attributes record what it does.
+
+Links describe relationships and grant no access. Nested role attributes package a typed link with
+an input action. The equivalent raw form is `[Read, Link<Booked>("Patient")]` on the patient and
+`[Reserved, Link<Booked>("Slot")]` on the slot. Required roles must be bound once; an ambiguous owner
+requires `Source = nameof(parameter)` or `Source = Subject.Return`.
+
+A custom action inherits its base effect's conflict rules. Its name defaults to the class name with
+`Attribute` removed; `[DisplayName("Reserve")]` can override it. See the
+[domain attributes](samples/AppointmentTests/BookingAttributes.cs),
+[action sample](samples/AppointmentTests/ResourceActionScenarios.cs), and
+[resource reference](docs/reference/resources.md).
+
+Alternate representations can share an identity through `IResourceAlternate<T>` on the resource owner,
+or `Identify<Patient>().With<PatientRow>(row => row.Id)` in custom-host configuration.
+Use `[ResourceKey<Patient>] string patientId` for a key-only input; it also works with a packaged role.
+Later steps can reuse readable labels from preceding dependencies without borrowing their object snapshots.
+The [registry sample](samples/AppointmentTests/RegistryBookingScenarios.cs) and
+[tracking sample](samples/AppointmentTests/ResourceTrackingScenarios.cs) show these features together.
+Scenario-wide external-system access remains independent: `[Uses<T>(LockMode.Exclusive)]` holds its
+admission token through setup, execution, teardown, and scope disposal.
 
 ## Read the report when something fails
 

@@ -3,7 +3,7 @@ namespace Raun;
 /// <summary>
 /// A resource's symbolic key within its type. Compared by value, so two keys with the same
 /// <see cref="Value"/> are equal. Implicitly convertible from a string for ergonomic call sites
-/// (<c>ctx.Resources.Load&lt;User&gt;("admin@x")</c>).
+/// (<c>ctx.Resources.Read&lt;User&gt;("admin@x")</c>).
 /// </summary>
 public readonly record struct ResourceKey(string Value)
 {

@@ -108,7 +108,7 @@ test('structured text retains literal order and does not resolve IDs from anothe
 });
 
 test('resource references in title note and logs select the same usage without scrolling',()=>{
- const current=step('s',message('key'));current.effects=[{verb:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:3,data:'old'}];
+ const current=step('s',message('key'));current.effects=[{effect:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:3,data:'old'}];
  const p=scope.buildScenarioDrill({...scenario,steps:[current]}),entry=p.querySelector('.step-entry');
  const chips=p.querySelectorAll('[data-message-resource]');assert.equal(chips.length,3);assert.equal(p.querySelector('.resource-events'),null);
  for(const chip of chips){
@@ -184,7 +184,7 @@ test('native Enter and Space activate only their own resource or expander once',
 
 test('resource activation highlights usage and Escape or outside click clears without changing step expansion',()=>{
  const current=step('s',message('Seed:key'));
- current.effects=[{verb:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:3}];
+ current.effects=[{effect:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:3}];
  const p=scope.buildScenarioDrill({...scenario,steps:[current]});
  const entry=p.querySelector('.step-entry'),chip=p.querySelector('[data-message-resource]');
  chip.dispatch('click');
@@ -202,7 +202,7 @@ test('resource activation highlights usage and Escape or outside click clears wi
 
 test('expanded steps show logs directly and preserve notes without duplicate resource events',()=>{
  const current=step('s',message('Seed:key'));current.offsetMs=100;
- current.effects=[{verb:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:103,data:'<old>'}];
+ current.effects=[{effect:'Read',resourceId:resource.id,type:resource.type,key:resource.key,offsetMs:103,data:'<old>'}];
  const p=scope.buildScenarioDrill({...scenario,steps:[current]});
  const entry=p.querySelector('.step-entry');entry.querySelector('.step-expander').dispatch('click');
  assert.equal(entry.classList.contains('open'),true);
@@ -280,14 +280,14 @@ test('resource hover shows captured reference data, preserves highlighting and c
 test('identity-only resource focus never borrows data from another reference',()=>{
  const other={...resource,id:'other'};
  const current=step('focus',{text:'id',parts:[{text:'id',resourceId:resource.id}]});
- current.effects=[{verb:'Read',resourceId:other.id,data:'unrelated'}];
+ current.effects=[{effect:'Read',resourceId:other.id,data:'unrelated'}];
  const p=scope.buildScenarioDrill({...scenario,resources:[resource,other],steps:[current]});
  const chip=p.querySelector('[data-message-resource]');chip.dispatch('focusin');
  const card=p.querySelector('.resource-hover');assert.ok(card);
  assert.match(nodeText(card),/No captured data/);
  assert.ok(card.querySelector('[data-resource-copy="data"]').disabled);
  dispatchDocument('keydown',chip,'Escape');
- current.effects.push({verb:'Read',resourceId:resource.id,data:'matching snapshot'});
+ current.effects.push({effect:'Read',resourceId:resource.id,data:'matching snapshot'});
  chip.dispatch('focusin');assert.match(nodeText(p.querySelector('.resource-hover')),/No captured data/);
  dispatchDocument('keydown',chip,'Escape');
  current.effects=[];current.noteMessages=[{parts:[{resourceId:resource.id,data:'captured note snapshot'}]}];

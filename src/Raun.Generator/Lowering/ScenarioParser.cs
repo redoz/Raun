@@ -1449,7 +1449,7 @@ internal sealed class ScenarioParser
                 earlier.Operation,
                 later.Operation,
                 later.Local.Name,
-                earlier.Verb + "/" + later.Verb);
+                earlier.Effect + "/" + later.Effect);
             ok = false;
         }
 
@@ -1813,13 +1813,13 @@ internal sealed class ScenarioParser
 
         if (method.DeclaringSyntaxReferences.Length == 0)
         {
-            foreach (var issue in RelationshipReader.Read(method).Issues)
+            foreach (var issue in RelationshipReader.Read(method, _model.Compilation).Issues)
             { Report(Descriptors.ById[issue.Id], invocation, issue.Id == "RAUN010" ? issue.Reason : issue.Subject.Name, issue.Id == "RAUN010" ? method.Name : issue.Reason); }
             foreach (var problem in ResourceRoleMetadata.Validate(method, _model.Compilation))
             { Report(Descriptors.ById[problem.Id], invocation, problem.Subject.Name, problem.Reason); }
         }
 
-        foreach (var subject in RelationshipReader.Read(method).Relationships.SelectMany(r => new[] { r.Source, r.Target }).Distinct())
+        foreach (var subject in RelationshipReader.Read(method, _model.Compilation).Relationships.SelectMany(r => new[] { r.Source, r.Target }).Distinct())
         {
             var parameter = method.Parameters.FirstOrDefault(p => p.Name == subject);
             if (parameter is not null && CallArguments.IndexOf(invocation.ArgumentList.Arguments, parameter.Name, parameter.Ordinal) < 0)
@@ -2090,7 +2090,7 @@ internal sealed class ScenarioParser
     /// claim names exactly the value the step receives. Empty when the method declares no roles ⇒ the
     /// emitter inserts nothing.
     /// </summary>
-    private static List<ResourceRoleClaim> BuildResourceClaims(
+    private List<ResourceRoleClaim> BuildResourceClaims(
         SeparatedSyntaxList<ArgumentSyntax> written,
         IMethodSymbol method,
         bool hasResult,
@@ -2125,23 +2125,17 @@ internal sealed class ScenarioParser
             return null;
         }
 
-        // Emits the lineage relations a producing subject declares via [Created]/[Loaded]/[Edited]'s
-        // References/Consumes: one Reference/Consume claim per resolvable target, the subject expression
-        // riding along (the runtime records subject→target). Emitted BEFORE the subject's own role claim,
-        // so effect order stays target-lineage-then-subject (e.g. Reference, Consume, then Create).
-        var relationships = RelationshipReader.Read(method).Relationships;
-        void EmitLineage(string source, ExpressionSyntax subjectExpression)
+        // Actions and links are independent operations. Links carry both endpoint expressions;
+        // the emitter defers a return-owned link until the call has produced its source value.
+        var relationships = RelationshipReader.Read(method, _model.Compilation).Relationships;
+        void EmitLinks(string source, ExpressionSyntax subjectExpression)
         {
             foreach (var relation in relationships.Where(r => r.Source == source))
             {
                 if (TargetFor(relation.Target) is { } expression)
                 {
-                    var targetAction = relation.Target == AttributeReader.ReturnSubject ? AttributeReader.ReturnAction(method)
-                        : method.Parameters.FirstOrDefault(parameter => parameter.Name == relation.Target) is { } targetParameter
-                            ? AttributeReader.ParameterAction(targetParameter) : null;
                     claims.Add(new ResourceRoleClaim(relation.Kind, expression, IsReturn: false)
                     {
-                        Action = targetAction is { AttributeIdentity: not null } action && action.Verb == relation.Kind ? action : null,
                         SubjectExpressions = [subjectExpression], RelationshipAttributeIdentity = relation.AttributeIdentity, RelationshipPropertyName = relation.PropertyName,
                     });
                 }
@@ -2166,20 +2160,18 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            if (role is "Create" or "Load" or "Edit")
-            {
-                EmitLineage(parameter.Name, expression);
-            }
-
             claims.Add(new ResourceRoleClaim(role, expression, IsReturn: false) { Action = AttributeReader.ParameterAction(parameter) is { AttributeIdentity: not null } action ? action : null });
         }
 
         if (hasResult && AttributeReader.ReturnRole(method) is { } returnRole)
         {
-            EmitLineage(AttributeReader.ReturnSubject, ReturnValue);
             claims.Add(new ResourceRoleClaim(returnRole, ReturnValue, IsReturn: true) { Action = AttributeReader.ReturnAction(method) is { AttributeIdentity: not null } action ? action : null });
         }
 
+        foreach (var source in relationships.Select(r => r.Source).Distinct())
+        {
+            if (TargetFor(source) is { } expression) { EmitLinks(source, expression); }
+        }
         return claims;
     }
 

@@ -28,7 +28,7 @@ public class DiagnosticTests
         var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
 
         Assert.Equal(
-            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016", "RAUN022", "RAUN024", "RAUN027", "RAUN028", "RAUN029", "RAUN030", "RAUN031", "RAUN032", "RAUN033", "RAUN034", "RAUN035"],
+            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016", "RAUN022", "RAUN024", "RAUN027", "RAUN028", "RAUN029", "RAUN030", "RAUN031", "RAUN032", "RAUN033", "RAUN034", "RAUN035", "RAUN036"],
             analyzer.SupportedDiagnostics.Select(d => d.Id).Order(StringComparer.Ordinal));
     }
 
@@ -387,7 +387,7 @@ public class DiagnosticTests
     [Fact]
     public async Task RAUN009_unannotated_resource_parameter()
     {
-        // A resource-typed parameter with no [Read]/[Edited]/[Deleted] role — there is no default.
+        // A resource-typed parameter with no [Read]/[Updated]/[Deleted] role — there is no default.
         var source =
             """
             using System.Threading.Tasks;
@@ -475,71 +475,55 @@ public class DiagnosticTests
         """;
 
     [Fact]
-    public async Task RAUN010_unknown_target_name()
+    public async Task Links_reject_unknown_roles()
     {
-        var source = LineageDsl +
-            """
-            public sealed partial class AppointmentWhen : When<NoWorld>
-            {
-                [StepName("transfer")]
-                [return: Created(References = [nameof(who), "ghost"])]
-                public async Task<Account> Transfer(User who) { await Task.Yield(); return new Account("a"); }
+        var source = LineageDsl + """
+            public sealed class Assigned : CreatedAttribute {
+                public sealed class UserAttribute : ResourceLinkAttribute<User, ReadAttribute>;
+            }
+            public sealed class Actions : When<NoWorld> {
+                [return: Assigned] public Task<Account> Assign([Read, Link<Assigned>("Ghost")] User who) => Task.FromResult(new Account("a"));
             }
             """;
-
-        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN010");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), "RAUN032");
     }
 
     [Fact]
-    public async Task RAUN010_return_target_without_a_subject_return()
+    public async Task Links_require_an_existing_source_application()
     {
-        // An [Edited] parameter naming Subject.Return as a target, but the step yields no resource.
-        var source = LineageDsl +
-            """
-            public sealed partial class AppointmentWhen : When<NoWorld>
-            {
-                [StepName("look up")]
-                public async Task LookUp([Edited(References = [Subject.Return])] Account acc) { await Task.Yield(); }
+        var source = LineageDsl + """
+            public sealed class Assigned : UpdatedAttribute { public sealed class UserAttribute : ResourceLinkAttribute<User, ReadAttribute>; }
+            public sealed class Actions : When<NoWorld> {
+                public Task Assign([Read, Link<Assigned>("User", Source = Subject.Return)] User who) => Task.CompletedTask;
             }
             """;
-
-        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN010");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), "RAUN032");
     }
 
     [Fact]
-    public async Task RAUN010_self_reference()
+    public async Task Links_cannot_bind_the_source_parameter_as_its_own_target()
     {
-        // A produced subject may not name itself as a lineage target.
-        var source = LineageDsl +
-            """
-            public sealed partial class AppointmentWhen : When<NoWorld>
-            {
-                [StepName("clone")]
-                [return: Created(References = [Subject.Return])]
-                public async Task<Account> Clone() { await Task.Yield(); return new Account("a"); }
+        var source = LineageDsl + """
+            public sealed class Assigned : UpdatedAttribute { public sealed class UserAttribute : ResourceLinkAttribute<User, ReadAttribute>; }
+            public sealed class Actions : When<NoWorld> {
+                public Task Assign([Assigned, Link<Assigned>("User")] User who) => Task.CompletedTask;
             }
             """;
-
-        AssertHas(await GeneratorHarness.DiagnoseAsync(source), "RAUN010");
+        AssertHas(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), "RAUN032");
     }
 
     [Fact]
-    public async Task RAUN010_clean_for_valid_targets()
+    public async Task Valid_links_bind_parameter_or_return_owners()
     {
-        var source = LineageDsl +
-            """
-            public sealed partial class AppointmentWhen : When<NoWorld>
-            {
-                [StepName("assign")]
-                public async Task Assign([Edited(References = [nameof(who)])] Account acc, User who) { await Task.Yield(); }
-
-                [StepName("create")]
-                [return: Created(References = [nameof(who)])]
-                public async Task<Account> Create(User who) { await Task.Yield(); return new Account("a"); }
+        var source = LineageDsl + """
+            public sealed class Assigned : UpdatedAttribute { public sealed class UserAttribute : ResourceLinkAttribute<User, ReadAttribute>; }
+            public sealed class Opened : CreatedAttribute { public sealed class UserAttribute : ResourceLinkAttribute<User, ReadAttribute>; }
+            public sealed class Actions : When<NoWorld> {
+                public Task Assign([Assigned] Account account, [Assigned.User] User who) => Task.CompletedTask;
+                [return: Opened] public Task<Account> Open([Opened.User] User who) => Task.FromResult(new Account("a"));
             }
             """;
-
-        Assert.DoesNotContain(await AnalyzeCompilable(source), d => d.Id == "RAUN010");
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
     }
 
     // A DSL whose steps declare every kind of parameter access on one resource type, so a scenario
@@ -565,24 +549,25 @@ public class DiagnosticTests
             public async Task<Patient> PatientExists(string name) { await Task.Yield(); return new Patient(name); }
         }
 
+        public sealed class Noted : CreatedAttribute { public sealed class PatientAttribute : ResourceLinkAttribute<Patient, ReadAttribute>; }
         public sealed partial class ConflictWhen : When<NoWorld>
         {
             [StepName("renaming the patient")]
-            public async Task Rename([Edited] Patient patient, string name) { await Task.Yield(); }
+            public async Task Rename([Updated] Patient patient, string name) { await Task.Yield(); }
 
             [StepName("suspending the patient")]
-            public async Task Suspend([Edited] Patient patient) { await Task.Yield(); }
+            public async Task Suspend([Updated] Patient patient) { await Task.Yield(); }
 
             [StepName("deleting the patient")]
             public async Task Delete([Deleted] Patient patient) { await Task.Yield(); }
 
             [StepName("attaching a note")]
-            [return: Created(References = [nameof(patient)])]
-            public async Task<Note> AttachNote(Patient patient, string text) { await Task.Yield(); return new Note(text); }
+            [return: Noted]
+            public async Task<Note> AttachNote([Noted.Patient] Patient patient, string text) { await Task.Yield(); return new Note(text); }
 
             [StepName("tagging the patient {tag}")]
             [return: Created]
-            public async Task<Note> Tag([Edited] Patient patient, int tag) { await Task.Yield(); return new Note($"tag-{tag}"); }
+            public async Task<Note> Tag([Updated] Patient patient, int tag) { await Task.Yield(); return new Note($"tag-{tag}"); }
         }
 
         public sealed partial class ConflictThen : Then<NoWorld>

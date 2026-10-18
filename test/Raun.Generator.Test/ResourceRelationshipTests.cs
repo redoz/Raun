@@ -6,214 +6,145 @@ namespace Raun.Generator.Test;
 
 public class ResourceRelationshipTests
 {
-    internal const string Source = """
-        using System.Threading.Tasks;
-        using Raun;
-        public sealed record Patient(string Id) : IResource<Patient> { public static ResourceKey KeyFor(Patient p) => p.Id; }
-        public sealed record Slot(string Id) : IResource<Slot> { public static ResourceKey KeyFor(Slot p) => p.Id; }
-        public sealed record Appointment(string Id) : IResource<Appointment> { public static ResourceKey KeyFor(Appointment p) => p.Id; }
-        [ResourceActionDefinition(ResourceActionKind.Create)]
-        public sealed class BookedAttribute : ResourceAttribute {
-          [Relationship<Patient>(ResourceRelation.Reference)] public string Patient { get; set; } = "not a binding";
-          [Relationship<Slot>(ResourceRelation.Consume)] public string Slot { get; set; } = "not a binding";
-        }
-        public sealed class Steps : Given<NoWorld> {
-          [return: Created] public Task<Patient> Patient() => Task.FromResult(new Patient("p"));
-          [return: Created] public Task<Slot> Slot() => Task.FromResult(new Slot("s"));
-          [return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]
-          public Task<Appointment> Book(Patient patient, Slot slot2) => Task.FromResult(new Appointment("a"));
-        }
-        public sealed class Stories : Scenarios<NoWorld> {
-          public Steps Given => Steps<Steps>();
-          [Scenario] public async Task Story() {
-            var patient = await Given.Patient(); var slot = await Given.Slot();
-            await Given.Book(patient, slot);
-          }
-        }
-        """;
+    internal const string Source = CrudResourceGeneratorTests.Source;
 
     [Fact]
-    public async Task Domain_properties_bind_arbitrary_parameter_names_and_emit_both_relationships()
+    public async Task Domain_roles_bind_arbitrary_parameter_names_and_emit_both_links()
     {
-        Assert.Empty(await GeneratorHarness.DiagnoseAsync(Source, requireCompilable: true));
+        var source = Source.Replace("Slot slot)", "Slot slot2)", StringComparison.Ordinal);
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
+        var generated = GeneratorHarness.Run(source); generated.AssertCompiles();
+        var book = (await Assert.Single(generated.Definitions()).RunAsync()).Single(r => r.Node.OperationName == "Book");
+        Assert.Equal(StepStatus.Passed, book.Status);
+        Assert.Equal([ResourceEffect.Read, ResourceEffect.Update, ResourceEffect.Create], book.Effects.Select(e => e.Effect));
+        Assert.Contains(book.Links, r => r.Target.Key.Value == "p" && r.Role == "Patient");
+        Assert.Contains(book.Links, r => r.Target.Key.Value == "s" && r.Role == "Slot");
+    }
+
+    [Fact]
+    public async Task Named_link_targets_keep_one_action_and_their_snapshot()
+    {
         var generated = GeneratorHarness.Run(Source); generated.AssertCompiles();
-        var results = await Assert.Single(generated.Definitions()).RunAsync();
-        Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
-        var book = results.Single(r => r.Node.OperationName == "Book");
-        Assert.Equal(2, book.Lineage.Count);
-        Assert.Equal([LifecycleVerb.Reference, LifecycleVerb.Consume, LifecycleVerb.Create], book.Effects.Select(e => e.Verb));
-        Assert.Equal("Booked", Assert.Single(book.Effects, e => e.Action is not null).Action!.Name);
-        Assert.Contains(book.Lineage, r => r.Target.Key.Value == "p" && r.Kind == LifecycleVerb.Reference);
-        Assert.Contains(book.Lineage, r => r.Target.Key.Value == "s" && r.Kind == LifecycleVerb.Consume);
-    }
-
-    [Theory]
-    [InlineData(ResourceActionKind.Reference, "Reference", "Patient patient", "[Named] Patient patient", "p")]
-    [InlineData(ResourceActionKind.Consume, "Consume", "Slot slot2", "[Named] Slot slot2", "s")]
-    public async Task Named_relationship_targets_keep_one_action_and_their_lineage(ResourceActionKind kind, string verb, string original, string decorated, string key)
-    {
-        var source = Source.Replace("public sealed class Steps", "[System.ComponentModel.DisplayName(\"Reserve\")] [ResourceActionDefinition(ResourceActionKind." + kind + ")] public sealed class NamedAttribute : ResourceAttribute; public sealed class Steps", StringComparison.Ordinal)
-            .Replace(original, decorated, StringComparison.Ordinal);
-        var generated = GeneratorHarness.Run(source);
-        generated.AssertCompiles();
-        var results = await Assert.Single(generated.Definitions()).RunAsync();
-        Assert.All(results, result => Assert.Equal(StepStatus.Passed, result.Status));
-        var book = results.Single(result => result.Node.OperationName == "Book");
-        var effect = Assert.Single(book.Effects, effect => effect.Identity.Key.Value == key);
-        Assert.Equal(verb, effect.Verb.ToString());
-        Assert.Equal(LockMode.Shared, effect.Verb.ToLockMode());
-        Assert.Equal("Reserve", effect.Action!.Name);
+        var book = (await Assert.Single(generated.Definitions()).RunAsync()).Single(r => r.Node.OperationName == "Book");
+        var reserved = Assert.Single(book.Effects, e => e.Identity.Key.Value == "s");
+        Assert.Equal(ResourceEffect.Update, reserved.Effect);
+        Assert.Equal(LockMode.Exclusive, reserved.Effect.ToLockMode());
+        Assert.Equal("Reserve", reserved.Action!.Name);
         Assert.Single(book.Logs, line => line.Contains("[resource] Reserve", StringComparison.Ordinal));
-        Assert.NotNull(effect.DataSnapshot);
-        Assert.Contains(book.Lineage, relation => relation.Target == effect.Identity && relation.Kind == effect.Verb);
+        Assert.NotNull(reserved.DataSnapshot);
+        Assert.Contains(book.Links, link => link.Target == reserved.Identity && link.Role == "Slot");
     }
 
     [Theory]
-    [InlineData("Booked(Patient = nameof(patient), Slot = nameof(slot2))", "Booked(Slot = nameof(slot2))", "RAUN032")]
-    [InlineData("Patient = nameof(patient)", "Patient = \" \"", "RAUN032")]
-    [InlineData("Slot = nameof(slot2)", "Slot = \"missing\"", "RAUN010")]
-    [InlineData("public string Patient { get; set; }", "public int Patient { get; set; }", "RAUN031")]
-    public async Task Bad_property_schemas_and_bindings_are_compile_errors(string oldValue, string newValue, string expected)
+    [InlineData("[Booked.Patient]", "[Read]", "RAUN036")]
+    [InlineData("[Booked.Patient]", "[Read, Link<Booked>(\"Unknown\")]", "RAUN032")]
+    [InlineData("[Booked.Patient]", "[Read, Link<Booked>(\"Patient\", Source = \"unknown\")]", "RAUN032")]
+    [InlineData("public sealed class PatientAttribute", "private sealed class PatientAttribute", "RAUN031")]
+    public async Task Bad_role_schemas_and_bindings_are_compile_errors(string before, string after, string expected)
     {
-        var source = Source.Replace(oldValue, newValue, StringComparison.Ordinal);
-        if (expected == "RAUN031") { source = source.Replace("Patient = nameof(patient), ", "", StringComparison.Ordinal).Replace("= \"not a binding\"", "= 0", StringComparison.Ordinal); }
-        var diagnostics = await GeneratorHarness.DiagnoseAsync(source, requireCompilable: expected != "RAUN031");
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(Source.Replace(before, after, StringComparison.Ordinal), requireCompilable: expected != "RAUN031");
         Assert.Contains(diagnostics, d => d.Id == expected);
         Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN000");
     }
 
     [Fact]
-    public async Task Standalone_relationships_are_the_same_contract()
+    public async Task Raw_links_require_their_own_input_action()
     {
-        var source = Source.Replace("[return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]",
-            "[return: Created] [return: RelatesTo(ResourceRelation.Reference, nameof(patient))] [return: RelatesTo(ResourceRelation.Consume, nameof(slot2))]", StringComparison.Ordinal);
-        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
-        var generated = GeneratorHarness.Run(source); generated.AssertCompiles();
-        var book = (await Assert.Single(generated.Definitions()).RunAsync()).Single(r => r.Node.OperationName == "Book");
-        Assert.Equal(2, book.Lineage.Count);
+        var source = Source.Replace("[Booked.Patient]", "[Link<Booked>(\"Patient\")]", StringComparison.Ordinal);
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true);
+        Assert.Contains(diagnostics, d => d.Id == "RAUN009");
     }
 
     [Fact]
-    public async Task Mixed_duplicate_edges_are_rejected()
+    public async Task Mixed_duplicate_role_bindings_are_rejected()
     {
-        var source = Source.Replace("public Task<Appointment> Book", "[return: RelatesTo(ResourceRelation.Reference, nameof(patient))] public Task<Appointment> Book", StringComparison.Ordinal);
+        var source = Source.Replace("[Booked.Patient]", "[Booked.Patient, Link<Booked>(\"Patient\")]", StringComparison.Ordinal);
         Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), d => d.Id == "RAUN032");
     }
 
-    [Theory]
-    [InlineData("Required = false", "")]
-    [InlineData("Required = false", "Patient = null, ")]
-    public async Task Optional_properties_allow_omission_but_reject_explicit_null(string options, string binding)
-    {
-        var source = Source.Replace("Relationship<Patient>(ResourceRelation.Reference)", "Relationship<Patient>(ResourceRelation.Reference, " + options + ")", StringComparison.Ordinal)
-            .Replace("Patient = nameof(patient), ", binding, StringComparison.Ordinal);
-        var diagnostics = await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true);
-        if (binding.Length == 0)
-        {
-            // The unreferenced patient still needs its own Read declaration.
-            diagnostics = await GeneratorHarness.DiagnoseAsync(source.Replace("Book(Patient patient", "Book([Read] Patient patient", StringComparison.Ordinal), requireCompilable: true);
-            Assert.DoesNotContain(diagnostics, d => d.Id is "RAUN032" or "RAUN000");
-        }
-        else { Assert.Contains(diagnostics, d => d.Id == "RAUN032"); }
-    }
-
     [Fact]
-    public async Task Null_array_bindings_are_diagnosed_without_an_analyzer_crash()
+    public async Task Packaged_marker_and_explicit_action_compete()
     {
-        var source = Source.Replace("[return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]", "[return: Created(References = null)]", StringComparison.Ordinal);
-        var diagnostics = await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true);
-        Assert.Contains(diagnostics, d => d.Id == "RAUN032");
-        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN000");
+        var source = Source.Replace("[Booked.Patient]", "[Booked.Patient, Read]", StringComparison.Ordinal);
+        Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), d => d.Id == "RAUN028");
     }
 
     [Theory]
     [InlineData("Row")]
     [InlineData("Response")]
-    public async Task Typed_relationships_accept_canonical_alternates_in_generated_code(string alternate)
+    public async Task Roles_accept_canonical_alternates(string alternate)
     {
-        var source = Source.Replace("public sealed record Patient(string Id) : IResource<Patient>",
-            "public sealed record Row(string Id); public sealed record Response(string Id); public sealed record Patient(string Id) : IResource<Patient>, IResourceAlternate<Row>, IResourceAlternate<Response>", StringComparison.Ordinal)
-            .Replace("public static ResourceKey KeyFor(Patient p) => p.Id;", "public static ResourceKey KeyFor(Patient p) => p.Id; public static ResourceKey KeyFor(Row p) => p.Id; public static ResourceKey KeyFor(Response p) => p.Id;", StringComparison.Ordinal)
-            .Replace("public Task<Patient> Patient() => Task.FromResult(new Patient", "public Task<" + alternate + "> Patient() => Task.FromResult(new " + alternate, StringComparison.Ordinal)
-            .Replace("Book(Patient patient", "Book(" + alternate + " patient", StringComparison.Ordinal);
+        var source = Source.Replace("public record Patient(string Id) : IResource<Patient>",
+            "public record Row(string Id); public record Response(string Id); public record Patient(string Id) : IResource<Patient>, IResourceAlternate<Row>, IResourceAlternate<Response>", StringComparison.Ordinal)
+            .Replace("public static ResourceKey KeyFor(Patient value) => value.Id;", "public static ResourceKey KeyFor(Patient value) => value.Id; public static ResourceKey KeyFor(Row value) => value.Id; public static ResourceKey KeyFor(Response value) => value.Id;", StringComparison.Ordinal)
+            .Replace("Task<Patient> Patient() => Task.FromResult(new Patient", "Task<" + alternate + "> Patient() => Task.FromResult(new " + alternate, StringComparison.Ordinal)
+            .Replace("[Booked.Patient] Patient patient", "[Booked.Patient] " + alternate + " patient", StringComparison.Ordinal);
+        Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
         var generated = GeneratorHarness.Run(source); generated.AssertCompiles();
         var results = await Assert.Single(generated.Definitions()).RunAsync();
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
-        Assert.Equal("Patient", Assert.Single(results.Single(r => r.Node.OperationName == "Book").Lineage, r => r.Kind == LifecycleVerb.Reference).Target.Type!.Name);
+        Assert.Equal("Patient", Assert.Single(results.Single(r => r.Node.OperationName == "Book").Links, r => r.Role == "Patient").Target.Type!.Name);
     }
 
     [Fact]
-    public async Task Explicit_kind_mismatches_fail_the_step_without_recording_the_relation()
+    public async Task Canonical_kind_mismatches_are_compile_errors()
     {
-        var source = Source.Replace("Relationship<Patient>(ResourceRelation.Reference)", "Relationship<Slot>(ResourceRelation.Reference)", StringComparison.Ordinal);
-        var generated = GeneratorHarness.Run(source); generated.AssertCompiles();
-        var book = (await Assert.Single(generated.Definitions()).RunAsync()).Single(r => r.Node.OperationName == "Book");
-        Assert.Equal(StepStatus.Failed, book.Status);
-        Assert.IsType<ArgumentException>(book.Exception);
-        Assert.Empty(book.Lineage);
+        var source = Source.Replace("ResourceLinkAttribute<Patient, ReadAttribute>", "ResourceLinkAttribute<Slot, ReadAttribute>", StringComparison.Ordinal);
+        Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), d => d.Id == "RAUN032");
     }
 
     [Fact]
-    public async Task Referenced_library_properties_and_usage_errors_are_read_from_metadata()
+    public async Task Referenced_library_roles_and_usage_errors_are_read_from_metadata()
     {
-        var declarations = Source[..Source.IndexOf("public sealed class Stories", StringComparison.Ordinal)];
+        var start = Source.IndexOf("public sealed class Stories", StringComparison.Ordinal);
+        var declarations = Source[..start]; var story = Source[start..];
         var library = GeneratorHarness.Run(declarations, "Bookings"); library.AssertCompiles();
-        var story = Source[Source.IndexOf("public sealed class Stories", StringComparison.Ordinal)..];
         var application = GeneratorHarness.Run("using Raun; using System.Threading.Tasks; " + story, "Consumer", MetadataReference.CreateFromImage(library.Image));
         application.AssertCompiles();
         Assert.All(await Assert.Single(application.Definitions()).RunAsync(), r => Assert.Equal(StepStatus.Passed, r.Status));
-        var badLibrary = GeneratorHarness.Run(declarations.Replace("Patient = nameof(patient), ", "", StringComparison.Ordinal), "BadBookings"); badLibrary.AssertCompiles();
+        var badLibrary = GeneratorHarness.Run(declarations.Replace("[Booked.Patient]", "[Read]", StringComparison.Ordinal), "BadBookings"); badLibrary.AssertCompiles();
         var bad = GeneratorHarness.Run("using Raun; using System.Threading.Tasks; " + story, "BadConsumer", MetadataReference.CreateFromImage(badLibrary.Image));
-        Assert.Single(bad.GeneratorDiagnostics, d => d.Id == "RAUN032");
+        Assert.Single(bad.GeneratorDiagnostics, d => d.Id == "RAUN036");
     }
 
     [Fact]
-    public async Task Private_generic_property_contracts_emit_accessible_metadata_lookups()
+    public async Task Private_generic_owners_emit_accessible_metadata_lookups()
     {
-        var source = Source.Replace("public sealed class Steps : Given<NoWorld> {", """
-            public sealed class Steps : Given<NoWorld> {
-              [ResourceActionDefinition(ResourceActionKind.Create)]
-              private sealed class LocalAttribute<T> : ResourceAttribute {
-                [Relationship<Patient>(ResourceRelation.Reference)] public string Patient { get; set; } = "";
-                [Relationship<Slot>(ResourceRelation.Consume)] public string Slot { get; set; } = "";
+        var source = Source.Replace("public sealed class Operations : Given<NoWorld> {", """
+            public sealed class Operations : Given<NoWorld> {
+              private sealed class Local<T> : CreatedAttribute {
+                public sealed class PatientAttribute : ResourceLinkAttribute<Patient, ReadAttribute>;
+                public sealed class SlotAttribute : ResourceLinkAttribute<Slot, Reserved>;
               }
-            """, StringComparison.Ordinal).Replace("[return: Booked(", "[return: Local<string>(", StringComparison.Ordinal);
+            """, StringComparison.Ordinal).Replace("[return: Booked]", "[return: Local<string>]", StringComparison.Ordinal)
+            .Replace("[Booked.Patient]", "[Local<string>.Patient]", StringComparison.Ordinal).Replace("[Booked.Slot]", "[Local<string>.Slot]", StringComparison.Ordinal);
         var generated = GeneratorHarness.Run(source); generated.AssertCompiles();
         var results = await Assert.Single(generated.Definitions()).RunAsync();
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
-        Assert.Equal(2, results.Single(r => r.Node.OperationName == "Book").Lineage.Count);
+        Assert.Equal(2, results.Single(r => r.Node.OperationName == "Book").Links.Count);
     }
 
     [Theory]
-    [InlineData("[ResourceActionDefinition(ResourceActionKind.Create)]", "", "RAUN030")]
-    [InlineData("ResourceActionKind.Create", "(ResourceActionKind)77", "RAUN030")]
-    [InlineData("ResourceRelation.Reference", "(ResourceRelation)77", "RAUN031")]
+    [InlineData("public sealed class Booked : CreatedAttribute", "public sealed class Booked : ResourceAttribute", "RAUN030")]
+    [InlineData("public sealed class Booked : CreatedAttribute", "[ResourceActionDefinition((ResourceEffect)77)] public sealed class Booked : ResourceAttribute", "RAUN030")]
+    [InlineData("public sealed class PatientAttribute", "private sealed class PatientAttribute", "RAUN031")]
     public async Task Invalid_unused_declarations_are_diagnosed(string before, string after, string id)
     {
-        var source = Source[..Source.IndexOf("public sealed class Steps", StringComparison.Ordinal)].Replace(before, after, StringComparison.Ordinal);
+        var source = Source[..Source.IndexOf("public sealed class Operations", StringComparison.Ordinal)].Replace(before, after, StringComparison.Ordinal);
         Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), d => d.Id == id);
     }
 
-    [Fact]
-    public async Task A_field_cannot_impersonate_an_inherited_relationship_property()
-    {
-        var source = Source.Replace("public sealed class Steps", "public sealed class HiddenAttribute : CreatedAttribute { public new string[] References = []; } public sealed class Steps", StringComparison.Ordinal)
-            .Replace("[return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]", "[return: Hidden(References = [nameof(patient), nameof(slot2)])]", StringComparison.Ordinal);
-        Assert.Contains(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true), d => d.Id == "RAUN031");
-    }
-
     [Theory]
-    [InlineData("private new string[] References { get; set; } = [];")]
-    [InlineData("[Relationship(ResourceRelation.Reference)] private string Secret { get; set; } = \"\";")]
-    public void Referenced_private_members_receive_the_same_schema_validation(string member)
+    [InlineData("public new string Patient = \"\";")]
+    [InlineData("private new string Patient { get; set; } = \"\";")]
+    public void Referenced_members_cannot_hide_inherited_roles(string member)
     {
-        var declarations = Source[..Source.IndexOf("public sealed class Stories", StringComparison.Ordinal)]
-            .Replace("public sealed class Steps", "public sealed class HiddenAttribute : CreatedAttribute { " + member + " } public sealed class Steps", StringComparison.Ordinal)
-            .Replace("[return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]", "[return: Hidden]", StringComparison.Ordinal)
-            .Replace("Book(Patient patient, Slot slot2)", "Book([Read] Patient patient, [Read] Slot slot2)", StringComparison.Ordinal);
-        var library = GeneratorHarness.Run(declarations, "PrivateBookings"); library.AssertCompiles();
-        var story = Source[Source.IndexOf("public sealed class Stories", StringComparison.Ordinal)..];
-        var consumer = GeneratorHarness.Run("using Raun; using System.Threading.Tasks; " + story, "Consumer", MetadataReference.CreateFromImage(library.Image));
-        Assert.Single(consumer.GeneratorDiagnostics, d => d.Id == "RAUN031");
+        var start = Source.IndexOf("public sealed class Stories", StringComparison.Ordinal);
+        var declarations = Source[..start].Replace("public sealed class Booked", "public class Booked", StringComparison.Ordinal)
+            .Replace("public sealed class Operations", "public sealed class Hidden : Booked { " + member + " } public sealed class Operations", StringComparison.Ordinal)
+            .Replace("[return: Booked]", "[return: Hidden]", StringComparison.Ordinal);
+        var library = GeneratorHarness.Run(declarations, "HiddenBookings"); library.AssertCompiles();
+        var consumer = GeneratorHarness.Run("using Raun; using System.Threading.Tasks; " + Source[start..], "Consumer", MetadataReference.CreateFromImage(library.Image));
+        Assert.Contains(consumer.GeneratorDiagnostics, d => d.Id == "RAUN031");
     }
 }

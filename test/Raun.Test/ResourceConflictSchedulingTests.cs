@@ -41,7 +41,7 @@ public class ResourceConflictSchedulingTests
     /// <summary>A step body that declares <paramref name="verb"/> on <c>Account:{id}</c>, optionally
     /// waiting on <paramref name="gate"/> first so claim order is deterministic.</summary>
     private static Func<IStepInputs, ScenarioContext, Task<object?>> Touch(
-        LifecycleVerb verb, string id, Task? gate = null, TaskCompletionSource? open = null)
+        ResourceEffect verb, string id, Task? gate = null, TaskCompletionSource? open = null)
         => async (_, ctx) =>
         {
             if (gate is not null)
@@ -52,13 +52,13 @@ public class ResourceConflictSchedulingTests
             var account = new Account(id);
             switch (verb)
             {
-                case LifecycleVerb.Create:
+                case ResourceEffect.Create:
                     await ctx.Resources.Create(account);
                     break;
-                case LifecycleVerb.Edit:
-                    await ctx.Resources.Edit(account);
+                case ResourceEffect.Update:
+                    await ctx.Resources.Update(account);
                     break;
-                case LifecycleVerb.Delete:
+                case ResourceEffect.Delete:
                     await ctx.Resources.Delete(account);
                     break;
                 default:
@@ -83,8 +83,8 @@ public class ResourceConflictSchedulingTests
     {
         var firstClaimed = new TaskCompletionSource();
         var def = Def(
-            Node(0, Touch(LifecycleVerb.Edit, "acc-1", open: firstClaimed)),
-            Node(1, Touch(LifecycleVerb.Delete, "acc-1", gate: firstClaimed.Task)));
+            Node(0, Touch(ResourceEffect.Update, "acc-1", open: firstClaimed)),
+            Node(1, Touch(ResourceEffect.Delete, "acc-1", gate: firstClaimed.Task)));
 
         var results = await Run(def);
 
@@ -101,14 +101,14 @@ public class ResourceConflictSchedulingTests
     {
         var firstClaimed = new TaskCompletionSource();
         var def = Def(
-            Node(0, Touch(LifecycleVerb.Edit, "acc-1", open: firstClaimed)),
-            Node(1, Touch(LifecycleVerb.Edit, "acc-1", gate: firstClaimed.Task)),
-            Node(2, Touch(LifecycleVerb.Read, "acc-1"), 1));
+            Node(0, Touch(ResourceEffect.Update, "acc-1", open: firstClaimed)),
+            Node(1, Touch(ResourceEffect.Update, "acc-1", gate: firstClaimed.Task)),
+            Node(2, Touch(ResourceEffect.Read, "acc-1"), 1));
 
         var results = await Run(def);
 
         var recorded = Assert.Single(results[0].Effects);
-        Assert.Equal(LifecycleVerb.Edit, recorded.Verb);
+        Assert.Equal(ResourceEffect.Update, recorded.Effect);
         Assert.Empty(results[1].Effects);
         Assert.Equal(StepStatus.Skipped, results[2].Status);
     }
@@ -117,9 +117,9 @@ public class ResourceConflictSchedulingTests
     public async Task Ordered_steps_mutating_one_identity_both_pass()
     {
         var def = Def(
-            Node(0, Touch(LifecycleVerb.Create, "acc-1")),
-            Node(1, Touch(LifecycleVerb.Edit, "acc-1"), 0),
-            Node(2, Touch(LifecycleVerb.Delete, "acc-1"), 1));
+            Node(0, Touch(ResourceEffect.Create, "acc-1")),
+            Node(1, Touch(ResourceEffect.Update, "acc-1"), 0),
+            Node(2, Touch(ResourceEffect.Delete, "acc-1"), 1));
 
         var results = await Run(def);
 
@@ -130,8 +130,8 @@ public class ResourceConflictSchedulingTests
     public async Task Unordered_shared_access_to_one_identity_both_pass()
     {
         var def = Def(
-            Node(0, Touch(LifecycleVerb.Read, "acc-1")),
-            Node(1, Touch(LifecycleVerb.Read, "acc-1")));
+            Node(0, Touch(ResourceEffect.Read, "acc-1")),
+            Node(1, Touch(ResourceEffect.Read, "acc-1")));
 
         var results = await Run(def);
 
@@ -142,8 +142,8 @@ public class ResourceConflictSchedulingTests
     public async Task Unordered_mutations_of_different_identities_both_pass()
     {
         var def = Def(
-            Node(0, Touch(LifecycleVerb.Edit, "acc-1")),
-            Node(1, Touch(LifecycleVerb.Edit, "acc-2")));
+            Node(0, Touch(ResourceEffect.Update, "acc-1")),
+            Node(1, Touch(ResourceEffect.Update, "acc-2")));
 
         var results = await Run(def);
 
@@ -160,11 +160,11 @@ public class ResourceConflictSchedulingTests
         var def = Def(
             Node(0, async (_, ctx) =>
             {
-                await ctx.Resources.Edit(new Account("acc-1"));
+                await ctx.Resources.Update(new Account("acc-1"));
                 firstFinished.SetResult();
                 return null;
             }),
-            Node(1, Touch(LifecycleVerb.Edit, "acc-1", gate: firstFinished.Task)));
+            Node(1, Touch(ResourceEffect.Update, "acc-1", gate: firstFinished.Task)));
 
         var results = await Run(def);
 
@@ -178,12 +178,12 @@ public class ResourceConflictSchedulingTests
     {
         var firstClaimed = new TaskCompletionSource();
         var def = Def(
-            Node(0, Touch(LifecycleVerb.Edit, "acc-1", open: firstClaimed)),
-            Node(1, Touch(LifecycleVerb.Delete, "acc-1", gate: firstClaimed.Task)));
+            Node(0, Touch(ResourceEffect.Update, "acc-1", open: firstClaimed)),
+            Node(1, Touch(ResourceEffect.Delete, "acc-1", gate: firstClaimed.Task)));
 
         var results = await Run(def);
 
-        Assert.Equal(["[resource] Edit Account:acc-1"], results[0].Logs);
+        Assert.Equal(["[resource] Update Account:acc-1"], results[0].Logs);
         var conflictLine = Assert.Single(results[1].Logs);
         Assert.StartsWith("[resource] conflict: ", conflictLine, StringComparison.Ordinal);
         Assert.Contains("Account:acc-1", conflictLine, StringComparison.Ordinal);

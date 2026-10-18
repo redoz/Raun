@@ -45,7 +45,7 @@ namespace Raun.Generated
                 OperationName = "UserExists",
                 DisplayNameTemplate = "user jane@acme.com exists",
                 SourceFile = "",
-                SourceLine = 84,
+                SourceLine = 88,
                 GroupId = null,
                 Timeout = null,
                 DependsOn = new int[]
@@ -79,7 +79,7 @@ namespace Raun.Generated
                 OperationName = "Suspend",
                 DisplayNameTemplate = "suspending the user",
                 SourceFile = "",
-                SourceLine = 85,
+                SourceLine = 89,
                 GroupId = null,
                 Timeout = null,
                 DependsOn = new int[]
@@ -99,10 +99,10 @@ namespace Raun.Generated
                 Invoke = static async (__inputs, __ctx) =>
                 {
 #line hidden
-                    await __ctx.Resources.Edit(__inputs.GetArgument<global::ResourceDemo.User>(0));
+                    await __ctx.Resources.Update(__inputs.GetArgument<global::ResourceDemo.User>(0));
                     var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::ResourceDemo.ResourceWhen>().Suspend(__inputs.GetArgument<global::ResourceDemo.User>(0));
 #line hidden
-                    await __ctx.Resources.Edit(__r);
+                    await __ctx.Resources.Update(__r);
 #line hidden
                     return (object? )__r;
                 }
@@ -115,7 +115,7 @@ namespace Raun.Generated
                 OperationName = "CannotSignIn",
                 DisplayNameTemplate = "the user cannot sign in",
                 SourceFile = "",
-                SourceLine = 86,
+                SourceLine = 90,
                 GroupId = null,
                 Timeout = null,
                 DependsOn = new int[]
@@ -167,7 +167,7 @@ namespace Raun.Generated
                 TypeName = "ResourceScenarios",
                 ClassDisplayName = null,
                 SourceFile = "",
-                SourceLine = 82,
+                SourceLine = 86,
                 Timeout = null,
                 TeardownPolicy = (global::Raun.Run)0,
                 Nodes = nodes,

@@ -90,10 +90,11 @@ public class StepArgumentEvaluationTests
     {
         var source = Source.Replace("public static string Next() { return (++Counter).ToString(); }",
             "public static Patient? Expected; public static Patient Next() => Expected = new Patient((++Counter).ToString());", StringComparison.Ordinal)
-            .Replace("[StepName(\"Given {key} / {key:id}\")]", "[StepName(\"Given {$return ?? key} / {key:id}\")] [return: Created(References = [nameof(key)])]", StringComparison.Ordinal)
-            .Replace("public Task Use([Read, ResourceKey<Patient>] string key)", "public Task<Patient> Use([Read] Patient key)", StringComparison.Ordinal)
+            .Replace("[StepName(\"Given {key} / {key:id}\")]", "[StepName(\"Given {$return ?? key} / {key:id}\")] [return: Produced]", StringComparison.Ordinal)
+            .Replace("public Task Use([Read, ResourceKey<Patient>] string key)", "public Task<Patient> Use([Produced.Input] Patient key)", StringComparison.Ordinal)
             .Replace("ProbeState.Actual = key;", "if (!ReferenceEquals(ProbeState.Expected, key)) throw new InvalidOperationException(\"different object\"); ProbeState.Actual = key.Id;", StringComparison.Ordinal)
-            .Replace("return Task.CompletedTask;", "return Task.FromResult(new Patient(\"created\"));", StringComparison.Ordinal);
+            .Replace("return Task.CompletedTask;", "return Task.FromResult(new Patient(\"created\"));", StringComparison.Ordinal)
+            + "public sealed class Produced : CreatedAttribute { public sealed class InputAttribute : ResourceLinkAttribute<Patient, ReadAttribute>; }";
         var generated = GeneratorHarness.Run(source);
         generated.AssertCompiles();
         var use = (await Assert.Single(generated.Definitions()).RunAsync())[1];
@@ -101,8 +102,8 @@ public class StepArgumentEvaluationTests
         Assert.Equal(1, Read<int>(generated, "Counter"));
         Assert.Equal("1", Read<string>(generated, "Actual"));
         Assert.Equal("Given Patient:created / 1", use.DisplayName);
-        var read = Assert.Single(use.Effects, effect => effect.Verb == LifecycleVerb.Reference);
-        Assert.Equal(read.Identity, Assert.Single(use.Lineage).Target);
+        var read = Assert.Single(use.Effects, effect => effect.Effect == ResourceEffect.Read);
+        Assert.Equal(read.Identity, Assert.Single(use.Links).Target);
         Assert.Equal(read.Identity, use.TitleMessage.Parts.Last(part => part.Resource.HasValue).Resource);
     }
 
@@ -367,17 +368,18 @@ public class StepArgumentEvaluationTests
         var source = Source.Replace("public static string Next() { return (++Counter).ToString(); }",
             "public static string[] Values = [\"before\"]; public static string[] NextArray() { ++Counter; return Values; }", StringComparison.Ordinal)
             .Replace("public Task Use([Read, ResourceKey<Patient>] string key)",
-                "[return: Created(References = [nameof(key)])] public Task<Patient> Use([ResourceKey<Patient>] ref string key)", StringComparison.Ordinal)
+                "[return: Produced] public Task<Patient> Use([Produced.Input, ResourceKey<Patient>] ref string key)", StringComparison.Ordinal)
             .Replace("ProbeState.Actual = key;", "ProbeState.Actual = key; key = \"after\";", StringComparison.Ordinal)
             .Replace("return Task.CompletedTask;", "return Task.FromResult(new Patient(\"created\"));", StringComparison.Ordinal)
-            .Replace("Given.Use(ProbeState.Next())", "Given.Use(ref ProbeState.NextArray()[0])", StringComparison.Ordinal);
+            .Replace("Given.Use(ProbeState.Next())", "Given.Use(ref ProbeState.NextArray()[0])", StringComparison.Ordinal)
+            + "public sealed class Produced : CreatedAttribute { public sealed class InputAttribute : ResourceLinkAttribute<Patient, ReadAttribute>; }";
         var generated = GeneratorHarness.Run(source);
         generated.AssertCompiles();
         Assert.Empty(GeneratorHarness.GeneratedCodeWarnings(source));
         var use = (await Assert.Single(generated.Definitions()).RunAsync())[1];
         Assert.Equal(StepStatus.Passed, use.Status);
         Assert.Equal("Given Patient:before / before", use.DisplayName);
-        Assert.Equal("after", Assert.Single(use.Lineage).Target.Key.Value);
+        Assert.Equal("after", Assert.Single(use.Links).Target.Key.Value);
         Assert.Equal(1, Read<int>(generated, "Counter"));
     }
 

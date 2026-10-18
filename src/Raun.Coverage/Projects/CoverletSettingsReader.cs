@@ -13,7 +13,7 @@ public static class CoverletSettingsReader
     public static CollectorScope Read(Stream stream)
         => FromValues(Values(stream), _ => null, _ => false, true);
 
-    public static CollectorScope Load(string modulePath, string invocationDirectory, Func<string, string[]?> arguments, Func<string, bool> isSet)
+    public static CollectorScope Read(string modulePath, string invocationDirectory, Func<string, string[]?> arguments, Func<string, bool> isSet)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(isSet);

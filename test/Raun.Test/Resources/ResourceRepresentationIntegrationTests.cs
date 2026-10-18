@@ -15,15 +15,16 @@ public sealed class ResourceRepresentationIntegrationTests
         var context = Context(resolver);
         var symbolic = new ResourceIdentity(typeof(Row), "42");
         await context.Read(new Patient("42"));
-        await context.Load<Row>((ResourceKey)"42");
-        await context.Edit(symbolic);
-        await context.Reference(symbolic, new Patient("43"), new ResourceIdentity(typeof(Row), "43"));
+        await context.Read<Row>((ResourceKey)"42");
+        await context.Update(symbolic);
+        await context.Link("Patient", new Patient("43"), symbolic);
+        await context.Link("Patient", new ResourceIdentity(typeof(Row), "43"), symbolic);
         Assert.Equal(new ResourceIdentity(typeof(Patient), "42"), Assert.Single(context.Effects).Identity);
-        var relation = Assert.Single(context.Lineage);
-        Assert.Equal(new ResourceIdentity(typeof(Patient), "43"), relation.Subject);
+        var relation = Assert.Single(context.Links);
+        Assert.Equal(new ResourceIdentity(typeof(Patient), "43"), relation.Source);
         Assert.Equal(new ResourceIdentity(typeof(Patient), "42"), relation.Target);
-        await Assert.ThrowsAsync<ArgumentException>(() => context.Reference(symbolic, new Patient("42")).AsTask());
-        Assert.Single(context.Lineage);
+        await Assert.ThrowsAsync<ArgumentException>(() => context.Link("Patient", new Patient("42"), symbolic).AsTask());
+        Assert.Single(context.Links);
         var title = new StepMessageBuilder(new MessageFormattingContext(resolver)).AppendFormatted(symbolic).Build();
         Assert.Equal(Assert.Single(context.Effects).Identity, Assert.Single(title.Parts).Resource);
     }
@@ -42,13 +43,13 @@ public sealed class ResourceRepresentationIntegrationTests
         var symbolic = new ResourceIdentity(typeof(Row), "42");
         if (symbolicFirst)
         {
-            await first.Edit(symbolic);
+            await first.Update(symbolic);
             await Assert.ThrowsAsync<ResourceConflictException>(() => second.Read(new Patient("42")).AsTask());
         }
         else
         {
             await first.Read(new Patient("42"));
-            await Assert.ThrowsAsync<ResourceConflictException>(() => second.Edit(symbolic).AsTask());
+            await Assert.ThrowsAsync<ResourceConflictException>(() => second.Update(symbolic).AsTask());
         }
         Assert.Empty(second.Effects);
     }
@@ -63,10 +64,10 @@ public sealed class ResourceRepresentationIntegrationTests
         var context = Context(resolver);
         var title = new StepMessageBuilder(new MessageFormattingContext(resolver)).AppendFormatted(row).Build();
         await context.Read(row);
-        await context.Edit(new Row("42", "after"));
-        await context.Load<Row>((ResourceKey)"42");
+        await context.Update(new Row("42", "after"));
+        await context.Read<Row>((ResourceKey)"42");
         var effect = Assert.Single(context.Effects);
-        Assert.Equal(LifecycleVerb.Edit, effect.Verb);
+        Assert.Equal(ResourceEffect.Update, effect.Effect);
         Assert.Equal("base:after", effect.Label);
         Assert.Contains("before", Assert.Single(title.Parts).Snapshot, StringComparison.Ordinal);
         Assert.Contains("evidence", Assert.Single(title.Parts).Snapshot, StringComparison.Ordinal);
@@ -81,7 +82,7 @@ public sealed class ResourceRepresentationIntegrationTests
         resolver.Identify("patients").With<Patient>().With<Row>(row => row.Id);
         var context = Context(resolver);
         await context.Read(new Patient("42"));
-        await context.Edit(new ResourceIdentity(typeof(Row), "42"));
+        await context.Update(new ResourceIdentity(typeof(Row), "42"));
         var node = Node(0);
         var definition = new ScenarioDefinition { ScenarioId = "s", DisplayName = "s", MethodName = "s", Nodes = [node] };
         var builder = new HtmlReportModelBuilder();

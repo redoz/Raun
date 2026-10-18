@@ -113,7 +113,7 @@ public class StepMessageTitleTests
         Assert.Equal("frozen", Assert.Single(References(result.NoteMessages[2])).Resource!.Value.Key.Value);
         Assert.Empty(References(result.NoteMessages[4]));
         Assert.Empty(result.Effects);
-        Assert.Empty(result.Lineage);
+        Assert.Empty(result.Links);
         Assert.Equal("Path  2026-10-13 12.50", results.Single(item => item.Node.OperationName == "Path").DisplayName);
     }
 
@@ -305,7 +305,7 @@ public class StepMessageTitleTests
         Assert.Equal(new[] { "str-one", "num-7" }, References(typed.TitleMessage).Select(part => part.Resource!.Value.Key.Value));
         Assert.Equal(plain.Node.StepId, typed.Node.StepId);
         Assert.Empty(typed.Effects);
-        Assert.Empty(typed.Lineage);
+        Assert.Empty(typed.Links);
     }
 
     private static ServiceProvider DeclaredServices(GeneratorResult generated)

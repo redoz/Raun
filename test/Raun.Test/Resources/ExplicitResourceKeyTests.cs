@@ -57,10 +57,10 @@ public sealed class ExplicitResourceKeyTests
         first.AttachLedger(ledger, 0);
         second.AttachLedger(ledger, 1);
         var expected = new ResourceIdentity(typeof(Resource), "key");
-        if (keyFirst) await first.Edit(expected);
-        else await first.Edit(new Resource("key"));
+        if (keyFirst) await first.Update(expected);
+        else await first.Update(new Resource("key"));
         var error = await Assert.ThrowsAsync<ResourceConflictException>(() => keyFirst
-            ? second.Read(new Resource("key")).AsTask() : second.Load<Resource>("key").AsTask());
+            ? second.Read(new Resource("key")).AsTask() : second.Read<Resource>("key").AsTask());
         Assert.Equal(expected, error.Identity);
         Assert.Empty(second.Effects);
     }
@@ -70,11 +70,11 @@ public sealed class ExplicitResourceKeyTests
     {
         var resources = new ResourceContext("step", "step", new ResourceIdentityResolver(), TimeProvider.System);
         var target = new Resource("target");
-        await resources.Load<Resource>("target");
-        await resources.Reference(target, new Resource("subject"));
+        await resources.Read<Resource>("target");
+        await resources.Link("Input", new Resource("subject"), target);
         Assert.Equal(new ResourceIdentity(typeof(Resource), "target"), Assert.Single(resources.Effects).Identity);
-        var relation = Assert.Single(resources.Lineage);
-        Assert.Equal(new ResourceIdentity(typeof(Resource), "subject"), relation.Subject);
+        var relation = Assert.Single(resources.Links);
+        Assert.Equal(new ResourceIdentity(typeof(Resource), "subject"), relation.Source);
         Assert.Equal(new ResourceIdentity(typeof(Resource), "target"), relation.Target);
         var node = Node(0, "step");
         var definition = new ScenarioDefinition
@@ -86,7 +86,7 @@ public sealed class ExplicitResourceKeyTests
         builder.OnStepFinished(definition, new StepResult
         {
             Node = node, DisplayName = "step", Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
-            Effects = resources.Effects, Lineage = resources.Lineage,
+            Effects = resources.Effects, Links = resources.Links,
         });
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(builder.Build("now")));
         var reportResources = json.RootElement.GetProperty("Scenarios")[0].GetProperty("Resources");

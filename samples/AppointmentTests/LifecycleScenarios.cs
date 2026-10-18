@@ -6,7 +6,7 @@ namespace AppointmentTests;
 /// <summary>
 /// What happens to an appointment after it is booked. Same authoring model as <see cref="Scenarios"/>;
 /// these lean on the parts of the framework the booking scenarios do not need: teardown policy and
-/// required cleanups, the Loaded/Edited/Deleted roles, a bare <c>if</c>, a step timeout, attachments,
+/// required cleanups, the Read/Updated/Deleted roles, a bare <c>if</c>, a step timeout, attachments,
 /// ILogger, and a custom phase marker.
 /// </summary>
 [DisplayName("Appointment lifecycle")]
@@ -35,7 +35,7 @@ public sealed class LifecycleScenarios : AppointmentSuite
         await Then.AppointmentIsIn(moved, held);
     }
 
-    // The patient already exists (Loaded, not Created), so there is nothing of theirs to tear down;
+    // The patient already exists (Read, not Created), so there is nothing of theirs to tear down;
     // the appointment is Created and then Deleted in order, which the trace shows as two effects on
     // one identity.
     [Scenario("patient cancels an existing appointment")]

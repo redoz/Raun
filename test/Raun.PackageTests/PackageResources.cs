@@ -17,5 +17,5 @@ public sealed record ConsumerReport(string File, string Consumer) : IResource<Co
     public static string LabelFor(ConsumerReport report) => $"{report.Consumer} report";
 }
 
-public sealed class RestoredAttribute : EditedAttribute;
-public sealed class BuiltAttribute : EditedAttribute;
+public sealed class RestoredAttribute : UpdatedAttribute;
+public sealed class BuiltAttribute : UpdatedAttribute;

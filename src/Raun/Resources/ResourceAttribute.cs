@@ -5,6 +5,6 @@ namespace Raun;
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
 public abstract class ResourceAttribute : Attribute
 {
-    /// <summary>The relationship properties declared by this attribute type. These are schema entries, not bound step arguments.</summary>
+    /// <summary>The relationship roles declared by this attribute type. These are schema entries, not bound step arguments.</summary>
     public IReadOnlyList<RelationshipDefinition> Relationships => ResourceAction.For(GetType()).Relationships;
 }

@@ -209,7 +209,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                     Effects = r.Effects.Select(e => new ReportEffect
                     {
                         ResourceId = ResourceId(e.Identity),
-                        Verb = e.Verb.ToString(),
+                        Effect = e.Effect.ToString(),
                         ActionName = e.Action?.Name,
                         Label = e.Label,
                         Type = e.Identity.Kind.DisplayName,
@@ -222,33 +222,32 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                 });
             }
 
-            // Lineage relations (2026-06-22 spec): relations are recorded explicitly at runtime from each
-            // producer's normalized relationship declarations. Map them straight
-            // through; dedup by (subject, target, kind) across the scenario. No subject inference.
-            var references = new List<ReportReference>();
-            var seenRelations = new HashSet<(ResourceIdentity, ResourceIdentity, LifecycleVerb)>();
+            // Preserve explicit role-named links. Only actual effects add resource activity.
+            // The same endpoints under different roles remain distinct.
+            var references = new List<ReportLink>();
+            var seenRelations = new HashSet<(ResourceIdentity, ResourceIdentity, string)>();
             foreach (var r in ordered)
             {
-                foreach (var relation in r.Lineage)
+                foreach (var relation in r.Links)
                 {
-                    var subjectType = relation.Subject.Kind.DisplayName;
-                    var subjectKey = relation.Subject.Key.ToString();
+                    var subjectType = relation.Source.Kind.DisplayName;
+                    var subjectKey = relation.Source.Key.ToString();
                     var targetType = relation.Target.Kind.DisplayName;
                     var targetKey = relation.Target.Key.ToString();
-                    if (!seenRelations.Add((relation.Subject, relation.Target, relation.Kind)))
+                    if (!seenRelations.Add((relation.Source, relation.Target, relation.Role)))
                     {
                         continue;
                     }
 
-                    references.Add(new ReportReference
+                    references.Add(new ReportLink
                     {
-                        SubjectId = ResourceId(relation.Subject),
+                        SourceId = ResourceId(relation.Source),
                         TargetId = ResourceId(relation.Target),
-                        SubjectType = subjectType,
-                        SubjectKey = subjectKey,
+                        SourceType = subjectType,
+                        SourceKey = subjectKey,
                         TargetType = targetType,
                         TargetKey = targetKey,
-                        Kind = relation.Kind.ToString(),
+                        Role = relation.Role,
                     });
                 }
             }
@@ -274,7 +273,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                 Key = pair.Key.Key.ToString(),
                 Events = events[pair.Key].Select(e => new ReportResourceEvent
                 {
-                    Verb = e.Verb.ToString(),
+                    Effect = e.Effect.ToString(),
                         ActionName = e.Action?.Name,
                     OffsetMs = Ms(e.Timestamp - start),
                     StepId = e.StepId ?? string.Empty,
@@ -300,7 +299,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                 Status = status,
                 Steps = steps,
                 Resources = resources,
-                References = references,
+                Links = references,
                 Uses = Definition.Uses.Select(u => $"{u.Resource.Name}:{u.Mode}").ToList(),
                 WaitedMs = Ms(Waited),
                 WaitedFor = WaitedFor?.Name,

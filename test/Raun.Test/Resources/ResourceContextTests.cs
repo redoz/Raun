@@ -8,7 +8,7 @@ namespace Raun.Test.Resources;
 
 /// <summary>
 /// Verifies the C1 <see cref="ResourceContext"/> tracer: each lifecycle verb records a
-/// <see cref="ResourceEffect"/> with the resolved identity, owning step, and an injected timestamp.
+/// <see cref="ResourceObservation"/> with the resolved identity, owning step, and an injected timestamp.
 /// </summary>
 public class ResourceContextTests
 {
@@ -26,7 +26,7 @@ public class ResourceContextTests
         await ctx.Create(new User("admin@acme.com"));
 
         var effect = Assert.Single(ctx.Effects);
-        Assert.Equal(LifecycleVerb.Create, effect.Verb);
+        Assert.Equal(ResourceEffect.Create, effect.Effect);
         Assert.Equal(LockMode.Exclusive, effect.Mode);
         Assert.Equal(new ResourceIdentity(typeof(User), "admin@acme.com"), effect.Identity);
         Assert.Equal("step-7", effect.StepId);
@@ -39,10 +39,10 @@ public class ResourceContextTests
     {
         var ctx = NewContext(out _);
 
-        await ctx.Load<User>("admin@acme.com");
+        await ctx.Read<User>("admin@acme.com");
 
         var effect = Assert.Single(ctx.Effects);
-        Assert.Equal(LifecycleVerb.Load, effect.Verb);
+        Assert.Equal(ResourceEffect.Read, effect.Effect);
         Assert.Equal(LockMode.Shared, effect.Mode);
         Assert.Equal(new ResourceIdentity(typeof(User), "admin@acme.com"), effect.Identity);
         Assert.Null(effect.Data);
@@ -55,12 +55,12 @@ public class ResourceContextTests
         var user = new User("admin@acme.com");
 
         await ctx.Read(user);
-        await ctx.Edit(user with { Suspended = true });
+        await ctx.Update(user with { Suspended = true });
         await ctx.Delete(user);
 
         // All three touches have the same identity — dedup collapses to a single effect.
         var effect = Assert.Single(ctx.Effects);
-        Assert.Equal(LifecycleVerb.Delete, effect.Verb);
+        Assert.Equal(ResourceEffect.Delete, effect.Effect);
         Assert.Equal(LockMode.Exclusive, effect.Mode);
         Assert.Equal(new ResourceIdentity(typeof(User), "admin@acme.com"), effect.Identity);
         Assert.NotNull(effect.Data);
@@ -74,11 +74,11 @@ public class ResourceContextTests
         var suspended = user with { Suspended = true };
 
         await ctx.Read(user);
-        await ctx.Edit(suspended);
+        await ctx.Update(suspended);
 
         var effect = Assert.Single(ctx.Effects);
-        Assert.Equal(LifecycleVerb.Edit, effect.Verb);
-        // The Edit data (suspended copy) replaces the Read data — proven by reference identity.
+        Assert.Equal(ResourceEffect.Update, effect.Effect);
+        // The Update data (suspended copy) replaces the Read data — proven by reference identity.
         Assert.Same(suspended, effect.Data);
     }
 
@@ -88,11 +88,11 @@ public class ResourceContextTests
         var ctx = NewContext(out _);
 
         await ctx.Create(new User("a@x"));
-        await ctx.Load<User>("b@x");
+        await ctx.Read<User>("b@x");
 
         Assert.Equal(
-            new[] { LifecycleVerb.Create, LifecycleVerb.Load },
-            ctx.Effects.Select(e => e.Verb));
+            new[] { ResourceEffect.Create, ResourceEffect.Read },
+            ctx.Effects.Select(e => e.Effect));
     }
 
     [Fact]
@@ -101,100 +101,59 @@ public class ResourceContextTests
         var ctx = NewContext(out _);
         var user = new User("jane@acme.com");
 
-        await ctx.Load(user);
+        await ctx.Read(user);
 
         var effect = Assert.Single(ctx.Effects);
-        Assert.Equal(LifecycleVerb.Load, effect.Verb);
+        Assert.Equal(ResourceEffect.Read, effect.Effect);
         Assert.Equal(LockMode.Shared, effect.Mode);
         Assert.Equal(new ResourceIdentity(typeof(User), "jane@acme.com"), effect.Identity);
         Assert.NotNull(effect.Data);
     }
 
     [Fact]
-    public async Task Reference_records_a_shared_effect_with_resolved_identity()
+    public async Task Links_do_not_record_effects_or_access_claims()
     {
         var ctx = NewContext(out _);
-
-        await ctx.Reference(new User("jane@acme.com"));
-
-        var effect = Assert.Single(ctx.Effects);
-        Assert.Equal(LifecycleVerb.Reference, effect.Verb);
-        Assert.Equal(LockMode.Shared, effect.Mode);
-        Assert.Equal(new ResourceIdentity(typeof(User), "jane@acme.com"), effect.Identity);
-    }
-
-    [Fact]
-    public async Task Consume_records_a_shared_effect_with_resolved_identity()
-    {
-        var ctx = NewContext(out _);
-
-        await ctx.Consume(new User("jane@acme.com"));
-
-        var effect = Assert.Single(ctx.Effects);
-        Assert.Equal(LifecycleVerb.Consume, effect.Verb);
-        Assert.Equal(LockMode.Shared, effect.Mode);
-        Assert.Equal(new ResourceIdentity(typeof(User), "jane@acme.com"), effect.Identity);
-    }
-
-    [Fact]
-    public async Task Consume_outranks_read_in_dedup()
-    {
-        var ctx = NewContext(out _);
-        var user = new User("jane@acme.com");
-
-        await ctx.Read(user);
-        await ctx.Consume(user);
-
-        // Same identity ⇒ one effect; the usage verb (Consume) outranks plain Read.
-        var effect = Assert.Single(ctx.Effects);
-        Assert.Equal(LifecycleVerb.Consume, effect.Verb);
-    }
-
-    [Fact]
-    public async Task Reference_with_a_subject_records_a_lineage_relation_and_the_effect()
-    {
-        var ctx = NewContext(out _);
-        var subject = new User("appt@acme.com");   // stands in for the produced resource
+        var source = new User("booking@acme.com");
         var target = new User("jane@acme.com");
-
-        await ctx.Reference(target, subject);
-
-        var effect = Assert.Single(ctx.Effects);            // the Reference effect is still recorded
-        Assert.Equal(LifecycleVerb.Reference, effect.Verb);
-        Assert.Equal(new ResourceIdentity(typeof(User), "jane@acme.com"), effect.Identity);
-
-        var relation = Assert.Single(ctx.Lineage);          // and a subject -> target relation
-        Assert.Equal(new ResourceIdentity(typeof(User), "appt@acme.com"), relation.Subject);
-        Assert.Equal(new ResourceIdentity(typeof(User), "jane@acme.com"), relation.Target);
-        Assert.Equal(LifecycleVerb.Reference, relation.Kind);
+        await ctx.Link("Patient", source, target);
+        Assert.Empty(ctx.Effects);
+        var link = Assert.Single(ctx.Links);
+        Assert.Equal(new ResourceIdentity(typeof(User), "booking@acme.com"), link.Source);
+        Assert.Equal(new ResourceIdentity(typeof(User), "jane@acme.com"), link.Target);
+        Assert.Equal("Patient", link.Role);
     }
 
     [Fact]
-    public async Task Consume_with_two_subjects_records_two_relations()
+    public async Task Collection_sources_record_multiple_links_and_dedup_exact_repeats()
     {
         var ctx = NewContext(out _);
-        var a = new User("a@acme.com");
-        var b = new User("b@acme.com");
-        var target = new User("slot@acme.com");
-
-        await ctx.Consume(target, a, b);
-
-        Assert.Equal(2, ctx.Lineage.Count);
-        Assert.All(ctx.Lineage, e => Assert.Equal(LifecycleVerb.Consume, e.Kind));
-        Assert.All(ctx.Lineage, e => Assert.Equal(new ResourceIdentity(typeof(User), "slot@acme.com"), e.Target));
-        Assert.Contains(ctx.Lineage, e => e.Subject == new ResourceIdentity(typeof(User), "a@acme.com"));
-        Assert.Contains(ctx.Lineage, e => e.Subject == new ResourceIdentity(typeof(User), "b@acme.com"));
+        User[] sources = [new("a@x"), new("b@x")];
+        var target = new User("slot@x");
+        await ctx.Link("Slot", sources, target);
+        await ctx.Link("Slot", sources, target);
+        Assert.Equal(2, ctx.Links.Count);
+        Assert.All(ctx.Links, link => Assert.Equal("Slot", link.Role));
+        Assert.Equal(["a@x", "b@x"], ctx.Links.Select(link => link.Source.Key.Value));
+        Assert.Empty(ctx.Effects);
     }
 
     [Fact]
-    public async Task Reference_without_subjects_records_no_relation()
+    public async Task Same_endpoints_can_have_different_roles()
     {
         var ctx = NewContext(out _);
+        var source = new User("booking@x"); var target = new User("jane@x");
+        await ctx.Link("Patient", source, target);
+        await ctx.Link("Payer", source, target);
+        Assert.Equal(["Patient", "Payer"], ctx.Links.Select(link => link.Role));
+    }
 
-        await ctx.Reference(new User("jane@acme.com"));
-
-        Assert.Single(ctx.Effects);
-        Assert.Empty(ctx.Lineage);
+    [Fact]
+    public async Task Update_outranks_read_in_dedup()
+    {
+        var ctx = NewContext(out _); var user = new User("jane@x");
+        await ctx.Read(user); await ctx.Update(user);
+        Assert.Equal(ResourceEffect.Update, Assert.Single(ctx.Effects).Effect);
     }
 
     sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

@@ -20,7 +20,7 @@ internal sealed class CoverageSourceConfiguration
             var options = services.GetCommandLineOptions();
             if (options.IsOptionSet("coverlet"))
             {
-                Scope = CoverletSettingsReader.Load(System.Reflection.Assembly.GetEntryAssembly()?.Location ?? Path.Combine(AppContext.BaseDirectory, "test.dll"),
+                Scope = CoverletSettingsReader.Read(System.Reflection.Assembly.GetEntryAssembly()?.Location ?? Path.Combine(AppContext.BaseDirectory, "test.dll"),
                     directory, option => options.TryGetOptionArgumentList(option, out var values) ? values : null, options.IsOptionSet);
             }
             else if (options.TryGetOptionArgumentList("coverage-settings", out var arguments) && arguments.Length > 0)

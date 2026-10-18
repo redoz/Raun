@@ -46,7 +46,7 @@
           "Effects": [
             {
               "ResourceId": "r0-0",
-              "Verb": "Create",
+              "Effect": "Create",
               "Type": "String",
               "Key": "Jane",
               "OffsetMs": 1,
@@ -144,14 +144,14 @@
           "Key": "Jane",
           "Events": [
             {
-              "Verb": "Create",
+              "Effect": "Create",
               "OffsetMs": 1,
               "StepId": "p"
             }
           ]
         }
       ],
-      "References": [],
+      "Links": [],
       "Uses": [],
       "WaitedMs": 0,
       "WaitedFor": null

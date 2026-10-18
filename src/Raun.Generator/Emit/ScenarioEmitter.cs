@@ -527,8 +527,8 @@ internal static class ScenarioEmitter
         => expression is IdentifierNameSyntax { Identifier.ValueText: "__r" };
 
     /// <summary>
-    /// Builds <c>await __ctx.Resources.{Verb}({Expression});</c> as a hidden-trivia expression
-    /// statement, e.g. <c>await __ctx.Resources.Edit(__r);</c>. The verb is the runtime
+    /// Builds <c>await __ctx.Resources.{Effect}({Expression});</c> as a hidden-trivia expression
+    /// statement, e.g. <c>await __ctx.Resources.Update(__r);</c>. The verb is the runtime
     /// <c>ResourceContext</c> method name; the expression is the parameter argument (in terms of
     /// <c>__inputs</c>) or <c>__r</c> for a return role.
     /// </summary>
@@ -536,31 +536,17 @@ internal static class ScenarioEmitter
     {
         if (claim.SubjectExpressions.Count > 0)
         {
-            var relationArguments = new List<ArgumentSyntax>
-            {
-                Argument(claim.Action is { AttributeIdentity: { } targetActionIdentity }
-                    ? InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
-                        Names.Global("Raun", "ResourceAction"), IdentifierName("FromGenerated")))
-                        .WithArgumentList(ArgumentList(SeparatedList(new[]
-                        {
-                            Argument(TypeOfExpression(Names.Global("Raun", "Generated", "RaunGenerated"))),
-                            Argument(Lit(targetActionIdentity)),
-                        })))
-                    : Names.Global("Raun", "ResourceRelation", claim.Verb)),
-                Argument(claim.SubjectExpressions[0]), Argument(claim.Expression),
-            };
-            if (claim.RelationshipAttributeIdentity is { } attributeIdentity && claim.RelationshipPropertyName is { } propertyName)
-            {
-                var descriptor = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
-                    Names.Global("Raun", "ResourceAction"), IdentifierName("FromGenerated")))
-                    .WithArgumentList(ArgumentList(SeparatedList(new[] { Argument(TypeOfExpression(Names.Global("Raun", "Generated", "RaunGenerated"))), Argument(Lit(attributeIdentity)) })));
-                var property = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, descriptor, IdentifierName("GetRelationship")))
-                    .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(Lit(propertyName)))));
-                relationArguments.Add(Argument(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, property, IdentifierName("ResourceType"))));
-            }
+            var owner = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                Names.Global("Raun", "ResourceAction"), IdentifierName("FromGenerated")))
+                .WithArgumentList(ArgumentList(SeparatedList(new[]
+                {
+                    Argument(TypeOfExpression(Names.Global("Raun", "Generated", "RaunGenerated"))),
+                    Argument(Lit(claim.RelationshipAttributeIdentity!)),
+                })));
             var relationCall = InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
-                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("__ctx"), IdentifierName("Resources")), IdentifierName("Relate")))
-                .WithArgumentList(ArgumentList(SeparatedList(relationArguments)));
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("__ctx"), IdentifierName("Resources")), IdentifierName("Link")))
+                .WithArgumentList(ArgumentList(SeparatedList(new[] { Argument(owner), Argument(Lit(claim.RelationshipPropertyName!)),
+                    Argument(claim.SubjectExpressions[0]), Argument(claim.Expression) })));
             ExpressionSyntax relationOperation = synchronous
                 ? InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
                     InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, relationCall, IdentifierName("GetAwaiter"))), IdentifierName("GetResult")))
@@ -591,7 +577,7 @@ internal static class ScenarioEmitter
                     SyntaxKind.SimpleMemberAccessExpression,
                     IdentifierName("__ctx"),
                     IdentifierName("Resources")),
-                IdentifierName(claim.Action.HasValue ? "Apply" : claim.Verb)))
+                IdentifierName(claim.Action.HasValue ? "Apply" : claim.Effect)))
             .WithArgumentList(ArgumentList(SeparatedList(arguments)));
 
         ExpressionSyntax operation = synchronous

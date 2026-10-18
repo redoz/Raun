@@ -11,7 +11,7 @@ public sealed partial class AppointmentWhen : When
         await Context.Resources.Apply(ResourceAction.For<ApprovedAttribute>(), patient);
         var approval = Assert.Single(Context.Resources.Effects, effect => effect.Action is not null);
         Assert.Equal("Approve", approval.Action!.Name);
-        Assert.Equal(LifecycleVerb.Edit, approval.Verb);
+        Assert.Equal(ResourceEffect.Update, approval.Effect);
         Assert.Equal(LockMode.Exclusive, approval.Mode);
         Assert.Equal(patient.Name, approval.Label);
     }
@@ -24,7 +24,7 @@ public sealed partial class AppointmentThen : Then
     {
         var audit = Assert.Single(Context.Resources.Effects);
         Assert.Equal("Audited", audit.Action!.Name);
-        Assert.Equal(LifecycleVerb.Read, audit.Verb);
+        Assert.Equal(ResourceEffect.Read, audit.Effect);
         Assert.Equal(LockMode.Shared, audit.Mode);
         Assert.Equal(expectedName, audit.Label);
         Assert.Null(audit.Data);

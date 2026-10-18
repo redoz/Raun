@@ -13,7 +13,7 @@ public sealed class ResourceActionCaseExecutionTests
         using System.Threading.Tasks;
         using Raun;
         namespace ActionCases;
-        [DisplayName("Approve")] public abstract class ApprovalAttribute : EditedAttribute;
+        [DisplayName("Approve")] public abstract class ApprovalAttribute : UpdatedAttribute;
         public sealed class ApprovedAttribute : ApprovalAttribute;
         public sealed class AuditedAttribute : ReadAttribute;
         public sealed record Patient(string Id, string Name) : IResource<Patient>
@@ -23,7 +23,7 @@ public sealed class ResourceActionCaseExecutionTests
         }
         public sealed class Steps : Given<NoWorld>
         {
-            [return: Loaded]
+            [return: Read]
             public Task<Patient> Seed(string name) => Task.FromResult(new Patient("42", name));
 
             [Approved]
@@ -79,8 +79,8 @@ public sealed class ResourceActionCaseExecutionTests
             var approve = Assert.Single(finished.Results, result => result.Node.OperationName == "Approve");
             Assert.Equal($"Approve {name}; {name} approved", approve.TitleMessage!.Text);
             var approval = Assert.Single(approve.Effects, effect => effect.Action is not null);
-            Assert.Single(approve.Effects, effect => effect.Verb == LifecycleVerb.Read && effect.Action is null);
-            Assert.Equal(LifecycleVerb.Edit, approval.Verb);
+            Assert.Single(approve.Effects, effect => effect.Effect == ResourceEffect.Read && effect.Action is null);
+            Assert.Equal(ResourceEffect.Update, approval.Effect);
             Assert.Equal(LockMode.Exclusive, approval.Mode);
             Assert.Equal("Approve", approval.Action!.Name);
             Assert.Equal("ApprovedAttribute", approval.Action.AttributeType!.Name);
@@ -94,7 +94,7 @@ public sealed class ResourceActionCaseExecutionTests
             {
                 var effect = Assert.Single(result.Effects, candidate => candidate.Action is not null);
                 Assert.Equal(approval.Identity, effect.Identity);
-                Assert.Equal(LifecycleVerb.Read, effect.Verb);
+                Assert.Equal(ResourceEffect.Read, effect.Effect);
                 Assert.Equal(LockMode.Shared, effect.Mode);
                 Assert.Equal("Audited", effect.Action!.Name);
                 Assert.Equal(name + " approved", effect.Label);

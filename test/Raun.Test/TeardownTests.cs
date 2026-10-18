@@ -236,7 +236,7 @@ public class TeardownTests
 
         Assert.Equal(StepStatus.Passed, results[1].Status);
         var effect = Assert.Single(results[1].Effects);
-        Assert.Equal(LifecycleVerb.Delete, effect.Verb);
+        Assert.Equal(ResourceEffect.Delete, effect.Effect);
         Assert.Equal("User:jane@x", effect.Identity.ToString());
     }
 

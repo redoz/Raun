@@ -9,7 +9,7 @@ public sealed record RegistryPatient(string PatientId, string FullName);
 
 /// <summary>The step approves a registered patient for booking.</summary>
 [DisplayName("Approve")]
-public sealed class ApprovedAttribute : EditedAttribute;
+public sealed class ApprovedAttribute : UpdatedAttribute;
 /// <summary>The step reads patient booking evidence. It does not change the patient.</summary>
 public sealed class AuditedAttribute : ReadAttribute;
 
@@ -77,15 +77,15 @@ public sealed class RegistryGiven : Given<PatientRegistry>
 public sealed class RegistryWhen : When<PatientRegistry>
 {
     [StepName("When approving {patient}")]
-    [return: Loaded]
+    [return: Read]
     public Task<Patient> ApprovePatient([Approved] RegistryPatient patient)
         => Task.FromResult(World.Approve(patient));
 
     // The service accepts an ID, not a patient object. The typed property on Booked still
     // links the booking to Patient, and the preceding row/domain observations supply its name.
     [StepName("When booking {patientId} in {slot}")]
-    [return: Booked(Patient = nameof(patientId), Slot = nameof(slot))]
-    public Task<Appointment> BookById([ResourceKey<Patient>] string patientId, [Reserved] Slot slot)
+    [return: Actions.Booked]
+    public Task<Appointment> BookById([Actions.Booked.Patient, ResourceKey<Patient>] string patientId, [Actions.Booked.Slot] Slot slot)
         => Task.FromResult(World.Book(patientId, slot));
 }
 

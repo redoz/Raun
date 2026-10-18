@@ -34,7 +34,7 @@ internal sealed record ReportScenario
     public required string Status { get; init; }
     public required IReadOnlyList<ReportStep> Steps { get; init; }
     public required IReadOnlyList<ReportResource> Resources { get; init; }
-    public required IReadOnlyList<ReportReference> References { get; init; }
+    public required IReadOnlyList<ReportLink> Links { get; init; }
 
     /// <summary>The scenario's contended-resource uses as <c>Type:Mode</c>; empty when none declared.</summary>
     public IReadOnlyList<string> Uses { get; init; } = [];
@@ -118,7 +118,7 @@ internal sealed record ReportEffect
     public string? ResourceId { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? ActionName { get; init; }
-    public required string Verb { get; init; }
+    public required string Effect { get; init; }
     public required string Type { get; init; }
     public required string Key { get; init; }
     public required double OffsetMs { get; init; }
@@ -140,20 +140,19 @@ internal sealed record ReportResourceEvent
 {
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? ActionName { get; init; }
-    public required string Verb { get; init; }
+    public required string Effect { get; init; }
     public required double OffsetMs { get; init; }
     public required string StepId { get; init; }
 }
 
-/// <summary>One resource→resource lineage edge in the report, mapped from a step's recorded
-/// producer References/Consumes targets. Endpoints carry scoped IDs alongside legacy (Type, Key) labels matching <see cref="ReportResource"/>.</summary>
-internal sealed record ReportReference
+/// <summary>One role-named link with scoped source and target identities.</summary>
+internal sealed record ReportLink
 {
-    public string? SubjectId { get; init; }
+    public string? SourceId { get; init; }
     public string? TargetId { get; init; }
-    public required string SubjectType { get; init; }
-    public required string SubjectKey { get; init; }
+    public required string SourceType { get; init; }
+    public required string SourceKey { get; init; }
     public required string TargetType { get; init; }
     public required string TargetKey { get; init; }
-    public required string Kind { get; init; } // "Reference" | "Consume" (from the verb)
+    public required string Role { get; init; }
 }

@@ -35,18 +35,18 @@ public class HtmlReportModelBuilderTests
     };
 
     private static StepResult Result(ScenarioNode node, DateTimeOffset startedAt, double ms,
-        StepStatus status = StepStatus.Passed, IReadOnlyList<ResourceEffect>? effects = null,
-        IReadOnlyList<string>? logs = null, IReadOnlyList<ResourceLineageRelation>? lineage = null,
+        StepStatus status = StepStatus.Passed, IReadOnlyList<ResourceObservation>? effects = null,
+        IReadOnlyList<string>? logs = null, IReadOnlyList<ResourceLink>? lineage = null,
         IReadOnlyDictionary<string, string>? attachments = null) => new()
     {
         Node = node, DisplayName = node.DisplayNameTemplate, Status = status,
         StartedAt = startedAt, Duration = TimeSpan.FromMilliseconds(ms),
-        Effects = effects ?? [], Logs = logs ?? [], Lineage = lineage ?? [],
+        Effects = effects ?? [], Logs = logs ?? [], Links = lineage ?? [],
         Attachments = attachments ?? new Dictionary<string, string>(),
     };
 
     [System.ComponentModel.DisplayName("Approve <now>")]
-    private sealed class ApprovedAttribute : EditedAttribute;
+    private sealed class ApprovedAttribute : UpdatedAttribute;
 
     [Fact]
     public void Report_dependencies_include_branch_guards_merge_sources_and_ordering_edges()
@@ -120,11 +120,11 @@ public class HtmlReportModelBuilderTests
         var target = new ResourceIdentity("patient", "p");
         var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([definition]); builder.OnScenarioStarted(definition);
-        builder.OnStepFinished(definition, Result(first, T0, 1, lineage: [new ResourceLineageRelation { Subject = subject, Target = target, Kind = LifecycleVerb.Reference }]));
-        builder.OnStepFinished(definition, Result(second, T0.AddMilliseconds(2), 1, lineage: [new ResourceLineageRelation { Subject = subject, Target = target, Kind = LifecycleVerb.Consume }]));
-        var relationships = Assert.Single(builder.Build("history").Scenarios).References;
-        Assert.Equal(["Reference", "Consume"], relationships.Select(edge => edge.Kind));
-        Assert.All(relationships, edge => { Assert.Equal(relationships[0].SubjectId, edge.SubjectId); Assert.Equal(relationships[0].TargetId, edge.TargetId); });
+        builder.OnStepFinished(definition, Result(first, T0, 1, lineage: [new ResourceLink { Source = subject, Target = target, Role = "Patient" }]));
+        builder.OnStepFinished(definition, Result(second, T0.AddMilliseconds(2), 1, lineage: [new ResourceLink { Source = subject, Target = target, Role = "Slot" }]));
+        var relationships = Assert.Single(builder.Build("history").Scenarios).Links;
+        Assert.Equal(["Patient", "Slot"], relationships.Select(edge => edge.Role));
+        Assert.All(relationships, edge => { Assert.Equal(relationships[0].SourceId, edge.SourceId); Assert.Equal(relationships[0].TargetId, edge.TargetId); });
     }
 
     [Theory]
@@ -144,17 +144,17 @@ public class HtmlReportModelBuilderTests
         builder.OnRunStarted([definition]); builder.OnScenarioStarted(definition);
         // Completion order must not choose the column name, and later names must not overwrite it.
         builder.OnStepFinished(definition, Result(later, T0.AddMilliseconds(2), 1, effects:
-            [new ResourceEffect { Identity = identity, Verb = LifecycleVerb.Edit, Label = "Janet", Timestamp = T0 }]));
+            [new ResourceObservation { Identity = identity, Effect = ResourceEffect.Update, Label = "Janet", Timestamp = T0 }]));
         builder.OnStepFinished(definition, new StepResult
         {
             Node = named, DisplayName = "named", Status = StepStatus.Passed, StartedAt = T0.AddMilliseconds(1),
-            Effects = source == "effect" ? [new ResourceEffect { Identity = identity, Verb = LifecycleVerb.Load, Label = "Jane <Doe>", Timestamp = T0 }] : [],
+            Effects = source == "effect" ? [new ResourceObservation { Identity = identity, Effect = ResourceEffect.Read, Label = "Jane <Doe>", Timestamp = T0 }] : [],
             TitleMessage = source == "title" ? message : StepMessage.FromText("named"),
             NoteMessages = source == "note" ? [message] : [],
             LogEntries = source == "log" ? [new LogEntry { Elapsed = TimeSpan.Zero, Content = message }] : [],
         });
         builder.OnStepFinished(definition, Result(first, T0, 1, effects:
-            [new ResourceEffect { Identity = identity, Verb = LifecycleVerb.Read, Label = "patient:42", Timestamp = T0 }]));
+            [new ResourceObservation { Identity = identity, Effect = ResourceEffect.Read, Label = "patient:42", Timestamp = T0 }]));
         var scenario = Assert.Single(builder.Build("labels").Scenarios);
         var resource = Assert.Single(scenario.Resources);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(resource));
@@ -172,18 +172,18 @@ public class HtmlReportModelBuilderTests
         var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([definition]);
         builder.OnScenarioStarted(definition);
-        builder.OnStepFinished(definition, Result(node, T0, 1, effects: [new ResourceEffect
+        builder.OnStepFinished(definition, Result(node, T0, 1, effects: [new ResourceObservation
         {
-            Verb = LifecycleVerb.Edit, Action = ResourceAction.For<ApprovedAttribute>(),
+            Effect = ResourceEffect.Update, Action = ResourceAction.For<ApprovedAttribute>(),
             Identity = new ResourceIdentity("patient", "42"), Label = "Jane <Doe>", Timestamp = T0,
         }]));
         var scenario = Assert.Single(builder.Build("x").Scenarios);
         var effect = Assert.Single(Assert.Single(scenario.Steps).Effects);
-        Assert.Equal("Edit", effect.Verb);
+        Assert.Equal("Update", effect.Effect);
         Assert.Equal("Approve <now>", effect.ActionName);
         Assert.Equal("Jane <Doe>", effect.Label);
         var history = Assert.Single(Assert.Single(scenario.Resources).Events);
-        Assert.Equal("Edit", history.Verb);
+        Assert.Equal("Update", history.Effect);
         Assert.Equal("Approve <now>", history.ActionName);
     }
 
@@ -220,7 +220,7 @@ public class HtmlReportModelBuilderTests
         Assert.All(resources.EnumerateArray(), resource => Assert.Empty(resource.GetProperty("Events").EnumerateArray()));
         var step = scenarios[0].GetProperty("Steps")[0];
         Assert.Empty(step.GetProperty("Effects").EnumerateArray());
-        Assert.Empty(scenarios[0].GetProperty("References").EnumerateArray());
+        Assert.Empty(scenarios[0].GetProperty("Links").EnumerateArray());
         foreach (var message in new[] { step.GetProperty("TitleMessage"), step.GetProperty("NoteMessages")[0], step.GetProperty("LogMessages")[0] })
         {
             var part = message.GetProperty("Parts").EnumerateArray().Last();
@@ -244,23 +244,23 @@ public class HtmlReportModelBuilderTests
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(node, T0, 10, effects:
         [
-            new ResourceEffect { Verb = LifecycleVerb.Create, Identity = left, StepId = "a", Timestamp = T0 },
-            new ResourceEffect { Verb = LifecycleVerb.Read, Identity = right, StepId = "a", Timestamp = T0 },
+            new ResourceObservation { Effect = ResourceEffect.Create, Identity = left, StepId = "a", Timestamp = T0 },
+            new ResourceObservation { Effect = ResourceEffect.Read, Identity = right, StepId = "a", Timestamp = T0 },
         ], lineage:
         [
-            new ResourceLineageRelation { Subject = left, Target = right, Kind = LifecycleVerb.Reference },
-            new ResourceLineageRelation { Subject = right, Target = left, Kind = LifecycleVerb.Reference },
+            new ResourceLink { Source = left, Target = right, Role = "Patient" },
+            new ResourceLink { Source = right, Target = left, Role = "Patient" },
         ]));
         var model = builder.Build("x");
         var scenario = Assert.Single(model.Scenarios);
         Assert.Equal(2, scenario.Resources.Count);
-        Assert.Equal(2, scenario.References.Count);
+        Assert.Equal(2, scenario.Links.Count);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(scenario));
         var root = json.RootElement;
         var ids = root.GetProperty("Resources").EnumerateArray().Select(r => r.GetProperty("Id").GetString()).ToArray();
         Assert.Equal(ids, root.GetProperty("Steps")[0].GetProperty("Effects").EnumerateArray().Select(e => e.GetProperty("ResourceId").GetString()));
-        Assert.Equal(ids[0], root.GetProperty("References")[0].GetProperty("SubjectId").GetString());
-        Assert.Equal(ids[1], root.GetProperty("References")[0].GetProperty("TargetId").GetString());
+        Assert.Equal(ids[0], root.GetProperty("Links")[0].GetProperty("SourceId").GetString());
+        Assert.Equal(ids[1], root.GetProperty("Links")[0].GetProperty("TargetId").GetString());
     }
 
     private static class Left { internal readonly struct Seed; }
@@ -337,9 +337,9 @@ public class HtmlReportModelBuilderTests
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 40, effects:
         [
-            new ResourceEffect
+            new ResourceObservation
             {
-                Verb = LifecycleVerb.Create, Identity = new ResourceIdentity(typeof(string), "Jane"),
+                Effect = ResourceEffect.Create, Identity = new ResourceIdentity(typeof(string), "Jane"),
                 StepId = "p", Timestamp = T0.AddMilliseconds(1),
             },
         ]));
@@ -397,14 +397,14 @@ public class HtmlReportModelBuilderTests
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, effects:
         [
-            new ResourceEffect { Verb = LifecycleVerb.Create, Identity = id, StepId = "a", Timestamp = T0.AddMilliseconds(2) },
+            new ResourceObservation { Effect = ResourceEffect.Create, Identity = id, StepId = "a", Timestamp = T0.AddMilliseconds(2) },
         ]));
 
         var scenario = Assert.Single(builder.Build("x").Scenarios);
         var resource = Assert.Single(scenario.Resources);
         Assert.Equal("String", resource.Type);
         Assert.Equal("Jane", resource.Key);
-        Assert.Equal("Create", Assert.Single(resource.Events).Verb);
+        Assert.Equal("Create", Assert.Single(resource.Events).Effect);
     }
 
     [Fact]
@@ -420,21 +420,21 @@ public class HtmlReportModelBuilderTests
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, lineage:
         [
-            new ResourceLineageRelation { Subject = appointment, Target = patient, Kind = LifecycleVerb.Reference },
-            new ResourceLineageRelation { Subject = appointment, Target = slot, Kind = LifecycleVerb.Consume },
+            new ResourceLink { Source = appointment, Target = patient, Role = "Patient" },
+            new ResourceLink { Source = appointment, Target = slot, Role = "Slot" },
         ]));
 
         var scenario = Assert.Single(builder.Build("x").Scenarios);
-        Assert.Equal(2, scenario.References.Count);
+        Assert.Equal(2, scenario.Links.Count);
 
-        var aggregation = scenario.References.Single(e => e.Kind == "Reference");
-        Assert.Equal("String", aggregation.SubjectType);
-        Assert.Equal("appt-1", aggregation.SubjectKey);
+        var aggregation = scenario.Links.Single(e => e.Role == "Patient");
+        Assert.Equal("String", aggregation.SourceType);
+        Assert.Equal("appt-1", aggregation.SourceKey);
         Assert.Equal("String", aggregation.TargetType);
         Assert.Equal("Jane", aggregation.TargetKey);
 
-        var composition = scenario.References.Single(e => e.Kind == "Consume");
-        Assert.Equal("appt-1", composition.SubjectKey);
+        var composition = scenario.Links.Single(e => e.Role == "Slot");
+        Assert.Equal("appt-1", composition.SourceKey);
         Assert.Equal("Int32", composition.TargetType);
         Assert.Equal("7", composition.TargetKey);
     }
@@ -449,11 +449,11 @@ public class HtmlReportModelBuilderTests
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, effects:
         [
-            new ResourceEffect { Verb = LifecycleVerb.Reference, Identity = new ResourceIdentity(typeof(string), "Jane"), StepId = "t", Timestamp = T0.AddMilliseconds(1) },
+            new ResourceObservation { Effect = ResourceEffect.Read, Identity = new ResourceIdentity(typeof(string), "Jane"), StepId = "t", Timestamp = T0.AddMilliseconds(1) },
         ]));
 
         var scenario = Assert.Single(builder.Build("x").Scenarios);
-        Assert.Empty(scenario.References);
+        Assert.Empty(scenario.Links);
     }
 
     [Fact]
@@ -469,14 +469,14 @@ public class HtmlReportModelBuilderTests
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, lineage:
         [
-            new ResourceLineageRelation { Subject = from, Target = bank, Kind = LifecycleVerb.Reference },
-            new ResourceLineageRelation { Subject = to, Target = bank, Kind = LifecycleVerb.Reference },
+            new ResourceLink { Source = from, Target = bank, Role = "Patient" },
+            new ResourceLink { Source = to, Target = bank, Role = "Patient" },
         ]));
 
         var scenario = Assert.Single(builder.Build("x").Scenarios);
-        Assert.Equal(2, scenario.References.Count);
-        Assert.Contains(scenario.References, e => e.SubjectKey == "acc-from" && e.TargetKey == "Bank");
-        Assert.Contains(scenario.References, e => e.SubjectKey == "acc-to" && e.TargetKey == "Bank");
+        Assert.Equal(2, scenario.Links.Count);
+        Assert.Contains(scenario.Links, e => e.SourceKey == "acc-from" && e.TargetKey == "Bank");
+        Assert.Contains(scenario.Links, e => e.SourceKey == "acc-to" && e.TargetKey == "Bank");
     }
 
     [Fact]
@@ -491,12 +491,12 @@ public class HtmlReportModelBuilderTests
         var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, Result(n0, T0, 10, lineage:
-            [new ResourceLineageRelation { Subject = appointment, Target = patient, Kind = LifecycleVerb.Reference }]));
+            [new ResourceLink { Source = appointment, Target = patient, Role = "Patient" }]));
         builder.OnStepFinished(def, Result(n1, T0, 10, lineage:
-            [new ResourceLineageRelation { Subject = appointment, Target = patient, Kind = LifecycleVerb.Reference }]));
+            [new ResourceLink { Source = appointment, Target = patient, Role = "Patient" }]));
 
         var scenario = Assert.Single(builder.Build("x").Scenarios);
-        Assert.Single(scenario.References);
+        Assert.Single(scenario.Links);
     }
 
     [Fact]

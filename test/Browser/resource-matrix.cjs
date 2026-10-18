@@ -15,21 +15,19 @@ const model = JSON.parse(payload);
 const matrixScenarioIndex=model.scenarios.findIndex(scenario=>scenario.displayName==='out-of-town patients get a travel reminder');
 assert.ok(matrixScenarioIndex>=0,'The canonical sample includes the travel reminder scenario');
 const domainEffects=model.scenarios.flatMap(scenario=>scenario.steps.flatMap(step=>step.effects));
-for(const [action,verb] of [['Register','Create'],['Hold','Edit'],['Reserve','Consume'],['Booked','Create'],['Rescheduled','Create'],['Cancel','Delete']]){
-  assert.ok(domainEffects.some(effect=>effect.actionName===action && effect.verb===verb),'The real sample demonstrates '+action+' with '+verb+' semantics');
+for(const [action,expectedEffect] of [['Register','Create'],['Hold','Update'],['Reserve','Update'],['Booked','Create'],['Rescheduled','Create'],['Cancel','Delete']]){
+  assert.ok(domainEffects.some(effect=>effect.actionName===action && effect.effect===expectedEffect),'The real sample demonstrates '+action+' with '+expectedEffect+' semantics');
 }
 for(const scenario of model.scenarios)for(const step of scenario.steps){
   const booked=step.effects.find(effect=>effect.actionName==='Booked');
   const reserved=step.effects.filter(effect=>effect.actionName==='Reserve');
-  const slotInputs=step.effects.filter(effect=>effect.type==='Slot' && effect.verb==='Consume');
-  for(const slot of slotInputs){
-    assert.equal(step.effects.filter(effect=>effect.resourceId===slot.resourceId && effect.verb==='Consume').length,1,'Reservation and lineage share one Consume event');
-    assert.ok(!step.effects.some(effect=>effect.resourceId===slot.resourceId && effect.verb==='Edit'),'Reserve does not add an exclusive Edit action');
-    assert.ok(reserved.some(effect=>effect.resourceId===slot.resourceId && effect.verb==='Consume'),'Reserve keeps Consume semantics');
+  for(const slot of reserved){
+    assert.equal(step.effects.filter(effect=>effect.resourceId===slot.resourceId && effect.actionName==='Reserve').length,1,'The reservation records one named Update');
+    assert.equal(slot.effect,'Update','Reserve changes the slot with exclusive access');
   }
   if(!booked)continue;
-  assert.ok(scenario.references.some(edge=>edge.subjectId===booked.resourceId && edge.kind==='Reference' && edge.targetType==='Patient'),'Booked retains the patient reference');
-  assert.ok(scenario.references.some(edge=>edge.subjectId===booked.resourceId && edge.kind==='Consume' && edge.targetType==='Slot'),'Booked consumes the chosen slot');
+  assert.ok(scenario.links.some(edge=>edge.sourceId===booked.resourceId && edge.role==='Patient' && edge.targetType==='Patient'),'Booked retains the patient link');
+  assert.ok(scenario.links.some(edge=>edge.sourceId===booked.resourceId && edge.role==='Slot' && edge.targetType==='Slot'),'Booked links its reserved slot');
 }
 
 const actionSample=model.scenarios.find(scenario=>scenario.displayName==='registered patient books by ID');
@@ -44,14 +42,14 @@ assert.ok(patientEffects.some(effect=>effect.data && JSON.parse(effect.data).Ful
 assert.ok(patientEffects.some(effect=>effect.data && JSON.parse(effect.data).Name==='Jane'),'The domain representation keeps its own evidence');
 const bookById=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Booked'));
 const keyReference=bookById.effects.find(effect=>effect.resourceId===patientResource.id);
-assert.equal(keyReference.verb,'Reference');
+assert.equal(keyReference.effect,'Read');
 assert.equal(keyReference.label,'Jane');
 assert.equal(keyReference.data,null,'A typed relationship through a string key does not borrow the registry snapshot');
 assert.ok(bookById.displayName.includes('Jane'),'Booking by key resolves the earlier readable name');
 const booking=bookById.effects.find(effect=>effect.actionName==='Booked');
 const registered=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Register'));
 const approved=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Approve'));
-const available=actionSample.steps.find(step=>step.effects.some(effect=>effect.type==='Slot' && effect.verb==='Create'));
+const available=actionSample.steps.find(step=>step.effects.some(effect=>effect.type==='Slot' && effect.effect==='Create'));
 const slotResource=actionSample.resources.find(resource=>resource.type==='Slot');
 for(const [step,mentions] of [[registered,[['Jane',patientResource.id],['pat-42',patientResource.id]]],[approved,[['Jane',patientResource.id]]],[available,[['slot 01',slotResource.id]]],[bookById,[['Jane',patientResource.id],['slot 01',slotResource.id]]]]){
   for(const [text,resourceId] of mentions){
@@ -59,11 +57,11 @@ for(const [step,mentions] of [[registered,[['Jane',patientResource.id],['pat-42'
   }
 }
 
-assert.ok(actionSample.references.some(edge=>edge.subjectId===booking.resourceId && edge.targetId===patientResource.id && edge.kind==='Reference'));
+assert.ok(actionSample.links.some(edge=>edge.sourceId===booking.resourceId && edge.targetId===patientResource.id && edge.role==='Patient'));
 const audit=actionSample.steps.find(step=>step.effects.some(effect=>effect.actionName==='Audited'));
 assert.ok(audit.displayName.includes('Jane'),'A key-only generated title reuses the patient name');
 assert.ok(audit.effects.some(effect=>effect.resourceId===patientResource.id && effect.label==='Jane' && effect.data==null),'Key-only effects have names without borrowed snapshots');
-assert.ok(actionSample.steps.some(step=>step.effects.some(effect=>effect.actionName==='Approve' && effect.verb==='Edit')));
+assert.ok(actionSample.steps.some(step=>step.effects.some(effect=>effect.actionName==='Approve' && effect.effect==='Update')));
 
 const allSteps=model.scenarios.flatMap(scenario=>scenario.steps);
 assert.ok(allSteps.some(step=>step.displayName==='Given patient Jane exists'),'An omitted optional city selects the shorter title');
@@ -77,16 +75,16 @@ for(const [scenarioName,creates,expectedAssertion] of [['a booking either lands,
   assert.deepEqual(assertions.filter(step=>step.status==='passed').map(step=>step.displayName),[expectedAssertion],'The patient choice selects its expected business outcome');
   assert.equal(assertions.filter(step=>step.status==='not-taken').length,2,'The other two business outcomes are not taken');
   const attempt=scenario.steps.find(step=>step.displayName.startsWith('When trying to book'));
-  const created=attempt.effects.filter(effect=>effect.type==='Appointment' && effect.verb==='Create');
+  const created=attempt.effects.filter(effect=>effect.type==='Appointment' && effect.effect==='Create');
   assert.equal(created.length,creates?1:0,'Only successful conditional booking creates an appointment');
   assert.equal(attempt.effects.filter(effect=>effect.actionName==='Reserve').length,creates?1:0,'Waitlisted and refused bookings do not reserve a slot');
-  assert.equal(scenario.references.length,creates?2:0,'Only successful conditional booking records lineage');
+  assert.equal(scenario.links.length,creates?2:0,'Only successful conditional booking records lineage');
   if(creates){
     const appointment=created[0];
     assert.equal(appointment.actionName,'Booked','Conditional booking uses the same domain action as direct booking');
-    for(const [type,kind] of [['Patient','Reference'],['Slot','Consume']]){
+    for(const [type,kind] of [['Patient','Patient'],['Slot','Slot']]){
       const target=scenario.resources.find(resource=>resource.type===type);
-      assert.ok(scenario.references.some(edge=>edge.subjectId===appointment.resourceId && edge.targetId===target.id && edge.kind===kind),'Conditional booking records the correct '+kind+' endpoint');
+      assert.ok(scenario.links.some(edge=>edge.sourceId===appointment.resourceId && edge.targetId===target.id && edge.role===kind),'Conditional booking records the correct '+kind+' endpoint');
     }
   }
 }
@@ -347,7 +345,7 @@ const renderFixture = (name, data) => {
     assert.equal(await page.locator('.matrix-clear').count(),0,'No Clear selection control');
     const relation=page.locator('.matrix-connection').first();
     assert.ok(await relation.isVisible(),'Resource inputs connect to Create before selecting a resource');
-    assert.match(await relation.getAttribute('aria-label'),/Reference|Consume/,'Connections describe the actual input action');
+    assert.match(await relation.getAttribute('aria-label'),/Patient|Slot/,'Connections describe the actual input action');
     assert.ok(await relation.evaluate(svg=>{
       const row=svg.closest('.matrix-row'),a=svg.getBoundingClientRect();
       return Math.abs(a.height-row.clientHeight)<1 && /^M [^ ]+ [^ ]+ H [^ ]+$/.test(svg.querySelector('path').getAttribute('d'));
@@ -374,7 +372,7 @@ const renderFixture = (name, data) => {
     assert.ok(await first.locator('.matrix-related').count() > 0, 'Keyboard resource selection highlights touching rows');
     assert.equal(await first.locator('.matrix-lineage').count(), 0, 'Resource relationships never add a separate row');
     assert.ok(await first.locator('.matrix-resource.matrix-reference').count() > 0, 'Resource selection marks related columns in the matrix');
-    assert.match(await lane.getAttribute('title'), /references|consumes/, 'Relationship details remain on the matrix heading');
+    assert.match(await lane.getAttribute('title'), /Patient|Slot/, 'Relationship details remain on the matrix heading');
     await page.locator('body').dispatchEvent('click');
     assert.equal(await lane.getAttribute('aria-pressed'), 'false','Outside clicks clear resource selection');
     await lane.click();await lane.press('Escape');
@@ -392,9 +390,9 @@ const renderFixture = (name, data) => {
     await first.locator('.resource-hover').hover();await page.waitForTimeout(100);
     assert.ok(await first.locator('.resource-hover').isVisible(),'Moving into the inspector preserves access to its copy actions');
     await page.keyboard.press('Escape');
-    const editEffect=model.scenarios[matrixScenarioIndex].steps.flatMap(step=>step.effects).find(effect=>effect.verb==='Edit');
+    const editEffect=model.scenarios[matrixScenarioIndex].steps.flatMap(step=>step.effects).find(effect=>effect.effect==='Update');
     assert.ok(editEffect && editEffect.data,'Sample contains a captured edit snapshot');
-    await first.getByRole('button',{name:/^Edit Patient:.*Show evidence/}).click();
+    await first.getByRole('button',{name:/^Update Patient:.*Show evidence/}).click();
     assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-resource-data')),editEffect.data,'Matrix action focuses its event snapshot, not a title reference');
     await page.keyboard.press('Escape');
     const open = first.locator('.step-entry.open .step-expander');
@@ -433,7 +431,7 @@ const renderFixture = (name, data) => {
     for (let index = 0; index < 8; index++) {
       const resource = { ...seed, id: 'matrix-fixture-' + index, key: 'fixture-' + index, events: [] };
       crowded.resources.push(resource);
-      arrange.effects.push({ verb: 'Create', type: seed.type, key: resource.key, resourceId: resource.id, offsetMs: 0, data: null });
+      arrange.effects.push({ effect: 'Create', type: seed.type, key: resource.key, resourceId: resource.id, offsetMs: 0, data: null });
     }
     crowded.displayName = 'Many resources (matrix fixture)';
     crowded.steps.find(step=>step.status==='failed').exception=Array.from({length:80},(_,i)=>'Exception detail '+i).join('\n');
@@ -587,12 +585,12 @@ const renderFixture = (name, data) => {
     assert.equal(await page.locator('.card').getAttribute('class'),initialCardClass,'Following a source link does not toggle the scenario');
     await sourceTab.close();
     const bundleFixture=structuredClone(model),bundleScenario=bundleFixture.scenarios[matrixScenarioIndex];bundleFixture.scenarios=[bundleScenario];
-    const bundleRef=bundleScenario.references.find(reference=>reference.kind==='Reference');
-    const bundleStep=bundleScenario.steps.find(step=>step.effects.some(effect=>effect.resourceId===bundleRef.subjectId && effect.verb==='Create'));
+    const bundleRef=bundleScenario.links.find(reference=>reference.role==='Patient');
+    const bundleStep=bundleScenario.steps.find(step=>step.effects.some(effect=>effect.resourceId===bundleRef.sourceId && effect.effect==='Create'));
     const extraResource={...bundleScenario.resources[0],id:'bundle-extra',key:'Companion',label:'Companion'};
     bundleScenario.resources.push(extraResource);
-    bundleStep.effects.push({...bundleStep.effects.find(effect=>effect.verb==='Reference'),resourceId:extraResource.id,key:extraResource.key,label:extraResource.label});
-    bundleScenario.references.push({...bundleRef,targetId:extraResource.id,targetKey:extraResource.key});
+    bundleStep.effects.push({...bundleStep.effects.find(effect=>effect.effect==='Read'),resourceId:extraResource.id,key:extraResource.key,label:extraResource.label});
+    bundleScenario.links.push({...bundleRef,targetId:extraResource.id,targetKey:extraResource.key});
     await page.goto(renderFixture('resource-matrix-three-inputs',bundleFixture));await page.locator('.card-head').click();
     assert.ok(await page.locator('.matrix-row').filter({has:page.locator('.matrix-connection')}).first().evaluate(row=>{
       const paths=Array.from(row.querySelectorAll('.matrix-connection path:not(.matrix-arrow)'));
@@ -601,28 +599,28 @@ const renderFixture = (name, data) => {
       return lanes.length===3 && lanes[1]>lanes[0] && Math.abs((lanes[2]-lanes[1])-(lanes[1]-lanes[0]))<.1 &&
         Math.abs(lanes[1]-((cell.top+cell.bottom)/2-bounds.top))<1 && paths.every(path=>/^M [^ ]+ [^ ]+ H [^ ]+$/.test(path.getAttribute('d')));
     }),'Three connections form an evenly spaced straight bundle centered on the action row');
-    for(const verb of ['Edit','Load']){
+    for(const effect of ['Update','Read']){
       const fixture=structuredClone(model),sc=fixture.scenarios[matrixScenarioIndex];fixture.scenarios=[sc];
-      const ref=sc.references.find(reference=>reference.kind==='Reference');
-      const producer=sc.steps.find(step=>step.effects.some(effect=>effect.resourceId===ref.subjectId && effect.verb==='Create'));
-      producer.effects.find(effect=>effect.resourceId===ref.subjectId && effect.verb==='Create').verb=verb;
-      await page.goto(renderFixture('resource-matrix-'+verb.toLowerCase()+'-relationship',fixture));await page.locator('.card-head').click();
-      assert.equal(await page.locator('.matrix-connection').filter({hasText:''}).evaluateAll((nodes,verb)=>nodes.some(svg=>svg.getAttribute('aria-label').includes('Reference → '+verb)),verb),true,verb+' producers retain their recorded relationships');
+      const ref=sc.links.find(reference=>reference.role==='Patient');
+      const producer=sc.steps.find(step=>step.effects.some(effect=>effect.resourceId===ref.sourceId && effect.effect==='Create'));
+      producer.effects.find(effect=>effect.resourceId===ref.sourceId && effect.effect==='Create').effect=effect;
+      await page.goto(renderFixture('resource-matrix-'+effect.toLowerCase()+'-relationship',fixture));await page.locator('.card-head').click();
+      assert.equal(await page.locator('.matrix-connection').filter({hasText:''}).evaluateAll((nodes,effect)=>nodes.some(svg=>svg.getAttribute('aria-label').includes('Patient → '+effect)),effect),true,effect+' producers retain their recorded relationships');
     }
     const snapshots=structuredClone(model),snapshotScenario=snapshots.scenarios[matrixScenarioIndex];
     snapshots.scenarios=[snapshotScenario];
-    const editStep=snapshotScenario.steps.find(step=>step.effects.some(effect=>effect.verb==='Edit'));
-    const captured=editStep.effects.find(effect=>effect.verb==='Edit');
+    const editStep=snapshotScenario.steps.find(step=>step.effects.some(effect=>effect.effect==='Update'));
+    const captured=editStep.effects.find(effect=>effect.effect==='Update');
     editStep.titleMessage={text:editStep.displayName,parts:[{text:'Given '},{text:'the patient',resourceId:captured.resourceId,data:'{"City":"before-edit-title-fixture"}'}]};
     await page.goto(renderFixture('resource-matrix-snapshot-fixture',snapshots));
     await page.locator('.card-head').click();
-    await page.getByRole('button',{name:/^Edit Patient:.*Show evidence/}).click();
+    await page.getByRole('button',{name:/^Update Patient:.*Show evidence/}).click();
     assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-resource-data')),captured.data,'Action inspection uses the event snapshot even when its title has a different snapshot');
     assert.deepEqual(errors, []);
     const repeated=structuredClone(model),repeatScenario=repeated.scenarios[matrixScenarioIndex];repeated.scenarios=[repeatScenario];
     const repeatStep=repeatScenario.steps.find(step=>step.effects.length && !step.isLifecycle),seedEffect=repeatStep.effects[0];
     repeatStep.logs=[];repeatStep.logMessages=[];repeatStep.notes=[];repeatStep.noteMessages=[];repeatStep.attachments=[];delete repeatStep.traceId;
-    repeatStep.effects=[{...seedEffect,verb:'Read',data:'{"Version":1}',offsetMs:repeatStep.offsetMs+10},{...seedEffect,verb:'Read',data:'{"Version":2}',offsetMs:repeatStep.offsetMs+20}];
+    repeatStep.effects=[{...seedEffect,effect:'Read',data:'{"Version":1}',offsetMs:repeatStep.offsetMs+10},{...seedEffect,effect:'Read',data:'{"Version":2}',offsetMs:repeatStep.offsetMs+20}];
     await page.goto(renderFixture('resource-matrix-event-snapshots',repeated));await page.locator('.card-head').click();
     const onlyEffects=page.locator('.step-entry').filter({has:page.locator('.matrix-event')}).first();
     assert.equal(await onlyEffects.locator('.step-body,.step-expander').count(),0,'Resource events alone no longer create a redundant expansion panel');
@@ -630,40 +628,40 @@ const renderFixture = (name, data) => {
     for(const [index,value] of [1,2].entries()){
       await repeatEvents.nth(index).focus();
       assert.equal(await page.evaluate(()=>document.activeElement.getAttribute('data-resource-data')),JSON.stringify({Version:value}));
-      assert.equal(await page.locator('.resource-hover-event').textContent(),repeatStep.effects[index].actionName ?? repeatStep.effects[index].verb,'Inspector shows the action without a step-relative timestamp');
+      assert.equal(await page.locator('.resource-hover-event').textContent(),repeatStep.effects[index].actionName ?? repeatStep.effects[index].effect,'Inspector shows the action without a step-relative timestamp');
       assert.ok(!(await repeatEvents.nth(index).getAttribute('aria-label')).includes('from step start'),'Accessible action labels omit the timestamp too');
       await page.keyboard.press('Escape');
     }
     const actionFixture=structuredClone(model),actionScenario=actionFixture.scenarios[matrixScenarioIndex];
     actionFixture.scenarios=[actionScenario];
     const actionStep=actionScenario.steps.find(step=>step.effects.length),actionEffect=actionStep.effects[0];
-    actionEffect.verb='Edit';actionEffect.actionName='Approve <now>';actionEffect.label='Jane <Doe>';
+    actionEffect.effect='Update';actionEffect.actionName='Approve <now>';actionEffect.label='Jane <Doe>';
     actionStep.effects.push({...actionEffect,actionName:'Audited',data:null});
     actionStep.effects.push({...actionEffect,actionName:'Approve <now>',data:null});
     await page.goto(renderFixture('custom-actions',actionFixture));
     await page.locator('.card-head').first().click();
     const actions=page.locator('.matrix-event').filter({hasText:'Approve <now>'});
     assert.equal(await actions.count(),2,'Equal action labels remain separate recorded effects');
-    assert.equal(await actions.first().getAttribute('data-matrix-verb'),'Edit','Custom names preserve effect semantics');
+    assert.equal(await actions.first().getAttribute('data-matrix-effect'),'Update','Custom names preserve effect semantics');
     assert.equal(await page.locator('.matrix-event').filter({hasText:'Audited'}).count(),1,'Default custom names are visible');
     await actions.first().focus();
     assert.match(await page.locator('.resource-hover-event').textContent(),/Approve <now>/);
     assert.deepEqual(errors,[]);
     await page.screenshot({path:path.join(out,'custom-actions.png'),fullPage:true});
     const historyFixture=structuredClone(model),historyScenario=historyFixture.scenarios.find(scenario=>scenario.scenarioId===actionSample.scenarioId);historyFixture.scenarios=[historyScenario];
-    const historyReference=historyScenario.references.find(edge=>edge.kind==='Reference');
-    const historySource=historyScenario.steps.find(step=>step.effects.some(effect=>effect.resourceId===historyReference.subjectId && effect.verb==='Create'));
-    const historyTarget=historySource.effects.find(effect=>effect.resourceId===historyReference.targetId && effect.verb==='Reference');
-    const historyProduced=historySource.effects.find(effect=>effect.resourceId===historyReference.subjectId && effect.verb==='Create');
+    const historyReference=historyScenario.links.find(edge=>edge.role==='Patient');
+    const historySource=historyScenario.steps.find(step=>step.effects.some(effect=>effect.resourceId===historyReference.sourceId && effect.effect==='Create'));
+    const historyTarget=historySource.effects.find(effect=>effect.resourceId===historyReference.targetId && effect.effect==='Read');
+    const historyProduced=historySource.effects.find(effect=>effect.resourceId===historyReference.sourceId && effect.effect==='Create');
     historyScenario.steps.push({...historySource,stepId:'history-later',label:'later',displayName:'Later consumption of a referenced input',titleMessage:null,
-      effects:[{...historyTarget,verb:'Consume',actionName:null},{...historyProduced,verb:'Edit',actionName:null}]});
-    historyScenario.references.push({...historyReference,kind:'Consume'});
+      effects:[{...historyTarget,effect:'Update',actionName:null},{...historyProduced,effect:'Update',actionName:null}]});
+    historyScenario.links.push({...historyReference,role:'Payer'});
     await page.goto(renderFixture('relationship-history',historyFixture));
     await page.locator('.card-head').first().click();
     const historyLabels=await page.locator('.matrix-connection').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')));
     const historyPrefix=historyReference.targetType+' '+historyReference.targetKey+' ';
-    assert.ok(historyLabels.some(label=>label.startsWith(historyPrefix+'Reference → Create')),'The original reference keeps its connection');
-    assert.ok(historyLabels.some(label=>label.startsWith(historyPrefix+'Consume → Edit')),'Later consumption of the same pair keeps its own connection');
+    assert.ok(historyLabels.some(label=>label.startsWith(historyPrefix+'Patient → Create')),'The original reference keeps its connection');
+    assert.ok(historyLabels.some(label=>label.startsWith(historyPrefix+'Payer → Update')),'Later consumption of the same pair keeps its own connection');
     assert.deepEqual(errors,[]);
     const graphPage=await browser.newPage({viewport:{width:1400,height:1000}});
     const parallel=model.scenarios.find(sc=>sc.displayName==='customer books with parallel arrange');
@@ -689,7 +687,7 @@ const renderFixture = (name, data) => {
       assert.deepEqual(await graphPage.locator('.predecessor-link').evaluateAll(links=>links.map(link=>[Number(link.dataset.from),Number(link.dataset.to)])),expected,'Grouping retains guard, ordering and merge dependencies');
     }
     const nested=structuredClone(parallel);
-    nested.scenarioId='nested-dependencies';nested.displayName='nested dependencies';nested.resources=[];nested.references=[];
+    nested.scenarioId='nested-dependencies';nested.displayName='nested dependencies';nested.resources=[];nested.links=[];
     const names=['A','B','C','D','E','F','J','K'],dependencies=[[],[0],[0],[0],[3],[3],[1,2],[4,5,6]];
     const stepBase=parallel.steps.find(step=>!step.isLifecycle);
     nested.steps=names.map((name,index)=>({...stepBase,index,stepId:'nested-'+name,displayName:name,dependsOn:dependencies[index],dependencies:null,guards:null,arms:null,effects:[],logs:[],logMessages:[],notes:[],noteMessages:[],attachments:[],titleMessage:{text:name,parts:[{text:name}]}}));

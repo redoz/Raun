@@ -39,6 +39,7 @@ public sealed class AppointmentsGiven : Given<AppointmentsWorld>
     }
 
     [StepName("Given the API is reachable")]
+    [return: Read]
     public async Task<AppointmentDto[]> ApiIsReachable() =>
         await World.Api.As(Actor.Patient).ListAsync();
 }

@@ -11,6 +11,8 @@ internal sealed record ResourceMappingDiscovery(
     IReadOnlyList<INamedTypeSymbol> Imports,
     IReadOnlyList<Diagnostic> Diagnostics)
 {
+    internal IReadOnlyList<ResourceDeclaration> All { get; init; } = [];
+
     internal bool HasMappings => Local.Count > 0 || Imports.Count > 0;
 
     internal static ResourceMappingDiscovery Discover(Compilation compilation)
@@ -90,7 +92,7 @@ internal sealed record ResourceMappingDiscovery(
             }
         }
         return new(local.OrderBy(d => d.Owner.ToDisplayString(), System.StringComparer.Ordinal)
-            .ThenBy(d => d.Source.ToDisplayString(), System.StringComparer.Ordinal).ToArray(), imports, diagnostics);
+            .ThenBy(d => d.Source.ToDisplayString(), System.StringComparer.Ordinal).ToArray(), imports, diagnostics) { All = local.OrderBy(d => d.Owner.ToDisplayString(), System.StringComparer.Ordinal).ThenBy(d => d.Source.ToDisplayString(), System.StringComparer.Ordinal).Concat(declarations.Skip(local.Count)).ToArray() };
     }
 
     private static INamedTypeSymbol? ReadOwner(Compilation compilation, Dictionary<string, object?> fields, int index)

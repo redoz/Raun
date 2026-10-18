@@ -12,77 +12,84 @@ internal readonly record struct RelationshipReadResult(ImmutableArray<DeclaredRe
 
 internal static class RelationshipReader
 {
-    internal static RelationshipReadResult Read(IMethodSymbol method)
+    internal static RelationshipReadResult Read(IMethodSymbol method, Compilation? compilation = null)
     {
         var relationships = new List<DeclaredRelationship>();
         var issues = new List<ResourceMetadataIssue>();
+        var owners = new List<(string Source, ISymbol Subject, AttributeData Attribute, INamedTypeSymbol Type)>();
         foreach (var parameter in method.Parameters)
-        { ReadSite(parameter.Name, AttributeReader.RoleAttribute(parameter.GetAttributes()), parameter.GetAttributes(), parameter); }
-        var explicitRelations = method.GetReturnTypeAttributes().Where(IsStandalone).ToImmutableArray();
-        ReadSite(AttributeReader.ReturnSubject, AttributeReader.ReturnAttribute(method),
-            explicitRelations.Length > 0 ? explicitRelations : method.GetAttributes().Where(IsStandalone).ToImmutableArray(), method);
-        var seen = new HashSet<(string Source, string Target)>();
-        foreach (var relationship in relationships)
         {
-            var subject = relationship.Source == AttributeReader.ReturnSubject ? (ISymbol)method : method.Parameters.First(p => p.Name == relationship.Source);
-            var role = relationship.Source == AttributeReader.ReturnSubject ? AttributeReader.ReturnRole(method)
-                : AttributeReader.ParameterRole((IParameterSymbol)subject);
-            if (role is not ("Create" or "Load" or "Edit"))
-            { issues.Add(new("RAUN032", subject, "A relationship source requires a Create, Load, or Edit action.")); }
-            var targetParameter = method.Parameters.FirstOrDefault(p => p.Name == relationship.Target);
-            var targetValid = relationship.Target == AttributeReader.ReturnSubject
-                ? SymbolHelpers.TryUnwrapReturn(method.ReturnType, out var result) && result is not null && AttributeReader.ReturnRole(method) is not null
-                : targetParameter is not null;
-            if (!targetValid || relationship.Target == relationship.Source)
-            { issues.Add(new("RAUN010", subject, relationship.Target)); }
-            else if (targetParameter is not null && targetParameter.Type.SpecialType != SpecialType.None
-                && AttributeReader.ResourceKeyType(targetParameter) is null && AttributeReader.ParameterRole(targetParameter) is null)
-            { issues.Add(new("RAUN032", subject, "The target must be a resource or a typed resource key.")); }
-            if (!seen.Add((relationship.Source, relationship.Target)))
-            { issues.Add(new("RAUN032", subject, "Duplicate or conflicting relationships name the same source and target.")); }
+            var attribute = AttributeReader.RoleAttribute(parameter.GetAttributes());
+            if (ResourceDefinitionReader.ActionType(attribute?.AttributeClass) is { } type)
+            { owners.Add((parameter.Name, parameter, attribute!, type)); }
         }
-        return new(relationships.OrderBy(r => r.Kind == "Reference" ? 0 : 1).ToImmutableArray(), issues.Distinct().ToImmutableArray());
-
-        void ReadSite(string source, AttributeData? action, ImmutableArray<AttributeData> standalone, ISymbol subject)
+        var returned = AttributeReader.ReturnAttribute(method);
+        if (ResourceDefinitionReader.ActionType(returned?.AttributeClass) is { } returnType)
+        { owners.Add((AttributeReader.ReturnSubject, method, returned!, returnType)); }
+        var bindings = new HashSet<(string Source, string Role)>();
+        foreach (var target in method.Parameters)
         {
-            if (action?.AttributeClass is { } type)
+            foreach (var attribute in target.GetAttributes())
             {
-                var schemaIssues = new List<ResourceMetadataIssue>();
-                foreach (var property in ResourceDefinitionReader.Schema(type, schemaIssues))
+                var marker = attribute.AttributeClass;
+                var packaged = ResourceDefinitionReader.LinkBase(marker);
+                var raw = IsStandalone(attribute);
+                if (packaged is null && !raw) { continue; }
+                var owner = packaged is not null ? marker?.ContainingType : marker?.TypeArguments[0] as INamedTypeSymbol;
+                var roleName = packaged is not null ? ResourceDefinitionReader.RoleName(marker!.Name)
+                    : attribute.ConstructorArguments.FirstOrDefault().Value as string;
+                var source = attribute.NamedArguments.FirstOrDefault(a => a.Key == "Source").Value.Value as string;
+                if (owner is null || string.IsNullOrWhiteSpace(roleName))
+                { issues.Add(new("RAUN032", target, "A link requires an action owner and a nonempty role name.")); continue; }
+                var candidates = owners.Where(o => Matches(o.Type, owner) && (source is null || o.Source == source)).ToArray();
+                if (candidates.Length != 1)
+                { issues.Add(new("RAUN032", target, "Bind the link to exactly one action application. Use Source when the owner is ambiguous.")); continue; }
+                var applied = candidates[0];
+                var schema = ResourceDefinitionReader.Schema(applied.Type, issues, compilation);
+                var role = schema.FirstOrDefault(r => r.PropertyName == roleName);
+                if (role.ResourceType is null)
+                { issues.Add(new("RAUN032", target, "The owner does not declare resource role '" + roleName + "'.")); continue; }
+                if (applied.Source == target.Name || !bindings.Add((applied.Source, roleName!)))
+                { issues.Add(new("RAUN032", target, "Bind each resource role once, to a different input.")); continue; }
+                if (AttributeReader.ParameterAction(target) is null)
+                { issues.Add(new("RAUN032", target, "A raw link requires a separate resource action on its input.")); }
+                if (compilation is not null)
                 {
-                    var supplied = action.NamedArguments.FirstOrDefault(a => a.Key == property.PropertyName);
-                    if (supplied.Key is null)
-                    {
-                        if (property.Required) { issues.Add(new("RAUN032", subject, "Supply required relationship property '" + property.PropertyName + "'.")); }
-                        continue;
-                    }
-                    var constant = supplied.Value;
-                    if (constant.IsNull || property.IsCollection && constant.Kind != TypedConstantKind.Array)
-                    { issues.Add(new("RAUN032", subject, "A supplied relationship binding cannot be null or have the wrong shape.")); continue; }
-                    var values = property.IsCollection && constant.Kind == TypedConstantKind.Array && !constant.IsNull
-                        ? constant.Values : ImmutableArray.Create(constant);
-                    if (property.Required && values.IsEmpty)
-                    { issues.Add(new("RAUN032", subject, "Supply a nonempty relationship property '" + property.PropertyName + "'.")); }
-                    foreach (var value in values)
-                    {
-                        if (value.Value is not string target || string.IsNullOrWhiteSpace(target))
-                        { issues.Add(new("RAUN032", subject, "A supplied relationship target must contain text.")); continue; }
-                        relationships.Add(new(source, target, property.Kind,
-                            property.ResourceType is null ? null : AssemblyQualifiedTypeName.From(type),
-                            property.ResourceType is null ? null : property.PropertyName));
-                    }
+                    var knownInput = ResourceCodeModel.TryGetParameter(compilation, target, out var input);
+                    var knownExpected = ResourceCodeModel.TryCanonical(compilation, role.ResourceType, out var expected);
+                    // Fluent host configuration is runtime data. Reject known mismatches and untyped
+                    // scalar inputs now; the independent recorder validates opaque mapped values later.
+                    if (knownInput && knownExpected && !SymbolEqualityComparer.Default.Equals(input!.CanonicalType, expected)
+                        || !knownInput && !ResourceCodeModel.MayHaveRuntimeMapping(compilation, target))
+                    { issues.Add(new("RAUN032", target, "The input must represent the role's canonical resource type.")); }
                 }
-            }
-            foreach (var declaration in standalone.Where(IsStandalone))
-            {
-                var kind = declaration.ConstructorArguments.Length > 0 && declaration.ConstructorArguments[0].Value is int value
-                    ? ResourceDefinitionReader.RelationKind(value) : null;
-                var target = declaration.ConstructorArguments.Length > 1 ? declaration.ConstructorArguments[1].Value as string : null;
-                if (kind is null || string.IsNullOrWhiteSpace(target))
-                { issues.Add(new("RAUN032", subject, "A relationship needs a valid kind and a nonblank target.")); continue; }
-                relationships.Add(new(source, target!, kind!));
+                relationships.Add(new(applied.Source, target.Name, "Link", AssemblyQualifiedTypeName.From(applied.Type), roleName));
             }
         }
+        foreach (var owner in owners)
+        {
+            foreach (var role in ResourceDefinitionReader.Schema(owner.Type, issues, compilation))
+            {
+                if (bindings.Contains((owner.Source, role.PropertyName))) { continue; }
+                var properties = ImmutableDictionary<string, string?>.Empty
+                    .Add("Raun.OwnerId", owner.Type.GetDocumentationCommentId())
+                    .Add("Raun.RoleName", role.PropertyName)
+                    .Add("Raun.ExpectedResourceId", role.ResourceType.GetDocumentationCommentId())
+                    .Add("Raun.MarkerId", role.MarkerType.GetDocumentationCommentId())
+                    .Add("Raun.Source", owner.Source == AttributeReader.ReturnSubject ? "$return" : owner.Source);
+                issues.Add(new("RAUN036", owner.Subject, "Supply required resource role '" + role.PropertyName + "'.",
+                    owner.Attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation(), properties));
+            }
+        }
+        return new(relationships.ToImmutableArray(), issues.Distinct().ToImmutableArray());
     }
-    internal static bool IsStandalone(AttributeData data) => ResourceDefinitionReader.Is(data.AttributeClass, "RelatesToAttribute");
+
+    private static bool Matches(INamedTypeSymbol actual, INamedTypeSymbol owner)
+    {
+        for (var current = actual; current is not null; current = current.BaseType)
+        { if (SymbolEqualityComparer.Default.Equals(current, owner)) { return true; } }
+        return false;
+    }
+
+    internal static bool IsStandalone(AttributeData data) => ResourceDefinitionReader.Is(data.AttributeClass?.OriginalDefinition, "LinkAttribute", 1);
 }

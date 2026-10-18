@@ -11,10 +11,10 @@ namespace AppointmentTests;
 /// <summary>Arrange steps for patients already on file and their slots.</summary>
 public sealed partial class AppointmentGiven : Given
 {
-    // A lookup, not a creation: the patient already exists, so the role is Loaded and there is
+    // A lookup, not a creation: the patient already exists, so the role is Read and there is
     // nothing to tear down.
     [StepName("Given patient {$return ?? name} is on file")]
-    [return: Loaded]
+    [return: Read]
     public Task<Patient> PatientOnFile(string name)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(90));
@@ -29,11 +29,11 @@ public sealed partial class AppointmentGiven : Given
         return Task.FromResult(new Slot(hour));
     }
 
-    // Edits the patient and returns the edited patient: [Edited] on the parameter, [return: Edited]
-    // on the result. Both resolve to Patient:{id}, so the trace shows one Edit, not two.
+    // Edits the patient and returns the edited patient: [Updated] on the parameter, [return: Updated]
+    // on the result. Both resolve to Patient:{id}, so the trace shows one Update, not two.
     [StepName("Given {patient} lives in {city}")]
-    [return: Edited]
-    public Task<Patient> PatientLivesIn([Edited] Patient patient, string city)
+    [return: Updated]
+    public Task<Patient> PatientLivesIn([Updated] Patient patient, string city)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(120));
         return Task.FromResult(patient with { City = city });
@@ -68,8 +68,8 @@ public sealed partial class AppointmentWhen : When
     // Rescheduling removes the old booking and creates a new one in the target slot. The old
     // appointment is [Deleted]; the new one consumes the slot it moves into.
     [StepName("When rescheduling {appointment} into {slot}")]
-    [return: Rescheduled(Slot = nameof(slot))]
-    public Task<Appointment> Reschedule([Deleted] Appointment appointment, [Reserved] Slot slot)
+    [return: Rescheduled]
+    public Task<Appointment> Reschedule([Cancelled] Appointment appointment, [Rescheduled.Slot] Slot slot)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(480));
         return Task.FromResult(new Appointment(appointment.Patient, slot));

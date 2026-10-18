@@ -24,13 +24,13 @@ public sealed class CustomResourceActionTests
         {
             await first.Apply(ResourceAction.For<ResourceActionTests.ApprovedAttribute>(), patient);
             var error = await Assert.ThrowsAsync<ResourceConflictException>(() => second.Read(patient).AsTask());
-            Assert.Equal(LifecycleVerb.Edit, error.OtherVerb);
+            Assert.Equal(ResourceEffect.Update, error.OtherEffect);
         }
         else
         {
             await first.Read(patient);
             var error = await Assert.ThrowsAsync<ResourceConflictException>(() => second.Apply(ResourceAction.For<ResourceActionTests.ApprovedAttribute>(), patient).AsTask());
-            Assert.Equal(LifecycleVerb.Edit, error.Verb);
+            Assert.Equal(ResourceEffect.Update, error.Effect);
         }
         Assert.Empty(second.Effects);
     }
@@ -56,8 +56,8 @@ public sealed class CustomResourceActionTests
         resolver.ApplyMappings([ResourceMapping.Alternate<Patient, Row>()]);
         var context = Context(resolver);
         await context.Read(new Patient("42"));
-        await context.Edit(new Patient("42"));
-        Assert.Equal(LifecycleVerb.Edit, Assert.Single(context.Effects).Verb);
+        await context.Update(new Patient("42"));
+        Assert.Equal(ResourceEffect.Update, Assert.Single(context.Effects).Effect);
         var action = ResourceAction.For<ResourceActionTests.ApprovedAttribute>();
         await context.Apply(action, new Row("42", "before"));
         var original = context.Effects[1];
@@ -79,7 +79,7 @@ public sealed class CustomResourceActionTests
         var context = Context(new ResourceIdentityResolver());
         var identity = new ResourceIdentity(typeof(Patient), "42");
         await context.Create(identity);
-        await context.Load(identity);
+        await context.Read(identity);
         await context.Apply(ResourceAction.For<ResourceActionTests.ApprovedAttribute>(), identity);
         Assert.All(context.Effects, effect => { Assert.Null(effect.Data); Assert.Null(effect.DataSnapshot); });
         Assert.Equal(2, context.Effects.Count);
@@ -107,5 +107,5 @@ public sealed class CustomResourceActionTests
     private static ScenarioNode Node(int index) => new() { Index = index, StepId = index.ToString(System.Globalization.CultureInfo.InvariantCulture),
         Phase = "Given", OperationName = "op", DisplayNameTemplate = "op", DependsOn = [], Invoke = (_, _) => Task.FromResult<object?>(null) };
     [DisplayName("Approve")]
-    public sealed class ConfirmedAttribute : EditedAttribute;
+    public sealed class ConfirmedAttribute : UpdatedAttribute;
 }

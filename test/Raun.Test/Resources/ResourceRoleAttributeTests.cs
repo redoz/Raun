@@ -17,9 +17,9 @@ public class ResourceRoleAttributeTests
     {
         var expected = AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method;
         Assert.Equal(expected, Targets<CreatedAttribute>());
-        Assert.Equal(expected, Targets<LoadedAttribute>());
         Assert.Equal(expected, Targets<ReadAttribute>());
-        Assert.Equal(expected, Targets<EditedAttribute>());
+        Assert.Equal(expected, Targets<ReadAttribute>());
+        Assert.Equal(expected, Targets<UpdatedAttribute>());
         Assert.Equal(expected, Targets<DeletedAttribute>());
     }
 
@@ -28,8 +28,8 @@ public class ResourceRoleAttributeTests
     {
         Assert.True(Targets<CreatedAttribute>().HasFlag(AttributeTargets.ReturnValue));
         Assert.True(Targets<CreatedAttribute>().HasFlag(AttributeTargets.Method));
-        Assert.True(Targets<LoadedAttribute>().HasFlag(AttributeTargets.ReturnValue));
-        Assert.True(Targets<LoadedAttribute>().HasFlag(AttributeTargets.Method));
+        Assert.True(Targets<ReadAttribute>().HasFlag(AttributeTargets.ReturnValue));
+        Assert.True(Targets<ReadAttribute>().HasFlag(AttributeTargets.Method));
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class ResourceRoleAttributeTests
     [Fact]
     public void Edited_is_valid_on_both_parameter_and_return()
     {
-        var t = Targets<EditedAttribute>();
+        var t = Targets<UpdatedAttribute>();
         Assert.True(t.HasFlag(AttributeTargets.Parameter));
         Assert.True(t.HasFlag(AttributeTargets.ReturnValue));
         Assert.True(t.HasFlag(AttributeTargets.Method));

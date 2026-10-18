@@ -41,19 +41,26 @@ public sealed record Appointment(Patient Patient, Slot Slot) : IResource<Appoint
 public sealed class BookingGiven : Given<NoWorld>
 {
     [StepName("Given patient {$return ?? name} exists")]
-    [return: Created]
+    [return: Seed]
     public Task<Patient> PatientExists(string id, string name) => Task.FromResult(new Patient(id, name));
 
     [StepName("Given {$return ?? hour} is available")]
-    [return: Created]
+    [return: Seed]
     public Task<Slot> AvailableSlot(int hour) => Task.FromResult(new Slot(hour));
+}
+
+public sealed class Reserved : UpdatedAttribute;
+public sealed class Booked : CreatedAttribute
+{
+    public sealed class PatientAttribute : ResourceLinkAttribute<Patient, ReadAttribute>;
+    public sealed class SlotAttribute : ResourceLinkAttribute<Slot, Reserved>;
 }
 
 public sealed class BookingWhen : When<NoWorld>
 {
     [StepName("When {patient} books {slot}")]
-    [return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
-    public Task<Appointment> Book(Patient patient, Slot slot) => Task.FromResult(new Appointment(patient, slot));
+    [return: Booked]
+    public Task<Appointment> Book([Booked.Patient] Patient patient, [Booked.Slot] Slot slot) => Task.FromResult(new Appointment(patient, slot));
 }
 
 public sealed class BookingThen : Then<NoWorld>

@@ -671,7 +671,7 @@ public sealed class ScenarioScheduler
                 LogEntries = teardownContext.LogEntries,
                 Attachments = teardownContext.Attachments,
                 Effects = teardownContext.Resources.Effects,
-                Lineage = teardownContext.Resources.Lineage,
+                Links = teardownContext.Resources.Links,
                 Exception = errors is null
                     ? null
                     : new AggregateException($"{errors.Count} teardown action(s) failed.", errors),
@@ -733,7 +733,7 @@ public sealed class ScenarioScheduler
                             LogEntries = result.LogEntries,
                             Attachments = result.Attachments,
                             Effects = result.Effects,
-                            Lineage = result.Lineage,
+                            Links = result.Links,
                             TraceId = result.TraceId,
                             SpanId = result.SpanId,
                         };
@@ -782,7 +782,7 @@ public sealed class ScenarioScheduler
                 LogEntries = context?.LogEntries ?? [],
                 Attachments = context?.Attachments ?? new Dictionary<string, string>(),
                 Effects = context?.Resources.Effects ?? [],
-                Lineage = context?.Resources.Lineage ?? [],
+                Links = context?.Resources.Links ?? [],
                 TraceId = context?.Activity?.TraceId.ToString(),
                 SpanId = context?.Activity?.SpanId.ToString(),
                 Exception = new TimeoutException(
@@ -1084,7 +1084,7 @@ public sealed class ScenarioScheduler
                     LogEntries = context.LogEntries,
                     Attachments = context.Attachments,
                     Effects = context.Resources.Effects,
-                    Lineage = context.Resources.Lineage,
+                    Links = context.Resources.Links,
                     TraceId = activity?.TraceId.ToString(),
                     SpanId = activity?.SpanId.ToString(),
                 },
@@ -1134,7 +1134,7 @@ public sealed class ScenarioScheduler
                     LogEntries = context.LogEntries,
                     Attachments = context.Attachments,
                     Effects = context.Resources.Effects,
-                    Lineage = context.Resources.Lineage,
+                    Links = context.Resources.Links,
                     TraceId = activity?.TraceId.ToString(),
                     SpanId = activity?.SpanId.ToString(),
                 },

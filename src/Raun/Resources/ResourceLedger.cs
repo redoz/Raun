@@ -19,7 +19,7 @@ internal sealed class ResourceLedger
     private readonly bool[][] _after;
     private readonly Dictionary<ResourceIdentity, List<Entry>> _claims = [];
 
-    private readonly record struct Entry(int Node, string StepDisplayName, LifecycleVerb Verb);
+    private readonly record struct Entry(int Node, string StepDisplayName, ResourceEffect Effect);
 
     /// <summary>Builds the ledger for one scenario, precomputing its transitive "must run after" relation.</summary>
     public ResourceLedger(IReadOnlyList<ScenarioNode> nodes)
@@ -34,7 +34,7 @@ internal sealed class ResourceLedger
     /// already holds a claim on the identity and either verb is exclusive; the refused claim is not
     /// recorded. Re-claiming by the same step keeps the stronger verb.
     /// </summary>
-    public void Claim(int nodeIndex, string stepDisplayName, ResourceIdentity identity, LifecycleVerb verb)
+    public void Claim(int nodeIndex, string stepDisplayName, ResourceIdentity identity, ResourceEffect verb)
     {
         lock (_lock)
         {
@@ -60,17 +60,17 @@ internal sealed class ResourceLedger
                     continue;
                 }
 
-                if (exclusive || entry.Verb.ToLockMode() == LockMode.Exclusive)
+                if (exclusive || entry.Effect.ToLockMode() == LockMode.Exclusive)
                 {
-                    throw new ResourceConflictException(identity, stepDisplayName, verb, entry.StepDisplayName, entry.Verb);
+                    throw new ResourceConflictException(identity, stepDisplayName, verb, entry.StepDisplayName, entry.Effect);
                 }
             }
 
             if (own >= 0)
             {
-                if (verb.Precedence() > entries[own].Verb.Precedence())
+                if (verb.Precedence() > entries[own].Effect.Precedence())
                 {
-                    entries[own] = entries[own] with { Verb = verb };
+                    entries[own] = entries[own] with { Effect = verb };
                 }
             }
             else

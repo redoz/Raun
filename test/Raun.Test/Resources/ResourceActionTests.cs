@@ -10,7 +10,7 @@ public sealed class ResourceActionTests
     public void Actions_use_one_declared_base_effect_and_optional_display_name()
     {
         var action = ResourceAction.For<ApprovedAttribute>();
-        Assert.Equal(LifecycleVerb.Edit, action.Effect);
+        Assert.Equal(ResourceEffect.Update, action.Effect);
         Assert.Equal("Approve", action.Name);
         Assert.Equal(typeof(ApprovedAttribute), action.AttributeType);
         Assert.Equal("Validated", ResourceAction.For<ValidatedAttribute>().Name);
@@ -28,9 +28,9 @@ public sealed class ResourceActionTests
         var right = ResourceAction.For<CheckedAttribute>();
         Assert.Equal(left.Name, right.Name);
         Assert.NotEqual(left.AttributeType, right.AttributeType);
-        Assert.Equal(LifecycleVerb.Read, right.Effect);
+        Assert.Equal(ResourceEffect.Read, right.Effect);
         Assert.Throws<ArgumentException>(() => ResourceAction.For<BlankAttribute>());
-        Assert.Throws<ArgumentException>(() => ResourceAction.For<ObsoleteAttribute>());
+        Assert.Throws<ArgumentException>(() => ResourceAction.For(typeof(ObsoleteAttribute)));
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public sealed class ResourceActionTests
         var scope = assembly.GetType(typeof(ResourceActionTests).FullName!)!;
         var action = ResourceAction.FromGenerated(scope, typeof(ApprovedAttribute).AssemblyQualifiedName!);
         Assert.Equal(assembly, action.AttributeType!.Assembly);
-        var schemaType = assembly.GetType(typeof(ResourceDefinitionTests).FullName + "+BookedAttribute")!;
+        var schemaType = assembly.GetType(typeof(ResourceDefinitionTests).FullName + "+Booked")!;
         var schema = ResourceAction.For(schemaType);
         Assert.Equal(assembly, schema.GetRelationship("Patient").ResourceType!.Assembly);
         var reference = new WeakReference(context);
@@ -95,29 +95,29 @@ public sealed class ResourceActionTests
         return reference;
     }
 
-    private sealed class Attribute : EditedAttribute;
+    private sealed class Attribute : UpdatedAttribute;
     private static class Named
     {
         [DisplayName("Explicit")]
-        internal sealed class Attribute : EditedAttribute;
+        internal sealed class Attribute : UpdatedAttribute;
     }
 
     [DisplayName("Approve")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Exercises indirect action inheritance.")]
-    public class ApprovedAttribute : EditedAttribute;
+    public class ApprovedAttribute : UpdatedAttribute;
     public sealed class IndirectAttribute : ApprovedAttribute;
     public sealed class ValidatedAttribute : ReadAttribute;
-    public sealed class GenericAttribute<T> : EditedAttribute;
+    public sealed class GenericAttribute<T> : UpdatedAttribute;
     [DisplayName("Approve")]
     public sealed class CheckedAttribute : ReadAttribute;
     [DisplayName(" ")]
-    public sealed class BlankAttribute : EditedAttribute;
-    public sealed class ThrowingAttribute : EditedAttribute
+    public sealed class BlankAttribute : UpdatedAttribute;
+    public sealed class ThrowingAttribute : UpdatedAttribute
     {
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1065:Do not raise exceptions in unexpected locations", Justification = "Proves metadata lookup does not initialize the attribute.")]
         static ThrowingAttribute() => throw new InvalidOperationException("initialized");
         public ThrowingAttribute() => throw new InvalidOperationException("constructed");
     }
-    private sealed class HiddenAttribute : EditedAttribute;
+    private sealed class HiddenAttribute : UpdatedAttribute;
     public sealed record PrivateValue;
 }

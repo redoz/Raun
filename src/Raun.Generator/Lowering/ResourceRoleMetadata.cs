@@ -6,14 +6,18 @@ using Raun.Generator.Syntax;
 
 namespace Raun.Generator.Lowering;
 
-internal readonly record struct ResourceRoleMetadata(string Verb, string Name, string? AttributeIdentity)
+internal readonly record struct ResourceRoleMetadata(string Effect, string Name, string? AttributeIdentity)
 {
-    internal static string? BaseVerb(INamedTypeSymbol? type) => ResourceDefinitionReader.Kind(type);
+    internal static string? BaseVerb(INamedTypeSymbol? type) => ResourceDefinitionReader.Kind(ResourceDefinitionReader.ActionType(type));
 
     internal static ResourceRoleMetadata? From(AttributeData? attribute, out string? error)
     {
+        return FromType(ResourceDefinitionReader.ActionType(attribute?.AttributeClass), out error);
+    }
+
+    internal static ResourceRoleMetadata? FromType(INamedTypeSymbol? type, out string? error)
+    {
         error = null;
-        var type = attribute?.AttributeClass;
         var verb = BaseVerb(type);
         if (verb is null || type is null) { return null; }
         if (ResourceDefinitionReader.IsBuiltin(type)) { return new(verb, verb, null); }
@@ -45,7 +49,7 @@ internal readonly record struct ResourceRoleMetadata(string Verb, string Name, s
 
     private static IEnumerable<(string Id, ISymbol Subject, string Reason)> ValidateSite(ISymbol subject, IEnumerable<AttributeData> attributes, Compilation? compilation)
     {
-        var roles = attributes.Where(a => ResourceDefinitionReader.IsAction(a.AttributeClass)).ToArray();
+        var roles = attributes.Where(a => ResourceDefinitionReader.ActionType(a.AttributeClass) is not null).ToArray();
         if (roles.Length > 1) { yield return ("RAUN028", subject, "Use one resource role for this subject."); }
         foreach (var role in roles)
         {

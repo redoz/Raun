@@ -49,7 +49,7 @@ public class LineMappingPdbTests(ITestOutputHelper output)
     [Fact]
     public void Resource_step_with_pre_call_claims_still_maps_to_original_invocation_span()
     {
-        // When.Suspend([Edited] User) [return: Edited]: the parameter claim is emitted BEFORE the call
+        // When.Suspend([Updated] User) [return: Updated]: the parameter claim is emitted BEFORE the call
         // under `#line hidden`, the return claim after. The call itself must still carry its own
         // span directive, so a breakpoint on the scenario line hits and stepping lands on the user's
         // source — never on generated plumbing.

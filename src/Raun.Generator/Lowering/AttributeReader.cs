@@ -8,16 +8,10 @@ namespace Raun.Generator.Lowering;
 /// <summary>Reads Raun's <c>[Scenario]</c> / <c>[StepName]</c> attribute data off method symbols.</summary>
 internal static class AttributeReader
 {
-    /// <summary>The reserved lineage-target token meaning the step's own return value, used in a
-    /// producer's <c>References</c>/<c>Consumes</c>. MUST stay identical to <c>Raun.Subject.Return</c>
-    /// (separate assembly).</summary>
+    /// <summary>The explicit link source token for the step result. Keep identical to Raun.Subject.Return.</summary>
     public const string ReturnSubject = "<return>";
 
-    /// <summary>
-    /// The lineage targets declared on a producer's <c>[Created]</c>/<c>[Loaded]</c>/<c>[Edited]</c>
-    /// attribute — its <c>References</c>/<c>Consumes</c> named properties. Each target is a parameter
-    /// name (via <c>nameof</c>) or <see cref="ReturnSubject"/>. Empty arrays when absent.
-    /// </summary>
+    /// <summary>The scenario's optional display name.</summary>
     public static string? ScenarioDisplayName(IMethodSymbol method)
     {
         var attr = method.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "ScenarioAttribute");
@@ -92,7 +86,7 @@ internal static class AttributeReader
     }
 
     /// <summary>
-    /// The resource role declared on <paramref name="parameter"/> (<c>[Read]/[Edited]/[Deleted]</c>),
+    /// The resource role declared on <paramref name="parameter"/> (<c>[Read]/[Updated]/[Deleted]</c>),
     /// as the runtime <c>ResourceContext</c> verb name, or null when none.
     /// </summary>
     public static ResourceRoleMetadata? ParameterAction(IParameterSymbol parameter)
@@ -101,14 +95,14 @@ internal static class AttributeReader
     public static ResourceRoleMetadata? ReturnAction(IMethodSymbol method)
         => ResourceRoleMetadata.From(ReturnAttribute(method), out _);
 
-    public static string? ParameterRole(IParameterSymbol parameter) => ParameterAction(parameter)?.Verb;
-    public static string? ReturnRole(IMethodSymbol method) => ReturnAction(method)?.Verb;
+    public static string? ParameterRole(IParameterSymbol parameter) => ParameterAction(parameter)?.Effect;
+    public static string? ReturnRole(IMethodSymbol method) => ReturnAction(method)?.Effect;
 
     public static AttributeData? ReturnAttribute(IMethodSymbol method)
         => RoleAttribute(method.GetReturnTypeAttributes()) ?? RoleAttribute(method.GetAttributes());
 
     internal static AttributeData? RoleAttribute(ImmutableArray<AttributeData> attributes)
-        => attributes.FirstOrDefault(a => ResourceDefinitionReader.IsAction(a.AttributeClass));
+        => attributes.FirstOrDefault(a => ResourceDefinitionReader.ActionType(a.AttributeClass) is not null);
 
     /// <summary>Numeric value of <c>Raun.LockMode.Exclusive</c>. MUST stay identical to the runtime enum (separate assembly).</summary>
     private const int LockModeExclusive = 1;

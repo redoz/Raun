@@ -63,7 +63,7 @@ public class WaitsForTests
         var identity = new ResourceIdentity(typeof(Resources.User), "jane@x");
         var ledger = new ResourceLedger([Node(0), Node(1, dependsOn: [0]), Node(2, dependsOn: [0], waitsFor: [1])]);
 
-        ledger.Claim(1, "arm edits", identity, LifecycleVerb.Edit);
-        ledger.Claim(2, "after the if reads", identity, LifecycleVerb.Read); // ordered via WaitsFor: no conflict
+        ledger.Claim(1, "arm edits", identity, ResourceEffect.Update);
+        ledger.Claim(2, "after the if reads", identity, ResourceEffect.Read); // ordered via WaitsFor: no conflict
     }
 }

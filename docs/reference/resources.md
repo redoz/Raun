@@ -67,7 +67,7 @@ public sealed record Patient(string Id, string Name) :
 ```
 
 All three resolve to **Patient + key**. Their resource roles share conflict detection, lineage, and
-report links. `[Read, ResourceKey<Patient>] string patientId` and `Context.Resources.Load<PatientRow>(key)`
+report links. `[Read, ResourceKey<Patient>] string patientId` and `Context.Resources.Read<PatientRow>(key)`
 refer to that same identity. Keys returned by each extractor must agree; key-only references already
 contain the canonical key and cannot transform it without an object. Distinct resource kinds can
 use the same key without colliding.
@@ -124,131 +124,115 @@ Typed groups merge, named kinds win over typed kinds, and distinct named groups 
 Named kinds use ordinal, case-sensitive names. `ResourceIdentity.Kind` covers both forms;
 its `Type` property is null for named kinds.
 
-## Resource roles and conflicts
+## Effects and access
 
-Declare each step's resource effects. The report shows them and the links between resources.
-Resource keys dispatch through `IResource<T>.KeyFor`, including explicit static interface implementations,
-so object and key-only references share the same identity.
+Declare the operation performed on each resource. Raun records parameter effects before the call,
+and return effects after a successful call. A method attribute describes its return value and requires
+`Task<T>` or `ValueTask<T>`; an explicit return attribute takes precedence.
 
-```csharp
-[StepName("When booking for {patient}")]
-[return: Created(References = [nameof(patient)], Consumes = [nameof(slot)])]
-public Task<Appointment> CreateAppointment(Patient patient, Slot slot) { ... }
-```
+| Effect | Built-in attribute | Access |
+| --- | --- | --- |
+| Create | `[Created]` | Exclusive |
+| Read | `[Read]` | Shared |
+| Update | `[Updated]` | Exclusive |
+| Delete | `[Deleted]` | Exclusive |
 
-All five roles—`[Created]`, `[Loaded]`, `[Read]`, `[Edited]`, and `[Deleted]`—work on parameters,
-return values, and methods. A method attribute describes its return value and requires
-`Task<T>` or `ValueTask<T>`. An explicit return attribute replaces the whole method role,
-including its lineage declarations.
+`[Seed]` is a Create action named Seed. Use it for fixture data inserted behind the scenes. Use
+Created or a domain action such as Registered for creation through the system under test.
+Attributes record operations; the step code must perform them. There is no separate Load effect.
 
-Raun records parameter effects before the call and return effects after it.
-`References` records retained links. `Consumes` records inputs used to produce the result.
-Missing resource roles cause compiler diagnostics.
-For effects inside a step, use `await Context.Resources.Create(value)` or `Load`, `Read`, `Edit`, `Delete`, `Reference`, and `Consume`.
+Parallel steps can share Read access. Unordered accesses to the same identity conflict when either
+is exclusive. The compiler detects known conflicts; runtime key checks catch the rest. A runtime
+conflict fails the step without waiting. These step claims are separate from scenario admission.
+`[Uses<T>(LockMode.Exclusive)]` can hold an external system for the entire scenario, including setup,
+teardown, and scope disposal. Existing Shared, Exclusive, and Pooled admission policies still apply.
 
-Parallel steps must not change the same resource. Raun detects conflicts at compile time where possible, and at run time by key.
-A run-time conflict fails the step; it does not wait for a lock.
+Use the imperative `Context.Resources.Create`, `Read`, `Update`, `Delete`, or `Apply` methods for
+operations inside a step. `Read<Patient>(key)` records a key-only Read without a snapshot.
 
-When a step takes a resource's key instead of the object, annotate the parameter with
-`[ResourceKey<TResource>]`. Combine it with the same access role:
+## Reusable actions and typed links
 
-```csharp
-[StepName("delete {patientId}")]
-public Task Delete([Deleted, ResourceKey<Patient>] string patientId)
-    => DeletePatientById(patientId);
-```
-
-The string is the key of `Patient`, so its effects, conflicts, lineage, and title links refer to the
-same resource as a `Patient` instance with that key. Key-only references reuse a name observed
-in a visible earlier step, or display `Patient:key` when none is available. They carry no object snapshot. `ResourceKey` parameters are also supported. The annotation requires an
-access role, a producer's `References`/`Consumes` declaration, or a typed relationship property; other parameter types report `RAUN024`.
-The step method still receives its original string or `ResourceKey`; Raun changes only the tracking and title reference.
-Nullable string parameters work when their supplied key is non-null. A supplied null key throws
-`ArgumentNullException` when its claim is evaluated; no claim is recorded for that invalid key.
-For a key-only reference in a manual log or note, format `new ResourceIdentity(typeof(Patient), patientId)`.
-
-## Reusable resource actions
-
-Derive a sealed attribute from one of the five resource roles to name a domain action once:
+A reusable attribute inherits a built-in action's effect. Its default label is the class name with
+`Attribute` removed. `System.ComponentModel.DisplayName` overrides it; blank labels are errors.
+Raun reads metadata without constructing attributes or executing their code.
 
 ```csharp
 [DisplayName("Approve")]
-public sealed class ApprovedAttribute : EditedAttribute;
+public sealed class Approved : UpdatedAttribute;
 
-public sealed class AuditedAttribute : ReadAttribute; // Displays "Audited".
-
-[StepName("approve {patientId}")]
-public Task Approve([Approved, ResourceKey<Patient>] string patientId) { ... }
-
-[Audited] // Method shorthand: records the returned resource after the call.
-public Task<Patient> Audit([Read] Patient patient) { ... }
-
-await Context.Resources.Apply(ResourceAction.For<ApprovedAttribute>(), patient);
-// When only the identity is available:
-await Context.Resources.Apply(ResourceAction.For<ApprovedAttribute>(),
-    new ResourceIdentity(typeof(Patient), patientId));
-```
-
-Use `System.ComponentModel.DisplayName` for a custom label. Otherwise Raun removes the final
-`Attribute` suffix from the concrete attribute's name. The nearest inherited `DisplayName` wins;
-a blank name is an error. Raun reads metadata without constructing the attribute.
-
-An action keeps its base role's behavior: Created, Edited, and Deleted are exclusive;
-Loaded and Read are shared. Input effects are recorded before the call; return effects after it.
-Created, Loaded, and Edited also support inherited `References` and `Consumes` declarations.
-Distinct custom attribute types retain separate report entries, even when their labels match.
-The step code performs the operation; the attribute records its effect.
-Use `ResourceAction.For<TAttribute>()` or `ResourceAction.For(typeof(ApprovedAttribute))`
-for manual tracking. Applying an action to an identity does not create an object snapshot.
-See the [action sample](../../samples/AppointmentTests/ResourceActionScenarios.cs).
-
-A custom attribute can also name a Reference or Consume action directly:
-
-```csharp
 [DisplayName("Reserve")]
-[ResourceActionDefinition(ResourceActionKind.Consume)]
-public sealed class ReservedAttribute : ResourceAttribute;
+public sealed class Reserved : UpdatedAttribute;
 
-[return: Created(Consumes = [nameof(slot)])]
-public Task<Appointment> Book([Reserved] Slot slot) { ... }
-
-// Inside a conditional step, record only a successful reservation:
-await Context.Resources.Relate(ResourceAction.For<ReservedAttribute>(), appointment, slot);
-```
-
-Reference and Consume actions keep shared access and do not delete their target.
-When a declared relationship targets a parameter with a named action of the same kind,
-Raun records one named event and retains the lineage edge. Here the slot shows Reserve,
-with Consume semantics. The `Relate` overload accepts only Reference and Consume actions.
-Attaching a relationship to an unchanged named observation does not repeat its log or trace event.
-Changed snapshots and explicit `Apply` calls still produce observation events.
-
-## Domain attributes with typed relationships
-
-Use a domain attribute when an operation always links the same kinds of resources.
-The [booking attributes](../../samples/AppointmentTests/BookingAttributes.cs) declare the action
-and its relationships together:
-
-```csharp
-[ResourceActionDefinition(ResourceActionKind.Create)]
-public sealed class BookedAttribute : ResourceAttribute
+public sealed class Booked : CreatedAttribute
 {
-    [Relationship<Patient>(ResourceRelation.Reference)]
-    public string Patient { get; set; } = "";
-
-    [Relationship<Slot>(ResourceRelation.Consume)]
-    public string Slot { get; set; } = "";
+    public sealed class PatientAttribute : ResourceLinkAttribute<Patient, ReadAttribute>;
+    public sealed class SlotAttribute : ResourceLinkAttribute<Slot, Reserved>;
 }
 
-[return: Booked(Patient = nameof(patientId), Slot = nameof(slot))]
-public Task<Appointment> Book([ResourceKey<Patient>] string patientId, Slot slot) { ... }
+[StepName("When booking {patient} in {slot2}")]
+[return: Booked]
+public Task<Appointment> Book([Booked.Patient] Patient patient, [Booked.Slot] Slot slot2) { ... }
 ```
 
-The property values name step parameters. Raun validates that each parameter represents the
-declared resource kind, including alternate representations and typed keys. The
-[registry sample](../../samples/AppointmentTests/RegistryBookingScenarios.cs) shows a registry row,
-domain patient, and opaque string ID sharing one identity and readable name.
-Existing inline `References` and `Consumes` declarations remain supported.
+This records Read on the patient, Reserve/Update on the slot, and Booked/Create on the returned
+appointment. It also records two links: booking → Patient → patient and booking → Slot → slot.
+A link is an independent `ResourceLink` with `Source`, `Role`, and `Target`; it adds no access claim
+or resource effect. Two roles can connect the same identities. Exact duplicate links are recorded once.
+
+Declare role attributes as public concrete nested types inside the action. Each role identifies a
+canonical resource type and an action to apply to the input. All roles are required and each binds to
+one parameter. A supported resource collection parameter records one action and link per element.
+Mapped representations of the canonical resource satisfy the same role. Role names come from the
+nested type name with `Attribute` removed; a parameter can have any name.
+
+The equivalent explicit form separates the action and link:
+
+```csharp
+[return: Booked]
+public Task<Appointment> Book(
+    [Read, Link<Booked>("Patient")] Patient patient,
+    [Reserved, Link<Booked>("Slot")] Slot slot2) { ... }
+```
+
+A raw link always requires a separate input action. If the step applies the same owning action more
+than once, set `Source = nameof(ownerParameter)` or `Source = Subject.Return` on the raw link.
+Raun reports missing, duplicate, ambiguous, or incompatible bindings at compile time. A failed return
+creates no return-owned link. Self-links are rejected after canonical identity resolution.
+
+For imperative code:
+
+```csharp
+await Context.Resources.Apply(ResourceAction.For<Approved>(), patient);
+await Context.Resources.Apply(ResourceAction.For<Booked>(), appointment);
+await Context.Resources.Link(ResourceAction.For<Booked>(), "Patient", appointment, patient);
+// A schema-free named link is also available. It grants no access:
+await Context.Resources.Link("Patient", appointment, patient);
+```
+
+Distinct custom action types retain separate observations, even if their labels match. Repeated
+explicit action calls record observation events; link calls do not repeat action logs or snapshots.
+See the [domain attributes](../../samples/AppointmentTests/BookingAttributes.cs) and
+[action sample](../../samples/AppointmentTests/ResourceActionScenarios.cs).
+
+## Key-only inputs
+
+Annotate a `string` or `ResourceKey` parameter with `[ResourceKey<TResource>]` and an action or packaged role:
+
+```csharp
+public Task Delete([Deleted, ResourceKey<Patient>] string patientId) { ... }
+
+[return: Booked]
+public Task<Appointment> Book(
+    [Booked.Patient, ResourceKey<Patient>] string patientId,
+    [Booked.Slot] Slot slot) { ... }
+```
+
+The method receives its original value. Effects, links, conflicts, and title references resolve to
+the same identity as an object with that key. Key-only references have no object snapshot and can reuse
+a readable name observed by a preceding dependency. A missing role is a compile error; other key
+parameter types report `RAUN024`. A supplied null key fails before recording its claim.
+For a manual log or note, format `new ResourceIdentity(typeof(Patient), patientId)`.
+See the [registry sample](../../samples/AppointmentTests/RegistryBookingScenarios.cs).
 
 ## Names across steps
 

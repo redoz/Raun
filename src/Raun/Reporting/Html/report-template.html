@@ -1373,13 +1373,13 @@
           for(const cell of row.querySelectorAll(".matrix-cell,.matrix-continuation"))cell.classList.toggle("matrix-selected",cell.dataset.resourceColumn===selected);
         }
         for(const button of header.querySelectorAll(".matrix-resource"))button.setAttribute("aria-pressed",String(button.dataset.resourceColumn===selected));
-        const relationships=column ? (sc.references || []).filter(reference=>
-          column.keys.has(matrixResourceKey({resourceId:reference.subjectId,type:reference.subjectType,key:reference.subjectKey})) ||
+        const relationships=column ? (sc.links || []).filter(reference=>
+          column.keys.has(matrixResourceKey({resourceId:reference.sourceId,type:reference.sourceType,key:reference.sourceKey})) ||
           column.keys.has(matrixResourceKey({resourceId:reference.targetId,type:reference.targetType,key:reference.targetKey}))) : [];
         for(const button of header.querySelectorAll(".matrix-resource")){
           const candidate=columns.find(candidate=>candidate.key===button.dataset.resourceColumn);
           const related=relationships.some(reference=>
-            candidate.keys.has(matrixResourceKey({resourceId:reference.subjectId,type:reference.subjectType,key:reference.subjectKey})) ||
+            candidate.keys.has(matrixResourceKey({resourceId:reference.sourceId,type:reference.sourceType,key:reference.sourceKey})) ||
             candidate.keys.has(matrixResourceKey({resourceId:reference.targetId,type:reference.targetType,key:reference.targetKey})));
           button.classList.toggle("matrix-reference",related && candidate.key!==selected);
         }
@@ -1404,11 +1404,11 @@
           button.type="button";button.dataset.resourceColumn=column.key;button.style.setProperty("--resource-color",color);button.setAttribute("aria-pressed","false");
           button.appendChild(document.createTextNode(column.resource.label || column.resource.key));
           button.appendChild(coverageText("small","",column.resource.type));
-          const relationships=(sc.references || []).filter(reference=>
-            column.keys.has(matrixResourceKey({resourceId:reference.subjectId,type:reference.subjectType,key:reference.subjectKey})) ||
+          const relationships=(sc.links || []).filter(reference=>
+            column.keys.has(matrixResourceKey({resourceId:reference.sourceId,type:reference.sourceType,key:reference.sourceKey})) ||
             column.keys.has(matrixResourceKey({resourceId:reference.targetId,type:reference.targetType,key:reference.targetKey})));
-          const relationshipText=relationships.map(reference=>reference.subjectType+" "+reference.subjectKey+" "+
-            (reference.kind==="Consume" ? "consumes" : "references")+" "+reference.targetType+" "+reference.targetKey).join("; ");
+          const relationshipText=relationships.map(reference=>reference.sourceType+" "+reference.sourceKey+" "+
+            reference.role+" "+reference.targetType+" "+reference.targetKey).join("; ");
           button.title=column.members.map(resource=>resource.type+": "+resource.key).join("\n")+(relationshipText ? "\n"+relationshipText : "");
           const accessibleName=(column.resource.label || column.resource.key)+", "+column.resource.type;
           button.setAttribute("aria-label",accessibleName+". Highlight touching steps"+(relationshipText ? ". "+relationshipText : ""));
@@ -1422,14 +1422,14 @@
             if(track && index===last)cell.classList.add("matrix-track-last");
             cell.dataset.resourceColumn=column.key;cell.style.gridColumn=String(columnIndex+(fullSize ? 1 : 2));cell.style.setProperty("--resource-color",color);
             for(const effect of hits[index]){
-              const event=el("button","matrix-event");event.type="button";event.textContent=effect.actionName ?? effect.verb;
-              event.dataset.matrixResource=matrixResourceKey(effect);event.dataset.matrixVerb=effect.verb;
+              const event=el("button","matrix-event");event.type="button";event.textContent=effect.actionName ?? effect.effect;
+              event.dataset.matrixResource=matrixResourceKey(effect);event.dataset.matrixEffect=effect.effect;
               event.style.setProperty("--resource-color",resourceColors.get(matrixResourceKey(effect)));
               if(effect.resourceId){event.dataset.messageResource=effect.resourceId;event.dataset.resourceActivity=effect.resourceId;}
               else{event.classList.add("res-chip");event.dataset.res=effect.type+":"+effect.key;}
               if(effect.data!=null)event.setAttribute("data-resource-data",effect.data);
-              event.dataset.resourceEvent=effect.actionName ?? effect.verb;
-              event.title=(effect.actionName ?? effect.verb)+" "+effect.type+": "+effect.key;
+              event.dataset.resourceEvent=effect.actionName ?? effect.effect;
+              event.title=(effect.actionName ?? effect.effect)+" "+effect.type+": "+effect.key;
               event.setAttribute("aria-label",event.title+". Show evidence for "+sc.steps[index].displayName);
               event.addEventListener("click",click=>{
                 click.stopPropagation();selected=column.key;select();
@@ -1445,15 +1445,15 @@
         const connections=[];
         rows.forEach((row,index)=>{
           const events=Array.from(row.querySelectorAll(".matrix-event"));
-          for(const reference of sc.references || []){
-            const subject=matrixResourceKey({resourceId:reference.subjectId,type:reference.subjectType,key:reference.subjectKey});
+          for(const reference of sc.links || []){
+            const subject=matrixResourceKey({resourceId:reference.sourceId,type:reference.sourceType,key:reference.sourceKey});
             const target=matrixResourceKey({resourceId:reference.targetId,type:reference.targetType,key:reference.targetKey});
-            const source=events.find(event=>event.dataset.matrixResource===target && event.dataset.matrixVerb===reference.kind);
-            const destination=events.find(event=>event.dataset.matrixResource===subject && ["Create","Load","Edit"].includes(event.dataset.matrixVerb));
+            const source=events.find(event=>event.dataset.matrixResource===target && event.dataset.matrixEffect);
+            const destination=events.find(event=>event.dataset.matrixResource===subject && ["Create","Read","Update","Delete"].includes(event.dataset.matrixEffect));
             if(!source || !destination || source.parentElement===destination.parentElement)continue;
             const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
             svg.classList.add("matrix-connection");svg.setAttribute("role","img");
-            svg.setAttribute("aria-label",reference.targetType+" "+reference.targetKey+" "+reference.kind+" → "+destination.dataset.matrixVerb+" "+reference.subjectType+" "+reference.subjectKey);
+            svg.setAttribute("aria-label",reference.targetType+" "+reference.targetKey+" "+reference.role+" → "+destination.dataset.matrixEffect+" "+reference.sourceType+" "+reference.sourceKey);
             svg.style.setProperty("--resource-color",resourceColors.get(target));
             const path=document.createElementNS(svg.namespaceURI,"path"),arrow=document.createElementNS(svg.namespaceURI,"path");
             arrow.classList.add("matrix-arrow");svg.append(path,arrow);row.appendChild(svg);

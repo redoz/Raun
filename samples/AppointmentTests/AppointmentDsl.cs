@@ -87,7 +87,7 @@ public sealed partial class AppointmentGiven : Given
     }
 
     [StepName("Given {$return} is available")]
-    [return: Created]
+    [return: Seed]
     public Task<Slot> AvailableSlot()
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(460));
@@ -118,23 +118,23 @@ public sealed partial class AppointmentGiven : Given
 public sealed partial class AppointmentWhen : When
 {
     [StepName("When booking {patient} in {slot}")]
-    [return: Booked(Patient = nameof(patient), Slot = nameof(slot))]
-    public Task<Appointment> CreateAppointment(Patient patient, [Reserved] Slot slot)
+    [return: Actions.Booked]
+    public Task<Appointment> CreateAppointment([Actions.Booked.Patient] Patient patient, [Actions.Booked.Slot] Slot slot)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(600));
         return Task.FromResult(new Appointment(patient, slot));
     }
 
     [StepName("When urgently booking {patient} in {slot2}")]
-    [return: Booked(Patient = nameof(patient), Slot = nameof(slot2))]
-    public Task<Appointment> CreateUrgentAppointment(Patient patient, [Reserved] Slot slot2)
+    [return: Actions.Booked]
+    public Task<Appointment> CreateUrgentAppointment([Actions.Booked.Patient] Patient patient, [Actions.Booked.Slot] Slot slot2)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(410));
         return Task.FromResult(new Appointment(patient, slot2));
     }
 
     [StepName("When importing the users")]
-    public Task<ImportResult> ImportUsers(User[] users)
+    public Task<ImportResult> ImportUsers([Read] User[] users)
     {
         Context.SimulateElapsed(TimeSpan.FromMilliseconds(300));
         return Task.FromResult(new ImportResult(users.Length));

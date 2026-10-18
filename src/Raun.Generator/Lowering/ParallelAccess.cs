@@ -13,12 +13,11 @@ namespace Raun.Generator.Lowering;
 /// least one of them mutates it (RAUN013).
 /// </summary>
 internal readonly record struct ParallelAccess(
-    ILocalSymbol Local, string Verb, bool Exclusive, string Operation, SyntaxNode Node)
+    ILocalSymbol Local, string Effect, bool Exclusive, string Operation, SyntaxNode Node)
 {
     /// <summary>
-    /// The accesses one lowered call makes. Parameter roles come from <c>[Read]/[Edited]/[Deleted]</c>;
-    /// a bare parameter named in a producer's <c>References</c>/<c>Consumes</c> carries the shared
-    /// Reference/Consume role. Return roles never appear: a step's return is its own output, shared
+    /// The accesses one lowered call makes. Parameter roles come from <c>[Read]/[Updated]/[Deleted]</c>;
+    /// links grant no access. Return roles never appear: a step's return is its own output, shared
     /// with no sibling.
     /// </summary>
     public static List<ParallelAccess> Of(
@@ -28,21 +27,19 @@ internal readonly record struct ParallelAccess(
         LoweredCall lowering)
     {
         var accesses = new List<ParallelAccess>();
-        var lineageVerbs = LineageVerbs(method);
 
         for (var p = 0; p < method.Parameters.Length; p++)
         {
             var parameter = method.Parameters[p];
-            var verb = AttributeReader.ParameterRole(parameter)
-                ?? (lineageVerbs.TryGetValue(parameter.Name, out var lineageVerb) ? lineageVerb : null);
+            var verb = AttributeReader.ParameterRole(parameter);
             var index = CallArguments.IndexOf(written, parameter.Name, p);
             if (verb is null || index < 0)
             {
                 continue;
             }
 
-            // Mirrors LifecycleVerb.ToLockMode in the runtime assembly: Create/Edit/Delete exclude, the rest share.
-            var exclusive = verb is "Create" or "Edit" or "Delete";
+            // Mirrors ResourceEffect.ToLockMode in the runtime assembly: Create/Update/Delete exclude, the rest share.
+            var exclusive = verb is "Create" or "Update" or "Delete";
             foreach (var read in lowering.Arguments[index].Reads)
             {
                 accesses.Add(new ParallelAccess(read.Local, verb, exclusive, operation, read.Node));
@@ -78,12 +75,4 @@ internal readonly record struct ParallelAccess(
         }
     }
 
-    /// <summary>Parameter name → Reference/Consume for every parameter a producer on this method names
-    /// as a lineage target (return-role producers and <c>[Edited]</c>-parameter producers alike).</summary>
-    private static Dictionary<string, string> LineageVerbs(IMethodSymbol method)
-    {
-        var verbs = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var relation in RelationshipReader.Read(method).Relationships) { verbs[relation.Target] = relation.Kind; }
-        return verbs;
-    }
 }

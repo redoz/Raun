@@ -6,7 +6,7 @@ const model=JSON.parse(fs.readFileSync(process.argv[2],'utf8').match(/<script id
 const base=model.scenarios.find(s=>s.displayName==='customer books with parallel arrange');
 const stepBase=base.steps.find(s=>!s.isLifecycle);
 function step(index,name,start,duration,dependsOn=[],guards=[],extra={}){return {...stepBase,index,stepId:'flow-'+index,displayName:name,titleMessage:{text:name,parts:[{text:name}]},offsetMs:start,durationMs:duration,dependsOn,guards,arms:null,logs:[],logMessages:[],notes:[],noteMessages:[],effects:[],attachments:[],...extra};}
-const fixture={...base,scenarioId:'flow',displayName:'Nested booking flow',durationMs:1000,resources:[],references:[],steps:[
+const fixture={...base,scenarioId:'flow',displayName:'Nested booking flow',durationMs:1000,resources:[],links:[],steps:[
  step(0,'Given the database is ready',0,100),
  step(1,'Given Jane is registered',100,200,[0],[],{arms:['if (priority)','else']}),
  step(2,'Given slot 01 is available',100,400,[0]),

@@ -17,18 +17,18 @@ public sealed class ResourceConflictException : InvalidOperationException
     public ResourceConflictException(
         ResourceIdentity identity,
         string stepDisplayName,
-        LifecycleVerb verb,
+        ResourceEffect verb,
         string otherStepDisplayName,
-        LifecycleVerb otherVerb)
+        ResourceEffect otherVerb)
         : base(
             $"Step '{stepDisplayName}' ({verb}) and step '{otherStepDisplayName}' ({otherVerb}) both touch "
             + $"{identity} and nothing orders them; add a dependency between them or declare one access as [Read].")
     {
         Identity = identity;
         StepDisplayName = stepDisplayName;
-        Verb = verb;
+        Effect = verb;
         OtherStepDisplayName = otherStepDisplayName;
-        OtherVerb = otherVerb;
+        OtherEffect = otherVerb;
     }
 
     /// <summary>The identity both steps touch.</summary>
@@ -38,11 +38,11 @@ public sealed class ResourceConflictException : InvalidOperationException
     public string StepDisplayName { get; }
 
     /// <summary>The refused claim's verb.</summary>
-    public LifecycleVerb Verb { get; }
+    public ResourceEffect Effect { get; }
 
     /// <summary>The step that already held a claim on the identity.</summary>
     public string OtherStepDisplayName { get; }
 
     /// <summary>The earlier claim's verb.</summary>
-    public LifecycleVerb OtherVerb { get; }
+    public ResourceEffect OtherEffect { get; }
 }

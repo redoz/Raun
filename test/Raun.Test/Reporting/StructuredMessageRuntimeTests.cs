@@ -29,7 +29,7 @@ public sealed class StructuredMessageRuntimeTests
         Assert.Equal("original", Assert.Single(Assert.Single(result.NoteMessages).Parts, p => p.Resource.HasValue).Data);
         Assert.Equal(new ResourceIdentity(typeof(Seed), "one"), Assert.Single(content.Parts, p => p.Resource.HasValue).Resource);
         Assert.Empty(result.Effects);
-        Assert.Empty(result.Lineage);
+        Assert.Empty(result.Links);
     }
 
     [Fact]

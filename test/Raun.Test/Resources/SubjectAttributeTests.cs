@@ -1,32 +1,22 @@
-using Raun;
 using Xunit;
 
 namespace Raun.Test.Resources;
 
 public class SubjectAttributeTests
 {
+    private sealed class Booked : CreatedAttribute;
+
     [Fact]
-    public void Created_lineage_properties_default_to_empty()
+    public void Raw_link_captures_role_and_explicit_source()
     {
-        Assert.Empty(new CreatedAttribute().References);
-        Assert.Empty(new CreatedAttribute().Consumes);
+        var link = new LinkAttribute<Booked>("Patient") { Source = Subject.Return };
+        Assert.Equal("Patient", link.Role);
+        Assert.Equal("<return>", link.Source);
     }
 
     [Fact]
-    public void Created_captures_references_and_consumes()
-    {
-        var attr = new CreatedAttribute { References = ["user", Subject.Return], Consumes = ["slot"] };
-        Assert.Equal(["user", "<return>"], attr.References);
-        Assert.Equal(["slot"], attr.Consumes);
-    }
-
-    [Fact]
-    public void Edited_carries_the_same_lineage_surface()
-    {
-        var attr = new EditedAttribute { References = ["who"] };
-        Assert.Equal(["who"], attr.References);
-        Assert.Empty(attr.Consumes);
-    }
+    public void Raw_link_uses_unambiguous_owner_by_default()
+        => Assert.Null(new LinkAttribute<Booked>("Patient").Source);
 
     [Fact]
     public void Subject_Return_is_the_reserved_token() => Assert.Equal("<return>", Subject.Return);

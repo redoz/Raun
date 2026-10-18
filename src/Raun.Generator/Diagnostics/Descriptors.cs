@@ -88,14 +88,14 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor MissingResourceRole = new(
         "RAUN009",
         "Resource access must be declared",
-        "Resource-typed {0} '{1}' must declare its access: [Read], [Edited], or [Deleted] on a parameter, or [Created], [Loaded], or [Edited] on the return — or be named in a producer's References/Consumes — there is no default",
+        "Resource-typed {0} '{1}' must declare its access: [Read], [Updated], or [Deleted] on a parameter, or [Created], [Read], or [Updated] on the return or a packaged resource-link role; there is no default",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor InvalidLineageSubject = new(
         "RAUN010",
-        "Lineage target must name a step input",
+        "Links target must name a step input",
         "'{0}' is not a valid lineage target for step '{1}' — References/Consumes must name a parameter (via nameof) or the step's own return (Subject.Return)",
         Category,
         DiagnosticSeverity.Error,
@@ -247,11 +247,15 @@ internal static class Descriptors
         "RAUN035", "Scenario case signature is unsupported", "Scenario '{0}' with cases cannot be generic or overloaded, or have optional, params, or by-ref parameters",
         Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor MissingResourceLink = new(
+        "RAUN036", "Required resource role is missing", "Invalid resource metadata on '{0}': {1}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
-        InvalidResourceDefinition, InvalidRelationshipProperty, InvalidResourceRelationship, InvalidScenarioCase, InvalidScenarioCaseArgument, InvalidScenarioCaseSignature, InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
+        MissingResourceLink, InvalidResourceDefinition, InvalidRelationshipProperty, InvalidResourceRelationship, InvalidScenarioCase, InvalidScenarioCaseArgument, InvalidScenarioCaseSignature, InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
         UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle, InvalidResourceKeyParameter,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,

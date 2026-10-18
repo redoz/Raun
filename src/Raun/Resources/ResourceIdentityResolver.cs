@@ -116,6 +116,10 @@ public sealed class ResourceIdentityResolver
         return identity;
     }
 
+    internal bool HasIdentity(Type type) => _groups.Snapshot(type).Key is not null
+        || _keyForInvokers.GetOrAdd(type, BuildKeyForInvoker) is not null || _selectors.ContainsKey(type)
+        || typeof(IResourceIdentity).IsAssignableFrom(type);
+
     /// <summary>Resolves only explicit resource contracts or selectors on the declared type.</summary>
     public bool TryResolve(Type declaredType, object instance, out ResourceIdentity identity)
     {

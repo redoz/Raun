@@ -8,11 +8,11 @@ namespace Raun.Generator.Test;
 public class ResourceKeyParameterTests
 {
     [Theory]
-    [InlineData("Read", "string", LifecycleVerb.Read)]
-    [InlineData("Edited", "string", LifecycleVerb.Edit)]
-    [InlineData("Deleted", "string", LifecycleVerb.Delete)]
-    [InlineData("Read", "ResourceKey", LifecycleVerb.Read)]
-    public async Task Key_parameters_trace_the_same_resource_as_the_full_object(string role, string keyType, LifecycleVerb expected)
+    [InlineData("Read", "string", ResourceEffect.Read)]
+    [InlineData("Updated", "string", ResourceEffect.Update)]
+    [InlineData("Deleted", "string", ResourceEffect.Delete)]
+    [InlineData("Read", "ResourceKey", ResourceEffect.Read)]
+    public async Task Key_parameters_trace_the_same_resource_as_the_full_object(string role, string keyType, ResourceEffect expected)
     {
         var generated = GeneratorHarness.Run(Source(role, keyType));
         generated.AssertCompiles();
@@ -22,7 +22,7 @@ public class ResourceKeyParameterTests
         var created = Assert.Single(results[1].Effects);
         var touched = Assert.Single(results[2].Effects);
         Assert.Equal(created.Identity, touched.Identity);
-        Assert.Equal(expected, touched.Verb);
+        Assert.Equal(expected, touched.Effect);
         Assert.Null(touched.Data);
         Assert.Null(touched.DataSnapshot);
         Assert.Equal("Jane", touched.Label);
@@ -39,7 +39,7 @@ public class ResourceKeyParameterTests
     [Fact]
     public async Task Key_and_object_claims_conflict_even_when_the_key_is_a_constant()
     {
-        var source = Source("Edited", "string").Replace(
+        var source = Source("Updated", "string").Replace(
             "await Given.Touch(patient.Id);", "await (Given.Touch(\"123\"), Given.ReadObject(patient));", StringComparison.Ordinal);
         var generated = GeneratorHarness.Run(source);
         generated.AssertCompiles();
@@ -49,26 +49,26 @@ public class ResourceKeyParameterTests
     }
 
     [Theory]
-    [InlineData("References", LifecycleVerb.Reference)]
-    [InlineData("Consumes", LifecycleVerb.Consume)]
-    public async Task Key_parameters_named_by_lineage_use_the_canonical_resource(string relation, LifecycleVerb expected)
+    [InlineData("Read", ResourceEffect.Read)]
+    [InlineData("Updated", ResourceEffect.Update)]
+    public async Task Key_parameters_link_to_the_canonical_resource(string action, ResourceEffect expected)
     {
-        var source = Source("Read", "string")
-            .Replace("[Read, ResourceKey<Patient>]", "[ResourceKey<Patient>]", StringComparison.Ordinal)
-            .Replace("public Task Touch(", "[return: Created(" + relation + " = [nameof(patientId)])]\n    public Task<Booking> Touch(", StringComparison.Ordinal)
+        var source = Source(action, "string")
+            .Replace("[" + action + ", ResourceKey<Patient>]", "[" + action + ", ResourceKey<Patient>, Link<Booked>(\"Patient\")]", StringComparison.Ordinal)
+            .Replace("public Task Touch(", "[return: Booked] public Task<Booking> Touch(", StringComparison.Ordinal)
             .Replace("return Task.CompletedTask;", "return Task.FromResult(new Booking(\"booking\"));", StringComparison.Ordinal)
-            + "\npublic sealed record Booking(string Id) : IResource<Booking> { public static ResourceKey KeyFor(Booking booking) => booking.Id; }";
+            + "\npublic sealed record Booking(string Id) : IResource<Booking> { public static ResourceKey KeyFor(Booking booking) => booking.Id; }"
+            + "\npublic sealed class Booked : CreatedAttribute { public sealed class PatientAttribute : ResourceLinkAttribute<Patient, ReadAttribute>; }";
         Assert.Empty(await GeneratorHarness.DiagnoseAsync(source, requireCompilable: true));
-        var generated = GeneratorHarness.Run(source);
-        generated.AssertCompiles();
+        var generated = GeneratorHarness.Run(source); generated.AssertCompiles();
         var results = await generated.Definitions().Single().RunAsync();
         Assert.All(results, result => Assert.Equal(StepStatus.Passed, result.Status));
         var patient = Assert.Single(results[1].Effects).Identity;
-        var lineage = Assert.Single(results[2].Lineage);
-        Assert.Equal(patient, lineage.Target);
-        Assert.Equal("Booking:booking", lineage.Subject.ToString());
-        Assert.Equal(expected, lineage.Kind);
-        Assert.Equal(new[] { expected, LifecycleVerb.Create }, results[2].Effects.Select(effect => effect.Verb));
+        var link = Assert.Single(results[2].Links);
+        Assert.Equal(patient, link.Target);
+        Assert.Equal("Booking:booking", link.Source.ToString());
+        Assert.Equal("Patient", link.Role);
+        Assert.Equal(new[] { expected, ResourceEffect.Create }, results[2].Effects.Select(effect => effect.Effect));
     }
 
     [Fact]

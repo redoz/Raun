@@ -30,7 +30,7 @@ public class ResourceLabelMemoryIntegrationTests
     public async Task Setup_titles_notes_logs_effects_and_cleanup_share_the_same_execution_memory()
     {
         var definition = Definition(
-            Node(0, async (_, ctx) => { await ctx.Resources.Load(new Patient("42", "Jane")); return null; }, setup: true),
+            Node(0, async (_, ctx) => { await ctx.Resources.Read(new Patient("42", "Jane")); return null; }, setup: true),
             Node(1, async (_, ctx) =>
             {
                 ctx.Log($"Log {Key}");

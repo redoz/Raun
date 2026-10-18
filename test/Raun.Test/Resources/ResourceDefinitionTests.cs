@@ -1,77 +1,68 @@
-using System.ComponentModel;
 using Xunit;
 
 namespace Raun.Test.Resources;
 
 public class ResourceDefinitionTests
 {
-    [ResourceActionDefinition(ResourceActionKind.Create)]
-    private sealed class BookedAttribute : ResourceAttribute
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1813:Avoid unsealed attributes", Justification = "Exercises inherited role validation.")]
+    private class Booked : CreatedAttribute
     {
-        [Relationship<Patient>(ResourceRelation.Reference)]
-        public string Patient { get; set; } = "ignored initializer";
-        [Relationship<Slot>(ResourceRelation.Consume)]
-        public string Slot { get; set; } = "";
+        public sealed class PatientAttribute : ResourceLinkAttribute<Patient, ReadAttribute>;
+        public sealed class SlotAttribute : ResourceLinkAttribute<Slot, UpdatedAttribute>;
     }
     public sealed class Patient;
     public sealed class Slot;
 
     [Fact]
-    public void Direct_actions_expose_one_immutable_typed_relationship_schema()
+    public void Actions_expose_one_immutable_typed_role_schema()
     {
-        var action = ResourceAction.For<BookedAttribute>();
-        Assert.Equal(LifecycleVerb.Create, action.Effect);
+        var action = ResourceAction.For<Booked>();
+        Assert.Equal(ResourceEffect.Create, action.Effect);
         Assert.Equal("Booked", action.Name);
         Assert.Equal(2, action.Relationships.Count);
         var patient = action.GetRelationship("Patient");
-        Assert.Equal(ResourceRelation.Reference, patient.Relation);
+        Assert.Equal(typeof(Booked), patient.OwnerType);
+        Assert.Equal(typeof(Booked.PatientAttribute), patient.MarkerType);
         Assert.Equal(typeof(Patient), patient.ResourceType);
-        Assert.True(patient.Required);
-        Assert.False(patient.IsCollection);
-        Assert.Equal(ResourceRelation.Consume, action.GetRelationship("Slot").Relation);
-        Assert.Same(action.Relationships, new BookedAttribute().Relationships);
+        Assert.Equal(typeof(ReadAttribute), patient.ActionType);
+        Assert.Equal(typeof(UpdatedAttribute), action.GetRelationship("Slot").ActionType);
+        Assert.Same(action.Relationships, new Booked().Relationships);
     }
 
     [Fact]
-    public void Built_in_arrays_use_the_same_schema_and_remain_optional()
-    {
-        var action = ResourceAction.For<CreatedAttribute>();
-        var references = action.GetRelationship("References");
-        Assert.Equal(ResourceRelation.Reference, references.Relation);
-        Assert.Null(references.ResourceType);
-        Assert.True(references.IsCollection);
-        Assert.False(references.Required);
-        Assert.Equal(ResourceRelation.Consume, action.GetRelationship("Consumes").Relation);
-    }
+    public void Builtins_have_no_implicit_roles()
+        => Assert.Empty(ResourceAction.For<CreatedAttribute>().Relationships);
 
     [Theory]
     [InlineData(typeof(MissingAttribute))]
     [InlineData(typeof(RepeatedAttribute))]
     [InlineData(typeof(InvalidKindAttribute))]
-    [InlineData(typeof(InvalidPropertyAttribute))]
-    [InlineData(typeof(HidingAttribute))]
-    [InlineData(typeof(HidingFieldAttribute))]
+    [InlineData(typeof(PrivateRole))]
+    [InlineData(typeof(Hiding))]
+    [InlineData(typeof(HidingField))]
+    [InlineData(typeof(HidingType))]
     public void Malformed_definitions_are_rejected_without_running_user_code(Type type)
         => Assert.Throws<ArgumentException>(() => ResourceAction.For(type));
 
     private sealed class MissingAttribute : ResourceAttribute;
-    [ResourceActionDefinition(ResourceActionKind.Create)]
-    private sealed class RepeatedAttribute : CreatedAttribute;
-    [ResourceActionDefinition((ResourceActionKind)99)]
-    private sealed class InvalidKindAttribute : ResourceAttribute;
-    private sealed class InvalidPropertyAttribute : CreatedAttribute
+    [ResourceActionDefinition(ResourceEffect.Create)] private sealed class RepeatedAttribute : CreatedAttribute;
+    [ResourceActionDefinition((ResourceEffect)99)] private sealed class InvalidKindAttribute : ResourceAttribute;
+    private sealed class PrivateRole : CreatedAttribute
     {
-        [Relationship(ResourceRelation.Reference)]
-        public int Wrong { get; set; }
+        private sealed class SecretAttribute : ResourceLinkAttribute<Patient, ReadAttribute>;
     }
-    private sealed class HidingAttribute : CreatedAttribute
+    private sealed class Hiding : Booked
     {
-        public new string[] References { get; set; } = [];
+        public new string PatientAttribute { get; set; } = "";
     }
-    private sealed class HidingFieldAttribute : CreatedAttribute
+    private sealed class HidingType : Booked
     {
-        // This malformed public field is the regression input: attribute named arguments can bind fields.
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1051:Do not declare visible instance fields", Justification = "Exercises a field hiding an inherited relationship property.")]
-        public new string[] References = [];
+        [AttributeUsage(AttributeTargets.Parameter)]
+        public new sealed class PatientAttribute : Attribute;
+    }
+    private sealed class HidingField : Booked
+    {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1051:Do not declare visible instance fields", Justification = "Exercises a field hiding an inherited resource role.")]
+        public new string PatientAttribute = "";
     }
 }

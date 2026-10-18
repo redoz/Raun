@@ -26,10 +26,11 @@ public sealed partial class AppointmentWhen : When
             return acceptsWaitlist ? new Waitlisted(3) : new Refused("the patient declined the waitlist");
         }
 
+        await Context.Resources.Apply(ResourceAction.For<Reserved>(), slot);
         var appointment = new Appointment(patient, slot);
-        await Context.Resources.Apply(ResourceAction.For<BookedAttribute>(), appointment);
-        await Context.Resources.Reference(patient, appointment);
-        await Context.Resources.Relate(ResourceAction.For<ReservedAttribute>(), appointment, slot);
+        await Context.Resources.Apply(ResourceAction.For<Actions.Booked>(), appointment);
+        await Context.Resources.Link(ResourceAction.For<Actions.Booked>(), "Patient", appointment, patient);
+        await Context.Resources.Link(ResourceAction.For<Actions.Booked>(), "Slot", appointment, slot);
         return new Booked(appointment);
     }
 }

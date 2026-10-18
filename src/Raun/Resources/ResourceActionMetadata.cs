@@ -1,78 +1,88 @@
-using System.Runtime.CompilerServices;
 using System.ComponentModel;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Raun;
 
 internal static class ResourceActionMetadata
 {
     private static readonly ConditionalWeakTable<Type, ResourceAction> Actions = new();
-    private static readonly Dictionary<Type, LifecycleVerb> Bases = new Dictionary<Type, LifecycleVerb>
-    {
-        [typeof(CreatedAttribute)] = LifecycleVerb.Create,
-        [typeof(LoadedAttribute)] = LifecycleVerb.Load,
-        [typeof(ReadAttribute)] = LifecycleVerb.Read,
-        [typeof(EditedAttribute)] = LifecycleVerb.Edit,
-        [typeof(DeletedAttribute)] = LifecycleVerb.Delete,
-    };
+    private static readonly HashSet<Type> Builtins = [typeof(CreatedAttribute), typeof(ReadAttribute), typeof(UpdatedAttribute), typeof(DeletedAttribute)];
 
     internal static ResourceAction Get(Type type) => Actions.GetValue(type, Build);
 
-    private static ResourceAction Build(Type type)
+    private static (ResourceEffect Effect, string Name) Definition(Type type)
     {
-        if (type.ContainsGenericParameters || !typeof(ResourceAttribute).IsAssignableFrom(type))
-        { throw new ArgumentException("Use a closed ResourceAttribute type with one ResourceActionDefinition.", nameof(type)); }
-        var definitions = new List<System.Reflection.CustomAttributeData>();
-        string? displayName = null;
-        var hierarchy = new List<Type>();
+        if (type.ContainsGenericParameters || type.IsAbstract || !typeof(ResourceAttribute).IsAssignableFrom(type))
+        { throw new ArgumentException("Use a closed concrete resource action.", nameof(type)); }
+        var definitions = new List<CustomAttributeData>();
+        string? name = null;
         for (var current = type; current is not null && current != typeof(ResourceAttribute); current = current.BaseType)
         {
-            hierarchy.Add(current);
             definitions.AddRange(current.GetCustomAttributesData().Where(data => data.AttributeType == typeof(ResourceActionDefinitionAttribute)));
-            if (displayName is not null || Bases.ContainsKey(current)) { continue; }
-            var label = current.GetCustomAttributesData().FirstOrDefault(data => data.AttributeType == typeof(DisplayNameAttribute));
-            if (label is null) { continue; }
-            displayName = label.ConstructorArguments.Count == 1 ? label.ConstructorArguments[0].Value as string : null;
-            if (string.IsNullOrWhiteSpace(displayName))
-            { throw new ArgumentException("A resource action's DisplayName must contain text.", nameof(type)); }
+            if (name is not null) { continue; }
+            var display = current.GetCustomAttributesData().FirstOrDefault(data => data.AttributeType == typeof(DisplayNameAttribute));
+            if (display is null) { continue; }
+            name = display.ConstructorArguments.Count == 1 ? display.ConstructorArguments[0].Value as string : null;
+            if (string.IsNullOrWhiteSpace(name)) { throw new ArgumentException("An action name must contain text.", nameof(type)); }
         }
-        if (definitions.Count != 1 || definitions[0].ConstructorArguments[0].Value is not int kind || !Enum.IsDefined((ResourceActionKind)kind))
-        { throw new ArgumentException("Declare exactly one valid ResourceActionDefinition across the attribute hierarchy.", nameof(type)); }
-        var effect = (LifecycleVerb)kind;
-        var builtin = Bases.ContainsKey(type);
-        var name = builtin ? effect.ToString() : displayName ?? type.Name.Split('`')[0];
-        if (!builtin && displayName is null && name.EndsWith("Attribute", StringComparison.Ordinal)) { name = name[..^9]; }
-        if (string.IsNullOrWhiteSpace(name)) { throw new ArgumentException("A resource action name must contain text. Set DisplayName on the attribute type.", nameof(type)); }
-        var properties = new Dictionary<string, (System.Reflection.PropertyInfo Property, RelationshipDefinition? Definition)>(StringComparer.Ordinal);
-        foreach (var owner in hierarchy.AsEnumerable().Reverse())
+        if (definitions.Count != 1 || definitions[0].ConstructorArguments[0].Value is not int value || !Enum.IsDefined((ResourceEffect)value))
+        { throw new ArgumentException("Declare exactly one valid ResourceActionDefinition in the hierarchy.", nameof(type)); }
+        var effect = (ResourceEffect)value;
+        name ??= Builtins.Contains(type) ? effect.ToString() : RoleName(type.Name);
+        if (string.IsNullOrWhiteSpace(name)) { throw new ArgumentException("An action name must contain text.", nameof(type)); }
+        return (effect, name);
+    }
+
+    internal static string RoleName(string name)
+    {
+        name = name.Split('`')[0];
+        return name.EndsWith("Attribute", StringComparison.Ordinal) ? name[..^9] : name;
+    }
+
+    internal static Type? LinkBase(Type type)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
         {
-            foreach (var member in owner.GetMembers(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
-                | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly))
+            if (current.IsGenericType && current.GetGenericTypeDefinition() == typeof(ResourceLinkAttribute<,>)) { return current; }
+        }
+        return null;
+    }
+
+    private static ResourceAction Build(Type type)
+    {
+        var definition = Definition(type);
+        var hierarchy = new Stack<Type>();
+        for (var current = type; current is not null && current != typeof(ResourceAttribute); current = current.BaseType) { hierarchy.Push(current); }
+        var roles = new Dictionary<string, RelationshipDefinition>(StringComparer.Ordinal);
+        while (hierarchy.TryPop(out var owner))
+        {
+            foreach (var nested in owner.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
             {
-                if (member is not System.Reflection.PropertyInfo && properties.TryGetValue(member.Name, out var inherited)
-                    && inherited.Definition is not null)
-                { throw new ArgumentException("A member cannot hide an inherited relationship property.", nameof(type)); }
+                var marker = nested;
+                if (marker.ContainsGenericParameters && owner.IsConstructedGenericType
+                    && marker.GetGenericArguments().Length == owner.GetGenericArguments().Length)
+                { marker = marker.MakeGenericType(owner.GetGenericArguments()); }
+                if (roles.ContainsKey(RoleName(marker.Name)))
+                { throw new ArgumentException("A nested type cannot hide an inherited resource role.", nameof(type)); }
+                if (LinkBase(marker) is not { } contract) { continue; }
+                var arguments = contract.GenericTypeArguments;
+                if (marker.ContainsGenericParameters || marker.IsAbstract || !marker.IsNestedPublic
+                    || arguments[0].ContainsGenericParameters || arguments[0].IsPointer || arguments[0].IsByRef)
+                { throw new ArgumentException("Declare a public, closed, concrete nested role with a closed resource target.", nameof(type)); }
+                Definition(arguments[1]);
+                var name = RoleName(marker.Name);
+                if (string.IsNullOrWhiteSpace(name) || !roles.TryAdd(name, new(owner, marker, name, arguments[0], arguments[1])))
+                { throw new ArgumentException("A role name must be nonblank and unique in the owner hierarchy.", nameof(type)); }
             }
-            foreach (var property in owner.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
-                | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly))
+            foreach (var member in owner.GetMembers(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
             {
-                var markers = property.GetCustomAttributesData().Where(data => data.AttributeType == typeof(RelationshipAttribute)
-                    || data.AttributeType.IsGenericType && data.AttributeType.GetGenericTypeDefinition() == typeof(RelationshipAttribute<>)).ToArray();
-                if (properties.TryGetValue(property.Name, out var inherited) && (inherited.Definition is not null || markers.Length > 0))
-                { throw new ArgumentException("A relationship property cannot hide or override an inherited property.", nameof(type)); }
-                if (markers.Length == 0) { properties[property.Name] = (property, null); continue; }
-                var marker = markers[0];
-                if (markers.Length != 1 || marker.ConstructorArguments[0].Value is not int relation || !Enum.IsDefined((ResourceRelation)relation)
-                    || property.PropertyType != typeof(string) && property.PropertyType != typeof(string[])
-                    || property.GetMethod is not { IsPublic: true, IsStatic: false } || property.SetMethod is not { IsPublic: true, IsStatic: false }
-                    || property.GetIndexParameters().Length != 0)
-                { throw new ArgumentException("A relationship needs one valid marker on a public instance string or string-array property with get and set.", nameof(type)); }
-                var required = !marker.NamedArguments.Any(argument => argument.MemberName == nameof(RelationshipAttribute.Required) && argument.TypedValue.Value is false);
-                var resourceType = marker.AttributeType.IsGenericType ? marker.AttributeType.GenericTypeArguments[0] : null;
-                properties[property.Name] = (property, new(property.Name, (ResourceRelation)relation, resourceType, property.PropertyType == typeof(string[]), required));
+                if (member is Type) { continue; }
+                if (roles.ContainsKey(RoleName(member.Name)))
+                { throw new ArgumentException("A member cannot hide a relationship role.", nameof(type)); }
             }
         }
-        var schema = Array.AsReadOnly(properties.Values.Where(value => value.Definition is not null).Select(value => value.Definition!)
-            .OrderBy(value => value.PropertyName, StringComparer.Ordinal).ToArray());
-        return new(effect, name, builtin ? null : type, schema);
+        return new(definition.Effect, definition.Name, Builtins.Contains(type) ? null : type,
+            Array.AsReadOnly(roles.Values.OrderBy(role => role.Name, StringComparer.Ordinal).ToArray()));
     }
 }

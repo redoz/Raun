@@ -5,26 +5,26 @@ namespace Raun;
 /// <summary>A resource action name and its access effect.</summary>
 public sealed class ResourceAction
 {
-    internal ResourceAction(LifecycleVerb effect, string name, Type? attributeType, IReadOnlyList<RelationshipDefinition>? relationships = null)
+    internal ResourceAction(ResourceEffect effect, string name, Type? attributeType, IReadOnlyList<RelationshipDefinition>? relationships = null)
     { Effect = effect; Name = name; AttributeType = attributeType; Relationships = relationships ?? Array.Empty<RelationshipDefinition>(); }
 
     /// <summary>The base effect used for conflict checks.</summary>
-    public LifecycleVerb Effect { get; }
+    public ResourceEffect Effect { get; }
     /// <summary>The action name shown in logs and reports.</summary>
     public string Name { get; }
     /// <summary>The custom attribute type, or null for a built-in action.</summary>
     public Type? AttributeType { get; }
 
-    /// <summary>The immutable relationship property schema. Usage arguments supply its bindings.</summary>
+    /// <summary>The immutable relationship role schema. Usage arguments supply its bindings.</summary>
     public IReadOnlyList<RelationshipDefinition> Relationships { get; }
 
-    /// <summary>Get one declared relationship property by its exact name.</summary>
+    /// <summary>Get one declared relationship role by its exact name.</summary>
     public RelationshipDefinition GetRelationship(string propertyName)
-        => Relationships.FirstOrDefault(property => property.PropertyName == propertyName)
-            ?? throw new ArgumentException("No relationship property has that name.", nameof(propertyName));
+        => Relationships.FirstOrDefault(property => property.Name == propertyName)
+            ?? throw new ArgumentException("No relationship role has that name.", nameof(propertyName));
 
     /// <summary>Gets action metadata without creating the attribute.</summary>
-    public static ResourceAction For<TAttribute>() where TAttribute : Attribute => For(typeof(TAttribute));
+    public static ResourceAction For<TAttribute>() where TAttribute : ResourceAttribute => For(typeof(TAttribute));
 
     /// <summary>Gets action metadata without running attribute code.</summary>
     public static ResourceAction For(Type attributeType)

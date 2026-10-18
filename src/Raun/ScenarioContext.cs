@@ -111,12 +111,12 @@ public sealed class ScenarioContext
     /// <summary>Binds this step to its span. Called by the scheduler.</summary>
     internal void AttachActivity(System.Diagnostics.Activity? activity) => _activity = activity;
 
-    private void OnResource(LifecycleVerb verb, ResourceIdentity identity, ResourceConflictException? conflict, string? snapshot, string? label, ResourceAction? action)
+    private void OnResource(ResourceEffect verb, ResourceIdentity identity, ResourceConflictException? conflict, string? snapshot, string? label, ResourceAction? action)
     {
         var content = conflict is null
             ? new StepMessage([new StepMessagePart($"[resource] {action?.Name ?? verb.ToString()} "), new StepMessagePart(label ?? ResourcePresentation.Display(identity), identity) { Snapshot = snapshot, Label = label }])
             : new StepMessage([
-                new StepMessagePart($"[resource] conflict: Step '{conflict.StepDisplayName}' ({conflict.Verb}) and step '{conflict.OtherStepDisplayName}' ({conflict.OtherVerb}) both touch "),
+                new StepMessagePart($"[resource] conflict: Step '{conflict.StepDisplayName}' ({conflict.Effect}) and step '{conflict.OtherStepDisplayName}' ({conflict.OtherEffect}) both touch "),
                 new StepMessagePart(label ?? ResourcePresentation.Display(identity), identity) { Snapshot = snapshot, Label = label },
                 new StepMessagePart(" and nothing orders them; add a dependency between them or declare one access as [Read]."),
             ]);
@@ -126,7 +126,7 @@ public sealed class ScenarioContext
         {
             var tags = new System.Diagnostics.ActivityTagsCollection
             {
-                ["verb"] = verb.ToString(),
+                ["effect"] = verb.ToString(),
                 ["identity"] = identity.ToString(),
             };
             if (action is not null) { tags["action"] = action.Name; }
@@ -188,15 +188,15 @@ public sealed class ScenarioContext
 
     /// <summary>
     /// The per-step <see cref="TimeProvider"/> backing this context — the same instance that stamps
-    /// the step's <see cref="Model.ResourceEffect"/> timestamps. On a real run this is
+    /// the step's <see cref="Model.ResourceObservation"/> timestamps. On a real run this is
     /// <see cref="TimeProvider.System"/>; in the scheduler's simulated-time mode it is a per-step
     /// <see cref="SimulatedClock"/> that only moves via <see cref="SimulateElapsed"/>.
     /// </summary>
     public TimeProvider TimeProvider { get; }
 
     /// <summary>
-    /// The resource surface for this step: lifecycle verbs (<c>Create</c>/<c>Load</c>/<c>Read</c>/
-    /// <c>Edit</c>/<c>Delete</c>) that record <see cref="Model.ResourceEffect"/>s for the report's
+    /// The resource surface for this step: lifecycle verbs (<c>Create</c>/<c>Read</c>/<c>Read</c>/
+    /// <c>Update</c>/<c>Delete</c>) that record <see cref="Model.ResourceObservation"/>s for the report's
     /// resource lane. Under the scheduler each verb also claims the identity in the scenario's
     /// <see cref="ResourceLedger"/>, so a claim that collides with an unordered sibling's throws
     /// <see cref="ResourceConflictException"/>; no lock is taken and nothing waits. The

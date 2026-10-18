@@ -74,7 +74,7 @@ public sealed class StepResult
     }
 
     /// <summary>Log lines collected during the step, messages only. Resource events the step recorded
-    /// appear here too, in order, as <c>[resource] {Verb} {Identity}</c> lines.</summary>
+    /// appear here too, in order, as <c>[resource] {Effect} {Identity}</c> lines.</summary>
     public IReadOnlyList<string> Logs
     {
         get => LogEntries.Count > 0
@@ -92,10 +92,10 @@ public sealed class StepResult
         new Dictionary<string, string>();
 
     /// <summary>Resource effects (lifecycle acquires) the step recorded, in call order.</summary>
-    public IReadOnlyList<ResourceEffect> Effects { get; init; } = [];
+    public IReadOnlyList<ResourceObservation> Effects { get; init; } = [];
 
-    /// <summary>Lineage relations the step recorded from a producer's [Created]/[Loaded]/[Edited] References/Consumes targets.</summary>
-    public IReadOnlyList<ResourceLineageRelation> Lineage { get; init; } = [];
+    /// <summary>The independent role-named resource links recorded by this step.</summary>
+    public IReadOnlyList<ResourceLink> Links { get; init; } = [];
 
     /// <summary>W3C trace id of the step's span, when a listener was subscribed to
     /// <see cref="RaunTelemetry.Source"/>; otherwise null. Paste it into your trace viewer.</summary>

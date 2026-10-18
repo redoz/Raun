@@ -120,7 +120,7 @@ public class SchedulerSimulatedTimeTests
             Node(1, async (_, ctx) =>
             {
                 ctx.SimulateElapsed(beforeEffect);
-                await ctx.Resources.Load(new Widget("k"));
+                await ctx.Resources.Read(new Widget("k"));
                 return null;
             }, [0]));
 

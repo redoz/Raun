@@ -2,147 +2,64 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Raun;
 
-/// <summary>The step creates a new resource.</summary>
+/// <summary>The step creates a resource.</summary>
 /// <remarks>
-/// <para>Use this attribute on a parameter, a return value, or a method.</para>
-/// <para>An attribute on a method applies to its return value.</para>
-/// <para>Raun records parameter effects before the call and return effects after the call.</para>
-/// <para>This effect requires exclusive access to the resource.</para>
-/// <para>Raun reports a conflict if an unordered step uses the same resource.</para>
-/// <para>The step code must do the operation. Raun does not lock the external system.</para>
-/// <para>Derive a custom attribute to give the effect a different report label.</para>
-/// <para>The default label is the custom type name without the final Attribute suffix.</para>
-/// <para>Use <see cref="System.ComponentModel.DisplayNameAttribute"/> on the custom type to set its label.</para>
+/// Use this attribute on a parameter, a return value, or a method. A method attribute applies to its return value.
+/// Raun records parameter effects before the call and return effects after a successful call.
+/// This effect requires exclusive access. Unordered access to the same resource causes a conflict.
+/// The step code must perform the operation. Raun does not lock the external system.
+/// Derive a domain attribute to name this operation. Use DisplayNameAttribute to override its report name.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
-[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-[ResourceActionDefinition(ResourceActionKind.Create)]
-public class CreatedAttribute : ResourceAttribute
-{
-    /// <summary>The resource keeps a reference to each specified resource.</summary>
-    /// <remarks>
-    /// <para>Each target has a separate identity and uses shared access.</para>
-    /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
-    /// <para>Use nameof(parameter) for a parameter name.</para>
-    /// </remarks>
-    [Relationship(ResourceRelation.Reference, Required = false)]
-    public string[] References { get; set; } = [];
+[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Domain actions derive from their base effect.")]
+[ResourceActionDefinition(ResourceEffect.Create)]
+public class CreatedAttribute : ResourceAttribute;
 
-    /// <summary>Each specified resource is an input to the resource that this step produces.</summary>
-    /// <remarks>
-    /// <para>This relation uses shared access. It does not delete the input resource.</para>
-    /// <para>Declare a Delete effect if the step removes the input resource.</para>
-    /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
-    /// <para>Use nameof(parameter) for a parameter name.</para>
-    /// </remarks>
-    [Relationship(ResourceRelation.Consume, Required = false)]
-    public string[] Consumes { get; set; } = [];
-}
-
-/// <summary>The step gets an existing resource.</summary>
+/// <summary>The step observes a resource without a change.</summary>
 /// <remarks>
-/// <para>Use this attribute on a parameter, a return value, or a method.</para>
-/// <para>An attribute on a method applies to its return value.</para>
-/// <para>Raun records parameter effects before the call and return effects after the call.</para>
-/// <para>This effect requires shared access to the resource.</para>
-/// <para>Unordered steps can share this access. An exclusive use causes a conflict.</para>
-/// <para>The step code must do the operation. Raun does not lock the external system.</para>
-/// <para>Derive a custom attribute to give the effect a different report label.</para>
-/// <para>The default label is the custom type name without the final Attribute suffix.</para>
-/// <para>Use <see cref="System.ComponentModel.DisplayNameAttribute"/> on the custom type to set its label.</para>
+/// Use this attribute on a parameter, a return value, or a method. A method attribute applies to its return value.
+/// Raun records parameter effects before the call and return effects after a successful call.
+/// This effect uses shared access. Unordered reads can share a resource; an exclusive use causes a conflict.
+/// Fetching an existing resource is a Read. The step code must perform the operation.
+/// Derive a domain attribute to name this operation. Use DisplayNameAttribute to override its report name.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
-[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-[ResourceActionDefinition(ResourceActionKind.Load)]
-public class LoadedAttribute : ResourceAttribute
-{
-    /// <summary>The resource keeps a reference to each specified resource.</summary>
-    /// <remarks>
-    /// <para>Each target has a separate identity and uses shared access.</para>
-    /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
-    /// <para>Use nameof(parameter) for a parameter name.</para>
-    /// </remarks>
-    [Relationship(ResourceRelation.Reference, Required = false)]
-    public string[] References { get; set; } = [];
-
-    /// <summary>Each specified resource is an input to the resource that this step produces.</summary>
-    /// <remarks>
-    /// <para>This relation uses shared access. It does not delete the input resource.</para>
-    /// <para>Declare a Delete effect if the step removes the input resource.</para>
-    /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
-    /// <para>Use nameof(parameter) for a parameter name.</para>
-    /// </remarks>
-    [Relationship(ResourceRelation.Consume, Required = false)]
-    public string[] Consumes { get; set; } = [];
-}
-
-/// <summary>The step uses an existing resource without a change.</summary>
-/// <remarks>
-/// <para>Use this attribute on a parameter, a return value, or a method.</para>
-/// <para>An attribute on a method applies to its return value.</para>
-/// <para>Raun records parameter effects before the call and return effects after the call.</para>
-/// <para>This effect requires shared access to the resource.</para>
-/// <para>Unordered steps can share this access. An exclusive use causes a conflict.</para>
-/// <para>The step code must do the operation. Raun does not lock the external system.</para>
-/// <para>Derive a custom attribute to give the effect a different report label.</para>
-/// <para>The default label is the custom type name without the final Attribute suffix.</para>
-/// <para>Use <see cref="System.ComponentModel.DisplayNameAttribute"/> on the custom type to set its label.</para>
-/// </remarks>
-[AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
-[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-[ResourceActionDefinition(ResourceActionKind.Read)]
+[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Domain actions derive from their base effect.")]
+[ResourceActionDefinition(ResourceEffect.Read)]
 public class ReadAttribute : ResourceAttribute;
 
-/// <summary>The step changes an existing resource.</summary>
+/// <summary>The step changes a resource.</summary>
 /// <remarks>
-/// <para>Use this attribute on a parameter, a return value, or a method.</para>
-/// <para>An attribute on a method applies to its return value.</para>
-/// <para>Raun records parameter effects before the call and return effects after the call.</para>
-/// <para>This effect requires exclusive access to the resource.</para>
-/// <para>Raun reports a conflict if an unordered step uses the same resource.</para>
-/// <para>The step code must do the operation. Raun does not lock the external system.</para>
-/// <para>Derive a custom attribute to give the effect a different report label.</para>
-/// <para>The default label is the custom type name without the final Attribute suffix.</para>
-/// <para>Use <see cref="System.ComponentModel.DisplayNameAttribute"/> on the custom type to set its label.</para>
+/// Use this attribute on a parameter, a return value, or a method. A method attribute applies to its return value.
+/// Raun records parameter effects before the call and return effects after a successful call.
+/// This effect requires exclusive access. Unordered access to the same resource causes a conflict.
+/// The step code must perform the change. Raun does not lock the external system.
+/// Derive a domain attribute to name this operation. Use DisplayNameAttribute to override its report name.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
-[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-[ResourceActionDefinition(ResourceActionKind.Edit)]
-public class EditedAttribute : ResourceAttribute
-{
-    /// <summary>The resource keeps a reference to each specified resource.</summary>
-    /// <remarks>
-    /// <para>Each target has a separate identity and uses shared access.</para>
-    /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
-    /// <para>Use nameof(parameter) for a parameter name.</para>
-    /// </remarks>
-    [Relationship(ResourceRelation.Reference, Required = false)]
-    public string[] References { get; set; } = [];
+[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Domain actions derive from their base effect.")]
+[ResourceActionDefinition(ResourceEffect.Update)]
+public class UpdatedAttribute : ResourceAttribute;
 
-    /// <summary>Each specified resource is an input to the resource that this step produces.</summary>
-    /// <remarks>
-    /// <para>This relation uses shared access. It does not delete the input resource.</para>
-    /// <para>Declare a Delete effect if the step removes the input resource.</para>
-    /// <para>Set each value to a parameter name or <see cref="Subject.Return"/>.</para>
-    /// <para>Use nameof(parameter) for a parameter name.</para>
-    /// </remarks>
-    [Relationship(ResourceRelation.Consume, Required = false)]
-    public string[] Consumes { get; set; } = [];
-}
-
-/// <summary>The step removes an existing resource.</summary>
+/// <summary>The step removes a resource.</summary>
 /// <remarks>
-/// <para>Use this attribute on a parameter, a return value, or a method.</para>
-/// <para>An attribute on a method applies to its return value.</para>
-/// <para>Raun records parameter effects before the call and return effects after the call.</para>
-/// <para>This effect requires exclusive access to the resource.</para>
-/// <para>Raun reports a conflict if an unordered step uses the same resource.</para>
-/// <para>The step code must do the operation. Raun does not lock the external system.</para>
-/// <para>Derive a custom attribute to give the effect a different report label.</para>
-/// <para>The default label is the custom type name without the final Attribute suffix.</para>
-/// <para>Use <see cref="System.ComponentModel.DisplayNameAttribute"/> on the custom type to set its label.</para>
+/// Use this attribute on a parameter, a return value, or a method. A method attribute applies to its return value.
+/// Raun records parameter effects before the call and return effects after a successful call.
+/// This effect requires exclusive access. Unordered access to the same resource causes a conflict.
+/// The step code must perform the removal. A relationship does not remove its target.
+/// Derive a domain attribute to name this operation. Use DisplayNameAttribute to override its report name.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
-[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Consumers derive domain action attributes from this role.")]
-[ResourceActionDefinition(ResourceActionKind.Delete)]
+[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Domain actions derive from their base effect.")]
+[ResourceActionDefinition(ResourceEffect.Delete)]
 public class DeletedAttribute : ResourceAttribute;
+
+/// <summary>The step creates test data directly in the system.</summary>
+/// <remarks>
+/// Use this action for setup that bypasses the normal application operation.
+/// Seed has Create semantics and requires exclusive access. The step code must insert the data.
+/// Parameter and return recording times are the same as CreatedAttribute.
+/// </remarks>
+[AttributeUsage(AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.Method)]
+[SuppressMessage("Performance", "CA1813:Avoid unsealed attributes", Justification = "Domain-specific seed actions can derive from this action.")]
+public class SeedAttribute : CreatedAttribute;

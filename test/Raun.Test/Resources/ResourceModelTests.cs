@@ -14,12 +14,11 @@ public sealed record User(string Email, bool Suspended = false) : IResource<User
 public class ResourceModelTests
 {
     [Theory]
-    [InlineData(LifecycleVerb.Read, LockMode.Shared)]
-    [InlineData(LifecycleVerb.Load, LockMode.Shared)]
-    [InlineData(LifecycleVerb.Create, LockMode.Exclusive)]
-    [InlineData(LifecycleVerb.Edit, LockMode.Exclusive)]
-    [InlineData(LifecycleVerb.Delete, LockMode.Exclusive)]
-    public void Verb_maps_to_lock_mode(LifecycleVerb verb, LockMode expected)
+    [InlineData(ResourceEffect.Read, LockMode.Shared)]
+    [InlineData(ResourceEffect.Create, LockMode.Exclusive)]
+    [InlineData(ResourceEffect.Update, LockMode.Exclusive)]
+    [InlineData(ResourceEffect.Delete, LockMode.Exclusive)]
+    public void Verb_maps_to_lock_mode(ResourceEffect verb, LockMode expected)
         => Assert.Equal(expected, verb.ToLockMode());
 
     [Fact]

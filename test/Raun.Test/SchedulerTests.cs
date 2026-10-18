@@ -553,7 +553,7 @@ public class SchedulerTests
     [Fact]
     public async Task Condition_that_throws_skips_both_arms_rather_than_marking_them_not_taken()
     {
-        // Load-bearing: a blown-up condition chose no branch. Reporting an arm as "not taken" would
+        // Read-bearing: a blown-up condition chose no branch. Reporting an arm as "not taken" would
         // disguise a failure as a routine decision.
         var def = Def(
             ThrowingCond(0),

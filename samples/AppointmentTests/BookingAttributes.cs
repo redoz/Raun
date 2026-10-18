@@ -1,43 +1,37 @@
+global using AppointmentTests.Actions;
 using System.ComponentModel;
 using Raun;
 
-namespace AppointmentTests;
+namespace AppointmentTests.Actions;
 
-/// <summary>The step registers a patient.</summary>
+/// <summary>Record a patient registration. The step must create the patient through the system.</summary>
 [DisplayName("Register")]
-public sealed class RegisteredAttribute : CreatedAttribute;
+public sealed class Registered : CreatedAttribute;
 
-/// <summary>The step holds a slot.</summary>
+/// <summary>Record a temporary hold on a slot. This action requires exclusive access.</summary>
 [DisplayName("Hold")]
-public sealed class HeldAttribute : EditedAttribute;
+public sealed class Held : UpdatedAttribute;
 
-/// <summary>The step uses a slot as input to a booking. This action uses shared access and does not delete the slot.</summary>
+/// <summary>Record a slot reservation. This action changes the slot and requires exclusive access.</summary>
 [DisplayName("Reserve")]
-[ResourceActionDefinition(ResourceActionKind.Consume)]
-public sealed class ReservedAttribute : ResourceAttribute;
+public sealed class Reserved : UpdatedAttribute;
 
-/// <summary>The step cancels a booking.</summary>
+/// <summary>Record a booking cancellation. The step must delete the booking.</summary>
 [DisplayName("Cancel")]
-public sealed class CancelledAttribute : DeletedAttribute;
+public sealed class Cancelled : DeletedAttribute;
 
-/// <summary>The step creates a booking linked to a patient and a slot.</summary>
-[ResourceActionDefinition(ResourceActionKind.Create)]
-public sealed class BookedAttribute : ResourceAttribute
+/// <summary>Record a new booking with its patient and reserved slot.</summary>
+public sealed class Booked : CreatedAttribute
 {
-    /// <summary>The step parameter that supplies the patient. The booking keeps a link to it.</summary>
-    [Relationship<Patient>(ResourceRelation.Reference)]
-    public string Patient { get; set; } = "";
-
-    /// <summary>The step parameter that supplies the slot. This input is not deleted.</summary>
-    [Relationship<Slot>(ResourceRelation.Consume)]
-    public string Slot { get; set; } = "";
+    /// <summary>Read the patient and link the booking to that patient.</summary>
+    public sealed class PatientAttribute : ResourceLinkAttribute<Patient, ReadAttribute>;
+    /// <summary>Reserve the slot and link the booking to that slot.</summary>
+    public sealed class SlotAttribute : ResourceLinkAttribute<Slot, Reserved>;
 }
 
-/// <summary>The step creates a replacement booking from a new slot.</summary>
-[ResourceActionDefinition(ResourceActionKind.Create)]
-public sealed class RescheduledAttribute : ResourceAttribute
+/// <summary>Record a replacement booking with its reserved slot.</summary>
+public sealed class Rescheduled : CreatedAttribute
 {
-    /// <summary>The step parameter that supplies the replacement slot. This input is not deleted.</summary>
-    [Relationship<Slot>(ResourceRelation.Consume)]
-    public string Slot { get; set; } = "";
+    /// <summary>Reserve the replacement slot and link the booking to that slot.</summary>
+    public sealed class SlotAttribute : ResourceLinkAttribute<Slot, Reserved>;
 }
