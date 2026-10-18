@@ -17,10 +17,24 @@ const fixture={...base,scenarioId:'flow',displayName:'Nested booking flow',durat
  step(7,'When booking Jane',500,500,[4,2])
 ]};
 async function branchText(locator){return locator.evaluate(n=>Array.from(n.childNodes).filter(x=>x.nodeType===3).map(x=>x.textContent).join('').trim());}
+async function assertBranchIndentation(page){
+ const positions=await page.locator('.step-head').evaluateAll(heads=>heads.flatMap(head=>{
+  const mark=head.querySelector('.scenario-status'),title=head.querySelector('.dn');
+  if(!head.getBoundingClientRect().height || getComputedStyle(mark).visibility==='hidden')return [];
+  return [{depth:Number(head.parentElement.style.getPropertyValue('--step-flow-depth') || 0),left:mark.getBoundingClientRect().left,
+   gap:title.getBoundingClientRect().left+parseFloat(getComputedStyle(title).paddingLeft)-mark.getBoundingClientRect().right}];
+ }));
+ const base=positions.find(position=>position.depth===0);assert.ok(base);
+ for(const position of positions){
+  assert.ok(Math.abs(position.left-base.left-position.depth*12)<1,'Status squircle follows each branch indentation level');
+  assert.ok(Math.abs(position.gap-base.gap)<1,'Status and title keep their normal spacing at every depth');
+ }
+}
 function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSync(file,template.replace('/*__RAUN_REPORT_JSON__*/',JSON.stringify({...model,scenarios:[data]}).replaceAll('<','\\u003C')));return pathToFileURL(file).href;}
 (async()=>{const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:{})});try{
  const page=await browser.newPage({viewport:{width:1200,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(render('nested',fixture));await page.locator('.card-head').click();
+ await assertBranchIndentation(page);
  assert.equal(await page.locator('.step-gantt').count(),8,'Every step has a timing strip on the same axis');
  const backgroundBounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const row=h.getBoundingClientRect(),track=h.querySelector('.gantt-track')?.getBoundingClientRect();return Boolean(track && Math.abs(track.left-row.left)<1 && Math.abs(track.right-row.right)<1 && Math.abs(track.top-row.top)<1 && Math.abs(track.bottom-row.bottom)<1);}));
  assert.ok(backgroundBounds.every(Boolean),'Timing fills each title-row background');
@@ -106,6 +120,12 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  assert.ok(await page.locator('[data-step="flow-4"]').isVisible(),'Failed binding plumbing remains visible for diagnosis');
  const priority=model.scenarios.find(s=>s.displayName==='priority patients get an urgent appointment');
  await page.goto(render('real-conditional',priority));await page.locator('.card-head').click();
+ await assertBranchIndentation(page);
+ const branchWithLogs=priority.steps.find(step=>step.guards?.length && step.status==='passed' && step.logs.length);
+ assert.ok(branchWithLogs,'Real branch has log evidence');
+ const branchRow=page.locator('[data-step="'+branchWithLogs.stepId+'"]');await branchRow.locator('.step-expander').click();
+ assert.ok(await branchRow.evaluate(row=>Math.abs(row.querySelector('.step-body').getBoundingClientRect().left-row.querySelector('.scenario-status').getBoundingClientRect().left)<1),'Expanded branch evidence stays aligned with its indented status');
+ await branchRow.locator('.step-expander').click();
  assert.ok(priority.steps.some(step=>step.isValueMerge),'Real compiler merges carry report metadata');
  for(const merge of priority.steps.filter(step=>step.isValueMerge && step.status!=='failed'))assert.equal(await page.locator('[data-step="'+merge.stepId+'"]').isVisible(),false,'Real conditional value merges do not add visible rows');
  const matrixBackgrounds=await page.locator('.step-head').evaluateAll(heads=>heads.filter(h=>h.getBoundingClientRect().height>0).map(h=>{const track=h.querySelector('.gantt-track').getBoundingClientRect(),cell=h.parentElement.querySelector('.matrix-cell,.matrix-summary-cell').getBoundingClientRect();return track.right<=cell.left+.1;}));
