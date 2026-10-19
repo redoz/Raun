@@ -406,15 +406,25 @@ test('run header exposes pass or fail state for the logo', () => {
   }
 });
 
-test('coverage diagnostics stay in a collapsed disclosure without a global counts table', () => {
+test('coverage notes fold into the reported source caption and count warnings', () => {
   const categories=[{category:4,counts:{inventory:1,complete:1,decisionMeasurable:1}}];
-  const view=context.api.buildCoverageReport({status:'available',categories,types:[],diagnostics:['sample diagnostic']});
+  const types=[{assembly:'Api',namespace:'N',name:'N.C',categories,methods:[]}];
+  const view=context.api.buildCoverageReport({status:'available',categories,types,diagnostics:['Source scope: runtime dependencies of Tests','Tests: excluded by coverage settings','Api: compilation has errors; all outcomes remain unverified']});
   const nodes=descendants(view);
   assert.equal(nodes.some(n=>n.className==='coverage-counts' || n.className==='coverage-diagnostics' || n.tag==='table'),false);
+  assert.equal(nodes.some(n=>n.textContent==='Collection details'),false);
   const details=nodes.find(n=>n.tag==='details'&&n.className==='coverage-collection');
   assert.ok(details);assert.equal(details.attributes.open,undefined);
-  assert.ok(descendants(details).some(n=>n.textContent==='sample diagnostic'));
+  const summary=details.children[0];assert.equal(summary.tag,'summary');
+  assert.equal(descendants(summary).map(n=>n.textContent).filter(Boolean).join(' '),'Reported source: 1 assembly · 1 warning');
+  const notes=descendants(details).filter(n=>n.tag==='p');
+  assert.deepEqual(notes.map(n=>n.className),['coverage-caption','coverage-caption','coverage-caption coverage-warning']);
   assert.ok(nodes.some(n=>n.className==='coverage-explorer'));
+  const plain=descendants(context.api.buildCoverageReport({status:'available',categories,types,diagnostics:['Source scope: runtime dependencies of Tests']}));
+  assert.equal(descendants(plain.find(n=>n.tag==='summary')).map(n=>n.textContent).filter(Boolean).join(' '),'Reported source: 1 assembly');
+  const none=descendants(context.api.buildCoverageReport({status:'available',categories,types}));
+  assert.equal(none.some(n=>n.tag==='details'),false);
+  assert.ok(none.some(n=>n.className==='coverage-caption' && n.textContent==='Reported source: 1 assembly'));
 });
 
 

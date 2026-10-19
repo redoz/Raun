@@ -510,7 +510,7 @@
   .report-meta a:hover,.report-meta a:focus-visible{text-decoration:underline}
   @media(prefers-reduced-motion:reduce){.tests-class-name .report-meta,.card-head .name .report-meta{transition:none}.tests-class-name .report-meta>.leading-ellipsis,.card-head .name .report-meta>.leading-ellipsis{transition:none;transform:none}}
   .tests-narrative .group{margin:10px 0 18px}
-  .coverage-collection{font-size:12px;font-weight:400;margin-left:auto;max-width:70ch}.coverage-collection>summary{cursor:pointer;color:var(--muted)}
+  .coverage-collection{font-size:12px;font-weight:400;max-width:70ch}.coverage-collection>summary{cursor:pointer;color:var(--muted)}.coverage-collection>p{margin:6px 0 0}.coverage-warning{color:var(--fail-text)}
   .coverage-scope-score{font-size:12px;color:var(--muted);margin:0 0 5px}
   @media(max-width:650px){
     body:has(.report-views) .appbar{padding:8px 12px}.tests-narrative{padding:10px 12px 20px}
@@ -1171,12 +1171,17 @@
       const section=el("section","coverage-section");section.setAttribute("aria-label","Branch coverage");
       const summary=el("header","coverage-heading");summary.appendChild(coverageText("span","","Run coverage"));
       const types=coverage.types || [], assemblies=new Set(types.map(type=>type.assembly));
-      summary.appendChild(coverageText("span","coverage-caption",coverage.status==="available" ? "Reported source: "+assemblies.size+(assemblies.size===1 ? " assembly" : " assemblies") : coverage.status==="pending" ? "Waiting for coverage data" : "Unavailable"));
+      const caption=coverage.status==="available" ? "Reported source: "+assemblies.size+(assemblies.size===1 ? " assembly" : " assemblies") : coverage.status==="pending" ? "Waiting for coverage data" : "Unavailable";
       if(coverage.diagnostics?.length){
-        const details=el("details","coverage-collection");details.appendChild(coverageText("summary","","Collection details"));
-        for(const diagnostic of coverage.diagnostics)details.appendChild(coverageText("p","coverage-caption",diagnostic));
+        const routine=note=>note.startsWith("Source scope: ") || note.endsWith(": excluded by coverage settings");
+        const warnings=coverage.diagnostics.filter(note=>!routine(note)).length;
+        const details=el("details","coverage-collection"), toggle=el("summary");toggle.appendChild(coverageText("span","coverage-caption",caption));
+        if(warnings)toggle.appendChild(coverageText("span","coverage-warning","· "+warnings+(warnings===1 ? " warning" : " warnings")));
+        details.appendChild(toggle);
+        for(const diagnostic of coverage.diagnostics)details.appendChild(coverageText("p","coverage-caption"+(routine(diagnostic) ? "" : " coverage-warning"),diagnostic));
         summary.appendChild(details);
       }
+      else summary.appendChild(coverageText("span","coverage-caption",caption));
       section.appendChild(summary);
       const body=el("div","coverage-body");section.appendChild(body);
       if(coverage.status!=="available")return section;
