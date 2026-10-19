@@ -146,10 +146,11 @@ test('complete report script renders typed messages on first paint in declaratio
  const context=vm.createContext({...browserLayout,document,window:{matchMedia:()=>({matches:true})},location:{search:'?theme=light'},URLSearchParams,getComputedStyle:()=>({getPropertyValue:()=>''}),Blob,CSS:{escape:x=>x}});
  const code=template.slice(template.indexOf('  <script>')+'  <script>'.length,template.lastIndexOf('  </script>'));
  assert.doesNotThrow(()=>vm.runInContext(code,context));
- assert.equal(report.querySelectorAll('[data-message-resource]').length,3);
  const card=report.querySelector('.card'),head=card.querySelector('.card-head');
  assert.equal(card.classList.contains('collapsed'),true);
+ // A collapsed scenario builds its steps when it first opens.
  head.dispatch('click');assert.equal(card.classList.contains('collapsed'),false);
+ assert.equal(report.querySelectorAll('[data-message-resource]').length,3);
  head.dispatch('click');assert.equal(card.classList.contains('collapsed'),true);
  assert.equal(vm.runInContext('fmtMs(1.234567)',context),'1.2 ms');
  const expander=report.querySelector('.step-logs-toggle');assert.equal(expander.getAttribute('aria-expanded'),'false');
@@ -353,6 +354,7 @@ test('scenario and group headings keep compact identifiers alongside the display
  assert.equal(app.querySelector('.card-body').querySelector('.mth'),null);
  const wait=head.querySelector('.where');assert.ok(wait);assert.equal(wait.parentElement,head);
  assert.equal(nodeText(wait),'Queued for Schedule · 59.0 ms');
+ head.dispatch('click');
  const timing=app.querySelector('.step-head').querySelector('.dm');
  assert.equal(timing.querySelector('.step-offset'),null);
  assert.match(timing.querySelector('.step-gantt').title,/^\+59\.0 ms to \+62\.0 ms/);

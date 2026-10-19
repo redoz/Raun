@@ -177,6 +177,8 @@ const renderFixture = (name, data) => {
 
     await registryCard.locator('.card-head').click();
 
+    // Collapsed scenarios build their steps on first open: open and close each before counting.
+    await page.evaluate(()=>{for(const head of document.querySelectorAll('.card.collapsed .card-head')){head.click();head.click();}});
     assert.equal(await page.locator('.resource-events').count(),0,'The matrix replaces duplicate Resource events tables');
     assert.equal(await page.locator('.matrix-event').count(),model.scenarios.reduce((total,scenario)=>total+scenario.steps.reduce((count,step)=>count+step.effects.length,0),0),'Every recorded resource event remains inspectable in the matrix');
     assert.equal(await page.locator('.resource-matrix').count(), model.scenarios.filter(hasResources).length, 'Resource matrix is part of the default view');

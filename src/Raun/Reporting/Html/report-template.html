@@ -1470,19 +1470,14 @@
         const color=index<CAT_SLOTS ? catVar(index) : "light-dark(hsl("+hue+" 68% 42%),hsl("+hue+" 68% 65%))";
         return [key,color];
       }));
-      for(const mention of drill.querySelectorAll('.message-resource')){
-        const color=resourceColors.get(mention.dataset.messageResource);
-        if(color)mention.style.setProperty('--resource-color',color);
-      }
       const header=el("div","matrix-header"),title=coverageText("div","matrix-steps","Steps");
       header.appendChild(title);
       matrix.appendChild(header);matrix.appendChild(drill);scroll.appendChild(matrix);
       panel.appendChild(coverageText("p","matrix-scroll-hint","Scroll sideways to follow resource history."));panel.appendChild(scroll);
       drill.style.setProperty("--matrix-lane-width",(resources.size*112)+"px");
       drill.style.marginTop="0";
-      const rows=Array.from(drill.querySelectorAll(".step-list .step-entry"));
-      for(const row of rows)row.classList.add("matrix-row");
-      let selected=null,columns=[];
+      // Rows join once the drill has steps: now, or when a collapsed card first opens (attachRows).
+      let rows=[],selected=null,columns=[];
       function select(){
         const column=columns.find(column=>column.key===selected);
         for(const [index,row] of rows.entries()){
@@ -1507,7 +1502,8 @@
       const clearOnEscape=event=>{if(event.key==="Escape"){selected=null;select();closeResourceHover();}};
       panel.addEventListener("keydown",clearOnEscape,true);
       header.addEventListener("keydown",clearOnEscape,true);
-      let connectionObserver=null;
+      let connectionObserver=null,addSummaryCells=null,drawCurrent=null;
+      (drill.openHooks ||= []).push(()=>drawCurrent?.());
       function renderColumns(){
         connectionObserver?.disconnect();
         panel.disposeMatrix=()=>connectionObserver?.disconnect();
@@ -1630,7 +1626,7 @@
           for(const write of writes)write();
         };
         connectionObserver=new ResizeObserver(drawConnections);
-        (drill.openHooks ||= []).push(drawConnections);
+        drawCurrent=drawConnections;
         connectionObserver.observe(drill);
         for(const row of rows){connectionObserver.observe(row);for(const event of row.querySelectorAll(".matrix-event"))connectionObserver.observe(event);}
         // The observer draws on first layout; fonts can change metrics later.
@@ -1641,7 +1637,7 @@
         const summary=coverageText('button','matrix-summary matrix-summary-header','◈');
         summary.type='button';summary.setAttribute('aria-label','Show all resource lanes');
         summary.setAttribute('aria-haspopup','dialog');header.appendChild(summary);
-        rows.forEach((row,index)=>{
+        addSummaryCells=()=>rows.forEach((row,index)=>{
           const effects=sc.steps[index].effects || [];
           const cell=el('div','matrix-summary-cell');
           if(effects.length){
@@ -1748,7 +1744,19 @@
           (card.openHooks ||= []).push(update);
         };
       }
-      renderColumns();return panel;
+      const attachRows=()=>{
+        rows=Array.from(drill.querySelectorAll(".step-list .step-entry"));
+        for(const row of rows)row.classList.add("matrix-row");
+        for(const mention of drill.querySelectorAll('.message-resource')){
+          const color=resourceColors.get(mention.dataset.messageResource);
+          if(color)mention.style.setProperty('--resource-color',color);
+        }
+        addSummaryCells?.();
+        renderColumns();
+      };
+      // Header columns belong to the heading row, which shows even while the card is collapsed.
+      if(drill.querySelector(".step-entry"))attachRows();else{renderColumns();panel.attachRows=attachRows;}
+      return panel;
     }
 
     function renderScenario(sc,workspace=false){
@@ -1782,12 +1790,22 @@
       const body = el("div", "card-body");
       card.appendChild(body);
 
-      // one scenario-level drill panel: every step in run order
-      const drill = buildScenarioDrill(sc);
-      drill.classList.add("open");
+      // one scenario-level drill panel: every step in run order. A collapsed card fills it on first
+      // open (or when an opener focuses a step), so a large report builds and lays out only headings.
+      const drill = el("div", "drill scenario-drill open");
+      drill.dataset.focus = "";
+      let built = false;
+      const build = () => {
+        if (built) return;
+        built = true;
+        fillScenarioDrill(drill, sc);
+        bindScenarioFlow(drill, sc);
+        drill.closest(".matrix-panel")?.attachRows?.();
+      };
 
       // open the panel and focus/scroll to a step; toggle closes when re-focusing the same step
       function focusStep(stepId, { toggle = false, scroll = true } = {}){
+        build();
         const open = drill.classList.contains("open");
         const same = drill.dataset.focus === stepId;
         if (toggle && open && same){
@@ -1812,7 +1830,12 @@
       // opener for the pre-expand pass: open the drill focused on a step
       openers.push({ scenarioId: sc.scenarioId, open: (stepId) => focusStep(stepId, { scroll: false }) });
 
-      if(bindScenarioFlow(drill,sc)){
+      // Build before the matrix installs (it adopts the rows), or defer to the first open, ahead of
+      // the matrix's own open hook.
+      if (workspace || isExpanded(sc)) build();
+      else (card.openHooks ||= []).push(build);
+
+      if(scenarioShowsTiming(sc)){
         const timing=cardTool(card,"timing-toggle",'<rect x="1" y="1" width="7" height="2.5" rx="1" fill="currentColor"/><rect x="4" y="4.75" width="8" height="2.5" rx="1" fill="currentColor"/><rect x="8" y="8.5" width="7" height="2.5" rx="1" fill="currentColor"/>',
           ()=>setViewPrefs({timing:!viewPrefs.timing}));
         timing.setAttribute("aria-label","Timing");
@@ -2113,6 +2136,10 @@
       return label || (arm===-1 ? 'No matching outcome' : 'Branch '+(arm+1));
     }
     // Timing describes observed execution. Guard paths describe source control flow.
+    // Timing bars help only when more than one visible step ran.
+    function scenarioShowsTiming(sc){
+      return sc.steps.filter(step=>!step.isLifecycle && !((step.isBranchBinding || step.isValueMerge) && step.status!=='failed')).length>1;
+    }
     function bindScenarioFlow(drill,sc){
       const list=drill.querySelector('.step-list'),byIndex=new Map(sc.steps.map(step=>[step.index,step]));
       const rows=new Map(Array.from(list.children,row=>[row.dataset.step,row]));
@@ -2120,7 +2147,7 @@
         ...sc.steps.filter(step=>['passed','failed'].includes(step.status)).map(step=>
           Number.isFinite(step.offsetMs) && Number.isFinite(step.durationMs) ? Math.max(0,step.offsetMs)+Math.max(0,step.durationMs) : 0));
       const chevron='<span class="stw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span>';
-      const showTiming=sc.steps.filter(step=>!step.isLifecycle && !((step.isBranchBinding || step.isValueMerge) && step.status!=='failed')).length>1;
+      const showTiming=scenarioShowsTiming(sc);
       const conditionTitles=new Map(),integratedConditions=new Set();
       for(const step of sc.steps)if(step.arms?.some(arm=>arm==='if' || arm.startsWith('if '))){
         const message=ifTitleMessage(step),row=rows.get(step.stepId),title=row.querySelector('.dn');
@@ -2318,6 +2345,10 @@
     }
     function buildScenarioDrill(sc){
       const p=el("div","drill scenario-drill");p.dataset.focus="";
+      return fillScenarioDrill(p,sc);
+    }
+    // Fills an empty drill in place, so a collapsed card can keep its drill and build the steps on first open.
+    function fillScenarioDrill(p,sc){
       let h='<div class="step-list">';
       for(const s of sc.steps){
         let b="";
