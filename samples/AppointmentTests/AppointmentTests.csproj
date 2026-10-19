@@ -43,10 +43,19 @@
          transitively through Raun. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
+    <!-- The Microsoft collector records which code ran; Raun.Coverage classifies its branches for the
+         report's Coverage view. testconfig.json limits the scope to this sample's own code. -->
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+  </ItemGroup>
+
+  <!-- The platform reads <assembly>.testconfig.json next to the test app. -->
+  <ItemGroup>
+    <None Include="testconfig.json" TargetPath="$(AssemblyName).testconfig.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Raun.Mtp\Raun.Mtp.csproj" />
+    <ProjectReference Include="..\..\src\Raun.Coverage\Raun.Coverage.csproj" PrivateAssets="none" />
     <ProjectReference Include="..\..\src\Raun.Generator\Raun.Generator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>

@@ -26,10 +26,21 @@ internal static class Program
             .AddScoped<ReceptionSession>()
             .AddLogging(logging => logging.AddProvider(new RaunLoggerProvider()))
             .BuildServiceProvider();
+        // The sample always collects coverage so its report has a Coverage view.
+        // testconfig.json limits the scope to this sample's own code.
+        if (!args.Contains("--coverage"))
+        {
+            args = [.. args, "--coverage", "--coverage-output-format", "xml"];
+        }
         return await RaunTestApplication.RunAsync(
             args,
             simulateTime: true,
             services: services,
-            configure: builder => builder.AddTrxReportProvider());
+            configure: builder =>
+            {
+                builder.AddTrxReportProvider();
+                builder.AddCodeCoverageProvider();
+                builder.UseClassifiedCoverage();
+            });
     }
 }

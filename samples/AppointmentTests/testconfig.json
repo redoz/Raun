@@ -1,0 +1,12 @@
+{
+  "codeCoverage": {
+    "Configuration": {
+      "IncludeTestAssembly": true,
+      "CodeCoverage": {
+        "ModulePaths": {
+          "Include": [ ".*AppointmentTests\\.dll$" ]
+        }
+      }
+    }
+  }
+}

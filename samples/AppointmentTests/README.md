@@ -41,10 +41,11 @@ Scenarios run concurrently. A branch that is not taken appears as skipped.
 | Application logs and attachments | [ServiceScenarios](ServiceScenarios.cs) and [Program](Program.cs): capture application ILogger output; [LifecycleDsl](LifecycleDsl.cs): ambient context and a saved reminder |
 | Limits on shared infrastructure | [CapacityScenarios](CapacityScenarios.cs): a pool of two stations and exclusive maintenance |
 | Runner extensions | [Program](Program.cs): register the TRX report provider |
+| Classified coverage | [Program](Program.cs) and [testconfig.json](testconfig.json): collect coverage on every run and limit it to this sample's own code, which fills the report's Coverage view |
 
 These are executable examples. Assertions check the results; they do not just produce a report.
 The authorization handler is local. For real HTTP requests, AppHost startup, tracing, shared access,
-and coverage, continue with [AspireAppointments](../AspireAppointments/README.md).
+and coverage of a separate application, continue with [AspireAppointments](../AspireAppointments/README.md).
 
 ## Try the runner options
 
