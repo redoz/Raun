@@ -23,3 +23,10 @@ derived from the sample. They do not change the sample's actual results.
 
 The scenario-flow checks cover the shared timing axis, observed parallel overlap, joins, nested if/switch
 branches, untaken alternatives, named prerequisites, keyboard navigation and narrow layouts.
+
+`report-perf.cjs` profiles report loading at scale. It clones the sample's scenarios to the requested
+count, renders them with the current template, and prints time to settled, Chromium's script, layout
+and style totals, and CPU time by function (medians over the runs). CPU profiles land in the output
+directory (default: artifacts/report-perf) for a closer look in DevTools:
+
+    node test/Browser/report-perf.cjs /absolute/path/to/raun-report.html --scenarios 300 --runs 3
