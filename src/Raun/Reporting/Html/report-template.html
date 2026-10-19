@@ -139,6 +139,13 @@
   .scenario-status.not-taken{background:var(--faint)}
   .card-head .name{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0;font-size:14px;font-weight:500}.scenario-title{min-width:0;overflow-wrap:anywhere}.card-head .report-meta{max-width:40%}
   .card-head .dur{flex:none;white-space:nowrap;text-align:right}
+  .card-head:has(>.card-tools){grid-template-columns:12px 12px minmax(0,1fr) max-content max-content}
+  .card-tools{display:inline-flex;gap:2px}
+  .card.collapsed .card-tools{display:none}
+  .card-tool{display:grid;place-items:center;padding:3px 5px;border:1px solid transparent;border-radius:4px;background:none;color:var(--muted);line-height:0;cursor:pointer}
+  .card-tool:hover{color:var(--ink);border-color:var(--border)}
+  .card-tool[aria-pressed="true"]{color:var(--ink);border-color:var(--border-strong)}
+  .card-tool:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
   .card-body{padding:0 0 0 20px}
   @media(max-width:650px){
     .appbar{padding:8px 12px}.run-summary,.run-summary-items,#report-tabs{gap:4px}
@@ -591,6 +598,10 @@
   .gantt-bar{position:absolute;inset-block:0;min-width:2px;background:var(--muted);opacity:.12;pointer-events:none}
   .status-failed .gantt-bar{background:var(--fail);opacity:.14}
   .dependency-related .gantt-bar{opacity:.22}
+  /* queue time: released by its prerequisites, not yet started */
+  .gantt-wait{position:absolute;inset-block:0;pointer-events:none;opacity:.35;background:repeating-linear-gradient(135deg,var(--muted) 0 1px,transparent 1px 4px)}
+  .gantt-wait.is-hovered{opacity:.6}
+  :root.timing-off :is(.gantt-bar,.gantt-wait,.gantt-joins){visibility:hidden}
   .step-head .step-duration{display:inline-block;min-width:48px;text-align:right}
   .step-prerequisites{grid-row:4;display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 9px;grid-column:3/-1;margin-top:6px;color:var(--muted);font:12px/1.5 var(--sans);min-width:0}
   .predecessor-link{background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;text-decoration-color:var(--border-strong);text-underline-offset:2px;font:inherit;text-align:left;cursor:pointer;overflow-wrap:anywhere}
@@ -687,6 +698,35 @@
     // Remember scenario expansion while the user switches views. Failed scenarios start open.
     const expandedFor = new Map();
     const isExpanded = (sc) => expandedFor.has(sc.scenarioId) ? expandedFor.get(sc.scenarioId) : sc.status === "failed";
+    // Viewer layout choices (timing shown, resource lanes collapsed), shared by every scenario and
+    // remembered in this browser. Storage can be missing or blocked: the defaults still render.
+    const VIEW_PREFS_KEY="raun.report.view";
+    const viewPrefs={timing:true,lanesCollapsed:false};
+    try{Object.assign(viewPrefs,JSON.parse(localStorage.getItem(VIEW_PREFS_KEY) || "{}"));}catch{}
+    document.documentElement.classList.toggle("timing-off",!viewPrefs.timing);
+    function setViewPrefs(next){
+      Object.assign(viewPrefs,next);
+      try{localStorage.setItem(VIEW_PREFS_KEY,JSON.stringify(viewPrefs));}catch{}
+      document.documentElement.classList.toggle("timing-off",!viewPrefs.timing);
+      document.dispatchEvent(new Event("raun-view"));
+    }
+    // A control inside the card heading: acts on its own, never expands or collapses the scenario.
+    function cardTool(card,cls,svgPath,onClick){
+      const button=el("button","card-tool "+cls);button.type="button";
+      button.innerHTML='<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">'+svgPath+'</svg>';
+      button.addEventListener("click",event=>{event.stopPropagation();onClick();});
+      button.addEventListener("keydown",event=>{if(event.key==="Enter" || event.key===" ")event.stopPropagation();});
+      const head=card.querySelector(".card-head");
+      let tools=head.querySelector(".card-tools");
+      if(!tools){tools=el("span","card-tools");head.insertBefore(tools,head.querySelector(".dur"));}
+      tools.appendChild(button);
+      return button;
+    }
+    // Listen for view changes while the node is on the page; a re-rendered report drops the old one.
+    function onViewChange(node,update){
+      const listener=()=>{if(node.isConnected)update();else document.removeEventListener("raun-view",listener);};
+      document.addEventListener("raun-view",listener);
+    }
     function setExpanded(sc, on){
       expandedFor.set(sc.scenarioId, on);
       const card = report.querySelector('.card[data-scenario="' + CSS.escape(sc.scenarioId) + '"]');
@@ -1678,13 +1718,23 @@
         }
         panel.configureCompact=owner=>{
           const sheet=owner.querySelector('.scenario-sheet');
+          // Lanes that fit show inline unless the viewer collapsed them; lanes that do not fit collapse
+          // to the activity column unless the viewer expanded this scenario's (then they scroll).
+          let expanded=false;
+          const toggle=cardTool(owner.closest('.card'),'matrix-toggle','',()=>{
+            const collapse=!sheet.classList.contains('matrix-compact');
+            expanded=!collapse;setViewPrefs({lanesCollapsed:collapse});
+          });
           const update=()=>{
-            const compact=owner.clientWidth<430+112*resources.size+20;
+            const fits=owner.clientWidth>=430+112*resources.size+20;
+            const compact=viewPrefs.lanesCollapsed || !fits && !expanded;
+            toggle.setAttribute('aria-label',compact ? 'Expand resources' : 'Collapse resources');
+            toggle.querySelector('svg').innerHTML='<path d="'+(compact ? 'M9 2l-4 4 4 4M15 2l-4 4 4 4' : 'M1 2l4 4-4 4M7 2l4 4-4 4')+'" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
             sheet.classList.toggle('matrix-compact',compact);
             sheet.style.setProperty('--matrix-columns',compact ? 'minmax(0,1fr) 48px' : `minmax(430px,1fr) repeat(${resources.size},112px)`);
             sheet.style.setProperty('--matrix-min-width',compact ? '0px' : (430+112*resources.size)+'px');
           };
-          const observer=new ResizeObserver(update);observer.observe(owner);update();
+          const observer=new ResizeObserver(update);observer.observe(owner);update();onViewChange(owner,update);
         };
       }
       renderColumns();return panel;
@@ -1751,7 +1801,13 @@
       // opener for the pre-expand pass: open the drill focused on a step
       openers.push({ scenarioId: sc.scenarioId, open: (stepId) => focusStep(stepId, { scroll: false }) });
 
-      bindScenarioFlow(drill,sc);
+      if(bindScenarioFlow(drill,sc)){
+        const timing=cardTool(card,"timing-toggle",'<rect x="1" y="1" width="7" height="2.5" rx="1" fill="currentColor"/><rect x="4" y="4.75" width="8" height="2.5" rx="1" fill="currentColor"/><rect x="8" y="8.5" width="7" height="2.5" rx="1" fill="currentColor"/>',
+          ()=>setViewPrefs({timing:!viewPrefs.timing}));
+        timing.setAttribute("aria-label","Timing");
+        const update=()=>timing.setAttribute("aria-pressed",String(viewPrefs.timing));
+        update();onViewChange(timing,update);
+      }
       if(!workspace)installScenarioMatrix(card,head,body,drillHost,sc,drill);
       return card;
     }
@@ -2138,6 +2194,14 @@
           const left='min('+(100*start/scale)+'%,calc(100% - 2px))';
           bar.style.left=left;bar.style.width=(100*duration/scale)+'%';
           bar.style.maxWidth='calc(100% - '+left+')';track.appendChild(bar);
+          // Released when its last prerequisite finished; any later start is queue time, hatched.
+          const released=Math.max(-Infinity,...prerequisites(step).filter(source=>!source.isLifecycle).map(source=>
+            Number.isFinite(source.offsetMs) && Number.isFinite(source.durationMs) ? source.offsetMs+source.durationMs : -Infinity));
+          if(Number.isFinite(released) && start>released){
+            const wait=el('span','gantt-wait');wait.hidden=true;
+            wait.style.left=(100*Math.max(0,released)/scale)+'%';wait.style.width=(100*(start-Math.max(0,released))/scale)+'%';
+            track.appendChild(wait);
+          }
         }
         axis.appendChild(timing.querySelector('.step-duration'));timing.appendChild(axis);row.appendChild(track);
         const panel=el('div','step-prerequisites');panel.hidden=true;panel.id='step-prerequisites-'+(++stepDetailSequence);
@@ -2180,24 +2244,34 @@
             const row=rows.get(join.step.stepId),track=row.querySelector('.gantt-track').getBoundingClientRect();
             const sources=join.sources.map(source=>rows.get(source.stepId)).filter(source=>source.getBoundingClientRect().height>0);
             if(!track.width || !track.height || !sources.length)return {join,drawn:null};
-            const x=row.querySelector('.gantt-bar').getBoundingClientRect().left-origin.left;
+            const start=row.querySelector('.gantt-bar').getBoundingClientRect().left-origin.left;
             const latest=Math.max(...join.sources.map(end));
+            // The sync line marks the release. A visible gap before the bar is queue time.
+            const release=track.left-origin.left+track.width*Math.max(0,Math.min(1,latest/scale));
+            const queued=Number.isFinite(latest) && start-release>=3,x=queued ? release : start;
             const marks=[...sources,row].map(participant=>{
               const head=participant.querySelector('.step-head').getBoundingClientRect();
               const source=byId.get(participant.dataset.step);
               return {source,y:(head.top+head.bottom)/2-origin.top,box:participant.querySelector('.gantt-track').getBoundingClientRect(),
                 kind:participant===row ? 'join' : latest!==-Infinity && end(source)===latest ? 'last' : 'finished'};
             });
-            return {join,drawn:{x,track,marks}};
+            return {join,drawn:{x,start,queued,track,marks}};
           });
           for(const {join,drawn} of plans){
             join.group.replaceChildren();
+            const wait=rows.get(join.step.stepId).querySelector('.gantt-wait');
+            if(wait)wait.hidden=!drawn?.queued;
+            join.wait=wait;
             if(!drawn)continue;
-            const {x,track,marks}=drawn,line=svgEl('g',{'class':'gantt-join-line'});
+            const {x:release,start,queued,track,marks}=drawn,line=svgEl('g',{'class':'gantt-join-line'});
             join.group.appendChild(line);
             const bounded=value=>Math.max(track.left-origin.left,Math.min(track.right-origin.left,value));
             for(const {source,y,box,kind} of marks){
-              line.appendChild(svgEl('path',{'class':'gantt-join-segment'+(kind==='finished' ? '' : ' is-solid'),'data-source-step':source.stepId,d:'M '+x+' '+(box.top-origin.top)+' V '+(box.bottom-origin.top)}));
+              const segment=x=>svgEl('path',{'class':'gantt-join-segment'+(kind==='finished' ? '' : ' is-solid'),'data-source-step':source.stepId,d:'M '+x+' '+(box.top-origin.top)+' V '+(box.bottom-origin.top)});
+              line.appendChild(segment(release));
+              // A queued step: solid at the release, hatched while waiting, solid again where it starts.
+              if(kind==='join' && queued)line.appendChild(segment(start));
+              const x=kind==='join' ? start : release;
               const points=kind==='finished' ? [[x-3,y-3],[x+3,y+3],[x-3,y+3],[x+3,y-3]]
                 : kind==='last' ? [[x-6,y-3],[x-2,y],[x-6,y+3]] : [[x+2,y-3],[x+6,y],[x+2,y+3]];
               const d=points.map(([px,py],index)=>(index===0 || kind==='finished' && index===2 ? 'M ' : 'L ')+bounded(px)+' '+py).join(' ');
@@ -2209,7 +2283,7 @@
         for(const row of rows.values()){observer.observe(row);observer.observe(row.querySelector('.gantt-track'));}
         // The observer draws on first layout; fonts can change metrics later.
         document.fonts?.ready.then(drawJoins);
-        const highlightJoin=selected=>{for(const join of joins)join.group.classList.toggle('is-hovered',join===selected);};
+        const highlightJoin=selected=>{for(const join of joins){join.group.classList.toggle('is-hovered',join===selected);join.wait?.classList.toggle('is-hovered',join===selected);}};
         drill.addEventListener('pointermove',event=>{
           let selected=null,nearest=6;
           for(const join of joins)for(const segment of join.group.querySelectorAll('.gantt-join-segment')){
@@ -2221,6 +2295,7 @@
         drill.addEventListener('pointerleave',()=>highlightJoin(null));
       }
       drill.addEventListener('keydown',event=>{if(event.key==='Escape'){const owner=event.target.closest?.('.step-prerequisites')?.parentElement;owner?.querySelector('.step-gantt').focus({preventScroll:true});for(const row of rows.values()){row.querySelector('.step-prerequisites').hidden=true;row.querySelector('.step-gantt').setAttribute('aria-expanded','false');}clear();}});
+      return showTiming;
     }
     // every step of a scenario, in registration order, with local progressive disclosure
     function evidenceToggleHtml(kind,name,panelId,open){

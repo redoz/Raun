@@ -290,6 +290,48 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
   return false;
  },unrelated.stepId);
  assert.equal(crossesUnrelated,false,'Merge guides leave unrelated rows blank');
+ // A step that queued after its prerequisites: the sync line sits at the release, hatching fills the wait.
+ const queued={...fixture,scenarioId:'queued',displayName:'Queued join',durationMs:1000,steps:[
+  step(0,'Given the database is ready',0,200),
+  step(1,'Given Jane is registered',0,300),
+  step(2,'When booking Jane',600,200,[0,1])
+ ]};
+ await page.goto(render('queued-join',queued)+'?theme=dark');await page.locator('.card-head').click();
+ await page.locator('.card').evaluate(async n=>{await n.scenarioAnimation?.finished;});
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ const sync=await page.evaluate(()=>{
+  const track=id=>document.querySelector('.step-entry[data-step="'+id+'"] .gantt-track').getBoundingClientRect();
+  const box=track('flow-2'),wait=document.querySelector('[data-step="flow-2"] .gantt-wait'),bar=document.querySelector('[data-step="flow-2"] .gantt-bar').getBoundingClientRect();
+  const segments=Array.from(document.querySelectorAll('.gantt-join[data-join-step="flow-2"] .gantt-join-segment'),node=>({step:node.dataset.sourceStep,x:node.getBoundingClientRect().left,solid:getComputedStyle(node).strokeDasharray==='none'}));
+  const marker=document.querySelector('.gantt-join[data-join-step="flow-2"] .gantt-join-marker[data-kind="join"]').getBoundingClientRect();
+  const hatch=wait && !wait.hidden ? wait.getBoundingClientRect() : null;
+  return {release:box.left+box.width*.3,start:bar.left,segments,marker:marker.left,hatch:hatch && {left:hatch.left,right:hatch.right,top:hatch.top,bottom:hatch.bottom},row:{top:box.top,bottom:box.bottom},background:wait && getComputedStyle(wait).backgroundImage};
+ });
+ for(const segment of sync.segments.filter(segment=>segment.step!=='flow-2'))assert.ok(Math.abs(segment.x-sync.release)<1,'Prerequisite rows carry the sync line at the release moment: '+JSON.stringify(sync));
+ const own=sync.segments.filter(segment=>segment.step==='flow-2');
+ assert.equal(own.length,2,'A queued step has a line at the release and another where its bar starts');
+ assert.ok(own.some(segment=>Math.abs(segment.x-sync.release)<1) && own.some(segment=>Math.abs(segment.x-sync.start)<1) && own.every(segment=>segment.solid),'Both of the queued step\'s lines are solid');
+ assert.ok(sync.marker>=sync.start-.5,'The joining arrow points into the bar start, not the release');
+ assert.ok(sync.hatch && Math.abs(sync.hatch.left-sync.release)<1 && Math.abs(sync.hatch.right-sync.start)<1,'Hatching spans the wait from release to start: '+JSON.stringify(sync));
+ assert.ok(sync.hatch.top<=sync.row.top+.5 && sync.hatch.bottom>=sync.row.bottom-.5 && sync.background.includes('repeating-linear-gradient'),'The wait hatch fills the queued row');
+ await page.screenshot({path:path.join(out,'queued-join-dark.png'),fullPage:true});
+
+ // Timing can be hidden for the whole report; the choice survives a reload and leaves the card open.
+ const timingToggle=page.locator('.card-tools .timing-toggle');
+ assert.equal(await timingToggle.getAttribute('aria-pressed'),'true','Timing shows by default');
+ await timingToggle.click();
+ assert.equal(await page.locator('.card').evaluate(n=>n.classList.contains('collapsed')),false,'The timing toggle does not collapse its scenario');
+ assert.equal(await timingToggle.getAttribute('aria-pressed'),'false');
+ const hiddenTiming=await page.evaluate(()=>['.gantt-bar','.gantt-wait','.gantt-joins'].map(selector=>getComputedStyle(document.querySelector(selector)).visibility));
+ assert.deepEqual(hiddenTiming,['hidden','hidden','hidden'],'Hiding timing hides bars, waits and sync lines');
+ await page.reload();await page.locator('.card-head').click();
+ assert.equal(await page.locator('.card-tools .timing-toggle').getAttribute('aria-pressed'),'false','The hidden-timing choice persists');
+ assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.gantt-bar')).visibility),'hidden');
+ await page.locator('.card-tools .timing-toggle').press('Enter');
+ assert.equal(await page.locator('.card').evaluate(n=>n.classList.contains('collapsed')),false,'Keyboard activation does not collapse its scenario either');
+ assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.gantt-bar')).visibility),'visible','Timing comes back');
+ await page.evaluate(()=>localStorage.clear());
+
  const waitlisted=model.scenarios.find(s=>s.displayName==='a patient whose booking waits is put on the waitlist');
  await page.goto(render('real-waitlisted-dark',waitlisted)+'?theme=dark');
  if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();

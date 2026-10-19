@@ -15,6 +15,7 @@ class Node {
  removeAttribute(k){delete this.attributes[k];}
  getAttribute(k){if(k.startsWith('data-'))return this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]??null;return this.attributes[k]??null;}
  appendChild(n){if(n.parentElement)n.parentElement.children=n.parentElement.children.filter(child=>child!==n);n.parentElement=this;this.children.push(n);return n;} append(...nodes){nodes.forEach(n=>this.appendChild(n));}
+ insertBefore(n,ref){if(!ref)return this.appendChild(n);if(n.parentElement)n.parentElement.children=n.parentElement.children.filter(child=>child!==n);n.parentElement=this;this.children.splice(this.children.indexOf(ref),0,n);return n;}
  prepend(...nodes){for(const n of [...nodes].reverse()){if(n.parentElement)n.parentElement.children=n.parentElement.children.filter(child=>child!==n);n.parentElement=this;this.children.unshift(n);}}
  replaceChildren(...nodes){this.children=[];this.append(...nodes);} remove(){if(this.parentElement)this.parentElement.children=this.parentElement.children.filter(n=>n!==this);}
  getBoundingClientRect(){return {x:0,y:0,left:0,top:0,right:0,bottom:0,width:0,height:0};}

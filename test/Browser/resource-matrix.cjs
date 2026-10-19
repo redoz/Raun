@@ -591,6 +591,37 @@ const renderFixture = (name, data) => {
     await page.locator('.tests-narrative').evaluate(node=>node.style.maxWidth='none');
     await page.waitForFunction(()=>!document.querySelector('.matrix-compact'));
     assert.equal(await page.locator('.card .matrix-resource:visible').count(),crowded.resources.length,'Lanes return inline when enough room is available');
+    // The viewer can collapse lanes that fit (room for the steps) and expand lanes that do not (scrolling).
+    const matrixToggle=page.locator('.card-tools .matrix-toggle');
+    assert.equal(await matrixToggle.getAttribute('aria-label'),'Collapse resources');
+    await matrixToggle.click();
+    await page.waitForFunction(()=>document.querySelector('.matrix-compact'));
+    assert.equal(await page.locator('.card').evaluate(n=>n.classList.contains('collapsed')),false,'Collapsing lanes keeps the scenario open');
+    assert.equal(await matrixToggle.getAttribute('aria-label'),'Expand resources');
+    await page.reload();
+    await page.locator('.tests-narrative').evaluate(node=>node.style.maxWidth='none');
+    assert.equal(await page.locator('.matrix-compact').count(),1,'Collapsed lanes stay collapsed after a reload, even with room');
+    await page.locator('.card-tools .matrix-toggle').click();
+    await page.waitForFunction(()=>!document.querySelector('.matrix-compact'));
+    const assertExpandedScrolls=async()=>{
+      const expandedScroll=await page.locator('.card .scenario-scroll').evaluate(node=>({scroll:node.scrollWidth,client:node.clientWidth}));
+      assert.ok(expandedScroll.scroll>expandedScroll.client,'Expanded lanes that do not fit scroll sideways: '+JSON.stringify(expandedScroll));
+      assert.equal(await page.locator('.card .matrix-resource:visible').count(),crowded.resources.length,'Every lane is inline while expanded');
+    };
+    await page.setViewportSize({width:1600,height:1100});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    assert.equal(await page.locator('.matrix-compact').count(),0,'An explicit expand holds when the room shrinks');
+    await assertExpandedScrolls();
+    await page.locator('.card-tools .matrix-toggle').click();
+    await page.waitForFunction(()=>document.querySelector('.matrix-compact'));
+    await page.evaluate(()=>localStorage.clear());await page.reload();
+    await page.waitForFunction(()=>document.querySelector('.matrix-compact'));
+    assert.equal(await page.locator('.card-tools .matrix-toggle').getAttribute('aria-label'),'Expand resources','Lanes that do not fit collapse on their own');
+    await page.locator('.card-tools .matrix-toggle').click();
+    await page.waitForFunction(()=>!document.querySelector('.matrix-compact'));
+    await assertExpandedScrolls();
+    await page.evaluate(()=>localStorage.clear());
+    await page.setViewportSize({width:2400,height:1100});
     const sourceFixture=structuredClone(model);sourceFixture.scenarios=[sourceFixture.scenarios[matrixScenarioIndex]];
     const sourceScenario=sourceFixture.scenarios[0];
     sourceScenario.sourceUrl='https://github.com/example/repo/blob/abc123/tests/Booking.cs#L42';
