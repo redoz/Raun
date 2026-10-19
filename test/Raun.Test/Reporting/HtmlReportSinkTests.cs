@@ -56,7 +56,7 @@ public sealed class HtmlReportSinkTests : IDisposable
         Assert.True(File.Exists(path));
         var html = await File.ReadAllTextAsync(path);
         Assert.Contains("books", html, StringComparison.Ordinal); // scenario name present
-        Assert.Contains("\"scenarioId\": \"scn\"", html, StringComparison.Ordinal); // JSON blob present
+        Assert.Contains("\"scenarioId\":\"scn\"", html, StringComparison.Ordinal); // JSON blob present
         Assert.DoesNotContain("__RAUN_REPORT_JSON__", html, StringComparison.Ordinal); // token replaced
         Assert.Contains("Raun run report", html, StringComparison.Ordinal); // restyled shell present
         Assert.Contains("id=\"report\"", html, StringComparison.Ordinal); // interactive report host present
@@ -251,8 +251,8 @@ public sealed class HtmlReportSinkTests : IDisposable
         await sink.PublishAsync(new RunFinished());
 
         var html = await File.ReadAllTextAsync(path);
-        Assert.Contains("\"waitedMs\": 250", html, StringComparison.Ordinal);
-        Assert.Contains("\"waitedFor\": \"ExclusiveDb\"", html, StringComparison.Ordinal);
+        Assert.Contains("\"waitedMs\":250", html, StringComparison.Ordinal);
+        Assert.Contains("\"waitedFor\":\"ExclusiveDb\"", html, StringComparison.Ordinal);
         Assert.Contains("Queued", html, StringComparison.Ordinal); // the header line's template text
     }
 

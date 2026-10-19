@@ -23,7 +23,6 @@ public sealed class HtmlReportSink : RunEventSink
     private static readonly JsonSerializerOptions SerializerOptions =
         new()
         {
-            WriteIndented = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };

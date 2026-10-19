@@ -23,12 +23,12 @@ public sealed class CoverageEnrichmentTests : IDisposable
         if (coverageFirst) { await sink.SetCoverageAsync(coverage); }
         await sink.PublishAsync(new RunFinished());
         var initial = await File.ReadAllTextAsync(path);
-        var timestamp = initial.Split("\"generatedAtUtc\": \"", StringSplitOptions.None)[1].Split('"')[0];
+        var timestamp = initial.Split("\"generatedAtUtc\":\"", StringSplitOptions.None)[1].Split('"')[0];
         if (!coverageFirst) { await sink.SetCoverageAsync(coverage); }
         var enriched = await File.ReadAllTextAsync(path);
         Assert.Contains("classified fixture", enriched, StringComparison.Ordinal);
         Assert.Contains(timestamp, enriched, StringComparison.Ordinal);
-        Assert.Contains("\"status\": \"available\"", enriched, StringComparison.Ordinal);
+        Assert.Contains("\"status\":\"available\"", enriched, StringComparison.Ordinal);
         Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
     }
 
@@ -55,7 +55,7 @@ public sealed class CoverageEnrichmentTests : IDisposable
         File.Move(backup, path);
         Assert.Equal(original, await File.ReadAllBytesAsync(path));
         await sink.SetCoverageAsync(new ReportCoverage { Status = "available" });
-        Assert.Contains("\"status\": \"available\"", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
+        Assert.Contains("\"status\":\"available\"", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
         Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
     }
 
