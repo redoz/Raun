@@ -27,7 +27,7 @@ const el=(tag,cls)=>Object.assign(new ViewNode(tag),{className:cls || ''});
 const svgEl=(tag,attrs)=>{const node=new ViewNode(tag);for (const [key,value] of Object.entries(attrs || {})) node.setAttribute(key,value);return node;};
 const context = vm.createContext({document,el,svgEl,esc:value=>String(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"),fmtDur:ms=>(ms/1000).toFixed(2)+" s",fmtGen:iso=>iso.replace("T"," ").replace("Z"," UTC")});
 vm.runInContext(template.slice(template.indexOf('const shortName ='),template.indexOf('const collapsedGroups =')),context);
-vm.runInContext(template.slice(start, end) + '\nthis.api = {stepNotesHtml,coverageRank, coverageCompare, coverageSegments, coverageLabels, buildCoverageReport, buildCoverageSource, buildReportViews:typeof buildReportViews === "function" ? buildReportViews : undefined, buildScenarioOutcomes:typeof buildScenarioOutcomes === "function" ? buildScenarioOutcomes : undefined, buildTestsReport:typeof buildTestsReport === "function" ? buildTestsReport : undefined, buildRunHeader:typeof buildRunHeader === "function" ? buildRunHeader : undefined, coverageHierarchy:typeof coverageHierarchy === "function" ? coverageHierarchy : undefined};', context);
+vm.runInContext(template.slice(start, end) + '\nthis.api = {stepNotesHtml,coverageRank, coverageCompare, coverageSegments, coverageLabels, coverageFlow, buildCoverageReport, buildCoverageSource, buildReportViews:typeof buildReportViews === "function" ? buildReportViews : undefined, buildScenarioOutcomes:typeof buildScenarioOutcomes === "function" ? buildScenarioOutcomes : undefined, buildTestsReport:typeof buildTestsReport === "function" ? buildTestsReport : undefined, buildRunHeader:typeof buildRunHeader === "function" ? buildRunHeader : undefined, coverageHierarchy:typeof coverageHierarchy === "function" ? coverageHierarchy : undefined};', context);
 const {coverageRank, coverageCompare, coverageSegments, coverageLabels} = context.api;
 const item = (name, counts, category=4) => ({name, categories:[{category, counts}]});
 
@@ -119,14 +119,14 @@ const detailName=view=>descendants(view).find(n=>n.className==='coverage-preview
 const key=(row,name)=>row.events.keydown({key:name,preventDefault(){}});
 const selectedName=view=>rowName(treeRows(view).find(row=>row.attributes['aria-selected']==='true'));
 
-test('coverage opens on the whole run as a tree with assemblies in name order and no diagram', () => {
+test('coverage opens on the whole run as a tree with assemblies in name order', () => {
   const view=treeView(), rows=treeRows(view);
   assert.deepEqual(rows.map(rowName),['Whole run','Alpha','Zeta']);
   assert.equal(rows[0].attributes['aria-level'],'1');assert.equal(rows[0].attributes['aria-expanded'],'true');
   assert.equal(rows[1].attributes['aria-level'],'2');assert.equal(rows[1].attributes['aria-expanded'],'false');
   assert.equal(rows[0].attributes['aria-selected'],'true');assert.equal(rows[0].attributes.tabindex,'0');assert.equal(rows[1].attributes.tabindex,'-1');
   assert.ok(descendants(view).some(n=>n.attributes.role==='treegrid'));
-  assert.equal(descendants(view).some(n=>n.tag==='svg' || n.className==='coverage-child' || n.className==='coverage-breadcrumbs'),false);
+  assert.equal(descendants(view).some(n=>n.className==='coverage-child' || n.className==='coverage-breadcrumbs'),false);
   assert.equal(detailName(view),'Whole run');
 });
 
@@ -213,6 +213,84 @@ test('the tree width splitter writes the grid property and survives tree changes
   expand(view,'Zeta');rowNamed(view,'Zeta').events.click();
   assert.equal(nodes().find(n=>n.attributes['aria-label']==='Tree width'),splitter);
   assert.equal(splitter.attributes['aria-valuenow'],String(start+2));
+});
+
+test('a selected scope shows its branch flow and a selected method does not', () => {
+  const view=treeView(), svgs=()=>descendants(view).filter(n=>n.tag==='svg');
+  assert.equal(svgs().length,1);
+  assert.match(svgs()[0].attributes['aria-label'],/Logic: 9/);
+  rowNamed(view,'Zeta').events.click();
+  assert.equal(svgs().length,1);
+  assert.match(svgs()[0].attributes['aria-label'],/Argument checks: 3\. Logic: 7/);
+  expand(view,'Alpha','A','Worker');rowNamed(view,'Run(…)').events.click();
+  assert.equal(svgs().length,0);
+});
+
+test('a band filters the tree to scopes with branches in it until it is cleared', () => {
+  const view=treeView(), nodes=()=>descendants(view);
+  const band=label=>nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith(label));
+  band('Logic → Not reached').events.click();
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Zeta']);
+  assert.equal(band('Logic → Not reached').attributes['aria-pressed'],'true');
+  assert.ok(nodes().some(n=>n.className==='coverage-tree-filter' && descendants(n).some(c=>c.textContent==='Logic → Not reached')));
+  expand(view,'Zeta','Z','Billing');
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Zeta','Z','Billing','Charge()','Refund()']);
+  rowNamed(view,'Zeta').events.click();
+  assert.equal(band('Logic → Not reached').attributes['aria-pressed'],'true');
+  band('Logic → Not reached').events.click();
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha','Zeta','Z','Billing','Charge()','Refund()']);
+  assert.equal(nodes().some(n=>n.className==='coverage-tree-filter'),false);
+  rowNamed(view,'Whole run').events.click();
+  band('Logic → All decision paths tested').events.click();
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha']);
+  nodes().find(n=>n.tag==='button' && n.textContent==='Clear filter').events.click();
+  assert.deepEqual(treeRows(view).map(rowName).slice(0,3),['Whole run','Alpha','Zeta']);
+});
+
+test('under a band a method shows only the snippets with branches in that band', () => {
+  const cats=n=>[{category:4,counts:{inventory:n,notReached:n}}];
+  const source=(text,line,outcome)=>({path:'C.cs',startLine:line,text,tokens:[],branches:[{start:0,length:text.length,category:4,outcome}]});
+  const view=context.api.buildCoverageReport({status:'available',categories:cats(2),types:[
+    {assembly:'Api',namespace:'N',name:'N.C',categories:cats(2),methods:[
+      {signature:'N.C.Large()',categories:cats(2),sources:[source('if (other) Skip();',10,'covered'),source('if (large) Skip();',20,'missed')]}
+    ]}
+  ]});
+  const nodes=()=>descendants(view);
+  nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Not reached')).events.click();
+  expand(view,'Api','N','C');rowNamed(view,'Large()').events.click();
+  assert.deepEqual(nodes().filter(n=>n.className==='coverage-snippet-choice').map(n=>n.textContent),['C.cs:20']);
+  assert.ok(nodes().some(n=>n.className==='coverage-branch-match'));
+});
+
+test('branch flow conserves counts directly from each kind to its outcomes', () => {
+  const flow=context.api.coverageFlow([
+    {category:4,counts:{inventory:10,complete:2,incomplete:1,reached:1,partial:2,notReached:2,unknown:2}},
+    {category:0,counts:{inventory:3,exercised:1,unmeasurable:2}}
+  ]);
+  assert.equal(flow.nodes.some(node=>node.id==='all'),false);
+  assert.equal(flow.nodes.filter(node=>node.column===0).reduce((sum,node)=>sum+node.count,0),13);
+  for (const node of flow.nodes) {
+    if (node.column>0) assert.equal(flow.links.filter(link=>link.to===node.id).reduce((sum,link)=>sum+link.count,0),node.count);
+    if (node.column<1) assert.equal(flow.links.filter(link=>link.from===node.id).reduce((sum,link)=>sum+link.count,0),node.count);
+  }
+  assert.equal(flow.nodes.find(node=>node.id==='outcome:unknown').count,2);
+  assert.equal(flow.nodes.find(node=>node.id==='outcome:helper').count,2);
+});
+
+test('branch flow includes unclassified branches and separate partial filter evidence without double counting', () => {
+  const flow=context.api.coverageFlow([{category:null,counts:{inventory:4,evaluated:1,filterPartial:1,filterNotReached:1,notReached:1,unknown:1}}]);
+  assert.equal(flow.nodes.find(node=>node.id==='kind:null').count,4);
+  assert.equal(flow.nodes.filter(node=>node.column===1).reduce((sum,node)=>sum+node.count,0),4);
+});
+
+test('an empty branch inventory produces no flow bands', () => {
+  assert.equal(context.api.coverageFlow([]).links.length,0);
+});
+
+test('band focus suppresses rectangular outline and follows SVG path', () => {
+  assert.match(template,/\.coverage-flow-link:focus\s*\{outline:none/);
+  assert.match(template,/\.coverage-flow-link\[aria-pressed="true"\]\s*\{[^}]*stroke:var\(--ink\)/);
+  assert.match(template,/\.coverage-flow-link:focus-visible\s*\{[^}]*stroke:var\(--ink\)/);
 });
 
 test('method source is rendered as safe text with line numbers and branch marks', () => {

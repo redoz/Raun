@@ -454,6 +454,24 @@
   .coverage-cell-logic .coverage-bar{flex:1;margin:0}
   .coverage-row-score,.coverage-cell-number{font-variant-numeric:tabular-nums;white-space:nowrap}
   .coverage-row-score{min-width:5ch;text-align:right;color:var(--muted)}
+  .coverage-flow{margin:4px 0 16px;max-width:640px}
+  .coverage-flow svg{width:100%;height:auto;display:block}
+  .coverage-flow text{fill:var(--ink);font-size:12px;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+  .coverage-flow .coverage-flow-heading{fill:var(--muted);font-size:11px;stroke:none}
+  .coverage-flow-link{opacity:.32;transition:opacity .12s}
+  .coverage-flow-link:hover{opacity:.7}
+  .coverage-flow-link[aria-pressed="true"]{stroke:var(--ink);stroke-width:1px}
+  .coverage-flow-link:focus{outline:none}
+  .coverage-flow-link:focus-visible{outline:none;stroke:var(--ink);stroke-width:2px}
+  .coverage-flow-kind-0{fill:#8ea6b5}.coverage-flow-kind-1{fill:#b69a82}.coverage-flow-kind-2{fill:#90a79b}
+  .coverage-flow-kind-3{fill:#a59eb4}.coverage-flow-kind-4{fill:#789db1}.coverage-flow-kind-null{fill:#777d87}
+  .coverage-flow-status-complete,.coverage-flow-status-exercise{fill:#70b58b}
+  .coverage-flow-status-partial{fill:#d9ac62}.coverage-flow-status-reached{fill:#74a8b3}
+  .coverage-flow-status-missed{fill:#ce7776}.coverage-flow-status-unknown{fill:#777d87}
+  .coverage-flow-status-helper{fill:url(#coverage-helper-pattern)}
+  .coverage-tree-filter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px 8px 20px;font-size:12px;border-bottom:1px solid var(--border)}
+  .coverage-tree-filter-label{font-weight:600}
+  .coverage-tree-filter button{margin-left:auto;background:none;color:var(--ink);border:1px solid var(--border-strong);padding:3px 8px;font:inherit;cursor:pointer}
   .coverage-kind{padding:12px 0;border-top:1px solid var(--border)}
   .coverage-kind-name{font-size:12px;font-weight:600;margin:0 0 6px}
   .coverage-preview .coverage-scope-score{font-size:13px;color:var(--ink);margin:0 0 12px}
@@ -1036,10 +1054,86 @@
       const compare=(a,b)=>a<b ? -1 : a>b ? 1 : 0;
       return [...nodes].sort((a,b)=>sort.direction*compare(column.value(a),column.value(b)) || compare(name(a),name(b)));
     }
-    function buildCoverageScope(node){
+    function coverageFlow(categories){
+      const outcomes=[
+        {key:"complete",label:"All decision paths tested",count:c=>c.complete || 0},
+        {key:"exercise",label:"Throw / handler entered",count:c=>c.exercised || 0},
+        {key:"partial",label:"Partly executed",count:c=>(c.incomplete || 0)+(c.partial || 0)+(c.filterPartial || 0)},
+        {key:"reached",label:"Expression / filter reached",count:c=>(c.reached || 0)+(c.evaluated || 0)},
+        {key:"missed",label:"Not reached",count:c=>c.notReached || 0},
+        {key:"unknown",label:"Coverage undetermined",count:c=>c.unknown || 0},
+        {key:"helper",label:"Library checks: unavailable",count:c=>c.unmeasurable || 0}
+      ];
+      const nodes=[], links=[];
+      for (const category of categories || []){
+        const c=category.counts, key=category.category;
+        if (!c.inventory) continue;
+        const id="kind:"+key;
+        nodes.push({id,label:key==null ? "Unclassified" : COVERAGE_KINDS[key],count:c.inventory,column:0,key});
+        for (const outcome of outcomes){
+          const count=outcome.count(c);
+          if (count) links.push({from:id,to:"outcome:"+outcome.key,count,key:outcome.key});
+        }
+      }
+      for (const outcome of outcomes){
+        const id="outcome:"+outcome.key, count=links.filter(link=>link.to===id).reduce((sum,link)=>sum+link.count,0);
+        if (count) nodes.push({id,label:outcome.label,count,column:1,key:outcome.key});
+      }
+      return {nodes,links};
+    }
+    function buildCoverageFlow(categories, onSelect, selection){
+      const figure=el("figure","coverage-flow"), flow=coverageFlow(categories), total=flow.nodes.filter(node=>node.column===0).reduce((sum,node)=>sum+node.count,0);
+      if (!total){figure.appendChild(coverageText("p","coverage-legend","No source branches found."));return figure;}
+      const svg=svgEl("svg",{viewBox:"0 0 620 230",preserveAspectRatio:"xMinYMin meet",role:onSelect ? "group" : "img","aria-label":"Source coverage. "+flow.nodes.map(node=>node.label+": "+node.count).join(". ")});
+      const defs=svgEl("defs"), pattern=svgEl("pattern",{id:"coverage-helper-pattern",patternUnits:"userSpaceOnUse",width:6,height:6});
+      pattern.appendChild(svgEl("rect",{width:6,height:6,fill:"#777d87"}));
+      pattern.appendChild(svgEl("path",{d:"M-1 1L1 -1M0 6L6 0M5 7L7 5",stroke:"#adb2bb","stroke-width":1}));
+      defs.appendChild(pattern);svg.appendChild(defs);
+      const positions=new Map(), columns=[0,1].map(column=>flow.nodes.filter(node=>node.column===column));
+      const height=190, gap=12, scale=(height-(Math.max(...columns.map(column=>column.length))-1)*gap)/total;
+      const xs=[0,360], width=12;
+      columns.forEach((column,index)=>{
+        let y=30+(height-column.reduce((sum,node)=>sum+node.count*scale,0)-(column.length-1)*gap)/2;
+        for (const node of column){positions.set(node.id,{x:xs[index],y,height:node.count*scale,incoming:0,outgoing:0});y+=node.count*scale+gap;}
+      });
+      for (const link of flow.links){
+        const from=positions.get(link.from), to=positions.get(link.to), h=link.count*scale;
+        const x1=from.x+width, x2=to.x, middle=(x1+x2)/2, y1=from.y+from.outgoing, y2=to.y+to.incoming;
+        const path=svgEl("path",{d:`M${x1},${y1} C${middle},${y1} ${middle},${y2} ${x2},${y2} L${x2},${y2+h} C${middle},${y2+h} ${middle},${y1+h} ${x1},${y1+h} Z`,
+          class:"coverage-flow-link coverage-flow-status-"+link.key});
+        const title=svgEl("title");
+        title.textContent=flow.nodes.find(node=>node.id===link.from).label+" → "+flow.nodes.find(node=>node.id===link.to).label+": "+link.count.toLocaleString()+" branches";
+        if (onSelect){
+          const selected=selection?.from===link.from && selection?.key===link.key;
+          path.setAttribute("role","button");path.setAttribute("tabindex","0");path.setAttribute("aria-label",title.textContent);
+          path.setAttribute("aria-pressed",String(selected));path.style.cursor="pointer";
+          if (selection) path.style.opacity=selected ? ".75" : ".12";
+          const activate=()=>onSelect({from:link.from,key:link.key,label:flow.nodes.find(node=>node.id===link.from).label+" → "+flow.nodes.find(node=>node.id===link.to).label});
+          path.addEventListener("click",activate);
+          path.addEventListener("keydown",event=>{if (event.key==="Enter" || event.key===" "){event.preventDefault();activate();}});
+        }
+        path.appendChild(title);svg.appendChild(path);from.outgoing+=h;to.incoming+=h;
+      }
+      for (const node of flow.nodes){
+        const position=positions.get(node.id), group=svgEl("g"), cls="coverage-flow-"+(node.column===0 ? "kind-" : "status-")+node.key;
+        group.appendChild(svgEl("rect",{x:position.x,y:position.y,width,height:position.height,class:cls}));
+        const text=svgEl("text",{x:position.x+20,y:position.y+position.height/2+4});
+        text.textContent=node.label+" · "+node.count.toLocaleString();
+        group.appendChild(text);svg.appendChild(group);
+      }
+      ["Branch kind","Coverage outcome"].forEach((label,index)=>{
+        const text=svgEl("text",{x:xs[index],y:14,class:"coverage-flow-heading"});text.textContent=label;svg.appendChild(text);
+      });
+      figure.appendChild(svg);return figure;
+    }
+    function coverageInBand(node,band){
+      return !band || coverageFlow(node.categories).links.some(link=>link.from===band.from && link.key===band.key);
+    }
+    function buildCoverageScope(node,onSelectBand,band){
       const pane=[coverageText("h3","coverage-preview-name",node.name)];
       const counts=coverageCounts(node,4), measurable=counts.decisionMeasurable || 0;
       pane.push(coverageText("p","coverage-scope-score",measurable ? (counts.complete || 0)+" of "+measurable+" logic decisions fully tested" : "No measurable logic decisions in this scope"));
+      pane.push(buildCoverageFlow(node.categories,onSelectBand,band));
       const kinds=coverageKinds(node.categories);
       if(!kinds.length)pane.push(coverageText("p","coverage-caption","No source branches found."));
       for(const category of kinds){
@@ -1049,18 +1143,18 @@
       }
       return pane;
     }
-    function buildCoverageMethod(method, pane, sizes){
-      const sources=method.sources || [];
+    function buildCoverageMethod(method, pane, sizes, band){
+      const sources=(method.sources || []).filter(source=>!band || (source.branches || []).some(branch=>"kind:"+branch.category===band.from && branch.outcome===band.key));
       pane.replaceChildren(coverageText("h3","coverage-preview-name",coverageMethodName(method)));
       const choices=el("div","coverage-snippet-choices"), content=el("div","coverage-preview-content");
       const choose=(source,choice)=>{
         sizes.source=source;
         for (const item of choices.children) item.setAttribute("aria-pressed",String(item===choice));
-        content.replaceChildren(buildCoverageSource(source ? [source] : [],null));
+        content.replaceChildren(buildCoverageSource(source ? [source] : [],band));
       };
       pane.appendChild(choices);pane.appendChild(content);
       for (const source of sources){
-        const choice=coverageText("button","coverage-snippet-choice",source.path.split(/[\\/]/).pop()+":"+coverageSourceLine(source,null));
+        const choice=coverageText("button","coverage-snippet-choice",source.path.split(/[\\/]/).pop()+":"+coverageSourceLine(source,band));
         choice.type="button";choice.addEventListener("click",()=>choose(source,choice));choices.appendChild(choice);
       }
       const chosen=Math.max(0,sources.indexOf(sizes.source));
@@ -1088,25 +1182,38 @@
       if(coverage.status!=="available")return section;
       const root=coverageHierarchy(types);root.categories=coverage.categories || [];
       const parents=new Map(), expanded=new Set([root]), sizes={}, sort={key:"name",direction:1};
-      let selected=root, focusPending=false;
+      let selected=root, focusPending=false, band=null;
       const explorer=el("div","coverage-explorer"), treePane=el("section","coverage-tree-pane"), pane=el("section","coverage-preview");
       const workspace=el("div","coverage-findings");
       workspace.appendChild(treePane);workspace.appendChild(coverageSplitter(workspace,sizes,"Tree width"));workspace.appendChild(pane);
       explorer.appendChild(workspace);body.appendChild(explorer);
       const tree=el("div","coverage-tree");tree.setAttribute("role","treegrid");tree.setAttribute("aria-label","Coverage by scope");
       const head=el("div","coverage-tree-head");head.setAttribute("role","row");tree.appendChild(head);
-      const rows=el("div","coverage-tree-rows");rows.setAttribute("role","rowgroup");tree.appendChild(rows);treePane.appendChild(tree);
+      const rows=el("div","coverage-tree-rows");rows.setAttribute("role","rowgroup");tree.appendChild(rows);
+      const filter=el("div","coverage-tree-filter");treePane.appendChild(tree);
       const visible=()=>{
         const list=[], walk=(node,depth)=>{
           list.push({node,depth});
-          if(expanded.has(node))for(const child of coverageSorted(node.children || [],sort)){parents.set(child,node);walk(child,depth+1);}
+          if(expanded.has(node))for(const child of coverageSorted((node.children || []).filter(child=>coverageInBand(child,band)),sort)){parents.set(child,node);walk(child,depth+1);}
         };
         walk(root,0);return list;
       };
       const select=node=>{
         selected=node;
-        if(node.level==="method")buildCoverageMethod(node,pane,sizes);
-        else pane.replaceChildren(...buildCoverageScope(node));
+        if(node.level==="method")buildCoverageMethod(node,pane,sizes,band);
+        else pane.replaceChildren(...buildCoverageScope(node,chooseBand,band));
+      };
+      const chooseBand=next=>{
+        band=next && !(band?.from===next.from && band?.key===next.key) ? next : null;
+        filter.replaceChildren();
+        if(band){
+          filter.appendChild(coverageText("span","coverage-caption","Filtered to"));filter.appendChild(coverageText("span","coverage-tree-filter-label",band.label));
+          const clear=coverageText("button","","Clear filter");clear.type="button";clear.addEventListener("click",()=>chooseBand(null));filter.appendChild(clear);
+          treePane.replaceChildren(filter,tree);
+        }
+        else treePane.replaceChildren(tree);
+        select(selected);renderRows();
+        pane.querySelector?.(".coverage-flow-link[aria-pressed=true]")?.focus();
       };
       const toggle=node=>{if(expanded.has(node))expanded.delete(node);else expanded.add(node);};
       const renderHead=()=>{
