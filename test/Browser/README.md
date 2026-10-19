@@ -21,6 +21,11 @@ to the output directory.
 Failure, crowded-resource, and differing title/event snapshot cases are clearly named fixtures
 derived from the sample. They do not change the sample's actual results.
 
+`coverage-view.cjs` checks the Coverage view with the sample's own coverage: the whole-run score, the flow's
+width and type size, keyboard drill-down to source, sorting, band filtering, collector notes, and phone layout:
+
+    node test/Browser/coverage-view.cjs /absolute/path/to/raun-report.html
+
 The scenario-flow checks cover the shared timing axis, observed parallel overlap, joins, nested if/switch
 branches, untaken alternatives, named prerequisites, keyboard navigation and narrow layouts.
 
