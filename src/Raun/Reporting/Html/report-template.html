@@ -380,26 +380,10 @@
   @media(max-width:650px){.scenario-sheet{padding-left:12px;min-width:calc(var(--matrix-min-width) + 12px)}.scenario-heading>.card-head{margin-left:-12px}}
 
   .coverage-section{margin:0 0 18px;border:1px solid var(--border-strong);border-radius:0;background:var(--surface);color:var(--ink)}
-  .coverage-section>summary{padding:14px 18px;cursor:pointer;font-weight:600;display:flex;gap:14px;align-items:baseline;list-style:inside}
-  .coverage-section>summary::before{content:"▸";font-size:12px;color:var(--muted)}
-  .coverage-section[open]>summary::before{content:"▾"}
-  .coverage-section>summary::-webkit-details-marker{display:none}
   .coverage-caption{font-size:12px;font-weight:400;color:var(--muted)}
   .coverage-body{padding:0 18px 18px;overflow-x:auto}
-  .coverage-breadcrumbs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px}
-  .coverage-breadcrumbs button{background:none;border:0;border-bottom:1px solid var(--border-strong);padding:4px 0;color:var(--ink);font:inherit;cursor:pointer}
-  .coverage-breadcrumbs button[aria-current]{border-bottom-color:transparent;font-weight:600;cursor:default}
-  .coverage-child{display:grid;grid-template-columns:minmax(260px,1fr) 100px minmax(200px,1fr);align-items:center;gap:18px;width:100%;padding:12px 0;text-align:left;background:none;border:0;border-bottom:1px solid var(--border);border-radius:0;color:var(--ink);cursor:pointer}
-  .coverage-child:hover{background:var(--surface-hover,var(--surface))}
-  .coverage-child-name{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
-  .coverage-child-name::after{content:" →";color:var(--muted)}
-  .coverage-evidence-note{max-width:85ch;font-size:12px;line-height:1.6;color:var(--muted);margin:4px 0 14px}
   .coverage-explorer button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
   .coverage-findings{display:grid;grid-template-columns:minmax(230px,1fr) minmax(0,2fr);gap:22px;border-top:1px solid var(--border)}
-  .coverage-finding-list{max-height:430px;overflow:auto}
-  .coverage-finding{display:flex;flex-direction:column;gap:5px;text-align:left;width:100%;padding:12px 8px;background:none;border:0;border-bottom:1px solid var(--border);color:var(--ink);cursor:pointer}
-  .coverage-finding .coverage-child-name::after{content:none}
-  .coverage-finding[aria-pressed="true"]{background:var(--surface-hover);box-shadow:inset 0 0 0 1px var(--border-strong)}
   .coverage-preview{min-width:0}
   .coverage-preview-content{max-height:500px;overflow:auto}
   .coverage-preview-name{font:12px var(--mono);overflow-wrap:anywhere;margin:18px 0 10px}
@@ -408,7 +392,6 @@
   .coverage-snippet-choice[aria-pressed="true"]{color:var(--ink);border-color:var(--border-strong)}
   .coverage-preview .coverage-source{margin:10px 0}
   .coverage-preview .coverage-source-code{max-height:400px}
-  @media(max-width:800px){.coverage-findings{grid-template-columns:1fr}.coverage-finding-list{max-height:180px}}
   .coverage-source{margin:18px 0}
   .coverage-path-hits{font:11px var(--mono);color:var(--muted);margin:8px 0}
   .coverage-source-path{font-family:var(--mono);font-size:11px;color:var(--muted);overflow-wrap:anywhere}
@@ -427,22 +410,6 @@
   .coverage-source-line.coverage-source-missed{background:rgba(210,54,54,.14)}
   .coverage-source-line.coverage-source-missed .coverage-source-number{color:var(--fail-text)}
   .coverage-syntax-keyword{color:#b6a6df}.coverage-syntax-string{color:#b4be86}.coverage-syntax-number{color:#d4ac80}.coverage-syntax-comment{color:#849a8b}
-  .coverage-table{width:100%;border-collapse:collapse;font-size:12px;text-align:left;margin:10px 0 16px}
-  .coverage-table th{font-weight:600;color:var(--muted);white-space:nowrap}
-  .coverage-table td,.coverage-table th{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
-  .coverage-table td:first-child,.coverage-table th:first-child{padding-left:0}
-  .coverage-metric{display:block;white-space:nowrap;line-height:1.6}
-  .coverage-grid{display:grid;grid-template-columns:minmax(240px,2.2fr) repeat(5,minmax(125px,1fr));gap:14px;align-items:center;min-width:940px}
-  .coverage-grid-head{padding:12px 0;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)}
-  .coverage-type{border-bottom:1px solid var(--border);border-radius:0}
-  .coverage-type>summary,.coverage-method>summary{padding:12px 0;cursor:pointer;list-style:none}
-  .coverage-type>summary::-webkit-details-marker,.coverage-method>summary::-webkit-details-marker{display:none}
-  .coverage-name{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
-  .coverage-name::before{content:"▸ ";color:var(--muted)}
-  details[open]>summary .coverage-name::before{content:"▾ "}
-  .coverage-name .coverage-caption{display:block;font-family:var(--sans);font-size:10px;margin:4px 0 0 13px}
-  .coverage-method{border-top:1px solid var(--border);margin-left:14px}
-  .coverage-method .coverage-name{font-size:11px}
   .coverage-profile{font-size:11px;line-height:1.5;min-width:0}
   .coverage-profile-label{display:block}
   .coverage-profile-note{font-size:10px;color:var(--muted);display:block}
@@ -451,32 +418,7 @@
   .coverage-covered{background:#70b58b}.coverage-incomplete{background:#d9ac62}.coverage-missed{background:#ce7776}
   .coverage-reached,.coverage-evaluated{background:#74a8b3}.coverage-partial,.coverage-filter-partial{background:#b6a076}.coverage-expression-missed,.coverage-filter-missed{background:#a88888}
   .coverage-unknown{background:#777d87}.coverage-helper{background:repeating-linear-gradient(135deg,#777d87 0 2px,transparent 2px 4px)}
-  .coverage-flow{margin:0 0 14px;min-width:880px}
-  .coverage-flow figcaption{font-size:12px;color:var(--muted);margin:8px 0 12px}
-  .coverage-flow svg{width:100%;height:auto;display:block}
-  .coverage-flow text{fill:var(--ink);font-size:12px;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
-  .coverage-flow .coverage-flow-heading{fill:var(--muted);font-size:11px;stroke:none}
-  .coverage-flow-link{opacity:.32;transition:opacity .12s}
-  .coverage-flow-link:hover{opacity:.7}
-  .coverage-flow-link[aria-pressed="true"]{stroke:var(--ink);stroke-width:1px}
-  .coverage-flow-link:focus{outline:none}
-  .coverage-flow-link:focus-visible{outline:none;stroke:var(--ink);stroke-width:2px}
-  .coverage-flow-kind-0{fill:#8ea6b5}.coverage-flow-kind-1{fill:#b69a82}.coverage-flow-kind-2{fill:#90a79b}
-  .coverage-flow-kind-3{fill:#a59eb4}.coverage-flow-kind-4{fill:#789db1}.coverage-flow-kind-null{fill:#777d87}
-  .coverage-flow-status-complete,.coverage-flow-status-exercise{fill:#70b58b}
-  .coverage-flow-status-partial{fill:#d9ac62}.coverage-flow-status-reached{fill:#74a8b3}
-  .coverage-flow-status-missed{fill:#ce7776}.coverage-flow-status-unknown{fill:#777d87}
-  .coverage-flow-status-helper{fill:url(#coverage-helper-pattern)}
-  .coverage-overview{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:18px;min-width:840px;padding:14px 0;border-bottom:1px solid var(--border)}
-  .coverage-overview h3{font-size:12px;margin:0 0 8px;font-weight:600}
-  .coverage-toolbar{display:flex;align-items:center;gap:10px;font-size:12px;margin:16px 0}
-  .coverage-toolbar select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border-strong);border-radius:0;padding:5px 8px}
   .coverage-family{font-size:11px;color:var(--muted);font-weight:500;margin:18px 0 6px}
-  .coverage-unverified>summary,.coverage-counts>summary{font-size:12px;color:var(--muted);cursor:pointer;padding:10px 0}
-  .coverage-counts{margin:0 0 10px}
-  .coverage-legend{font-size:12px;color:var(--muted);line-height:1.6;max-width:80ch;margin:12px 0}
-  .coverage-diagnostics{font-size:12px;color:var(--muted);margin-top:14px}
-  .coverage-diagnostics ul{padding-left:18px;line-height:1.7}
   .coverage-section summary:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 
 
@@ -488,21 +430,8 @@
   .coverage-heading{display:flex;align-items:baseline;gap:12px;padding:12px 20px 0;font-size:13px;font-weight:600}
   .coverage-body{padding:0;overflow:hidden;flex:1;min-height:0;display:flex}
   .coverage-explorer{flex:1;min-width:0;min-height:0;display:flex}
-  .coverage-controls{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 20px;border-bottom:1px solid var(--border);min-height:38px}
-  .coverage-breadcrumbs{margin:0;gap:10px;font-size:13px}
-  .coverage-toolbar{margin:0;font-size:12px;flex-wrap:wrap}
-  .coverage-toolbar button{background:none;color:var(--ink);border:1px solid var(--border-strong);padding:4px 8px;cursor:pointer}
-  .coverage-stage{min-height:0;overflow:auto;padding:8px 20px;display:flex;flex-direction:column}
-  .coverage-flow{min-width:700px;margin:0;min-height:0;flex:1;display:flex;flex-direction:column}
-  .coverage-flow figcaption{margin:0 0 4px;font-size:11px}
-  .coverage-flow svg{width:100%;height:100%;min-height:0;flex:1}
-  .coverage-flow text{font-size:12px}
-  .coverage-flow .coverage-flow-heading{font-size:11px}
-  .coverage-evidence-note{margin:0;font-size:11px}
-  .coverage-children{min-height:0;overflow:hidden}
   .coverage-findings{flex:1;min-width:0;height:100%;min-height:0;grid-template-columns:minmax(260px,var(--coverage-list-size,45%)) 8px minmax(0,1fr);gap:0;border:0;border-top:1px solid var(--border);margin-top:12px}
-  .coverage-offenders,.coverage-preview{min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;padding:12px 20px}
-  .coverage-offenders{padding-right:12px}
+  .coverage-preview{min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;padding:12px 20px}
   .coverage-preview{padding-left:12px;overflow:auto}
   .coverage-tree-pane{min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden}
   .coverage-tree{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;font-size:12px}
@@ -529,13 +458,6 @@
   .coverage-kind-name{font-size:12px;font-weight:600;margin:0 0 6px}
   .coverage-preview .coverage-scope-score{font-size:13px;color:var(--ink);margin:0 0 12px}
   .coverage-family{font-size:13px;font-weight:600;color:var(--ink);margin:0 0 6px}
-  .coverage-offenders>.coverage-caption{margin:0 0 10px;font-size:11px}
-  .coverage-finding-list{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain}
-  .coverage-finding{padding:12px 10px;gap:8px}
-  .coverage-finding .coverage-child-name{font-family:var(--sans);font-size:13px;line-height:1.45}
-  .coverage-finding[aria-pressed="true"]{background:var(--surface-hover);box-shadow:inset 0 0 0 1px var(--border-strong)}
-  .coverage-child{display:flex;flex-wrap:wrap;gap:8px;padding:12px 8px}
-  .coverage-child-name{width:100%;font-size:13px}
   .coverage-preview-name{font:600 13px var(--mono);margin:0 0 10px}
   .coverage-snippet-choices{flex:none;max-height:64px;margin-bottom:10px}
   .coverage-preview-content{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain}
@@ -549,12 +471,10 @@
   .coverage-empty strong{color:var(--ink);font-weight:600;font-size:15px}
   .coverage-splitter{background:var(--surface);position:relative;touch-action:none;outline-offset:-2px}
   .coverage-splitter::after{content:"";position:absolute;background:var(--border-strong)}
-  .coverage-splitter[aria-orientation="horizontal"]{cursor:row-resize;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-  .coverage-splitter[aria-orientation="horizontal"]::after{width:32px;height:2px;left:calc(50% - 16px);top:2px}
   .coverage-splitter[aria-orientation="vertical"]{cursor:col-resize;border-left:1px solid var(--border);border-right:1px solid var(--border)}
   .coverage-splitter[aria-orientation="vertical"]::after{height:32px;width:2px;top:calc(50% - 16px);left:2px}
   .coverage-splitter:hover,.coverage-splitter:focus-visible{background:var(--surface-hover)}
-  @media(max-width:700px){.coverage-controls{align-items:flex-start;flex-direction:column;gap:8px;padding:8px 12px}.coverage-offenders,.coverage-preview{padding:10px}.coverage-findings{grid-template-columns:minmax(160px,var(--coverage-list-size,35%)) 8px minmax(0,1fr)}.coverage-heading{padding-left:12px}}
+  @media(max-width:700px){.coverage-preview{padding:10px}.coverage-findings{grid-template-columns:minmax(160px,var(--coverage-list-size,35%)) 8px minmax(0,1fr)}.coverage-heading{padding-left:12px}}
 
   .report-views,.report-view{flex:1;min-width:0;min-height:0;display:flex;overflow:hidden}
   .report-views>[hidden]{display:none}
@@ -572,9 +492,6 @@
   .report-meta a:hover,.report-meta a:focus-visible{text-decoration:underline}
   @media(prefers-reduced-motion:reduce){.tests-class-name .report-meta,.card-head .name .report-meta{transition:none}.tests-class-name .report-meta>.leading-ellipsis,.card-head .name .report-meta>.leading-ellipsis{transition:none;transform:none}}
   .tests-narrative .group{margin:10px 0 18px}
-  .coverage-scope-children{display:flex;gap:6px;flex-wrap:wrap;width:100%;max-height:76px;overflow:auto}
-  .coverage-scope-children .coverage-child{width:auto;padding:4px 7px;background:var(--surface-2);border:0;font:12px var(--sans)}
-  .coverage-controls{flex-wrap:wrap;justify-content:flex-start}.coverage-toolbar{margin-left:auto}
   .coverage-collection{font-size:12px;font-weight:400;margin-left:auto;max-width:70ch}.coverage-collection>summary{cursor:pointer;color:var(--muted)}
   .coverage-scope-score{font-size:12px;color:var(--muted);margin:0 0 5px}
   @media(max-width:650px){
@@ -583,7 +500,6 @@
     .coverage-findings>.coverage-splitter{display:none}.coverage-tree-pane{border-bottom:1px solid var(--border)}
     .coverage-tree-head,.coverage-row{grid-template-columns:minmax(120px,1fr) 104px 52px;gap:8px;padding:0 10px;min-width:0}
     .coverage-cell-partial{display:none}
-    .coverage-toolbar{margin-left:0}.coverage-stage{padding:6px 12px}
   }
   .flow-branch,.flow-condition{--flow-status-inset:25px}
   .flow-branch{position:relative;min-width:0;border-bottom:1px solid var(--border)}
@@ -972,50 +888,6 @@
           cell.appendChild(coverageBar(segments.filter(segment=>segment.family===family)));
       }
       return cell;
-    }
-    function coverageMetrics(counts){
-      const c = counts || {};
-      const lines = [];
-      if (c.exerciseMeasurable) lines.push(c.exercised + "/" + c.exerciseMeasurable + " exercised");
-      if (c.decisionMeasurable) lines.push(c.complete + "/" + c.decisionMeasurable + " complete · " + (c.incomplete || 0) + " incomplete");
-      if (c.inventory) lines.push(c.inventory + " branches");
-      if (c.reached || c.partial || c.expressionNotReached)
-        lines.push((c.reached || 0) + " reached · " + (c.partial || 0) + " partial · " + (c.expressionNotReached || 0) + " not reached");
-      if (c.evaluated || c.filterPartial || c.filterNotReached) lines.push((c.evaluated || 0) + " filters evaluated · " + (c.filterPartial || 0) + " partly evaluated · " + (c.filterNotReached || 0) + " not evaluated");
-      if (c.unknown) lines.push(c.unknown + " unknown");
-      if (c.unmeasurable) lines.push(c.unmeasurable + " unmeasurable");
-      return lines.length ? lines : ["—"];
-    }
-    function coverageCell(counts){
-      const cell = el("td");
-      for (const text of coverageMetrics(counts)) cell.appendChild(coverageText("span", "coverage-metric", text));
-      return cell;
-    }
-    function coverageSummary(categories){
-      const table = el("table", "coverage-table");
-      const head = el("thead"), row = el("tr");
-      for (const label of ["Kind", "Guards / handlers", "Complete decisions", "Expressions (coarse)", "Filters", "Unknown", "Unmeasurable", "Branches"])
-        row.appendChild(coverageText("th", "", label));
-      head.appendChild(row); table.appendChild(head);
-      const body = el("tbody");
-      const map = new Map((categories || []).map(category => [category.category, category.counts]));
-      const keys = [0, 1, 2, 3, 4];
-      if (map.has(null)) keys.push(null);
-      for (const key of keys){
-        const c = map.get(key) || {}, r = el("tr");
-        r.appendChild(coverageText("th", "", key == null ? "Unclassified" : COVERAGE_KINDS[key]));
-        const values = [
-          c.exerciseMeasurable ? coverageLabels({exerciseMeasurable:c.exerciseMeasurable,exercised:c.exercised},key)[0].text : "—",
-          c.decisionMeasurable ? c.complete + "/" + c.decisionMeasurable + " complete · " + (c.incomplete || 0) + " incomplete" : "—",
-          c.reached || c.partial || c.expressionNotReached ? (c.reached || 0) + " reached · " + (c.partial || 0) + " partial · " + (c.expressionNotReached || 0) + " not reached" : "—",
-          c.evaluated || c.filterPartial || c.filterNotReached ? (c.evaluated || 0) + " evaluated · " + (c.filterPartial || 0) + " partly evaluated · " + (c.filterNotReached || 0) + " not evaluated" : "—",
-          c.unknown || "—", c.unmeasurable || "—", c.inventory || "—"
-        ];
-        for (const value of values) r.appendChild(coverageText("td", "", value));
-        body.appendChild(r);
-      }
-      table.appendChild(body);
-      return table;
     }
     function coverageAggregate(items){
       const categories=new Map();
