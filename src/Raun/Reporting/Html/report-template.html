@@ -455,7 +455,7 @@
   .coverage-row-score,.coverage-cell-number{font-variant-numeric:tabular-nums;white-space:nowrap}
   .coverage-row-score{min-width:5ch;text-align:right;color:var(--muted)}
   .coverage-flow{flex:none;margin:4px 0 16px;overflow-x:auto}
-  .coverage-flow svg{width:620px;height:230px;max-width:none;display:block}
+  .coverage-flow svg{max-width:none;display:block}
   .coverage-flow text{fill:var(--ink);font-size:12px;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
   .coverage-flow .coverage-flow-heading{fill:var(--muted);font-size:11px;stroke:none}
   .coverage-flow-link{opacity:.32;transition:opacity .12s}
@@ -1084,47 +1084,60 @@
     function buildCoverageFlow(categories, onSelect, selection){
       const figure=el("figure","coverage-flow"), flow=coverageFlow(categories), total=flow.nodes.filter(node=>node.column===0).reduce((sum,node)=>sum+node.count,0);
       if (!total){figure.appendChild(coverageText("p","coverage-legend","No source branches found."));return figure;}
-      const svg=svgEl("svg",{viewBox:"0 0 620 230",preserveAspectRatio:"xMinYMin meet",role:onSelect ? "group" : "img","aria-label":"Source coverage. "+flow.nodes.map(node=>node.label+": "+node.count).join(". ")});
-      const defs=svgEl("defs"), pattern=svgEl("pattern",{id:"coverage-helper-pattern",patternUnits:"userSpaceOnUse",width:6,height:6});
-      pattern.appendChild(svgEl("rect",{width:6,height:6,fill:"#777d87"}));
-      pattern.appendChild(svgEl("path",{d:"M-1 1L1 -1M0 6L6 0M5 7L7 5",stroke:"#adb2bb","stroke-width":1}));
-      defs.appendChild(pattern);svg.appendChild(defs);
-      const positions=new Map(), columns=[0,1].map(column=>flow.nodes.filter(node=>node.column===column));
-      const height=190, gap=12, scale=(height-(Math.max(...columns.map(column=>column.length))-1)*gap)/total;
-      const xs=[0,360], width=12;
-      columns.forEach((column,index)=>{
-        let y=30+(height-column.reduce((sum,node)=>sum+node.count*scale,0)-(column.length-1)*gap)/2;
-        for (const node of column){positions.set(node.id,{x:xs[index],y,height:node.count*scale,incoming:0,outgoing:0});y+=node.count*scale+gap;}
-      });
-      for (const link of flow.links){
-        const from=positions.get(link.from), to=positions.get(link.to), h=link.count*scale;
-        const x1=from.x+width, x2=to.x, middle=(x1+x2)/2, y1=from.y+from.outgoing, y2=to.y+to.incoming;
-        const path=svgEl("path",{d:`M${x1},${y1} C${middle},${y1} ${middle},${y2} ${x2},${y2} L${x2},${y2+h} C${middle},${y2+h} ${middle},${y1+h} ${x1},${y1+h} Z`,
-          class:"coverage-flow-link coverage-flow-status-"+link.key});
-        const title=svgEl("title");
-        title.textContent=flow.nodes.find(node=>node.id===link.from).label+" → "+flow.nodes.find(node=>node.id===link.to).label+": "+link.count.toLocaleString()+" branches";
-        if (onSelect){
-          const selected=selection?.from===link.from && selection?.key===link.key;
-          path.setAttribute("role","button");path.setAttribute("tabindex","0");path.setAttribute("aria-label",title.textContent);
-          path.setAttribute("aria-pressed",String(selected));path.style.cursor="pointer";
-          if (selection) path.style.opacity=selected ? ".75" : ".12";
-          const activate=()=>onSelect({from:link.from,key:link.key,label:flow.nodes.find(node=>node.id===link.from).label+" → "+flow.nodes.find(node=>node.id===link.to).label});
-          path.addEventListener("click",activate);
-          path.addEventListener("keydown",event=>{if (event.key==="Enter" || event.key===" "){event.preventDefault();activate();}});
+      const draw=span=>{
+        const svg=svgEl("svg",{viewBox:"0 0 "+span+" 230",width:span,height:230,role:onSelect ? "group" : "img","aria-label":"Source coverage. "+flow.nodes.map(node=>node.label+": "+node.count).join(". ")});
+        const defs=svgEl("defs"), pattern=svgEl("pattern",{id:"coverage-helper-pattern",patternUnits:"userSpaceOnUse",width:6,height:6});
+        pattern.appendChild(svgEl("rect",{width:6,height:6,fill:"#777d87"}));
+        pattern.appendChild(svgEl("path",{d:"M-1 1L1 -1M0 6L6 0M5 7L7 5",stroke:"#adb2bb","stroke-width":1}));
+        defs.appendChild(pattern);svg.appendChild(defs);
+        const positions=new Map(), columns=[0,1].map(column=>flow.nodes.filter(node=>node.column===column));
+        const height=190, gap=12, scale=(height-(Math.max(...columns.map(column=>column.length))-1)*gap)/total;
+        const xs=[0,span-260], width=12;
+        columns.forEach((column,index)=>{
+          let y=30+(height-column.reduce((sum,node)=>sum+node.count*scale,0)-(column.length-1)*gap)/2;
+          for (const node of column){positions.set(node.id,{x:xs[index],y,height:node.count*scale,incoming:0,outgoing:0});y+=node.count*scale+gap;}
+        });
+        for (const link of flow.links){
+          const from=positions.get(link.from), to=positions.get(link.to), h=link.count*scale;
+          const x1=from.x+width, x2=to.x, middle=(x1+x2)/2, y1=from.y+from.outgoing, y2=to.y+to.incoming;
+          const path=svgEl("path",{d:`M${x1},${y1} C${middle},${y1} ${middle},${y2} ${x2},${y2} L${x2},${y2+h} C${middle},${y2+h} ${middle},${y1+h} ${x1},${y1+h} Z`,
+            class:"coverage-flow-link coverage-flow-status-"+link.key});
+          const title=svgEl("title");
+          title.textContent=flow.nodes.find(node=>node.id===link.from).label+" → "+flow.nodes.find(node=>node.id===link.to).label+": "+link.count.toLocaleString()+" branches";
+          if (onSelect){
+            const selected=selection?.from===link.from && selection?.key===link.key;
+            path.setAttribute("role","button");path.setAttribute("tabindex","0");path.setAttribute("aria-label",title.textContent);
+            path.setAttribute("aria-pressed",String(selected));path.style.cursor="pointer";
+            if (selection) path.style.opacity=selected ? ".75" : ".12";
+            const activate=()=>onSelect({from:link.from,key:link.key,label:flow.nodes.find(node=>node.id===link.from).label+" → "+flow.nodes.find(node=>node.id===link.to).label});
+            path.addEventListener("click",activate);
+            path.addEventListener("keydown",event=>{if (event.key==="Enter" || event.key===" "){event.preventDefault();activate();}});
+          }
+          path.appendChild(title);svg.appendChild(path);from.outgoing+=h;to.incoming+=h;
         }
-        path.appendChild(title);svg.appendChild(path);from.outgoing+=h;to.incoming+=h;
+        for (const node of flow.nodes){
+          const position=positions.get(node.id), group=svgEl("g"), cls="coverage-flow-"+(node.column===0 ? "kind-" : "status-")+node.key;
+          group.appendChild(svgEl("rect",{x:position.x,y:position.y,width,height:position.height,class:cls}));
+          const text=svgEl("text",{x:position.x+20,y:position.y+position.height/2+4});
+          text.textContent=node.label+" · "+node.count.toLocaleString();
+          group.appendChild(text);svg.appendChild(group);
+        }
+        ["Branch kind","Coverage outcome"].forEach((label,index)=>{
+          const text=svgEl("text",{x:xs[index],y:14,class:"coverage-flow-heading"});text.textContent=label;svg.appendChild(text);
+        });
+        return svg;
+      };
+      // Fill the pane's width at 1:1 scale so labels keep the body text size.
+      let span=620;figure.appendChild(draw(span));
+      if (typeof ResizeObserver==="function"){
+        const observer=new ResizeObserver(([entry])=>{
+          if (!figure.isConnected){observer.disconnect();return;}
+          const next=Math.max(560,Math.floor(entry.contentRect.width));
+          if (next!==span){span=next;figure.replaceChildren(draw(span));}
+        });
+        observer.observe(figure);
       }
-      for (const node of flow.nodes){
-        const position=positions.get(node.id), group=svgEl("g"), cls="coverage-flow-"+(node.column===0 ? "kind-" : "status-")+node.key;
-        group.appendChild(svgEl("rect",{x:position.x,y:position.y,width,height:position.height,class:cls}));
-        const text=svgEl("text",{x:position.x+20,y:position.y+position.height/2+4});
-        text.textContent=node.label+" · "+node.count.toLocaleString();
-        group.appendChild(text);svg.appendChild(group);
-      }
-      ["Branch kind","Coverage outcome"].forEach((label,index)=>{
-        const text=svgEl("text",{x:xs[index],y:14,class:"coverage-flow-heading"});text.textContent=label;svg.appendChild(text);
-      });
-      figure.appendChild(svg);return figure;
+      return figure;
     }
     function coverageInBand(node,band){
       return !band || coverageFlow(node.categories).links.some(link=>link.from===band.from && link.key===band.key);
