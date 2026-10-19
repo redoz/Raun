@@ -316,6 +316,26 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  assert.ok(sync.hatch.top<=sync.row.top+.5 && sync.hatch.bottom>=sync.row.bottom-.5 && sync.background.includes('repeating-linear-gradient'),'The wait hatch fills the queued row');
  await page.screenshot({path:path.join(out,'queued-join-dark.png'),fullPage:true});
 
+ // Resting on the timing area fades step text after a beat; the title text or leaving brings it back.
+ const titleOpacity=()=>page.evaluate(()=>Number(getComputedStyle(document.querySelector('[data-step="flow-0"] .dn')).opacity));
+ const timingPoint=await page.evaluate(()=>{
+  const track=document.querySelector('[data-step="flow-2"] .gantt-track').getBoundingClientRect(),text=document.createRange();
+  text.selectNodeContents(document.querySelector('[data-step="flow-2"] .dn'));
+  return {x:Math.max(text.getBoundingClientRect().right+40,track.left+track.width*.55),y:(track.top+track.bottom)/2};
+ });
+ await page.mouse.move(timingPoint.x,timingPoint.y);
+ assert.ok(await titleOpacity()>.9,'Sweeping across the timing area does not flash a fade');
+ await page.waitForTimeout(1000);
+ assert.ok(await titleOpacity()<.3,'Resting on the timing area fades step text');
+ assert.ok(await page.evaluate(()=>Number(getComputedStyle(document.querySelector('[data-step="flow-0"] .gantt-bar')).opacity))>.05,'Timing bars stay visible while text fades');
+ const titleText=await page.evaluate(()=>{const text=document.createRange();text.selectNodeContents(document.querySelector('[data-step="flow-2"] .dn'));const box=text.getBoundingClientRect();return {x:box.left+4,y:(box.top+box.bottom)/2};});
+ await page.mouse.move(titleText.x,titleText.y);await page.waitForTimeout(400);
+ assert.ok(await titleOpacity()>.9,'Pointing at a step title brings the text back');
+ await page.mouse.move(timingPoint.x,timingPoint.y);await page.waitForTimeout(1000);
+ assert.ok(await titleOpacity()<.3);
+ await page.mouse.move(5,5);await page.waitForTimeout(400);
+ assert.ok(await titleOpacity()>.9,'Leaving the steps brings the text back at once');
+
  // Timing can be hidden for the whole report; the choice survives a reload and leaves the card open.
  const timingToggle=page.locator('.card-tools .timing-toggle');
  assert.equal(await timingToggle.getAttribute('aria-pressed'),'true','Timing shows by default');

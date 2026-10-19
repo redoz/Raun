@@ -562,6 +562,9 @@
   .gantt-wait{position:absolute;inset-block:0;pointer-events:none;opacity:.35;background:repeating-linear-gradient(135deg,var(--muted) 0 1px,transparent 1px 4px)}
   .gantt-wait.is-hovered{opacity:.6}
   :root.timing-off :is(.gantt-bar,.gantt-wait,.gantt-joins){visibility:hidden}
+  /* gantt focus: resting on the timing fades step text after a beat (back at once on leave) */
+  .scenario-drill .step-head>*{transition:opacity .2s ease}
+  :root:not(.timing-off) .scenario-drill.gantt-focus .step-head>*{opacity:.2;transition:opacity .3s ease .5s}
   .step-head .step-duration{display:inline-block;min-width:48px;text-align:right}
   .step-prerequisites{grid-row:4;display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 9px;grid-column:3/-1;margin-top:6px;color:var(--muted);font:12px/1.5 var(--sans);min-width:0}
   .predecessor-link{background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;text-decoration-color:var(--border-strong);text-underline-offset:2px;font:inherit;text-align:left;cursor:pointer;overflow-wrap:anywhere}
@@ -2339,6 +2342,18 @@
         drill.addEventListener('pointerleave',()=>highlightJoin(null));
       }
       drill.addEventListener('keydown',event=>{if(event.key==='Escape'){const owner=event.target.closest?.('.step-prerequisites')?.parentElement;owner?.querySelector('.step-gantt').focus({preventScroll:true});for(const row of rows.values()){row.querySelector('.step-prerequisites').hidden=true;row.querySelector('.step-gantt').setAttribute('aria-expanded','false');}clear();}});
+      if(showTiming){
+        // Pointing at the timing means reading the bars; pointing at a title's text or a control means
+        // reading that, so the text comes back. Title cells span the row, so test the text itself.
+        const onText=(node,x,y)=>{const text=document.createRange();text.selectNodeContents(node);
+          return Array.from(text.getClientRects()).some(box=>x>=box.left-2 && x<=box.right+2 && y>=box.top-2 && y<=box.bottom+2);};
+        drill.addEventListener('pointermove',event=>{
+          const target=event.target,entry=target.closest?.('.step-entry'),title=target.closest?.('.dn');
+          const reading=!entry || target.closest('button,a,.step-body,.step-notes,.step-prerequisites,.matrix-cell,.matrix-continuation,.matrix-summary-cell') || title && onText(title,event.clientX,event.clientY);
+          drill.classList.toggle('gantt-focus',!reading);
+        });
+        drill.addEventListener('pointerleave',()=>drill.classList.remove('gantt-focus'));
+      }
       return showTiming;
     }
     // every step of a scenario, in registration order, with local progressive disclosure
