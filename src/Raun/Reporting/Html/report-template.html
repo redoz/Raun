@@ -1384,6 +1384,9 @@
       const opacity=start ? getComputedStyle(reveal).opacity : '0';
       card.scenarioAnimation?.cancel();card.scenarioAnimation=null;
       card.classList.toggle('collapsed',!on);card.classList.remove('is-animating');
+      // Work skipped while collapsed (layout-dependent choices) catches up before the reveal is measured.
+      // The reveal keeps a collapsed body laid out, so opening resizes nothing and no observer fires.
+      if(on)for(const node of [card,...card.querySelectorAll('.drill')])for(const open of node.openHooks || [])open();
       if(!reveal)return;
       reveal.inert=!on;
       const end=on ? reveal.scrollHeight : 0,margin=on ? '8px' : '0px';
@@ -1585,6 +1588,9 @@
           }
         });
         const drawConnections=()=>{
+          // A collapsed card has nothing to draw; measuring it would still force a style and layout pass.
+          // Its rows resize when it opens, and the observer draws then.
+          if(drill.closest('.card.collapsed'))return;
           // Measure everything first, then write: interleaving reads and writes forces a layout per row.
           const sheet=drill.getBoundingClientRect();
           if(!sheet.width || !sheet.height)return;
@@ -1624,6 +1630,7 @@
           for(const write of writes)write();
         };
         connectionObserver=new ResizeObserver(drawConnections);
+        (drill.openHooks ||= []).push(drawConnections);
         connectionObserver.observe(drill);
         for(const row of rows){connectionObserver.observe(row);for(const event of row.querySelectorAll(".matrix-event"))connectionObserver.observe(event);}
         // The observer draws on first layout; fonts can change metrics later.
@@ -1725,7 +1732,10 @@
             const collapse=!sheet.classList.contains('matrix-compact');
             expanded=!collapse;setViewPrefs({lanesCollapsed:collapse});
           });
-          const update=()=>{
+          const card=owner.closest('.card');
+          // Collapsed cards hide the lanes, so they wait to be measured until they open.
+          const update=(force=false)=>{
+            if(!force && card.classList.contains('collapsed'))return;
             const fits=owner.clientWidth>=430+112*resources.size+20;
             const compact=viewPrefs.lanesCollapsed || !fits && !expanded;
             toggle.setAttribute('aria-label',compact ? 'Expand resources' : 'Collapse resources');
@@ -1734,7 +1744,8 @@
             sheet.style.setProperty('--matrix-columns',compact ? 'minmax(0,1fr) 48px' : `minmax(430px,1fr) repeat(${resources.size},112px)`);
             sheet.style.setProperty('--matrix-min-width',compact ? '0px' : (430+112*resources.size)+'px');
           };
-          const observer=new ResizeObserver(update);observer.observe(owner);update();onViewChange(owner,update);
+          const observer=new ResizeObserver(()=>update());observer.observe(owner);update(true);onViewChange(owner,update);
+          (card.openHooks ||= []).push(update);
         };
       }
       renderColumns();return panel;
@@ -2236,6 +2247,8 @@
         }
         drill.appendChild(overlay);
         const drawJoins=()=>{
+          // Skip collapsed cards, as drawConnections does: the observer draws when the card opens.
+          if(drill.closest('.card.collapsed'))return;
           // Measure everything first, then write: interleaving reads and writes forces a layout per join.
           const origin=drill.getBoundingClientRect();
           if(!origin.width || !origin.height)return;
@@ -2279,7 +2292,7 @@
             }
           }
         };
-        const observer=new ResizeObserver(drawJoins);observer.observe(drill);
+        const observer=new ResizeObserver(drawJoins);observer.observe(drill);(drill.openHooks ||= []).push(drawJoins);
         for(const row of rows.values()){observer.observe(row);observer.observe(row.querySelector('.gantt-track'));}
         // The observer draws on first layout; fonts can change metrics later.
         document.fonts?.ready.then(drawJoins);
