@@ -27,8 +27,8 @@ const el=(tag,cls)=>Object.assign(new ViewNode(tag),{className:cls || ''});
 const svgEl=(tag,attrs)=>{const node=new ViewNode(tag);for (const [key,value] of Object.entries(attrs || {})) node.setAttribute(key,value);return node;};
 const context = vm.createContext({document,el,svgEl,esc:value=>String(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"),fmtDur:ms=>(ms/1000).toFixed(2)+" s",fmtGen:iso=>iso.replace("T"," ").replace("Z"," UTC")});
 vm.runInContext(template.slice(template.indexOf('const shortName ='),template.indexOf('const collapsedGroups =')),context);
-vm.runInContext(template.slice(start, end) + '\nthis.api = {stepNotesHtml,coverageRank, coverageCompare, coverageSegments, coverageLabels, coverageFlow, buildCoverageReport, buildCoverageSource, buildReportViews:typeof buildReportViews === "function" ? buildReportViews : undefined, buildScenarioOutcomes:typeof buildScenarioOutcomes === "function" ? buildScenarioOutcomes : undefined, buildTestsReport:typeof buildTestsReport === "function" ? buildTestsReport : undefined, buildRunHeader:typeof buildRunHeader === "function" ? buildRunHeader : undefined, coverageHierarchy:typeof coverageHierarchy === "function" ? coverageHierarchy : undefined};', context);
-const {coverageRank, coverageCompare, coverageSegments, coverageLabels, coverageFlow} = context.api;
+vm.runInContext(template.slice(start, end) + '\nthis.api = {stepNotesHtml,coverageRank, coverageCompare, coverageSegments, coverageLabels, buildCoverageReport, buildCoverageSource, buildReportViews:typeof buildReportViews === "function" ? buildReportViews : undefined, buildScenarioOutcomes:typeof buildScenarioOutcomes === "function" ? buildScenarioOutcomes : undefined, buildTestsReport:typeof buildTestsReport === "function" ? buildTestsReport : undefined, buildRunHeader:typeof buildRunHeader === "function" ? buildRunHeader : undefined, coverageHierarchy:typeof coverageHierarchy === "function" ? coverageHierarchy : undefined};', context);
+const {coverageRank, coverageCompare, coverageSegments, coverageLabels} = context.api;
 const item = (name, counts, category=4) => ({name, categories:[{category, counts}]});
 
 test('logic ranking uses complete observable decisions, not expression hits or argument checks', () => {
@@ -103,27 +103,151 @@ test('partly evaluated filters remain separate from expression partial execution
   assert.ok(coverageLabels(counts,1).some(label=>label.text==='1 exception filter partly evaluated'));
 });
 
-test('branch flow conserves counts directly from each kind to its outcomes', () => {
-  const flow=context.api.coverageFlow([
-    {category:4,counts:{inventory:10,complete:2,incomplete:1,reached:1,partial:2,notReached:2,unknown:2}},
-    {category:0,counts:{inventory:3,exercised:1,unmeasurable:2}}
-  ]);
-  assert.equal(flow.nodes.some(node=>node.id==='all'),false);
-  assert.equal(flow.nodes.filter(node=>node.column===0).reduce((sum,node)=>sum+node.count,0),13);
-  for (const node of flow.nodes) {
-    if (node.column>0) assert.equal(flow.links.filter(link=>link.to===node.id).reduce((sum,link)=>sum+link.count,0),node.count);
-    if (node.column<1) assert.equal(flow.links.filter(link=>link.from===node.id).reduce((sum,link)=>sum+link.count,0),node.count);
-  }
-  assert.equal(flow.nodes.find(node=>node.id==='outcome:unknown').count,2);
-  assert.equal(flow.nodes.find(node=>node.id==='outcome:helper').count,2);
+const logic=counts=>[{category:4,counts}];
+const treeView=()=>context.api.buildCoverageReport({status:'available',categories:logic({inventory:9,decisionMeasurable:6,complete:2,incomplete:1,notReached:5}),types:[
+  {assembly:'Zeta',namespace:'Z',name:'Z.Billing',categories:[{category:0,counts:{inventory:3,exerciseMeasurable:3,exercised:1}},...logic({inventory:7,decisionMeasurable:4,incomplete:1,notReached:5})],methods:[
+    {signature:'Z.Billing.Refund()',categories:logic({inventory:3,decisionMeasurable:1,incomplete:1,notReached:1})},
+    {signature:'Z.Billing.Charge()',categories:logic({inventory:4,decisionMeasurable:3,notReached:4})}]},
+  {assembly:'Alpha',namespace:'A',name:'A.Worker',categories:logic({inventory:2,decisionMeasurable:2,complete:2}),methods:[
+    {signature:'A.Worker.Run(int)',categories:logic({inventory:2,decisionMeasurable:2,complete:2}),sources:[{path:'src/Worker.cs',startLine:3,text:'if (x) Run();',tokens:[],branches:[]}]}]}
+]});
+const treeRows=view=>descendants(view).filter(n=>n.attributes.role==='row' && n.className.split(' ').includes('coverage-row'));
+const rowName=row=>descendants(row).find(n=>n.className==='coverage-row-name').textContent;
+const rowNamed=(view,name)=>treeRows(view).find(row=>rowName(row)===name);
+const expand=(view,...names)=>{for (const name of names) descendants(rowNamed(view,name)).find(n=>n.className==='coverage-toggle').events.click();};
+const detailName=view=>descendants(view).find(n=>n.className==='coverage-preview-name').textContent;
+const key=(row,name)=>row.events.keydown({key:name,preventDefault(){}});
+const selectedName=view=>rowName(treeRows(view).find(row=>row.attributes['aria-selected']==='true'));
+
+test('coverage opens on the whole run as a tree with assemblies in name order and no diagram', () => {
+  const view=treeView(), rows=treeRows(view);
+  assert.deepEqual(rows.map(rowName),['Whole run','Alpha','Zeta']);
+  assert.equal(rows[0].attributes['aria-level'],'1');assert.equal(rows[0].attributes['aria-expanded'],'true');
+  assert.equal(rows[1].attributes['aria-level'],'2');assert.equal(rows[1].attributes['aria-expanded'],'false');
+  assert.equal(rows[0].attributes['aria-selected'],'true');assert.equal(rows[0].attributes.tabindex,'0');assert.equal(rows[1].attributes.tabindex,'-1');
+  assert.ok(descendants(view).some(n=>n.attributes.role==='treegrid'));
+  assert.equal(descendants(view).some(n=>n.tag==='svg' || n.className==='coverage-child' || n.className==='coverage-breadcrumbs'),false);
+  assert.equal(detailName(view),'Whole run');
 });
-test('branch flow includes unclassified branches and separate partial filter evidence without double counting', () => {
-  const flow=context.api.coverageFlow([{category:null,counts:{inventory:4,evaluated:1,filterPartial:1,filterNotReached:1,notReached:1,unknown:1}}]);
-  assert.equal(flow.nodes.find(node=>node.id==='kind:null').count,4);
-  assert.equal(flow.nodes.filter(node=>node.column===1).reduce((sum,node)=>sum+node.count,0),4);
+
+test('tree rows show fully tested logic decisions, unreached branches and partly tested decisions', () => {
+  const view=treeView(), zeta=rowNamed(view,'Zeta');
+  const text=descendants(zeta).map(n=>n.textContent || '');
+  assert.ok(text.includes('0/4'));assert.ok(text.includes('5'));assert.ok(text.includes('1'));
+  const bar=descendants(zeta).find(n=>n.className==='coverage-bar');
+  assert.equal(bar.attributes.role,'img');assert.match(bar.attributes['aria-label'],/1 partly tested/);assert.match(bar.attributes['aria-label'],/3 untested/);
+  assert.match(zeta.title,/Argument checks: 1 of 3 argument checks triggered/);
+  assert.ok(descendants(rowNamed(view,'Alpha')).some(n=>n.textContent==='2/2'));
+  const headers=descendants(view).filter(n=>n.attributes.role==='columnheader').map(n=>descendants(n).find(c=>c.tag==='button').textContent);
+  assert.deepEqual(headers,['Scope','Logic decisions','Not reached','Partly tested']);
 });
-test('an empty branch inventory produces no flow bands', () => {
-  assert.equal(context.api.coverageFlow([]).links.length,0);
+
+test('expanding rows reveals the hierarchy and collapsing hides it again', () => {
+  const view=treeView();
+  expand(view,'Zeta','Z','Billing');
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha','Zeta','Z','Billing','Charge()','Refund()']);
+  assert.deepEqual(treeRows(view).map(row=>row.attributes['aria-level']),['1','2','2','3','4','5','5']);
+  assert.equal(rowNamed(view,'Charge()').attributes['aria-expanded'],undefined);
+  assert.equal(rowNamed(view,'Charge()').title.split('\n')[0],'Z.Billing.Charge()');
+  expand(view,'Zeta');
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha','Zeta']);
+  expand(view,'Zeta');
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha','Zeta','Z','Billing','Charge()','Refund()']);
+  assert.equal(selectedName(view),'Whole run');
+});
+
+test('a selected scope shows its per-kind summary and a selected method shows its source', () => {
+  const view=treeView();
+  rowNamed(view,'Zeta').events.click();
+  assert.equal(detailName(view),'Zeta');
+  const nodes=()=>descendants(view);
+  assert.ok(nodes().some(n=>n.className==='coverage-scope-score' && n.textContent==='0 of 4 logic decisions fully tested'));
+  assert.deepEqual(nodes().filter(n=>n.className==='coverage-kind-name').map(n=>n.textContent),['Argument checks · 3 branches','Logic · 7 branches']);
+  assert.equal(nodes().some(n=>n.className==='coverage-source'),false);
+  expand(view,'Alpha','A','Worker');rowNamed(view,'Run(…)').events.click();
+  assert.equal(detailName(view),'A.Worker.Run(…)');
+  assert.ok(nodes().some(n=>n.className==='coverage-source'));
+  assert.ok(nodes().some(n=>n.className==='coverage-syntax-plain' && n.textContent.includes('Run();')));
+  assert.equal(nodes().some(n=>n.className==='coverage-kind-name'),false);
+  assert.equal(rowNamed(view,'Run(…)').attributes['aria-selected'],'true');
+});
+
+test('arrow keys move the selection and expand or collapse rows', () => {
+  const view=treeView();
+  key(treeRows(view)[0],'ArrowDown');assert.equal(selectedName(view),'Alpha');
+  key(rowNamed(view,'Alpha'),'ArrowRight');assert.equal(rowNamed(view,'Alpha').attributes['aria-expanded'],'true');assert.equal(selectedName(view),'Alpha');
+  key(rowNamed(view,'Alpha'),'ArrowRight');assert.equal(selectedName(view),'A');assert.equal(detailName(view),'A');
+  key(rowNamed(view,'A'),'ArrowLeft');assert.equal(selectedName(view),'Alpha');
+  key(rowNamed(view,'Alpha'),'ArrowLeft');assert.equal(rowNamed(view,'Alpha').attributes['aria-expanded'],'false');
+  key(rowNamed(view,'Alpha'),'End');assert.equal(selectedName(view),'Zeta');
+  key(rowNamed(view,'Zeta'),'Enter');assert.equal(rowNamed(view,'Zeta').attributes['aria-expanded'],'true');
+  key(rowNamed(view,'Zeta'),'Home');assert.equal(selectedName(view),'Whole run');
+  assert.equal(treeRows(view).filter(row=>row.attributes.tabindex==='0').length,1);
+});
+
+test('column headers sort each level and a second click reverses the order', () => {
+  const view=treeView(), header=label=>descendants(view).find(n=>n.attributes.role==='columnheader' && descendants(n).some(c=>c.tag==='button' && c.textContent===label));
+  const sortButton=label=>descendants(header(label)).find(n=>n.tag==='button');
+  assert.equal(header('Scope').attributes['aria-sort'],'ascending');
+  expand(view,'Zeta','Z','Billing');
+  sortButton('Not reached').events.click();
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Zeta','Z','Billing','Charge()','Refund()','Alpha']);
+  assert.equal(header('Not reached').attributes['aria-sort'],'descending');assert.equal(header('Scope').attributes['aria-sort'],'none');
+  sortButton('Not reached').events.click();
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha','Zeta','Z','Billing','Refund()','Charge()']);
+  assert.equal(header('Not reached').attributes['aria-sort'],'ascending');
+  sortButton('Logic decisions').events.click();
+  assert.deepEqual(treeRows(view).map(rowName).slice(1,3),['Zeta','Z']);
+  sortButton('Scope').events.click();
+  assert.deepEqual(treeRows(view).map(rowName).slice(0,3),['Whole run','Alpha','Zeta']);
+});
+
+test('the tree width splitter writes the grid property and survives tree changes', () => {
+  const view=treeView(), nodes=()=>descendants(view);
+  assert.equal(nodes().filter(n=>n.attributes.role==='separator').length,1);
+  const splitter=nodes().find(n=>n.attributes['aria-label']==='Tree width');
+  const start=Number(splitter.attributes['aria-valuenow']);
+  splitter.events.keydown({key:'ArrowRight',preventDefault(){}});
+  assert.equal(splitter.attributes['aria-valuenow'],String(start+2));
+  assert.equal(nodes().find(n=>n.className==='coverage-findings').style.getPropertyValue('--coverage-list-size'),(start+2)+'%');
+  expand(view,'Zeta');rowNamed(view,'Zeta').events.click();
+  assert.equal(nodes().find(n=>n.attributes['aria-label']==='Tree width'),splitter);
+  assert.equal(splitter.attributes['aria-valuenow'],String(start+2));
+});
+
+test('method source is rendered as safe text with line numbers and branch marks', () => {
+  const categories=[{category:4,counts:{inventory:1,notReached:1}}];
+  const sources=[{path:'Finance.cs',startLine:12,notExecutedLines:[12],text:'if (flag) return "<script>";',tokens:[{start:0,length:2,kind:'keyword'},{start:17,length:8,kind:'string'}],branches:[{start:0,length:25,category:4,outcome:'missed'}]}];
+  const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'N',name:'N.Finance',categories,methods:[{signature:'N.Finance.Calculate()',categories,sources}]}]});
+  expand(view,'Api','N','Finance');rowNamed(view,'Calculate()').events.click();
+  const nodes=descendants(view);
+  assert.ok(nodes.some(n=>n.className==='coverage-source'));
+  assert.ok(nodes.some(n=>n.className?.includes('coverage-source-missed')));
+  assert.ok(nodes.some(n=>n.textContent==='12'));
+  assert.ok(nodes.some(n=>n.className==='coverage-syntax-keyword' && n.textContent==='if'));
+  assert.ok(nodes.some(n=>n.className?.includes('coverage-source-match')));
+  assert.equal(nodes.some(n=>n.tag==='script'),false);
+});
+
+test('snippet choices switch one source pane and the choice survives reselecting the method', () => {
+  const cats=n=>[{category:4,counts:{inventory:n,notReached:n}}];
+  const source=(text,line)=>({path:'C.cs',startLine:line,text,tokens:[],branches:[{start:0,length:text.length,category:4,outcome:'missed'}]});
+  const view=context.api.buildCoverageReport({status:'available',categories:cats(3),types:[
+    {assembly:'Api',namespace:'N',name:'N.C',categories:cats(3),methods:[
+      {signature:'N.C.Small()',categories:cats(1),sources:[source('if (small) Skip();',10)]},
+      {signature:'N.C.Large()',categories:cats(2),sources:[source('if (large) Skip();',20),source('if (other) Skip();',30)]}
+    ]}
+  ]});
+  const nodes=()=>descendants(view);
+  const text=()=>nodes().filter(n=>n.className?.startsWith('coverage-syntax-')).map(n=>n.textContent).join('');
+  expand(view,'Api','N','C');rowNamed(view,'Large()').events.click();
+  assert.equal(nodes().filter(n=>n.className==='coverage-source-code').length,1);
+  assert.match(text(),/large/);assert.doesNotMatch(text(),/other|small/);
+  nodes().find(n=>n.className==='coverage-snippet-choice' && n.textContent.includes(':30')).events.click();
+  assert.match(text(),/other/);assert.doesNotMatch(text(),/large/);
+  rowNamed(view,'Small()').events.click();
+  assert.match(text(),/small/);assert.doesNotMatch(text(),/large|other/);
+  assert.equal(nodes().filter(n=>n.className==='coverage-source-code').length,1);
 });
 
 test('drill-down groups semantic namespaces and preserves nested type identity', () => {
@@ -141,7 +265,7 @@ test('drill-down groups semantic namespaces and preserves nested type identity',
   assert.equal(assembly.categories[0].counts.inventory,10);
   const method=assembly.children[0].children[0].children[0];
   assert.equal(method.level,'method');
-  assert.equal(context.api.coverageFlow(method.categories).nodes.find(node=>node.id==='outcome:complete').count,1);
+  assert.equal(method.categories[0].counts.complete,1);
   assert.equal(tree.children[1].children[0].name,'(global namespace)');
 });
 
@@ -149,63 +273,6 @@ test('missing namespace metadata is explicit and never inferred from nested type
   const tree=context.api.coverageHierarchy([{assembly:'Api',name:'Business.Outer.Inner',categories:[],methods:[]}]);
   assert.equal(tree.children[0].children[0].name,'(namespace unavailable)');
 });
-test('navigation keeps one diagram and changes scope through method and breadcrumbs', () => {
-  const categories=[{category:4,counts:{inventory:3,complete:1,decisionMeasurable:2,notReached:1,unknown:1}}];
-  const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'Business',name:'Business.Finance',categories,
-    methods:[{signature:'Business.Finance.Calculate()',categories}]}]});
-  const nodes=()=>descendants(view);
-  const children=()=>nodes().filter(node=>node.className==='coverage-child');
-  const diagram=()=>nodes().filter(node=>node.tag==='svg');
-  assert.equal(diagram().length,1);
-  for (const expected of ['Api','Business','Finance','Calculate()']){
-    const button=children().find(node=>node.children[0].textContent===expected);
-    assert.ok(button,expected);
-    button.events.click();
-    assert.equal(diagram().length,1);
-    assert.equal(nodes().find(node=>node.attributes['aria-current']==='page').textContent,expected);
-  }
-  assert.equal(children().length,0); // method scope has no child scopes
-  assert.match(diagram()[0].attributes['aria-label'],/Coverage undetermined: 1/);
-  const band=nodes().find(node=>node.tag==='path' && node.attributes['aria-label']?.startsWith('Logic → Not reached')); band.events.click();
-  assert.equal(nodes().find(node=>node.attributes['aria-current']==='page').textContent,'Calculate()');
-  nodes().find(node=>node.tag==='button' && node.textContent==='Whole run').events.click();
-  nodes().find(n=>n.tag==='button' && n.textContent==='Clear band filter').events.click();
-  assert.equal(children()[0].children[0].textContent,'Api');
-  assert.equal(diagram().length,1);
-});
-test('band selection filters children and ranks by absolute unreached logic count', () => {
-  const cats=n=>[{category:4,counts:{inventory:n+1,notReached:n,decisionMeasurable:n+1,complete:1}}];
-  const view=context.api.buildCoverageReport({status:'available',categories:cats(12),types:[
-    {assembly:'Small',namespace:'N',name:'N.C',categories:cats(2),methods:[{signature:'N.C.Small()',categories:cats(2)}]},
-    {assembly:'Large',namespace:'N',name:'N.C',categories:cats(10),methods:[{signature:'N.C.Large()',categories:cats(10)}]},
-    {assembly:'Covered',namespace:'N',name:'N.C',categories:cats(0),methods:[{signature:'N.C.Covered()',categories:cats(0)}]}
-  ]});
-  const nodes=()=>descendants(view), children=()=>nodes().filter(n=>n.className==='coverage-child');
-  assert.equal(nodes().some(n=>n.tag==='select'),false);
-  assert.deepEqual(children().map(n=>n.children[0].textContent),['Large','Small','Covered']);
-  const band=nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Not reached'));
-  assert.ok(band);band.events.click();
-  assert.deepEqual(nodes().filter(n=>n.className?.split(' ').includes('coverage-finding')).map(n=>n.children[0].textContent),['N.C.Large()','N.C.Small()']);
-  assert.equal(children().length,3); // scope navigation survives a band filter
-  assert.equal(nodes().filter(n=>n.tag==='svg').length,1);
-  nodes().find(n=>n.tag==='button' && n.textContent==='Clear band filter').events.click();
-  assert.equal(children().length,3);
-});
-test('method source is rendered as safe text with line numbers and band matches', () => {
-  const categories=[{category:4,counts:{inventory:1,notReached:1}}];
-  const sources=[{path:'Finance.cs',startLine:12,notExecutedLines:[12],text:'if (flag) return "<script>";',tokens:[{start:0,length:2,kind:'keyword'},{start:17,length:8,kind:'string'}],branches:[{start:0,length:25,category:4,outcome:'missed'}]}];
-  const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'N',name:'N.Finance',categories,methods:[{signature:'N.Finance.Calculate()',categories,sources}]}]});
-  const nodes=()=>descendants(view);
-  for (const name of ['Api','N','Finance','Calculate()']) nodes().find(n=>n.className==='coverage-child' && n.children[0].textContent===name).events.click();
-  const source=nodes().find(n=>n.className==='coverage-source');assert.ok(source);
-  assert.ok(nodes().some(n=>n.className?.includes('coverage-source-missed')));
-  assert.ok(nodes().some(n=>n.textContent==='12'));
-  assert.ok(nodes().some(n=>n.className==='coverage-syntax-keyword' && n.textContent==='if'));
-  assert.equal(nodes().some(n=>n.tag==='script'),false);
-  nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Not reached')).events.click();
-  assert.ok(nodes().some(n=>n.className?.includes('coverage-source-match')));
-});
-
 test('execution ranges distinguish statements on one line and preserve uncovered context', () => {
   const source={path:'C.cs',startLine:1,text:'A(); B(); // note',tokens:[{start:10,length:7,kind:'comment'}],branches:[],execution:[{start:0,length:4,state:'executed'},{start:5,length:4,state:'missed'}]};
   const view=context.api.buildCoverageSource([source],null), nodes=descendants(view);
@@ -214,29 +281,6 @@ test('execution ranges distinguish statements on one line and preserve uncovered
   assert.ok(nodes.some(n=>n.className==='coverage-syntax-comment' && n.textContent==='// note'));
 });
 
-
-test('band findings replace one source pane without changing diagram scope', () => {
-  const cats=n=>[{category:4,counts:{inventory:n,notReached:n}}];
-  const source=(text,line)=>({path:'C.cs',startLine:line,text,tokens:[],branches:[{start:0,length:text.length,category:4,outcome:'missed'}]});
-  const view=context.api.buildCoverageReport({status:'available',categories:cats(3),types:[
-    {assembly:'Api',namespace:'N',name:'N.C',categories:cats(3),methods:[
-      {signature:'N.C.Small()',categories:cats(1),sources:[source('if (small) Skip();',10)]},
-      {signature:'N.C.Large()',categories:cats(2),sources:[source('if (large) Skip();',20),source('if (other) Skip();',30)]}
-    ]}
-  ]});
-  const nodes=()=>descendants(view);
-  const text=()=>nodes().filter(n=>n.className?.startsWith('coverage-syntax-')).map(n=>n.textContent).join('');
-  nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Not reached')).events.click();
-  assert.equal(nodes().filter(n=>n.className==='coverage-source-code').length,1);
-  assert.match(text(),/large/);assert.doesNotMatch(text(),/other|small/);
-  nodes().find(n=>n.className==='coverage-snippet-choice' && n.textContent.includes(':30')).events.click();
-  assert.match(text(),/other/);assert.doesNotMatch(text(),/large/);
-  nodes().find(n=>n.className?.split(' ').includes('coverage-finding') && n.children[0].textContent==='N.C.Small()').events.click();
-  assert.match(text(),/small/);assert.doesNotMatch(text(),/large|other/);
-  assert.equal(nodes().filter(n=>n.className==='coverage-source-code').length,1);
-  assert.equal(nodes().find(n=>n.attributes['aria-current']==='page').textContent,'Whole run');
-  assert.equal(nodes().filter(n=>n.tag==='svg').length,1);
-});
 
 test('path counts show frequencies without guessing semantic arm labels', () => {
   const view=context.api.buildCoverageSource([{path:'C.cs',startLine:1,text:'if (flag) A();',tokens:[],branches:[{start:0,length:14,category:4,outcome:'partial',pathHits:[2,3917]}]}],null);
@@ -255,12 +299,6 @@ test('specific arm execution overrides enclosing mixed expression evidence', () 
   assert.ok(marks.some(n=>n.className==='coverage-execution-missed' && n.children[0].textContent==='Yes()'));
   assert.ok(marks.some(n=>n.className==='coverage-execution-executed' && n.children[0].textContent==='No()'));
   assert.ok(marks.some(n=>n.className==='coverage-execution-partial'));
-});
-
-test('band focus suppresses rectangular outline and follows SVG path', () => {
-  assert.match(template,/\.coverage-flow-link:focus\s*\{outline:none/);
-  assert.match(template,/\.coverage-flow-link\[aria-pressed="true"\]\s*\{[^}]*stroke:var\(--ink\)/);
-  assert.match(template,/\.coverage-flow-link:focus-visible\s*\{[^}]*stroke:var\(--ink\)/);
 });
 
 test('compact run header keeps summary and measured logic score inline', () => {
@@ -299,55 +337,6 @@ test('coverage diagnostics stay in a collapsed disclosure without a global count
   assert.ok(details);assert.equal(details.attributes.open,undefined);
   assert.ok(descendants(details).some(n=>n.textContent==='sample diagnostic'));
   assert.ok(nodes.some(n=>n.className==='coverage-explorer'));
-});
-
-
-test('coverage app starts with the first finding and scope navigation', () => {
-  const categories=[{category:4,counts:{inventory:2,notReached:2}}];
-  const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'N',name:'N.C',categories,methods:[{signature:'N.C.Work()',categories}]}]});
-  assert.equal(view.tag,'section');
-  const nodes=descendants(view);
-  assert.ok(nodes.some(n=>n.className==='coverage-preview-name'&&n.textContent==='N.C.Work()'));
-  assert.equal(nodes.some(n=>n.textContent?.includes('Choose a band')),false);
-  assert.equal(nodes.filter(n=>n.attributes.role==='separator').length,2);
-  const splitter=nodes.find(n=>n.attributes['aria-label']==='Diagram height');
-  const event={key:'ArrowDown',preventDefault(){}};
-  splitter.events.keydown(event);
-  assert.equal(splitter.attributes['aria-valuenow'],'28');
-});
-
-test('coverage band changes only the findings workspace, keeping the scope controls', () => {
-  const categories=[{category:4,counts:{inventory:2,notReached:2}}];
-  const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'N',name:'N.C',categories,methods:[{signature:'N.C.Work()',categories}]}]});
-  const before=descendants(view).find(n=>n.attributes['aria-label']==='Diagram height');
-  descendants(view).find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Not reached')).events.click();
-  const nodes=descendants(view);
-  assert.equal(nodes.find(n=>n.attributes['aria-label']==='Diagram height'),before);
-  assert.ok(nodes.some(n=>n.className==='coverage-preview-name' && n.textContent==='N.C.Work()'));
-  assert.equal(nodes.filter(n=>n.attributes.role==='separator').length,2);
-});
-
-
-test('findings width persists across band changes and clearing the filter', () => {
-  const categories=[{category:4,counts:{inventory:2,notReached:2}}];
-  const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'N',name:'N.C',categories,methods:[{signature:'N.C.Work()',categories}]}]});
-  const nodes=()=>descendants(view);
-  nodes().find(n=>n.attributes['aria-label']==='Findings width').events.keydown({key:'ArrowRight',preventDefault(){}});
-  nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Not reached')).events.click();
-  assert.equal(nodes().find(n=>n.attributes['aria-label']==='Findings width').attributes['aria-valuenow'],'30');
-  nodes().find(n=>n.textContent==='Clear band filter').events.click();
-  assert.equal(nodes().find(n=>n.attributes['aria-label']==='Findings width').attributes['aria-valuenow'],'30');
-});
-
-
-test('resizing writes real CSS properties for the grid, not only divider values', () => {
-  const categories=[{category:4,counts:{inventory:2,notReached:2}}];
-  const view=context.api.buildCoverageReport({status:'available',categories,types:[]});
-  const nodes=descendants(view), explorer=nodes.find(n=>n.className==='coverage-explorer'), findings=nodes.find(n=>n.className==='coverage-findings');
-  nodes.find(n=>n.attributes['aria-label']==='Diagram height').events.keydown({key:'ArrowDown',preventDefault(){}});
-  nodes.find(n=>n.attributes['aria-label']==='Findings width').events.keydown({key:'ArrowRight',preventDefault(){}});
-  assert.equal(explorer.style.getPropertyValue('--coverage-chart-size'),'28%');
-  assert.equal(findings.style.getPropertyValue('--coverage-list-size'),'30%');
 });
 
 

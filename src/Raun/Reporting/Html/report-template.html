@@ -487,7 +487,7 @@
   .coverage-section{margin:0;border:0;width:100%;min-height:0;display:flex;flex-direction:column}
   .coverage-heading{display:flex;align-items:baseline;gap:12px;padding:12px 20px 0;font-size:13px;font-weight:600}
   .coverage-body{padding:0;overflow:hidden;flex:1;min-height:0;display:flex}
-  .coverage-explorer{flex:1;min-width:0;min-height:0;display:grid;grid-template-rows:auto minmax(210px,var(--coverage-chart-size,26%)) 8px minmax(0,1fr)}
+  .coverage-explorer{flex:1;min-width:0;min-height:0;display:flex}
   .coverage-controls{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 20px;border-bottom:1px solid var(--border);min-height:38px}
   .coverage-breadcrumbs{margin:0;gap:10px;font-size:13px}
   .coverage-toolbar{margin:0;font-size:12px;flex-wrap:wrap}
@@ -500,10 +500,34 @@
   .coverage-flow .coverage-flow-heading{font-size:11px}
   .coverage-evidence-note{margin:0;font-size:11px}
   .coverage-children{min-height:0;overflow:hidden}
-  .coverage-findings{height:100%;min-height:0;grid-template-columns:minmax(210px,var(--coverage-list-size,28%)) 8px minmax(0,1fr);gap:0;border:0}
+  .coverage-findings{flex:1;min-width:0;height:100%;min-height:0;grid-template-columns:minmax(260px,var(--coverage-list-size,45%)) 8px minmax(0,1fr);gap:0;border:0;border-top:1px solid var(--border);margin-top:12px}
   .coverage-offenders,.coverage-preview{min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;padding:12px 20px}
   .coverage-offenders{padding-right:12px}
-  .coverage-preview{padding-left:12px}
+  .coverage-preview{padding-left:12px;overflow:auto}
+  .coverage-tree-pane{min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+  .coverage-tree{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;font-size:12px}
+  .coverage-tree-head,.coverage-row{display:grid;grid-template-columns:minmax(160px,1fr) minmax(120px,170px) 76px 84px;align-items:center;gap:12px;padding:0 14px 0 20px;min-width:480px}
+  .coverage-tree-head{position:sticky;top:0;z-index:1;background:var(--surface);border-bottom:1px solid var(--border-strong)}
+  .coverage-tree-head button{background:none;border:0;padding:9px 0;font:inherit;font-size:11px;color:var(--muted);cursor:pointer;width:100%;text-align:inherit}
+  .coverage-tree-head button:hover,.coverage-tree-heading[aria-sort="ascending"] button,.coverage-tree-heading[aria-sort="descending"] button{color:var(--ink)}
+  .coverage-tree-heading[aria-sort="ascending"] button::after{content:" ↑"}.coverage-tree-heading[aria-sort="descending"] button::after{content:" ↓"}
+  .coverage-tree-heading.coverage-cell-missed,.coverage-tree-heading.coverage-cell-partial,.coverage-cell-number{text-align:right}
+  .coverage-row{min-height:30px;border-bottom:1px solid var(--border);cursor:pointer}
+  .coverage-row:hover{background:var(--surface-hover)}
+  .coverage-row[aria-selected="true"]{background:var(--surface-hover);box-shadow:inset 3px 0 var(--ring)}
+  .coverage-row:focus{outline:none}.coverage-row:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+  .coverage-cell{min-width:0}
+  .coverage-cell-name{display:flex;align-items:center;gap:4px;padding-left:calc(var(--depth,0) * 16px)}
+  .coverage-toggle{flex:none;width:16px;font-size:13px;color:var(--muted);text-align:center;user-select:none}
+  .coverage-row-name{font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .coverage-row[aria-level="1"] .coverage-row-name{font-family:var(--sans);font-weight:600}
+  .coverage-cell-logic{display:flex;align-items:center;gap:8px}
+  .coverage-cell-logic .coverage-bar{flex:1;margin:0}
+  .coverage-row-score,.coverage-cell-number{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .coverage-row-score{min-width:5ch;text-align:right;color:var(--muted)}
+  .coverage-kind{padding:12px 0;border-top:1px solid var(--border)}
+  .coverage-kind-name{font-size:12px;font-weight:600;margin:0 0 6px}
+  .coverage-preview .coverage-scope-score{font-size:13px;color:var(--ink);margin:0 0 12px}
   .coverage-family{font-size:13px;font-weight:600;color:var(--ink);margin:0 0 6px}
   .coverage-offenders>.coverage-caption{margin:0 0 10px;font-size:11px}
   .coverage-finding-list{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain}
@@ -555,8 +579,10 @@
   .coverage-scope-score{font-size:12px;color:var(--muted);margin:0 0 5px}
   @media(max-width:650px){
     body:has(.report-views) .appbar{padding:8px 12px}.tests-narrative{padding:10px 12px 20px}
-    .coverage-findings{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(100px,30%) minmax(0,1fr)}
-    .coverage-findings>.coverage-splitter{display:none}.coverage-offenders{border-bottom:1px solid var(--border)}
+    .coverage-findings{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(160px,45%) minmax(0,1fr)}
+    .coverage-findings>.coverage-splitter{display:none}.coverage-tree-pane{border-bottom:1px solid var(--border)}
+    .coverage-tree-head,.coverage-row{grid-template-columns:minmax(120px,1fr) 104px 52px;gap:8px;padding:0 10px;min-width:0}
+    .coverage-cell-partial{display:none}
     .coverage-toolbar{margin-left:0}.coverage-stage{padding:6px 12px}
   }
   .flow-branch,.flow-condition{--flow-status-inset:25px}
@@ -1088,147 +1114,91 @@
     function coverageMethodName(method){
       return method.signature==="<top-level-statements-entry-point>" ? "Top-level code" : method.signature.replace(/\(.+\)$/, "(…)");
     }
-    function coverageMethods(node){
-      return node.level==="method" ? [node] : (node.children || []).flatMap(coverageMethods);
+    function coverageNodeName(node){
+      return node.level==="method" ? coverageMethodName({signature:node.name}) : node.name;
     }
-    function coverageSplitter(parent, vertical, sizes={},label){
-      const splitter=el("div","coverage-splitter"), initial=vertical ? (sizes.list || 28) : (sizes.diagram || 26);
-      const property=vertical ? "--coverage-list-size" : "--coverage-chart-size";
-      const minimum=vertical ? 18 : 16, maximum=vertical ? 50 : 55;
+    function coverageKindLabel(key){
+      return key==null ? "Unclassified" : COVERAGE_KINDS[key];
+    }
+    function coverageKinds(categories){
+      const order=key=>key==null ? COVERAGE_KINDS.length : key;
+      return (categories || []).filter(category=>category.counts?.inventory).sort((a,b)=>order(a.category)-order(b.category));
+    }
+    function coverageLogicBar(counts){
+      const c=counts || {}, measurable=c.decisionMeasurable || 0, complete=c.complete || 0, incomplete=c.incomplete || 0;
+      return coverageBar([
+        {key:"covered",count:complete,label:"fully tested"},
+        {key:"incomplete",count:incomplete,label:"partly tested"},
+        {key:"missed",count:Math.max(0,measurable-complete-incomplete),label:"untested"}
+      ].filter(segment=>segment.count));
+    }
+    function coverageSplitter(parent, sizes={}, label){
+      const splitter=el("div","coverage-splitter"), initial=sizes.list || 45, minimum=20, maximum=75;
       let value=initial, dragging=false;
       splitter.setAttribute("role","separator");splitter.setAttribute("tabindex","0");
-      splitter.setAttribute("aria-orientation",vertical ? "vertical" : "horizontal");
-      splitter.setAttribute("aria-label",label || (vertical ? "Findings width" : "Diagram height"));
+      splitter.setAttribute("aria-orientation","vertical");splitter.setAttribute("aria-label",label);
       splitter.setAttribute("aria-valuemin",minimum);splitter.setAttribute("aria-valuemax",maximum);
-      splitter.setAttribute("aria-valuenow",value);parent.style.setProperty(property,value+"%");
-      const update=next=>{value=Math.max(minimum,Math.min(maximum,next));parent.style.setProperty(property,value+"%");sizes[vertical ? "list" : "diagram"]=value;splitter.setAttribute("aria-valuenow",Math.round(value));};
-      const move=event=>{const bounds=parent.getBoundingClientRect(), top=vertical ? bounds.top : parent.querySelector(".coverage-stage").getBoundingClientRect().top;update(100*(vertical ? (event.clientX-bounds.left)/bounds.width : (event.clientY-top)/bounds.height));};
+      splitter.setAttribute("aria-valuenow",value);parent.style.setProperty("--coverage-list-size",value+"%");
+      const update=next=>{value=Math.max(minimum,Math.min(maximum,next));parent.style.setProperty("--coverage-list-size",value+"%");sizes.list=value;splitter.setAttribute("aria-valuenow",Math.round(value));};
+      const move=event=>{const bounds=parent.getBoundingClientRect();update(100*(event.clientX-bounds.left)/bounds.width);};
       splitter.addEventListener("pointerdown",event=>{if(event.button!==0)return;event.preventDefault();dragging=true;splitter.setPointerCapture(event.pointerId);});
       splitter.addEventListener("pointermove",event=>{if(dragging)move(event);});
       splitter.addEventListener("pointerup",()=>{dragging=false;});splitter.addEventListener("pointercancel",()=>{dragging=false;});
       splitter.addEventListener("keydown",event=>{
-        const down=vertical ? "ArrowRight" : "ArrowDown", up=vertical ? "ArrowLeft" : "ArrowUp";
-        if(event.key===down || event.key===up || event.key==="Home"){
-          event.preventDefault();update(event.key==="Home" ? initial : value+(event.key===down ? 2 : -2));
+        if(event.key==="ArrowRight" || event.key==="ArrowLeft" || event.key==="Home"){
+          event.preventDefault();update(event.key==="Home" ? initial : value+(event.key==="ArrowRight" ? 2 : -2));
         }
       });
       return splitter;
     }
-    function coverageWorkspace(sidebar,pane,sizes){
-      const workspace=el("div","coverage-findings");
-      workspace.appendChild(sidebar);workspace.appendChild(coverageSplitter(workspace,true,sizes));workspace.appendChild(pane);
-      return workspace;
-    }
-    function buildCoverageFindings(current, selection, sizes={}){
-      const sidebar=el("section","coverage-offenders"), pane=el("section","coverage-preview"), workspace=coverageWorkspace(sidebar,pane,sizes);
-      sidebar.appendChild(coverageText("h3","coverage-family",selection ? "Matching methods" : "Methods"));
-      const methods=coverageMethods(current).filter(method=>!selection || coverageFlow(method.categories).links.some(link=>link.from===selection.from && link.key===selection.key));
-      methods.sort((a,b)=>(coverageCounts(b,4).notReached || 0)-(coverageCounts(a,4).notReached || 0) || (coverageCounts(b,4).incomplete || 0)-(coverageCounts(a,4).incomplete || 0) || a.signature.localeCompare(b.signature));
-      sidebar.appendChild(coverageText("p","coverage-caption",methods.length+(methods.length===1 ? " method" : " methods")));
-      const items=el("div","coverage-finding-list");sidebar.appendChild(items);
-      const show=(method,button)=>{
-        sizes.method=method;
-        for (const item of items.children) item.setAttribute("aria-pressed",String(item===button));
-        const sources=(method.sources || []).filter(source=>!selection || (source.branches || []).some(branch=>"kind:"+branch.category===selection.from && branch.outcome===selection.key));
-        pane.replaceChildren(coverageText("h3","coverage-preview-name",coverageMethodName(method)));
-        const choices=el("div","coverage-snippet-choices"), content=el("div","coverage-preview-content");
-        const choose=(source,choice)=>{
-          sizes.source=source;
-          for (const item of choices.children) item.setAttribute("aria-pressed",String(item===choice));
-          content.replaceChildren(buildCoverageSource(source ? [source] : [],selection));
-        };
-        pane.appendChild(choices);pane.appendChild(content);
-        for (const source of sources){
-          const choice=coverageText("button","coverage-snippet-choice",source.path.split(/[\\/]/).pop()+":"+coverageSourceLine(source,selection));
-          choice.type="button";choice.addEventListener("click",()=>choose(source,choice));choices.appendChild(choice);
-        }
-        const chosen=Math.max(0,sources.indexOf(sizes.source));
-        choose(sources[chosen],choices.children[chosen]);
-      };
-      for (const method of methods){
-        const button=el("button","coverage-finding");button.type="button";
-        button.title=method.signature;
-        button.appendChild(coverageText("span","coverage-child-name",coverageMethodName(method)));
-        const matched=selection ? coverageFlow(method.categories).links.find(link=>link.from===selection.from && link.key===selection.key).count : null;
-        button.appendChild(coverageText("span","coverage-caption",selection ? matched+" branch"+(matched===1 ? "" : "es")+" in this band"
-          : (coverageCounts(method,4).notReached || 0)+" logic branches not reached · "+(coverageCounts(method,4).incomplete || 0)+" decisions with untested paths"));
-        button.addEventListener("click",()=>show(method,button));items.appendChild(button);
-      }
-      if (methods.length){const chosen=Math.max(0,methods.indexOf(sizes.method));show(methods[chosen],items.children[chosen]);}
-      else pane.appendChild(coverageText("p","coverage-caption","No methods match this band."));
-      return workspace;
-    }
-    function coverageFlow(categories){
-      const outcomes=[
-        {key:"complete",label:"All decision paths tested",count:c=>c.complete || 0},
-        {key:"exercise",label:"Throw / handler entered",count:c=>c.exercised || 0},
-        {key:"partial",label:"Partly executed",count:c=>(c.incomplete || 0)+(c.partial || 0)+(c.filterPartial || 0)},
-        {key:"reached",label:"Expression / filter reached",count:c=>(c.reached || 0)+(c.evaluated || 0)},
-        {key:"missed",label:"Not reached",count:c=>c.notReached || 0},
-        {key:"unknown",label:"Coverage undetermined",count:c=>c.unknown || 0},
-        {key:"helper",label:"Library checks: unavailable",count:c=>c.unmeasurable || 0}
+    function coverageColumns(){
+      return [
+        {key:"name",label:"Scope",direction:1,value:node=>coverageNodeName(node).toLowerCase()},
+        {key:"logic",label:"Logic decisions",direction:1,value:node=>{const c=coverageCounts(node,4);return c.decisionMeasurable ? (c.complete || 0)/c.decisionMeasurable : Infinity;}},
+        {key:"missed",label:"Not reached",direction:-1,value:node=>coverageCounts(node,4).notReached || 0},
+        {key:"partial",label:"Partly tested",direction:-1,value:node=>coverageCounts(node,4).incomplete || 0}
       ];
-      const nodes=[], links=[];
-      for (const category of categories || []){
-        const c=category.counts, key=category.category;
-        if (!c.inventory) continue;
-        const id="kind:"+key;
-        nodes.push({id,label:key==null ? "Unclassified" : COVERAGE_KINDS[key],count:c.inventory,column:0,key});
-        for (const outcome of outcomes){
-          const count=outcome.count(c);
-          if (count) links.push({from:id,to:"outcome:"+outcome.key,count,key:outcome.key});
-        }
-      }
-      for (const outcome of outcomes){
-        const id="outcome:"+outcome.key, count=links.filter(link=>link.to===id).reduce((sum,link)=>sum+link.count,0);
-        if (count) nodes.push({id,label:outcome.label,count,column:1,key:outcome.key});
-      }
-      return {nodes,links};
     }
-    function buildCoverageFlow(categories, onSelect, selection){
-      const figure=el("figure","coverage-flow"), flow=coverageFlow(categories), total=flow.nodes.filter(node=>node.column===0).reduce((sum,node)=>sum+node.count,0);
-      if (!total){figure.appendChild(coverageText("p","coverage-legend","No source branches found."));return figure;}
-      const svg=svgEl("svg",{viewBox:"0 0 1000 230",preserveAspectRatio:"xMinYMin meet",role:onSelect ? "group" : "img","aria-label":"Source coverage. "+flow.nodes.map(node=>node.label+": "+node.count).join(". ")});
-      const defs=svgEl("defs"), pattern=svgEl("pattern",{id:"coverage-helper-pattern",patternUnits:"userSpaceOnUse",width:6,height:6});
-      pattern.appendChild(svgEl("rect",{width:6,height:6,fill:"#777d87"}));
-      pattern.appendChild(svgEl("path",{d:"M-1 1L1 -1M0 6L6 0M5 7L7 5",stroke:"#adb2bb","stroke-width":1}));
-      defs.appendChild(pattern);svg.appendChild(defs);
-      const positions=new Map(), columns=[0,1].map(column=>flow.nodes.filter(node=>node.column===column));
-      const height=190, gap=12, scale=(height-(Math.max(...columns.map(column=>column.length))-1)*gap)/total;
-      const xs=[18,655], width=12;
-      columns.forEach((column,index)=>{
-        let y=30+(height-column.reduce((sum,node)=>sum+node.count*scale,0)-(column.length-1)*gap)/2;
-        for (const node of column){positions.set(node.id,{x:xs[index],y,height:node.count*scale,incoming:0,outgoing:0});y+=node.count*scale+gap;}
-      });
-      for (const link of flow.links){
-        const from=positions.get(link.from), to=positions.get(link.to), h=link.count*scale;
-        const x1=from.x+width, x2=to.x, middle=(x1+x2)/2, y1=from.y+from.outgoing, y2=to.y+to.incoming;
-        const path=svgEl("path",{d:`M${x1},${y1} C${middle},${y1} ${middle},${y2} ${x2},${y2} L${x2},${y2+h} C${middle},${y2+h} ${middle},${y1+h} ${x1},${y1+h} Z`,
-          class:"coverage-flow-link coverage-flow-status-"+link.key});
-        const title=svgEl("title");
-        title.textContent=flow.nodes.find(node=>node.id===link.from).label+" → "+flow.nodes.find(node=>node.id===link.to).label+": "+link.count.toLocaleString()+" branches";
-        if (onSelect){
-          const selected=selection?.from===link.from && selection?.key===link.key;
-          path.setAttribute("role","button");path.setAttribute("tabindex","0");path.setAttribute("aria-label",title.textContent);
-          path.setAttribute("aria-pressed",String(selected));path.style.cursor="pointer";
-          if (selection) path.style.opacity=selected ? ".75" : ".12";
-          const activate=()=>onSelect({from:link.from,key:link.key,label:flow.nodes.find(node=>node.id===link.from).label+" → "+flow.nodes.find(node=>node.id===link.to).label});
-          path.addEventListener("click",activate);
-          path.addEventListener("keydown",event=>{if (event.key==="Enter" || event.key===" "){event.preventDefault();activate();}});
-        }
-        path.appendChild(title);svg.appendChild(path);from.outgoing+=h;to.incoming+=h;
+    function coverageSorted(nodes,sort){
+      const columns=coverageColumns(), column=columns.find(column=>column.key===sort.key), name=columns[0].value;
+      const compare=(a,b)=>a<b ? -1 : a>b ? 1 : 0;
+      return [...nodes].sort((a,b)=>sort.direction*compare(column.value(a),column.value(b)) || compare(name(a),name(b)));
+    }
+    function buildCoverageScope(node){
+      const pane=[coverageText("h3","coverage-preview-name",node.name)];
+      const counts=coverageCounts(node,4), measurable=counts.decisionMeasurable || 0;
+      pane.push(coverageText("p","coverage-scope-score",measurable ? (counts.complete || 0)+" of "+measurable+" logic decisions fully tested" : "No measurable logic decisions in this scope"));
+      const kinds=coverageKinds(node.categories);
+      if(!kinds.length)pane.push(coverageText("p","coverage-caption","No source branches found."));
+      for(const category of kinds){
+        const kind=el("section","coverage-kind");
+        kind.appendChild(coverageText("h4","coverage-kind-name",coverageKindLabel(category.category)+" · "+category.counts.inventory+(category.counts.inventory===1 ? " branch" : " branches")));
+        kind.appendChild(coverageProfile(category.counts,category.category));pane.push(kind);
       }
-      for (const node of flow.nodes){
-        const position=positions.get(node.id), group=svgEl("g"), cls="coverage-flow-"+(node.column===0 ? "kind-" : "status-")+node.key;
-        group.appendChild(svgEl("rect",{x:position.x,y:position.y,width,height:position.height,class:cls}));
-        const text=svgEl("text",{x:position.x+20,y:position.y+position.height/2+4});
-        text.textContent=node.label+" · "+node.count.toLocaleString();
-        group.appendChild(text);svg.appendChild(group);
+      return pane;
+    }
+    function buildCoverageMethod(method, pane, sizes){
+      const sources=method.sources || [];
+      pane.replaceChildren(coverageText("h3","coverage-preview-name",coverageMethodName(method)));
+      const choices=el("div","coverage-snippet-choices"), content=el("div","coverage-preview-content");
+      const choose=(source,choice)=>{
+        sizes.source=source;
+        for (const item of choices.children) item.setAttribute("aria-pressed",String(item===choice));
+        content.replaceChildren(buildCoverageSource(source ? [source] : [],null));
+      };
+      pane.appendChild(choices);pane.appendChild(content);
+      for (const source of sources){
+        const choice=coverageText("button","coverage-snippet-choice",source.path.split(/[\\/]/).pop()+":"+coverageSourceLine(source,null));
+        choice.type="button";choice.addEventListener("click",()=>choose(source,choice));choices.appendChild(choice);
       }
-      ["Branch kind","Coverage outcome"].forEach((label,index)=>{
-        const text=svgEl("text",{x:xs[index],y:14,class:"coverage-flow-heading"});text.textContent=label;svg.appendChild(text);
-      });
-      figure.appendChild(svg);return figure;
+      const chosen=Math.max(0,sources.indexOf(sizes.source));
+      choose(sources[chosen],choices.children[chosen]);
+    }
+    function coverageRowTitle(node){
+      const lines=node.level==="method" ? [node.signature] : [];
+      for(const category of coverageKinds(node.categories))
+        lines.push(coverageKindLabel(category.category)+": "+coverageLabels(category.counts,category.category).map(label=>label.text).join("; "));
+      return lines.join("\n");
     }
     function buildCoverageReport(coverage){
       if(!coverage)return null;
@@ -1245,44 +1215,81 @@
       const body=el("div","coverage-body");section.appendChild(body);
       if(coverage.status!=="available")return section;
       const root=coverageHierarchy(types);root.categories=coverage.categories || [];
-      let trail=[root],selection=null;const sizes={};
-      const explorer=el("div","coverage-explorer"),breadcrumbs=el("nav","coverage-breadcrumbs"),children=el("nav","coverage-scope-children");
-      breadcrumbs.setAttribute("aria-label","Coverage scope");children.setAttribute("aria-label","Narrow coverage scope");
-      const controls=el("div","coverage-controls"),filter=el("div","coverage-toolbar");
-      controls.appendChild(breadcrumbs);controls.appendChild(filter);controls.appendChild(children);explorer.appendChild(controls);
-      const stage=el("div","coverage-stage"),list=el("div","coverage-children");
-      explorer.appendChild(stage);explorer.appendChild(coverageSplitter(explorer,false,sizes));explorer.appendChild(list);body.appendChild(explorer);
-      const render=()=>{
-        const current=trail[trail.length-1];breadcrumbs.replaceChildren();
-        trail.forEach((node,index)=>{
-          if(index)breadcrumbs.appendChild(coverageText("span","coverage-caption","/"));
-          const button=coverageText("button","",node.name);button.type="button";
-          if(index===trail.length-1)button.setAttribute("aria-current","page");
-          else button.addEventListener("click",()=>{trail=trail.slice(0,index+1);render();});
-          breadcrumbs.appendChild(button);
-        });
-        children.replaceChildren();
-        const scopes=[...(current.children || [])].sort((a,b)=>(coverageCounts(b,4).notReached || 0)-(coverageCounts(a,4).notReached || 0) || (coverageCounts(b,4).incomplete || 0)-(coverageCounts(a,4).incomplete || 0) || (a.name || '').localeCompare(b.name || ''));
-        for(const child of scopes){
-          const button=el("button","coverage-child");button.type="button";
-          button.appendChild(coverageText("span","coverage-child-name",child.name));
-          button.addEventListener("click",()=>{trail.push(child);render();breadcrumbs.querySelectorAll("button")[trail.length-1].focus();});children.appendChild(button);
-        }
-        filter.replaceChildren();
-        if(selection){
-          filter.appendChild(coverageText("span","coverage-caption",selection.label));
-          const clear=coverageText("button","","Clear band filter");clear.type="button";
-          clear.addEventListener("click",()=>{selection=null;render();});filter.appendChild(clear);
-        }
-        const counts=coverageCounts(current,4),denominator=counts.decisionMeasurable || 0;
-        const score=coverageText("p","coverage-scope-score",denominator ? (counts.complete || 0)+" of "+denominator+" measurable logic decisions fully tested" : "No measurable logic decisions in this scope");
-        stage.replaceChildren(score,buildCoverageFlow(current.categories,band=>{
-          selection=selection?.from===band.from && selection?.key===band.key ? null : band;render();
-          stage.querySelectorAll("[aria-pressed='true']")[0]?.focus();
-        },selection));
-        list.replaceChildren(buildCoverageFindings(current,selection,sizes));
+      const parents=new Map(), expanded=new Set([root]), sizes={}, sort={key:"name",direction:1};
+      let selected=root, focusPending=false;
+      const explorer=el("div","coverage-explorer"), treePane=el("section","coverage-tree-pane"), pane=el("section","coverage-preview");
+      const workspace=el("div","coverage-findings");
+      workspace.appendChild(treePane);workspace.appendChild(coverageSplitter(workspace,sizes,"Tree width"));workspace.appendChild(pane);
+      explorer.appendChild(workspace);body.appendChild(explorer);
+      const tree=el("div","coverage-tree");tree.setAttribute("role","treegrid");tree.setAttribute("aria-label","Coverage by scope");
+      const head=el("div","coverage-tree-head");head.setAttribute("role","row");tree.appendChild(head);
+      const rows=el("div","coverage-tree-rows");rows.setAttribute("role","rowgroup");tree.appendChild(rows);treePane.appendChild(tree);
+      const visible=()=>{
+        const list=[], walk=(node,depth)=>{
+          list.push({node,depth});
+          if(expanded.has(node))for(const child of coverageSorted(node.children || [],sort)){parents.set(child,node);walk(child,depth+1);}
+        };
+        walk(root,0);return list;
       };
-      render();return section;
+      const select=node=>{
+        selected=node;
+        if(node.level==="method")buildCoverageMethod(node,pane,sizes);
+        else pane.replaceChildren(...buildCoverageScope(node));
+      };
+      const toggle=node=>{if(expanded.has(node))expanded.delete(node);else expanded.add(node);};
+      const renderHead=()=>{
+        head.replaceChildren();
+        for(const column of coverageColumns()){
+          const cell=el("div","coverage-tree-heading coverage-cell-"+column.key), button=coverageText("button","",column.label);
+          cell.setAttribute("role","columnheader");button.type="button";
+          cell.setAttribute("aria-sort",sort.key!==column.key ? "none" : sort.direction===1 ? "ascending" : "descending");
+          button.addEventListener("click",()=>{
+            if(sort.key===column.key)sort.direction=-sort.direction;else {sort.key=column.key;sort.direction=column.direction;}
+            renderHead();renderRows();
+          });
+          cell.appendChild(button);head.appendChild(cell);
+        }
+      };
+      const renderRows=()=>{
+        const list=visible();rows.replaceChildren();
+        list.forEach(({node,depth},index)=>{
+          const row=el("div","coverage-row"), hasChildren=(node.children || []).length>0, active=node===selected;
+          row.setAttribute("role","row");row.setAttribute("aria-level",String(depth+1));
+          row.setAttribute("aria-selected",String(active));row.setAttribute("tabindex",active ? "0" : "-1");
+          if(hasChildren)row.setAttribute("aria-expanded",String(expanded.has(node)));
+          row.title=coverageRowTitle(node);
+          const name=el("div","coverage-cell coverage-cell-name");name.setAttribute("role","gridcell");name.style.setProperty("--depth",depth);
+          const marker=coverageText("span","coverage-toggle",hasChildren ? (expanded.has(node) ? "▾" : "▸") : "");
+          marker.setAttribute("aria-hidden","true");
+          if(hasChildren)marker.addEventListener("click",event=>{event?.stopPropagation();toggle(node);renderRows();});
+          name.appendChild(marker);name.appendChild(coverageText("span","coverage-row-name",coverageNodeName(node)));row.appendChild(name);
+          const counts=coverageCounts(node,4), logic=el("div","coverage-cell coverage-cell-logic");logic.setAttribute("role","gridcell");
+          if(counts.decisionMeasurable){logic.appendChild(coverageLogicBar(counts));logic.appendChild(coverageText("span","coverage-row-score",(counts.complete || 0)+"/"+counts.decisionMeasurable));}
+          else logic.appendChild(coverageText("span","coverage-row-score","—"));
+          row.appendChild(logic);
+          for(const [key,value] of [["missed",counts.notReached],["partial",counts.incomplete]]){
+            const cell=coverageText("div","coverage-cell coverage-cell-number coverage-cell-"+key,value ? String(value) : "—");cell.setAttribute("role","gridcell");row.appendChild(cell);
+          }
+          const move=target=>{if(target){select(target);focusPending=true;renderRows();}};
+          row.addEventListener("click",()=>{if(node!==selected){select(node);renderRows();}});
+          row.addEventListener("keydown",event=>{
+            const key=event.key;
+            if(key==="ArrowDown")move(list[index+1]?.node);
+            else if(key==="ArrowUp")move(list[index-1]?.node);
+            else if(key==="Home")move(list[0].node);
+            else if(key==="End")move(list[list.length-1].node);
+            else if(key==="ArrowRight"){if(!hasChildren)return;if(expanded.has(node))move(list[index+1].node);else {toggle(node);focusPending=true;renderRows();}}
+            else if(key==="ArrowLeft"){if(hasChildren && expanded.has(node)){toggle(node);focusPending=true;renderRows();}else if(parents.has(node))move(parents.get(node));else return;}
+            else if(key==="Enter" || key===" "){if(!hasChildren)return;toggle(node);focusPending=true;renderRows();}
+            else return;
+            event.preventDefault();
+          });
+          rows.appendChild(row);
+          if(active && focusPending){focusPending=false;row.focus();}
+        });
+      };
+      renderHead();select(root);renderRows();
+      return section;
     }
 
     function buildReportViews(views,tabHost,onChange,initial){
