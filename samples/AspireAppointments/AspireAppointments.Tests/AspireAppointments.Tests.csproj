@@ -27,6 +27,13 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
   </ItemGroup>
 
+  <!-- The platform reads <assembly>.testconfig.json next to the test app. It switches the Microsoft
+       collector to dynamic instrumentation: static instrumentation rewrites DLLs in place on Linux
+       and macOS, under the running controller, which then crashes. -->
+  <ItemGroup>
+    <None Include="testconfig.json" TargetPath="$(AssemblyName).testconfig.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Raun.Aspire\Raun.Aspire.csproj" />
     <ProjectReference Include="../../../src/Raun.Coverage/Raun.Coverage.csproj" PrivateAssets="none" />

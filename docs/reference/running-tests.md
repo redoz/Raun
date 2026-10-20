@@ -129,6 +129,8 @@ On Linux and macOS, the Microsoft collector instruments assemblies in place by d
 has the test app and Raun loaded from those files, so it can crash with `BadImageFormatException` after the run.
 Set `EnableStaticManagedInstrumentation` to `false` and `EnableDynamicManagedInstrumentation` to `true` under
 `codeCoverage:Configuration:CodeCoverage`, as in the [AppointmentTests testconfig.json](../../samples/AppointmentTests/testconfig.json).
+This is the upstream collector bug [microsoft/codecoverage#203](https://github.com/microsoft/codecoverage/issues/203), still open.
+Dynamic instrumentation is not supported on Linux or macOS Arm64, where this setting gives empty coverage; use Coverlet there.
 Raun classifies branches as argument checks, error handling, null propagation, logging, or logic.
 Add project rules with `builder.UseBranchClassificationMiddleware(() => new ProjectRule())` and `IBranchClassificationMiddleware` from `Raun.Coverage`.
 See the [provider setup](../../samples/AspireAppointments/AspireAppointments.Tests/Program.cs).

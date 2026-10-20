@@ -1,0 +1,14 @@
+{
+  "codeCoverage": {
+    "Configuration": {
+      "IncludeTestAssembly": true,
+      "CodeCoverage": {
+        "EnableStaticManagedInstrumentation": false,
+        "EnableDynamicManagedInstrumentation": true,
+        "ModulePaths": {
+          "Include": [ ".*AspireAppointments.*\\.dll$" ]
+        }
+      }
+    }
+  }
+}
