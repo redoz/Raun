@@ -64,6 +64,14 @@ public sealed class ScenarioDefinition
     /// </summary>
     public IReadOnlyList<ContendedResourceUse> Uses { get; init; } = [];
 
+    /// <summary>
+    /// The scenario's <c>key=value</c> tags from every <see cref="TagAttribute"/> on the assembly, its
+    /// containing classes (outermost first), and the scenario method, in that order, with the tags
+    /// of an attribute whose class carries <c>[Tag]</c>s expanded in place. A pair reached twice
+    /// (compared case-insensitively) is kept once, at its first position. Empty when none.
+    /// </summary>
+    public IReadOnlyList<ScenarioTag> Tags { get; init; } = [];
+
     /// <summary>Complete generated resource defaults for this application.</summary>
     public IReadOnlyList<ResourceMapping> ResourceMappings { get; init; } = [];
 

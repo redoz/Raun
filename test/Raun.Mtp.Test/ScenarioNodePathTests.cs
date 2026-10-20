@@ -165,4 +165,44 @@ public class ScenarioNodePathTests
         Assert.Equal("Demo", segments[2]);
         Assert.Equal("Booking", segments[3]);
     }
+
+    private static ScenarioDefinition Tagged(ScenarioNode step) => new()
+    {
+        ScenarioId = "scn",
+        DisplayName = "customer books",
+        MethodName = "Demo.Booking.CustomerBooks",
+        Tags = [new("area", "auth"), new("area", "billing"), new("owner", "payments")],
+        Nodes = [step],
+    };
+
+    [Fact]
+    public void Properties_carry_every_tag_as_metadata()
+    {
+        var step = Node("a step");
+
+        var tags = ScenarioNodePath.Properties(Tagged(step), step).OfType<TestMetadataProperty>()
+            .Where(p => p.Key is not ("Phase" or "Scenario"))
+            .Select(p => p.Key + "=" + p.Value)
+            .Order(StringComparer.Ordinal); // a PropertyBag's order is its own business
+
+        Assert.Equal(["area=auth", "area=billing", "owner=payments"], tags);
+    }
+
+#pragma warning disable TPEXP // TreeNodeFilter is an experimental Microsoft.Testing.Platform API.
+    [Theory]
+    [InlineData("/**[area=billing]", true)]
+    [InlineData("/**[(area=auth)&(owner=payments)]", true)]
+    [InlineData("/**[area!=auth]", false)]
+    [InlineData("/**[owner=identity]", false)]
+    public void A_tree_node_filter_selects_on_tags(string filter, bool matches)
+    {
+        var step = Node("a step");
+        var ctor = typeof(Microsoft.Testing.Platform.Requests.TreeNodeFilter).GetConstructor(
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public,
+            [typeof(string)])!;
+        var selector = new TreeNodeSelector((Microsoft.Testing.Platform.Requests.TreeNodeFilter)ctor.Invoke([filter]));
+
+        Assert.Equal(matches, selector.Matches(Tagged(step), step));
+    }
+#pragma warning restore TPEXP
 }

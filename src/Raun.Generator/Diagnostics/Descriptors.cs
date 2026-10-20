@@ -251,11 +251,15 @@ internal static class Descriptors
         "RAUN036", "Required resource role is missing", "Invalid resource metadata on '{0}': {1}",
         Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor InvalidTag = new(
+        "RAUN037", "Tag is invalid", "Tag '{0}={1}' is invalid: {2}",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     /// <summary>Every descriptor by id — how a diagnostic the parser carries as plain values (an id and
     /// its arguments) becomes a reportable one. Declared last: static fields initialize in order.</summary>
     public static readonly IReadOnlyDictionary<string, DiagnosticDescriptor> ById = new[]
     {
-        MissingResourceLink, InvalidResourceDefinition, InvalidRelationshipProperty, InvalidResourceRelationship, InvalidScenarioCase, InvalidScenarioCaseArgument, InvalidScenarioCaseSignature, InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
+        InvalidTag, MissingResourceLink, InvalidResourceDefinition, InvalidRelationshipProperty, InvalidResourceRelationship, InvalidScenarioCase, InvalidScenarioCaseArgument, InvalidScenarioCaseSignature, InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
         UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle, InvalidResourceKeyParameter,
         InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,

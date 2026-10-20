@@ -44,6 +44,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.ContendedResourceKind,
         Descriptors.InertContendedResourceUse,
         Descriptors.MutableStepClassState,
+        Descriptors.InvalidTag,
     ];
 
     public override void Initialize(AnalysisContext context)
@@ -53,6 +54,8 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeMethod, SyntaxKind.MethodDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSymbolAction(AnalyzeNamedType, SymbolKind.NamedType);
+        context.RegisterSymbolAction(ctx => AnalyzeTags(ctx.Symbol.GetAttributes(), ctx.ReportDiagnostic), SymbolKind.NamedType, SymbolKind.Method);
+        context.RegisterCompilationAction(ctx => AnalyzeTags(ctx.Compilation.Assembly.GetAttributes(), ctx.ReportDiagnostic));
         context.RegisterCompilationStartAction(OnCompilationStart);
     }
 
@@ -72,6 +75,28 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(
             ctx => AnalyzeScenarioResourceUse(ctx, usage), SyntaxKind.MethodDeclaration);
         context.RegisterCompilationEndAction(ctx => ReportInertContendedResources(ctx, usage));
+    }
+
+    /// <summary>RAUN037: every <c>[Tag]</c> on a symbol or the assembly is usable in a filter and the report.</summary>
+    private static void AnalyzeTags(ImmutableArray<AttributeData> attributes, Action<Diagnostic> report)
+    {
+        foreach (var attr in attributes)
+        {
+            if (attr.AttributeClass is not { } cls || !AttributeReader.IsTagAttribute(cls) || attr.ConstructorArguments.Length != 2)
+            {
+                continue;
+            }
+
+            var key = attr.ConstructorArguments[0].Value as string;
+            var value = attr.ConstructorArguments[1].Value as string;
+            if (TagRules.Problem(key, value) is { } problem)
+            {
+                report(Diagnostic.Create(
+                    Descriptors.InvalidTag,
+                    attr.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? Location.None,
+                    key, value, problem));
+            }
+        }
     }
 
     private static void AnalyzeNamedType(SymbolAnalysisContext context)

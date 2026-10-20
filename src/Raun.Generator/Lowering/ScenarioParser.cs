@@ -244,6 +244,8 @@ internal sealed class ScenarioParser
 
         AddUses(_model.Compilation.Assembly.GetAttributes());
 
+        var tags = CollectTags();
+
         var usings = CollectUsings().ToList();
 
         // Ordered by display string: a HashSet's order is an implementation detail, and the emitted
@@ -280,6 +282,7 @@ internal sealed class ScenarioParser
                 .OrderBy(p => p.Key, System.StringComparer.Ordinal)
                 .Select(p => new ParsedUse(p.Value.Type, p.Value.Mode, p.Key))
                 .ToList(),
+            Tags = tags,
         };
     }
 
@@ -312,6 +315,38 @@ internal sealed class ScenarioParser
 
     private void Refuse(SyntaxToken token, string reason)
         => Report(Descriptors.ScenarioNotGenerated, token.GetLocation(), MethodFullName, reason);
+
+    /// <summary>The scenario's tags: the assembly's, then its containing classes' (outermost first),
+    /// then the method's, each pair (compared case-insensitively, as the filter matches) kept once
+    /// at its first position.</summary>
+    private List<ParsedTag> CollectTags()
+    {
+        var sites = new List<ImmutableArray<AttributeData>> { _model.Compilation.Assembly.GetAttributes() };
+        var types = new List<ImmutableArray<AttributeData>>();
+        for (var type = _method.ContainingType; type is not null; type = type.ContainingType)
+        {
+            types.Add(type.GetAttributes());
+        }
+
+        types.Reverse();
+        sites.AddRange(types);
+        sites.Add(_method.GetAttributes());
+
+        var seen = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        var tags = new List<ParsedTag>();
+        foreach (var site in sites)
+        {
+            foreach (var (key, value) in AttributeReader.Tags(site))
+            {
+                if (seen.Add(key + "=" + value))
+                {
+                    tags.Add(new ParsedTag(key, value));
+                }
+            }
+        }
+
+        return tags;
+    }
 
     /// <summary>Merges the [Uses] on one site into the scenario's set; Exclusive wins per type.</summary>
     private void AddUses(ImmutableArray<AttributeData> attributes)

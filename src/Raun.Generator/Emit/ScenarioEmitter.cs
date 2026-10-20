@@ -244,6 +244,14 @@ internal static class ScenarioEmitter
                 scenario.Uses.Select(UseEntry))));
         }
 
+        // Only when tagged, so untagged scenarios emit exactly what they did before.
+        if (scenario.Tags.Count > 0)
+        {
+            members.Add(Set("Tags", ArrayOf(
+                Names.Global("Raun", "Model", "ScenarioTag"),
+                scenario.Tags.Select(TagEntry))));
+        }
+
         if (hasResourceMappings)
         {
             members.Add(Set("ResourceMappings", MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, Names.Global("Raun", "Generated", "RaunResourceDefaults"), IdentifierName("Mappings"))));
@@ -260,6 +268,15 @@ internal static class ScenarioEmitter
     }
 
     /// <summary><c>new global::Raun.ContendedResourceUse(typeof(T), global::Raun.LockMode.Mode)</c>.</summary>
+    /// <summary><c>new global::Raun.Model.ScenarioTag("key", "value")</c>.</summary>
+    private static ExpressionSyntax TagEntry(ParsedTag tag)
+        => ObjectCreationExpression(Names.Global("Raun", "Model", "ScenarioTag"))
+            .WithArgumentList(ArgumentList(SeparatedList(new[]
+            {
+                Argument(Lit(tag.Key)),
+                Argument(Lit(tag.Value)),
+            })));
+
     private static ExpressionSyntax UseEntry(ParsedUse use)
         => ObjectCreationExpression(Names.Global("Raun", "ContendedResourceUse"))
             .WithArgumentList(ArgumentList(SeparatedList<ArgumentSyntax>(new[]

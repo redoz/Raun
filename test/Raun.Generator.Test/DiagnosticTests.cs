@@ -28,7 +28,7 @@ public class DiagnosticTests
         var analyzer = new Raun.Generator.Analysis.ScenarioAnalyzer();
 
         Assert.Equal(
-            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016", "RAUN022", "RAUN024", "RAUN027", "RAUN028", "RAUN029", "RAUN030", "RAUN031", "RAUN032", "RAUN033", "RAUN034", "RAUN035", "RAUN036"],
+            ["RAUN000", "RAUN008", "RAUN009", "RAUN010", "RAUN014", "RAUN015", "RAUN016", "RAUN022", "RAUN024", "RAUN027", "RAUN028", "RAUN029", "RAUN030", "RAUN031", "RAUN032", "RAUN033", "RAUN034", "RAUN035", "RAUN036", "RAUN037"],
             analyzer.SupportedDiagnostics.Select(d => d.Id).Order(StringComparer.Ordinal));
     }
 
@@ -1195,5 +1195,60 @@ public class DiagnosticTests
 
         var diagnostic = Assert.Single(await GeneratorHarness.DiagnoseAsync(source), d => d.Id == "RAUN011");
         Assert.Contains(reason, diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("\"\", \"auth\"", "key is empty")]
+    [InlineData("\"area\", \"\"", "value is empty")]
+    [InlineData("\" area\", \"auth\"", "leading or trailing whitespace")]
+    [InlineData("\"area\", \"auth \"", "leading or trailing whitespace")]
+    [InlineData("\"ar=ea\", \"auth\"", "'='")]
+    [InlineData("\"area\", \"a|b\"", "'|'")]
+    [InlineData("\"area\", \"a*\"", "'*'")]
+    [InlineData("\"area\", \"[x]\"", "'['")]
+    [InlineData("\"ar:ea\", \"auth\"", "':'")]
+    [InlineData("\"phase\", \"Given\"", "reserved")]
+    [InlineData("\"Scenario\", \"x\"", "reserved")]
+    public async Task RAUN037_invalid_tag(string arguments, string reason)
+    {
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
+            "using Raun;\n[Tag(" + arguments + ")]\npublic static class Tagged;\n");
+
+        var d = Assert.Single(diagnostics, d => d.Id == "RAUN037");
+        Assert.Contains(reason, d.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RAUN037_is_reported_on_every_tag_site()
+    {
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
+            """
+            using Raun;
+            [assembly: Tag("", "assembly")]
+            [Tag("", "attribute class")]
+            public sealed class AuthAttribute : System.Attribute;
+            public static class Tagged
+            {
+                [Tag("", "method")]
+                public static void M() { }
+            }
+            """);
+
+        Assert.Equal(3, diagnostics.Count(d => d.Id == "RAUN037"));
+    }
+
+    [Fact]
+    public async Task RAUN037_accepts_a_well_formed_tag()
+    {
+        var diagnostics = await GeneratorHarness.DiagnoseAsync(
+            """
+            using Raun;
+            [assembly: Tag("suite", "appointments")]
+            [Tag("owner", "payments team")]
+            [Tag("area", "auth-v2.1")]
+            public static class Tagged;
+            """);
+
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RAUN037");
     }
 }

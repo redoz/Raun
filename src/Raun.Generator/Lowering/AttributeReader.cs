@@ -126,6 +126,53 @@ internal static class AttributeReader
         }
     }
 
+    /// <summary>
+    /// The <c>(key, value)</c> of every <c>[Tag]</c> among <paramref name="attributes"/>, in
+    /// declaration order, with any other attribute replaced by the tags its own class carries
+    /// (recursively, so a tag attribute may itself be tagged by another). Malformed tags — a
+    /// missing or empty key or value — are skipped here; RAUN037 reports them.
+    /// </summary>
+    public static IEnumerable<(string Key, string Value)> Tags(ImmutableArray<AttributeData> attributes)
+        => Tags(attributes, new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default));
+
+    private static IEnumerable<(string Key, string Value)> Tags(ImmutableArray<AttributeData> attributes, HashSet<INamedTypeSymbol> expanding)
+    {
+        foreach (var attr in attributes)
+        {
+            if (attr.AttributeClass is not { } cls)
+            {
+                continue;
+            }
+
+            if (IsTagAttribute(cls))
+            {
+                if (attr.ConstructorArguments.Length == 2
+                    && attr.ConstructorArguments[0].Value is string { Length: > 0 } key
+                    && attr.ConstructorArguments[1].Value is string { Length: > 0 } value)
+                {
+                    yield return (key, value);
+                }
+
+                continue;
+            }
+
+            // Guarded so an attribute class tagged (directly or through others) with itself ends.
+            if (expanding.Add(cls))
+            {
+                foreach (var tag in Tags(cls.GetAttributes(), expanding))
+                {
+                    yield return tag;
+                }
+
+                expanding.Remove(cls);
+            }
+        }
+    }
+
+    /// <summary>Whether <paramref name="type"/> is <c>Raun.TagAttribute</c>.</summary>
+    public static bool IsTagAttribute(INamedTypeSymbol type)
+        => type is { Name: "TagAttribute", ContainingNamespace: { Name: "Raun", ContainingNamespace.IsGlobalNamespace: true } };
+
     private static int TimeoutMs(AttributeData? attr, string namedArgument)
     {
         if (attr is null)

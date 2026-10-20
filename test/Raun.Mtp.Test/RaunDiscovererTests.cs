@@ -224,4 +224,23 @@ public class RaunDiscovererTests
 
         Assert.Equal("3. Teardown", nodes[^1].DisplayName);
     }
+
+    [Fact]
+    public void Discovered_node_carries_the_scenario_tags_as_metadata()
+    {
+        var definition = new ScenarioDefinition
+        {
+            ScenarioId = "scn",
+            DisplayName = "my scenario",
+            MethodName = "Ns.Scn",
+            Tags = [new("area", "auth"), new("owner", "payments")],
+            Nodes = [Node(0, "a", "step a")],
+        };
+
+        var node = Assert.Single(RaunDiscoverer.BuildNodes(definition));
+
+        Assert.Equal(
+            ["area=auth", "owner=payments"],
+            node.Properties.OfType<TestMetadataProperty>().Select(p => p.Key + "=" + p.Value).Order(StringComparer.Ordinal));
+    }
 }

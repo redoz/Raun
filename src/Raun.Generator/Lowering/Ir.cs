@@ -187,6 +187,7 @@ internal sealed record ParsedScenario
     private readonly EquatableArray<Syn<UsingDirectiveSyntax>> _usings;
     private readonly EquatableArray<ParsedStep> _steps;
     private readonly EquatableArray<ParsedUse> _uses;
+    private readonly EquatableArray<ParsedTag> _tags;
 
     public IReadOnlyList<UsingDirectiveSyntax> Usings
     {
@@ -224,7 +225,18 @@ internal sealed record ParsedScenario
         get => _uses;
         init => _uses = Equatable.Of(value);
     }
+
+    /// <summary>Every [Tag] the scenario is subject to, assembly first and the scenario method last,
+    /// each pair once. Empty ⇒ no initializer.</summary>
+    public IReadOnlyList<ParsedTag> Tags
+    {
+        get => _tags;
+        init => _tags = Equatable.Of(value);
+    }
 }
+
+/// <summary>One <c>key=value</c> scenario tag, as written on its <c>[Tag]</c>.</summary>
+internal readonly record struct ParsedTag(string Key, string Value);
 
 /// <summary>One lowered step (graph node).</summary>
 internal sealed record ParsedStep

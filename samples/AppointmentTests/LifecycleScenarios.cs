@@ -10,6 +10,7 @@ namespace AppointmentTests;
 /// ILogger, and a custom phase marker.
 /// </summary>
 [DisplayName("Appointment lifecycle")]
+[Tag("area", "lifecycle")]
 public sealed class LifecycleScenarios : AppointmentSuite
 {
     // Run.OnSuccess: a failed reschedule leaves its rows behind for inspection instead of cleaning up.
@@ -55,6 +56,7 @@ public sealed class LifecycleScenarios : AppointmentSuite
     // it holds. The scenario also carries a whole-scenario timeout alongside SendTravelReminder's
     // per-step one.
     [Scenario("out-of-town patients get a travel reminder", Timeout = 30_000)]
+    [Tag("feature", "reminders")]
     public async Task TravelReminder()
     {
         var patient = await Given.PatientExists("Sven");

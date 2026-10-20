@@ -96,6 +96,10 @@ internal sealed class MtpReportSink : RunEventSink
         };
 
         testNode.Properties.Add(ScenarioTestIdentity.Create(definition));
+        foreach (var tag in ScenarioNodePath.Tags(definition))
+        {
+            testNode.Properties.Add(tag);
+        }
 
         if (!string.IsNullOrEmpty(node.SourceFile) && node.SourceLine > 0)
         {

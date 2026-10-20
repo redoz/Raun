@@ -41,3 +41,4 @@ RAUN034 | Raun.Usage | Error | Scenario case argument must match its parameter t
 RAUN035 | Raun.Usage | Error | Scenario case signature is unsupported
 
 RAUN036 | Raun.Usage | Error | Required resource role is missing
+RAUN037 | Raun.Usage | Error | Tag is invalid

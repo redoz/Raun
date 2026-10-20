@@ -644,4 +644,33 @@ public class MtpReportSinkTests
 
         Assert.Empty(bus.Updates);
     }
+
+    [Fact]
+    public async Task Finished_node_carries_the_scenario_tags_as_metadata()
+    {
+        // The IDE and the TRX read traits off the terminal update, so it must carry them too.
+        var def = new ScenarioDefinition
+        {
+            ScenarioId = "s",
+            DisplayName = "my scenario",
+            MethodName = "Ns.Scn",
+            Tags = [new("area", "auth")],
+            Nodes = [Node(0, "a", "step a")],
+        };
+        var (sink, bus) = NewSink();
+
+        await sink.PublishAsync(new ScenarioStarted(def));
+        await sink.PublishAsync(new StepFinished(def, new StepResult
+        {
+            Node = def.Nodes[0],
+            DisplayName = "step a",
+            Status = StepStatus.Passed,
+            StartedAt = TestInstant,
+            Duration = TimeSpan.FromMilliseconds(1),
+        }));
+
+        var node = Assert.Single(bus.Nodes);
+        var tag = Assert.Single(node.Properties.OfType<TestMetadataProperty>());
+        Assert.Equal(("area", "auth"), (tag.Key, tag.Value));
+    }
 }

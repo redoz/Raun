@@ -72,6 +72,10 @@ internal static class RaunDiscoverer
 
         node.Properties.Add(DiscoveredTestNodeStateProperty.CachedInstance);
         node.Properties.Add(ScenarioTestIdentity.Create(definition));
+        foreach (var tag in ScenarioNodePath.Tags(definition))
+        {
+            node.Properties.Add(tag);
+        }
 
         if (TryMakeFileLocation(step, out var location))
         {

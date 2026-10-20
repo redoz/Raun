@@ -73,17 +73,32 @@ internal static class ScenarioNodePath
         segment.Replace("%", "%25", StringComparison.Ordinal).Replace("/", "%2F", StringComparison.Ordinal);
 
     /// <summary>
-    /// The properties a filter's <c>[key=value]</c> expression can match. The platform inspects only
+    /// The properties a filter's <c>[key=value]</c> expression can match: the step's phase, its
+    /// scenario's name, and every scenario tag. The platform inspects only
     /// <see cref="TestMetadataProperty"/>, and never reads the bag at all when no segment carries a
-    /// property expression.
+    /// property expression. A key with several values matches when any of them does, and
+    /// <c>[key!=value]</c> only when none does.
     /// </summary>
     public static PropertyBag Properties(ScenarioDefinition definition, ScenarioNode step)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(step);
 
-        return new PropertyBag(
+        var bag = new PropertyBag(
             new TestMetadataProperty(PhaseKey, step.Phase),
             new TestMetadataProperty(ScenarioKey, definition.DisplayName));
+        foreach (var tag in Tags(definition))
+        {
+            bag.Add(tag);
+        }
+
+        return bag;
     }
+
+    /// <summary>
+    /// The scenario's tags as <see cref="TestMetadataProperty"/>s, the form the IDE shows as traits,
+    /// the TRX records, and a <c>--treenode-filter</c> property expression matches.
+    /// </summary>
+    public static IEnumerable<TestMetadataProperty> Tags(ScenarioDefinition definition)
+        => definition.Tags.Select(tag => new TestMetadataProperty(tag.Key, tag.Value));
 }
