@@ -234,24 +234,10 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             "--report-html", "--results-directory", ReportDirectory];
         if (collectCoverage)
         {
-            // Include the sample's own steps as source under test. Coverlet cannot instrument
-            // an already-loaded MTP controller. Disable static instrumentation to avoid the
-            // .NET 10 Linux metadata crash: github.com/microsoft/codecoverage/issues/203.
-            var settings = Path.Combine(Root, "coverage.config");
-            File.WriteAllText(settings, """
-                <Configuration>
-                  <IncludeTestAssembly>true</IncludeTestAssembly>
-                  <CodeCoverage>
-                    <EnableStaticManagedInstrumentation>false</EnableStaticManagedInstrumentation>
-                    <EnableStaticNativeInstrumentation>false</EnableStaticNativeInstrumentation>
-                    <EnableDynamicManagedInstrumentation>true</EnableDynamicManagedInstrumentation>
-                    <EnableDynamicNativeInstrumentation>false</EnableDynamicNativeInstrumentation>
-                    <ModulePaths><Include>
-                    <ModulePath>.*AspireAppointments.*</ModulePath>
-                  </Include></ModulePaths></CodeCoverage>
-                </Configuration>
-                """);
-            arguments.AddRange(["--coverage", "--coverage-output-format", "xml", "--coverage-settings", settings]);
+            // The sample's own testconfig.json scopes the Microsoft collector to its assemblies and
+            // turns static instrumentation off (github.com/microsoft/codecoverage/issues/203), so a
+            // consumer gets working coverage on Linux without extra settings.
+            arguments.AddRange(["--coverage", "--coverage-output-format", "xml"]);
         }
         await DotnetAsync(context, [.. arguments]);
         var report = new ConsumerReport(Path.Combine(ReportDirectory, "raun-report.html"), Name);

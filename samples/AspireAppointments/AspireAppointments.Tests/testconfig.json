@@ -4,7 +4,9 @@
       "IncludeTestAssembly": true,
       "CodeCoverage": {
         "EnableStaticManagedInstrumentation": false,
+        "EnableStaticNativeInstrumentation": false,
         "EnableDynamicManagedInstrumentation": true,
+        "EnableDynamicNativeInstrumentation": false,
         "ModulePaths": {
           "Include": [ ".*AspireAppointments.*\\.dll$" ]
         }
