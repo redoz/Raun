@@ -125,6 +125,10 @@ and ships in `Raun.Coverage`.
 
 Register a compatible collector for the report's Coverage view.
 Use `--report-html --coverage --coverage-output-format xml`, or `--report-html --coverlet --coverlet-output-format json`.
+On Linux and macOS, the Microsoft collector instruments assemblies in place by default. The test host controller
+has the test app and Raun loaded from those files, so it can crash with `BadImageFormatException` after the run.
+Set `EnableStaticManagedInstrumentation` to `false` and `EnableDynamicManagedInstrumentation` to `true` under
+`codeCoverage:Configuration:CodeCoverage`, as in the [AppointmentTests testconfig.json](../../samples/AppointmentTests/testconfig.json).
 Raun classifies branches as argument checks, error handling, null propagation, logging, or logic.
 Add project rules with `builder.UseBranchClassificationMiddleware(() => new ProjectRule())` and `IBranchClassificationMiddleware` from `Raun.Coverage`.
 See the [provider setup](../../samples/AspireAppointments/AspireAppointments.Tests/Program.cs).
