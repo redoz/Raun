@@ -65,8 +65,18 @@ The IDE reports each step as a test. Selecting a step runs its dependencies, bra
 ```bash
 dotnet run -- --treenode-filter '/*/*/*/customer books an appointment/*'
 dotnet run -- --treenode-filter '/*/*/*/*/*[Phase=When]'
+dotnet run -- --treenode-filter '/**[area=users]'
+dotnet run -- --treenode-filter '/**[(area=booking)&(tier!=smoke)]'
 dotnet run -- --max-parallel-scenarios 4 --maximum-failed-tests 1
 ```
+
+[Tags](scenario-authoring.md#tags) are filter properties on every step of their scenario. A key with
+several values matches when any value does; `[key!=value]` matches only when none does. Combine with
+`&` and `|`, and use `*` wildcards in values. Matching ignores case. Use `!=` to exclude: the
+platform's `!(...)` does not negate reliably. In the HTML report, select tags in the bar above the
+scenarios or on a scenario's chips to show scenarios with any of them. The selection is kept in the
+URL (`?tag=area:users&tag=area:lifecycle`), so a filtered report can be reloaded or shared. A tag every
+scenario carries is offered in the bar but left off the chips.
 
 Paths are `/{assembly}/{namespace}/{class}/{scenario}/{step}`.
 Remove numbering prefixes from `--list-tests` step names when filtering. Get scenario names from `[Scenario]` or the report.

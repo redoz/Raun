@@ -192,6 +192,23 @@ The [registry sample](samples/AppointmentTests/RegistryBookingScenarios.cs) and
 Scenario-wide external-system access remains independent: `[Uses<T>(LockMode.Exclusive)]` holds its
 admission token through setup, execution, teardown, and scope disposal.
 
+## Tag scenarios and run a subset
+
+Tag a scenario, its class, or the assembly with `key=value` pairs, then run only what matches:
+
+```csharp
+[Scenario("bulk user import")]
+[Tag("area", "users")]
+public async Task ImportUsers() { ... }
+```
+
+```bash
+dotnet run -- --treenode-filter '/**[area=users]'
+```
+
+Your own attribute can stand for a set of tags. Tags also show in the IDE, the TRX, and the HTML report,
+which filters by them. See [tags](docs/reference/scenario-authoring.md#tags).
+
 ## Read the report when something fails
 
 Use the HTML report to inspect a failure or share a run. It includes step results, a resource matrix, and errors. Gantt bars behind the step titles show when steps ran and

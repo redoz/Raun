@@ -39,6 +39,11 @@ internal sealed record ReportScenario
     /// <summary>The scenario's contended-resource uses as <c>Type:Mode</c>; empty when none declared.</summary>
     public IReadOnlyList<string> Uses { get; init; } = [];
 
+    /// <summary>The scenario's <c>key=value</c> tags in declaration order; null (and left out of the
+    /// JSON) when it has none, so an untagged report carries nothing extra.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ReportTag>? Tags { get; init; }
+
     /// <summary>Milliseconds admission held the scenario back behind a contended resource; 0 when none.</summary>
     public double WaitedMs { get; init; }
 
@@ -92,6 +97,8 @@ internal sealed record ReportStep
 }
 
 internal sealed record ReportDependency(int Index, string Kind);
+
+internal sealed record ReportTag(string Key, string Value);
 
 internal sealed record ReportMessage
 {

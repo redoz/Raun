@@ -185,6 +185,44 @@ Resolve services from `context.Services` in the factory. Use `context.Scenario` 
 Parallel steps share one world and step-class instance, so keep references stable and services safe for concurrent use.
 See the [world example](../../samples/AppointmentTests/CancellationScenarios.cs).
 
+## Tags
+
+Tags are `key=value` pairs. Put `[Tag]` on a scenario, on its class (every scenario in it, nested
+classes included), or on the assembly. It repeats, and one key can have several values:
+
+```csharp
+[assembly: Tag("suite", "appointments")]
+
+[Tag("area", "booking")]
+public sealed class Scenarios : AppointmentSuite
+{
+    [Scenario("customer books an appointment")]
+    [Tag("tier", "smoke")]
+    [Tag("owner", "payments")]
+    public async Task Booking() { ... }
+}
+```
+
+To name a set of tags, put them on your own attribute class. Applying the attribute applies them all,
+and such attributes can carry each other:
+
+```csharp
+[Tag("area", "users")]
+[Tag("owner", "identity")]
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class UserImportAttribute : Attribute;
+```
+
+The generator reads tags at compile time, so an attribute from a shared library works too. A
+scenario's tags run assembly, classes (outermost first), then the method; a pair reached twice is
+kept once, compared case-insensitively. Tags select runs with `--treenode-filter`
+([running tests](running-tests.md#reports-and-test-selection)), appear as traits in the IDE and as
+properties in the TRX, and filter the HTML report.
+
+`RAUN037` rejects an empty key or value, leading or trailing whitespace, any of `= [ ] ( ) & | ! / *`
+(filter syntax), `:` in a key (the report writes tags as `key:value`), and the keys `Phase` and
+`Scenario`, which the filter already matches. See the [tag sample](../../samples/AppointmentTests/Tags.cs).
+
 ## Notes, logs, and attachments
 
 Attach explanations to `Task` or `Task<T>` with `.Note("why")` or `.Note($"why {patient}")`.

@@ -48,6 +48,7 @@ jobs:
           node test/Browser/resource-matrix.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
           node test/Browser/scenario-flow.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
           node test/Browser/coverage-view.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
+          node test/Browser/scenario-tags.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
 
       - name: Pack (verifies the packages assemble on every push)
         run: |

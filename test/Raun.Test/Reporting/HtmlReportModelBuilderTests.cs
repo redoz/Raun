@@ -13,6 +13,7 @@ public class HtmlReportModelBuilderTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 6, 9, 12, 0, 0, TimeSpan.Zero);
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
     private static ScenarioNode Node(int index, string stepId, string phase, string template,
         int[]? dependsOn = null, string? group = null, bool isSetup = false, bool isTeardown = false, Guard[]? guards = null, int[]? mergeSources = null, int[]? waitsFor = null, string[]? arms = null) => new()
@@ -670,6 +671,38 @@ public class HtmlReportModelBuilderTests
         Assert.Equal(["ExclusiveDb:Exclusive", "SharedCatalog:Shared"], scenario.Uses);
         Assert.Equal(1234, scenario.WaitedMs);
         Assert.Equal("ExclusiveDb", scenario.WaitedFor);
+    }
+
+    [Fact]
+    public void Tags_are_carried_per_scenario_and_left_out_when_there_are_none()
+    {
+        var tagged = new ScenarioDefinition
+        {
+            ScenarioId = "t", DisplayName = "t", MethodName = "Ns.t", Nodes = [Node(0, "x", "Given", "x")],
+            Tags = [new ScenarioTag("area", "auth"), new ScenarioTag("owner", "payments")],
+        };
+        var plain = new ScenarioDefinition
+        {
+            ScenarioId = "p", DisplayName = "p", MethodName = "Ns.p", Nodes = [Node(0, "x", "Given", "x")],
+        };
+
+        var builder = new HtmlReportModelBuilder();
+        builder.OnRunStarted([tagged, plain]);
+        foreach (var def in new[] { tagged, plain })
+        {
+            builder.OnScenarioStarted(def);
+            builder.OnStepFinished(def, Result(def.Nodes[0], T0, 10));
+        }
+
+        var scenarios = builder.Build("2026-09-06T00:00:00Z").Scenarios;
+        using var taggedJson = JsonDocument.Parse(JsonSerializer.Serialize(scenarios[0], WebJson));
+        using var plainJson = JsonDocument.Parse(JsonSerializer.Serialize(scenarios[1], WebJson));
+
+        Assert.Equal(
+            ["area=auth", "owner=payments"],
+            taggedJson.RootElement.GetProperty("tags").EnumerateArray()
+                .Select(t => t.GetProperty("key").GetString() + "=" + t.GetProperty("value").GetString()));
+        Assert.False(plainJson.RootElement.TryGetProperty("tags", out _));
     }
 
     [Fact]

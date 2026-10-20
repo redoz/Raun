@@ -302,6 +302,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                 Resources = resources,
                 Links = references,
                 Uses = Definition.Uses.Select(u => $"{u.Resource.Name}:{u.Mode}").ToList(),
+                Tags = Definition.Tags.Count == 0 ? null : Definition.Tags.Select(t => new ReportTag(t.Key, t.Value)).ToList(),
                 WaitedMs = Ms(Waited),
                 WaitedFor = WaitedFor?.Name,
             };

@@ -26,6 +26,12 @@ width and type size, keyboard drill-down to source, sorting, band filtering, col
 
     node test/Browser/coverage-view.cjs /absolute/path/to/raun-report.html
 
+`scenario-tags.cjs` checks the tag filter with the sample's own tags: every tag offered once, card
+chips without the tag every scenario shares, either-of selection, the filter kept in and restored
+from the URL (`?tag=area:users`), a stale tag from another run, and phone layout:
+
+    node test/Browser/scenario-tags.cjs /absolute/path/to/raun-report.html
+
 The scenario-flow checks cover the shared timing axis, observed parallel overlap, joins, nested if/switch
 branches, untaken alternatives, named prerequisites, keyboard navigation and narrow layouts.
 

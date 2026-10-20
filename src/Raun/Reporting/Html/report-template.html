@@ -170,6 +170,18 @@
   .card.collapsed .card-body{ display:none; }
   .card-head .where{grid-column:3/-1;font-size:11px;line-height:1.2;color:var(--muted);overflow-wrap:anywhere}
   .card.collapsed .card-head .where{display:none}
+  .card-head .scenario-tags{grid-column:3/-1;margin-top:4px}
+  .tag-filter{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:4px 0 12px;font-size:12px;color:var(--muted)}
+  .tag-filter-label{font-weight:600;color:var(--ink)}
+  .tag-filter-options,.scenario-tags{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+  .tag-filter-option,.scenario-tag{font:12px/1.5 var(--sans);color:var(--muted);background:none;border:1px solid var(--border-strong);border-radius:3px;padding:0 6px;cursor:pointer;overflow-wrap:anywhere;text-align:left}
+  .tag-filter-option:hover,.scenario-tag:hover{color:var(--ink)}
+  .tag-filter-option[aria-pressed="true"],.scenario-tag[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);background:var(--inset)}
+  .tag-filter-option:focus-visible,.scenario-tag:focus-visible,.tag-filter-clear:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+  .tag-filter-clear{font:inherit;color:var(--muted);background:none;border:0;padding:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+  .tag-filter-clear[hidden],.tag-filter-count:empty{display:none}
+  .tag-filter-count{margin-left:auto}
+  .tests-narrative .tag-filtered{display:none!important}
   .report-meta{display:inline-flex;align-items:baseline;gap:6px;min-width:0;font:12px/1.6 var(--sans);color:var(--muted)}
   .report-meta-dot{flex:none}.leading-ellipsis{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}.leading-ellipsis>span{direction:ltr;unicode-bidi:isolate}
   .dur{ font:13px/1 var(--mono); color:var(--muted); }
@@ -1353,24 +1365,89 @@
       return '<span class="report-meta"><'+tag+' class="leading-ellipsis '+className+'" title="'+esc(fullName)+'"'+
         (address ? ' href="'+esc(address)+'" target="_blank" rel="noopener noreferrer"' : '')+'><span dir="ltr">'+esc(value)+'</span></'+tag+'></span>';
     }
+    // Tag filter: the picked tags (key:value) narrow the Scenarios view to the scenarios carrying any
+    // of them. The pick lives in the URL (?tag=area:auth&tag=...), so a filtered view can be reloaded
+    // or shared. A tag every scenario carries is filterable but left off the cards, where it is noise.
+    const tagText=(tag)=>tag.key+":"+tag.value;
+    const tagLabel=(tag)=>{const at=tag.indexOf(":");return at<0 ? tag : tag.slice(0,at)+": "+tag.slice(at+1);};
+    // Filled from the URL by renderAll, and shared by every card the Scenarios view renders.
+    const selectedTags=new Set();
+    let sharedTags=new Set();
+    const scenarioMatchesTags=(sc)=>!selectedTags.size || (sc.tags || []).some(tag=>selectedTags.has(tagText(tag)));
+    function setSelectedTags(next){
+      const tags=[...next];
+      selectedTags.clear();for(const tag of tags)selectedTags.add(tag);
+      // A file:// page may refuse a URL rewrite; the filter still applies, it just is not remembered.
+      try{const url=new URL(location.href);url.searchParams.delete("tag");for(const tag of selectedTags)url.searchParams.append("tag",tag);history.replaceState(history.state,"",url);}catch{}
+      document.dispatchEvent(new Event("raun-tags"));
+    }
+    const toggleTag=(tag)=>{const next=new Set(selectedTags);if(next.has(tag))next.delete(tag);else next.add(tag);setSelectedTags(next);};
+    function onTagChange(node,update){
+      const listener=()=>{if(node.isConnected)update();else document.removeEventListener("raun-tags",listener);};
+      document.addEventListener("raun-tags",listener);
+    }
+    function sharedTagsOf(scenarios){
+      if(scenarios.length<2)return new Set();
+      return new Set((scenarios[0].tags || []).map(tagText).filter(tag=>scenarios.every(sc=>(sc.tags || []).some(t=>tagText(t)===tag))));
+    }
+    function buildTagFilter(scenarios){
+      const known=[...new Set(scenarios.flatMap(sc=>(sc.tags || []).map(tagText)))];
+      if(!known.length && !selectedTags.size)return null;
+      const bar=el("div","tag-filter");bar.setAttribute("role","group");bar.setAttribute("aria-label","Filter scenarios by tag");
+      const label=el("span","tag-filter-label");label.textContent="Tags";
+      const options=el("span","tag-filter-options");
+      const clear=el("button","tag-filter-clear");clear.type="button";clear.textContent="Clear";
+      clear.addEventListener("click",()=>setSelectedTags([]));
+      const count=el("span","tag-filter-count");count.setAttribute("aria-live","polite");
+      const render=()=>{
+        // A picked tag no scenario carries (from another run's URL) stays listed until it is unpicked.
+        const tags=[...new Set([...known,...selectedTags])].sort((a,b)=>a.localeCompare(b));
+        options.replaceChildren(...tags.map(tag=>{
+          const option=el("button","tag-filter-option");option.type="button";option.dataset.tag=tag;option.textContent=tagLabel(tag);
+          option.setAttribute("aria-pressed",String(selectedTags.has(tag)));
+          option.addEventListener("click",()=>toggleTag(tag));
+          return option;
+        }));
+        clear.hidden=!selectedTags.size;
+        const shown=scenarios.filter(scenarioMatchesTags).length;
+        count.textContent=selectedTags.size ? "Showing "+shown+" of "+scenarios.length+" scenario"+(scenarios.length===1 ? "" : "s") : "";
+      };
+      render();onTagChange(bar,render);
+      bar.append(label,options,clear,count);
+      return bar;
+    }
     function buildTestsReport(run,render){
       const narrative=el("div","tests-narrative");
       const scenarios=run.scenarios || [];
       if(!scenarios.length)narrative.appendChild(coverageText("p","coverage-empty","No scenarios in this run."));
+      sharedTags=sharedTagsOf(scenarios);
+      const tagFilter=buildTagFilter(scenarios), shown=[];
+      if(tagFilter)narrative.appendChild(tagFilter);
       for(const group of groupByClass(scenarios)){
         const section=el("section","group");
         const heading=el("h2","tests-class-name");heading.tabIndex=0;
         heading.innerHTML='<span class="tests-class-label">'+esc(group.label)+'</span>'+reportIdentifierHtml(group.type,group.type,"group-type",group.scenarios.find(sc=>sc.typeSourceUrl)?.typeSourceUrl);
         section.appendChild(heading);
         const body=el("div","group-body");
-        for(const sc of group.scenarios)body.appendChild(render(sc));
+        const cards=group.scenarios.map(sc=>({sc,card:body.appendChild(render(sc))}));
+        shown.push({section,cards});
         section.appendChild(body);
         narrative.appendChild(section);
+      }
+      if(tagFilter){
+        // Hide rather than rebuild, so open cards and built step lists survive a change of filter.
+        const apply=()=>{for(const {section,cards} of shown){
+          let any=false;
+          for(const {sc,card} of cards){const match=scenarioMatchesTags(sc);card.classList.toggle("tag-filtered",!match);any||=match;}
+          section.classList.toggle("tag-filtered",!any);
+        }};
+        apply();onTagChange(narrative,apply);
       }
       return narrative;
     }
     function renderAll(){
       if(reportApp)return;
+      for(const tag of new URLSearchParams(location.search).getAll("tag"))selectedTags.add(tag);
       const views=[{key:"tests",label:"Scenarios",build:()=>buildTestsReport(model,sc=>renderScenario(sc))}];
       if(model.coverage)views.push({key:"coverage",label:"Coverage",build:()=>buildCoverageReport(model.coverage)});
       reportApp=buildReportViews(views,document.getElementById("report-tabs"),key=>{document.body.dataset.reportView=key;},"tests");
@@ -1782,6 +1859,20 @@
       head.innerHTML='<span class="tw" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></span><span class="scenario-status '+esc(sc.status)+'" role="img" aria-label="'+esc(sc.status)+'"></span>'+
         '<span class="name"><span class="scenario-title">'+esc(sc.displayName)+'</span>'+reportIdentifierHtml(shortName(sc.methodName),sc.methodName,"scenario-method",sc.sourceUrl)+'</span><span class="dur">'+fmtDur(sc.durationMs)+'</span>';
       if(sc.waitedMs>0)head.innerHTML+='<div class="where">Queued'+(sc.waitedFor ? ' for '+esc(sc.waitedFor) : '')+' · '+fmtDur(sc.waitedMs)+'</div>';
+      const ownTags=(sc.tags || []).map(tagText).filter(tag=>!sharedTags.has(tag));
+      if(!workspace && ownTags.length){
+        // Each chip toggles the tag filter; like a card tool it never expands or collapses the card.
+        const tags=el("span","scenario-tags");
+        for(const tag of ownTags){
+          const chip=el("button","scenario-tag");chip.type="button";chip.dataset.tag=tag;chip.textContent=tagLabel(tag);
+          chip.title="Show only scenarios tagged "+tag;chip.setAttribute("aria-pressed",String(selectedTags.has(tag)));
+          chip.addEventListener("click",event=>{event.stopPropagation();toggleTag(tag);});
+          chip.addEventListener("keydown",event=>{if(event.key==="Enter" || event.key===" ")event.stopPropagation();});
+          tags.appendChild(chip);
+        }
+        head.appendChild(tags);
+        onTagChange(tags,()=>{for(const chip of tags.children)chip.setAttribute("aria-pressed",String(selectedTags.has(chip.dataset.tag)));});
+      }
       const toggle = () => { head.setAttribute("aria-expanded", String(!isExpanded(sc))); setExpanded(sc, !isExpanded(sc)); };
       if(!workspace){
       head.setAttribute("aria-expanded", String(isExpanded(sc)));
