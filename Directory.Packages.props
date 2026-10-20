@@ -22,21 +22,21 @@
 
     <!-- ILogger bridge: step logs written through the standard .NET logging abstraction.
          Abstractions only â€” no logging implementation is taken as a dependency. -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
 
     <!-- DI: Raun.Mtp needs only the abstractions (IServiceScopeFactory); the test project needs
          the implementation to build a provider. -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
 
     <!-- Aspire integration (Raun.Aspire + the Aspire sample). -->
     <!-- Patch the transitive MessagePack dependency: GHSA-qhrr-8q5h-9q3h. -->
-    <PackageVersion Include="MessagePack" Version="2.5.303" />
+    <PackageVersion Include="MessagePack" Version="3.1.12" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.1" />
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.1" />
-    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
 
     <!-- Coverage spike: does the profiler reach Aspire's child processes?
          Moves in lockstep with Microsoft.Testing.Platform above: a version mismatch surfaces as a
@@ -70,8 +70,8 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
     <!-- 18.10.x targets .NET 11; 18.9.6 is the latest .NET 10-compatible MSBuild. -->
-    <PackageVersion Include="Microsoft.Build.Framework" Version="18.9.6" />
-    <PackageVersion Include="Microsoft.NET.StringTools" Version="18.9.6" />
+    <PackageVersion Include="Microsoft.Build.Framework" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.NET.StringTools" Version="18.11.0" />
 
     <!-- Tag-driven versioning for the packable libraries (referenced from Directory.Build.targets). -->
     <PackageVersion Include="MinVer" Version="8.0.0" />
@@ -83,7 +83,7 @@
          `using Xunit;` verbatim. Pinned to match the xunit.v3 line above. -->
     <PackageVersion Include="xunit.v3.assert" Version="4.0.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
   </ItemGroup>
 
 </Project>
