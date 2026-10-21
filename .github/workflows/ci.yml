@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Dependabot lock files re-runs CI after pushing regenerated lock files to a Dependabot branch.
+  workflow_dispatch:
 
 permissions:
   contents: read

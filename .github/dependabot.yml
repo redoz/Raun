@@ -1,6 +1,8 @@
 # Dependency updates, grouped so a week's bumps arrive as one reviewable PR per ecosystem rather
 # than one per package. NuGet versions are centrally managed (Directory.Packages.props) and pinned
-# by packages.lock.json, so a Dependabot PR updates both and CI re-restores with --locked-mode.
+# by packages.lock.json. Dependabot edits the lock files itself but never runs a real restore, so it
+# misses the per-RID lock files (packages.linux-x64.lock.json) and some transitive project entries;
+# the dependabot-locks workflow regenerates every lock file on its PRs before CI's --locked-mode.
 version: 2
 updates:
   - package-ecosystem: nuget
@@ -11,6 +13,16 @@ updates:
     groups:
       all-nuget:
         patterns: ['*']
+    ignore:
+      # MSBuild 18.10+ targets .NET 11; the SDK is pinned to 10.0 (global.json). Bump these
+      # together with the SDK, by hand.
+      - dependency-name: Microsoft.Build.Framework
+        versions: ['>= 18.10']
+      - dependency-name: Microsoft.NET.StringTools
+        versions: ['>= 18.10']
+      # A security pin for a transitive dependency of StreamJsonRpc, which is built against 2.x.
+      - dependency-name: MessagePack
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /

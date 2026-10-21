@@ -1,0 +1,47 @@
+name: Dependabot lock files
+
+# Dependabot rewrites packages.lock.json files by hand instead of running a restore, so it misses
+# the per-RID lock files and some transitive project entries, and CI's --locked-mode restore fails.
+# On a Dependabot PR this runs a real restore (which, via Directory.Build.targets, rewrites every
+# committed RID's lock file), pushes the result to the PR branch, and re-runs CI on that commit:
+# pushes made with GITHUB_TOKEN do not trigger workflows, but workflow_dispatch does.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  refresh:
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Regenerate lock files
+        run: |
+          dotnet restore Raun.slnx
+          dotnet restore test/Raun.PackageTests/Raun.PackageTests.csproj
+
+      - name: Push and re-run CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet; then
+            echo "Lock files already consistent."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git commit -am "build: regenerate lock files after the dependency bump"
+          git push
+          gh workflow run ci.yml --ref "$BRANCH"
