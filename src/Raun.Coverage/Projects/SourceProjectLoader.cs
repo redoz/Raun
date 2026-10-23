@@ -135,14 +135,7 @@ internal static class SourceProjectLoader
     private static async Task<ProjectProperties> ReadPropertiesAsync(Project project, string configuration, CancellationToken cancellationToken, string? targetFramework = null)
     {
         var projectPath = project.FilePath!;
-        var start = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var start = DotnetProcess.StartInfo(Path.GetDirectoryName(projectPath)!);
         start.ArgumentList.Add("msbuild");
         start.ArgumentList.Add(projectPath);
         start.ArgumentList.Add("-getProperty:IsTestProject,IsTestingPlatformApplication,TargetPath,TargetFramework,TargetFrameworks");

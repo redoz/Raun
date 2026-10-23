@@ -25,7 +25,7 @@ public sealed class RuntimeScopeFixtureTests
             WriteProject(root, "Unrelated", "<TargetFrameworks>net10.0;netstandard2.0</TargetFrameworks>", "", "public class Unrelated {}");
             var solution = Path.Combine(root, "Scope.slnx");
             File.WriteAllText(solution, "<Solution><Project Path='Root/Root.csproj'/><Project Path='Sut/Sut.csproj'/><Project Path='Dependency/Dependency.csproj'/><Project Path='Unrelated/Unrelated.csproj'/></Solution>");
-            var start = new ProcessStartInfo("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            var start = DotnetProcess.StartInfo(root);
             start.ArgumentList.Add("restore"); start.ArgumentList.Add(solution);
             using var process = Process.Start(start)!;
             var output = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
