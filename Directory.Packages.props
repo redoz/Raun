@@ -33,9 +33,9 @@
     <!-- Aspire integration (Raun.Aspire + the Aspire sample). -->
     <!-- Patch the transitive MessagePack dependency: GHSA-qhrr-8q5h-9q3h. Stay on 2.x: StreamJsonRpc
          (via Aspire) is built against MessagePack 2, and 3.x is a breaking major. -->
-    <PackageVersion Include="MessagePack" Version="2.5.303" />
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.1" />
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.1" />
+    <PackageVersion Include="MessagePack" Version="2.5.307" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.3" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.3" />
     <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
 
