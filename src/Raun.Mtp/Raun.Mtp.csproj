@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>$(RaunTargetFrameworks)</TargetFrameworks>
     <!-- This is the FRAMEWORK library, not a runnable test app. The Microsoft.Testing.Platform
          package defaults IsTestingPlatformApplication to true, which would make `dotnet test` (under
          the repo's MTP runner in global.json) try to run this library as a test executable and fail

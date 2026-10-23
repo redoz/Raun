@@ -1,11 +1,9 @@
 <Project>
   <PropertyGroup>
-    <RaunCoveragePackBuildHost>false</RaunCoveragePackBuildHost>
-    <RaunCoveragePackBuildHost Condition="'$(MSBuildProjectName)' == 'Raun.Coverage'">true</RaunCoveragePackBuildHost>
     <RaunCoverageBuildHostRoot>$(MSBuildThisFileDirectory)BuildHost-netcore/</RaunCoverageBuildHostRoot>
     <RaunCoverageBuildHostRoot Condition="!Exists('$(RaunCoverageBuildHostRoot)')">$(PkgMicrosoft_CodeAnalysis_Workspaces_MSBuild)/contentFiles/any/any/BuildHost-netcore/</RaunCoverageBuildHostRoot>
   </PropertyGroup>
   <ItemGroup Condition="Exists('$(RaunCoverageBuildHostRoot)')">
-    <Content Include="$(RaunCoverageBuildHostRoot)**/*" Link="BuildHost-netcore/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" Pack="$(RaunCoveragePackBuildHost)" PackagePath="buildTransitive/BuildHost-netcore/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="$(RaunCoverageBuildHostRoot)**/*" Link="BuildHost-netcore/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" Pack="false" />
   </ItemGroup>
 </Project>

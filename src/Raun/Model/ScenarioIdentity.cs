@@ -33,7 +33,7 @@ public static class ScenarioIdentity
     {
         ArgumentNullException.ThrowIfNull(methodFullName);
 
-        var lastDot = methodFullName.LastIndexOf('.');
+        var lastDot = methodFullName.AsSpan().LastIndexOf('.');
         if (lastDot < 0)
         {
             @namespace = string.Empty;
@@ -45,7 +45,7 @@ public static class ScenarioIdentity
         methodName = methodFullName[(lastDot + 1)..];
         var declaringType = methodFullName[..lastDot];
 
-        var typeDot = declaringType.LastIndexOf('.');
+        var typeDot = declaringType.AsSpan().LastIndexOf('.');
         if (typeDot < 0)
         {
             @namespace = string.Empty;

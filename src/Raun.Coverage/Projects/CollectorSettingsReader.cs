@@ -12,7 +12,7 @@ public static class CollectorSettingsReader
         using var reader = new StreamReader(stream, leaveOpen: true);
         var text = reader.ReadToEnd();
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (text.TrimStart().StartsWith('<'))
+        if (text.AsSpan().TrimStart().StartsWith('<'))
         {
             using var xmlReader = XmlReader.Create(new StringReader(text), new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
             var document = XDocument.Load(xmlReader);

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>$(RaunTargetFrameworks)</TargetFrameworks>
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
     <Description>Source-first classified branch coverage analysis for Raun reports.</Description>
   </PropertyGroup>
@@ -20,5 +20,19 @@
     <None Include="buildTransitive/Raun.Coverage.targets" Pack="true" PackagePath="buildTransitive/" />
   </ItemGroup>
   <Import Project="buildTransitive/Raun.Coverage.targets" />
+
+  <!-- Pack the Roslyn MSBuild BuildHost once, from the primary target framework. A Content item
+       with Pack=true is collected by the outer (multi-target) build, where the package path
+       property it is built from is not set, so it would silently ship without the BuildHost. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_IncludeRaunCoverageBuildHost</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <Target Name="_IncludeRaunCoverageBuildHost" Condition="'$(TargetFramework)' == '$(RaunPrimaryTargetFramework)'">
+    <Error Condition="!Exists('$(RaunCoverageBuildHostRoot)')" Text="Roslyn MSBuild BuildHost not found at $(RaunCoverageBuildHostRoot)." />
+    <ItemGroup>
+      <_RaunCoverageBuildHostFile Include="$(RaunCoverageBuildHostRoot)**/*" />
+      <TfmSpecificPackageFile Include="@(_RaunCoverageBuildHostFile)" PackagePath="buildTransitive/BuildHost-netcore/%(_RaunCoverageBuildHostFile.RecursiveDir)" />
+    </ItemGroup>
+  </Target>
 </Project>
 

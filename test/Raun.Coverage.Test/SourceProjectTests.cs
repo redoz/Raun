@@ -20,13 +20,14 @@ public sealed class SourceProjectTests
     {
         using var loaded = await SourceProjectLoader.LoadAsync(
             Path.Combine(CoverageEnvironmentProbeTests.FindRoot(), "Raun.slnx"), new CollectorScope(), TestContext.Current.CancellationToken);
-        Assert.Contains(loaded.Projects, p => p.Name == "Raun");
-        Assert.Contains(loaded.Projects, p => p.Name == "Raun.Coverage");
-        Assert.DoesNotContain(loaded.Projects, p => p.Name == "Raun.Generator");
-        Assert.DoesNotContain(loaded.Projects, p => p.Name == "AspireAppointments.Api");
-        Assert.DoesNotContain(loaded.Projects, p => p.Name == "AppointmentTests");
-        Assert.DoesNotContain(loaded.Projects, p => p.Name == "Raun.Coverage.Test");
-        Assert.Contains(loaded.Diagnostics, d => d.Contains("Raun.Coverage.Test: excluded", StringComparison.Ordinal));
+        Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun");
+        Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Coverage");
+        Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Generator");
+        Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.Api");
+        Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "AppointmentTests");
+        Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Coverage.Test");
+        // Multi-targeted projects are named per target framework, e.g. "Raun.Coverage.Test(net11.0)".
+        Assert.Contains(loaded.Diagnostics, d => d.StartsWith("Raun.Coverage.Test", StringComparison.Ordinal) && d.Contains(": excluded", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -40,12 +41,12 @@ public sealed class SourceProjectTests
             TestContext.Current.CancellationToken,
             useSourceContext ? "ExternalConsumer.dll" : Path.Combine(source, "bin", "Debug", "net10.0", "AspireAppointments.Tests.dll"),
             useSourceContext ? source : root);
-        Assert.Contains(loaded.Projects, p => p.Name == "AspireAppointments.Api");
-        Assert.Contains(loaded.Projects, p => p.Name == "AspireAppointments.AppHost");
-        Assert.Contains(loaded.Projects, p => p.Name == "Raun.Mtp");
-        Assert.DoesNotContain(loaded.Projects, p => p.Name == "Raun.Generator");
-        Assert.DoesNotContain(loaded.Projects, p => p.Name == "AppointmentTests");
-        Assert.DoesNotContain(loaded.Projects, p => p.Name == "AspireAppointments.Tests");
+        Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.Api");
+        Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.AppHost");
+        Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Mtp");
+        Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Generator");
+        Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "AppointmentTests");
+        Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.Tests");
     }
 
     [Fact]
@@ -55,10 +56,10 @@ public sealed class SourceProjectTests
         using var loaded = await SourceProjectLoader.LoadAsync(Path.Combine(root, "Raun.slnx"),
             new CollectorScope { ModuleExcludes = [@"Raun\.Aspire\.dll$"] }, TestContext.Current.CancellationToken,
             Path.Combine(root, "samples", "AspireAppointments", "AspireAppointments.Tests", "bin", "Debug", "net10.0", "AspireAppointments.Tests.dll"));
-        Assert.DoesNotContain(loaded.Projects, p => p.Name == "Raun.Aspire");
-        Assert.Contains(loaded.Projects, p => p.Name == "Raun.Mtp");
-        Assert.Contains(loaded.Projects, p => p.Name == "Raun");
-        Assert.Contains(loaded.Projects, p => p.Name == "AspireAppointments.Api");
+        Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Aspire");
+        Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Mtp");
+        Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun");
+        Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.Api");
     }
 
     [Fact]

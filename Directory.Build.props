@@ -11,12 +11,18 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- The runtimes the libraries ship for and their tests run on. Samples and test fixtures
+         stay on the lowest one. -->
+    <RaunPrimaryTargetFramework>net10.0</RaunPrimaryTargetFramework>
+    <RaunTargetFrameworks>$(RaunPrimaryTargetFramework);net11.0</RaunTargetFrameworks>
 
     <!-- Every warning (compiler, CA, and IDE style) is a build error, repo-wide, with the full
-         analyzer set turned on. -->
+         analyzer set turned on. Pinned to the .NET 10 rule set: the .NET 11 SDK's 'latest' turns
+         on IDE style rules (IDE0008, IDE0022, ...) that contradict this codebase's style. Move it
+         deliberately, with the .editorconfig preferences settled, not as a side effect of an SDK. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
-    <AnalysisLevel>latest-all</AnalysisLevel>
+    <AnalysisLevel>10.0-all</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 
     <!-- CS1591: don't require XML docs on every public member (yet).

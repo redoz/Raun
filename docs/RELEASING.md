@@ -127,6 +127,13 @@ such a build up front with `RAUN018`, comparing `$(NETCoreSdkVersion)` against
 Supported baseline today: the .NET 10 SDK 10.0.300 or later. Adding an older baseline means a
 `Raun.Generator.RoslynNN` variant project (see `Directory.Build.props`), not a version bump.
 
+The libraries ship `lib/net10.0` and `lib/net11.0` (`RaunTargetFrameworks` in
+`Directory.Build.props`), and the tests run on both. The repository builds with the .NET 11 SDK
+pinned in `global.json`; CI also installs the .NET 10 SDK for the `net10.0` test runs. The generator
+is added to the `Raun` package once, from `RaunPrimaryTargetFramework`. On `net11.0` the
+`Microsoft.Extensions.*.Abstractions` dependencies disappear from the nuspec: .NET 11 ships them in
+the shared framework, and the SDK prunes them.
+
 ## Generator ↔ runtime contract
 
 The generated code targets only data: `ScenarioDefinition` / `ScenarioNode` object initializers,

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>$(RaunTargetFrameworks)</TargetFrameworks>
     <!-- A library, not a runnable test app: the same opt-out Raun.Mtp needs, because
          Microsoft.Testing.Platform (referenced transitively) defaults this to true. -->
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>

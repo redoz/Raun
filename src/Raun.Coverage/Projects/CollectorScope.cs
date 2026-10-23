@@ -19,7 +19,7 @@ public sealed record CollectorScope
     private static bool CoverletMatch(string filter, string assembly, string type)
     {
         var end = filter.IndexOf(']', StringComparison.Ordinal);
-        if (!filter.StartsWith('[') || end < 1) { return false; }
+        if (!filter.AsSpan().StartsWith('[') || end < 1) { return false; }
         static string Pattern(string glob) => "^" + Regex.Escape(glob).Replace(@"\*", ".*", StringComparison.Ordinal).Replace(@"\?", "?", StringComparison.Ordinal) + "$";
         return Match(assembly, Pattern(filter[1..end])) && Match(type.Replace('+', '.'), Pattern(filter[(end + 1)..].Replace('+', '.')));
     }

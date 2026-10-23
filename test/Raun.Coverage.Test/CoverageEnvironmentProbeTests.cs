@@ -11,7 +11,9 @@ public sealed class CoverageEnvironmentProbeTests
     {
         var root = FindRoot();
         var sdk = WorkspaceSdk.EnsureRegistered(root);
-        Assert.Equal(10, sdk.Major);
+        // global.json pins the .NET 11 SDK; a net10.0 process can only load a .NET 10 SDK's MSBuild,
+        // so the locator falls back to the newest SDK the running runtime can host.
+        Assert.Equal(Environment.Version.Major, sdk.Major);
         using var workspace = MSBuildWorkspace.Create();
         var solution = await workspace.OpenSolutionAsync(Path.Combine(root, "Raun.slnx"), cancellationToken: TestContext.Current.CancellationToken);
         var api = Assert.Single(solution.Projects, p => p.Name == "AspireAppointments.Api");

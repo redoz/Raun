@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>$(RaunTargetFrameworks)</TargetFrameworks>
     <Description>
       The Raun runtime: the [Scenario] attributes, the Given/When/Then step-class bases and the scenario world, the
       source generator that lowers a scenario method into a step graph, the DAG step
@@ -52,8 +52,9 @@
     <None Include="buildTransitive\Raun.props" Pack="true" PackagePath="buildTransitive\" />
   </ItemGroup>
 
-  <Target Name="_IncludeRaunGenerator">
-    <!-- Pin the analyzer TFM so this net10.0 project's TargetFramework doesn't flow to the
+  <!-- Analyzers are not per-TFM: add the generator once, from the primary target framework. -->
+  <Target Name="_IncludeRaunGenerator" Condition="'$(TargetFramework)' == '$(RaunPrimaryTargetFramework)'">
+    <!-- Pin the analyzer TFM so this project's TargetFramework doesn't flow to the
          netstandard2.0 generator via the MSBuild task's inherited global properties. -->
     <MSBuild Projects="..\Raun.Generator\Raun.Generator.csproj" Targets="GetTargetPath"
              Properties="TargetFramework=netstandard2.0;Configuration=$(Configuration)">
