@@ -3,8 +3,8 @@ name: Dependabot lock files
 # Dependabot rewrites packages.lock.json files by hand instead of running a restore, so it misses
 # the per-RID lock files and some transitive project entries, and CI's --locked-mode restore fails.
 # On a Dependabot PR this runs a real restore (which, via Directory.Build.targets, rewrites every
-# committed RID's lock file), pushes the result to the PR branch, and re-runs CI on that commit:
-# pushes made with GITHUB_TOKEN do not trigger workflows, but workflow_dispatch does.
+# committed RID's lock file), pushes the result to the PR branch, and runs CI once on the final
+# commit through workflow_dispatch.
 on:
   pull_request:
     branches: [main]
@@ -38,10 +38,13 @@ jobs:
         run: |
           if git diff --quiet; then
             echo "Lock files already consistent."
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+            # [skip ci]: the push would otherwise start approval-gated pull_request runs; CI runs
+            # once below instead. workflow_dispatch ignores [skip ci].
+            git commit -am "build: regenerate lock files after the dependency bump [skip ci]"
+            git push
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
-          git commit -am "build: regenerate lock files after the dependency bump"
-          git push
+          # CI skips Dependabot's own pull_request runs, so this is the PR's one CI run.
           gh workflow run ci.yml --ref "$BRANCH"

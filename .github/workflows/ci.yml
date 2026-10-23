@@ -13,6 +13,9 @@ permissions:
 
 jobs:
   build:
+    # A Dependabot PR's lock files are regenerated first; Dependabot lock files dispatches this
+    # workflow on the final commit, so the PR's own (stale-lock) run would only add a red check.
+    if: github.event_name != 'pull_request' || github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
