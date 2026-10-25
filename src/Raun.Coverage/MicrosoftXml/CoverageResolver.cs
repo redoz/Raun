@@ -41,7 +41,7 @@ internal static class CoverageResolver
         {
             return EvidenceStatus.NotReached;
         }
-        if (branch.Measurement == MeasurementKind.Guard && branch.Syntax is IfStatementSyntax guard && hits.Length == 1 && hits[0] != CoverageHit.Yes)
+        if (branch.Measurement == MeasurementKind.Guard && branch.Syntax is IfStatementSyntax guard && hits.Length == 1 && hits[0] == CoverageHit.No)
         {
             return Match(guard.Condition.GetLocation().GetLineSpan(), branch, ranges) switch
             {
@@ -106,6 +106,8 @@ internal static class CoverageResolver
             : matches.Any(range => range.Hit == CoverageHit.Partial) ? CoverageHit.Partial : CoverageHit.No;
     }
 
+    // Checks syntax, not the inventory: it cannot see which nodes were inventoried. Over-including a node only turns
+    // partial into unknown; it never overclaims.
     // A partly executed range that also holds another inventoried branch's test cannot say which of them missed.
     private static bool SharesRange(InventoryBranch branch, CoverageRange[] ranges)
     {

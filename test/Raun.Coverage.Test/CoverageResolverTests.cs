@@ -132,6 +132,17 @@ public sealed class CoverageResolverTests
     }
 
     [Fact]
+    public void A_guard_with_unresolved_throw_evidence_is_unknown_even_when_the_condition_ran()
+    {
+        var guard = Guard("class C { void M(string s) { if (s.Length == 0) throw new System.ArgumentException(); } }");
+        var condition = ((Microsoft.CodeAnalysis.CSharp.Syntax.IfStatementSyntax)guard.Syntax).Condition.GetLocation().GetLineSpan();
+        var conditionOnly = guard with { Outcomes = [condition] };
+        Assert.Equal(EvidenceStatus.Unknown, CoverageResolver.Resolve(guard, Read(Xml(conditionOnly, "yes"))));
+        var probe = guard with { Outcomes = [guard.Outcomes[0], condition] };
+        Assert.Equal(EvidenceStatus.Unknown, CoverageResolver.Resolve(guard, Read(Xml(probe, "partial", "yes"))));
+    }
+
+    [Fact]
     public void A_partly_executed_range_shared_by_two_branches_is_ambiguous_for_both()
     {
         var compilation = TestCompilation.Create("class C { void M(string s) { if (s?.Length == 0) throw new System.ArgumentException(); } }");
