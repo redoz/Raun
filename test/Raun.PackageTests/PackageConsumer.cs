@@ -261,8 +261,12 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         Assert.Contains(coverage.GetProperty("categories").EnumerateArray(), category =>
         {
             var counts = category.GetProperty("counts");
-            return new[] { "exercised", "complete", "reached", "partial", "evaluated" }
-                .Any(name => counts.GetProperty(name).GetInt32() > 0);
+            var inventory = counts.GetProperty("inventory").GetInt32();
+            var covered = counts.GetProperty("covered").GetInt32();
+            var partial = counts.GetProperty("partial").GetInt32();
+            var uncovered = counts.GetProperty("uncovered").GetInt32();
+            var unknown = counts.GetProperty("unknown").GetInt32();
+            return inventory > 0 && inventory == covered + partial + uncovered + unknown && covered + partial > 0;
         });
     }
 
