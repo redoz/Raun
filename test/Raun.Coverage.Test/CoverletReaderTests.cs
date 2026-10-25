@@ -101,14 +101,23 @@ public sealed class CoverletReaderTests
         Assert.Empty(CoverletBranchEvidence.PathHits(branch, [module with { Paths = [.. module.Paths, new CoveragePath("fixture.cs", "lambda", 1, 20, 0, 1)] }]));
     }
 
+    private const string DecisionSource = "class C { int M(bool b) { if (b) return 1; return 2; } }";
+    private const string ExpressionSource = "class C { int M(bool b) { return b ? 1 : 2; } }";
+    private const string GuardSource = "class C { void M(string s) { if (s.Length == 0) throw new System.ArgumentException(); } }";
+
     [Theory]
-    [InlineData(4L, 0L, (int)EvidenceStatus.Incomplete)]
-    [InlineData(1L, 1L, (int)EvidenceStatus.Complete)]
-    [InlineData(0L, 0L, (int)EvidenceStatus.NotReached)]
-    public void Unique_decision_paths_resolve_without_assigning_true_false_labels(long first, long second, int expectedValue)
+    [InlineData(DecisionSource, 4L, 0L, (int)EvidenceStatus.Incomplete)]
+    [InlineData(DecisionSource, 1L, 1L, (int)EvidenceStatus.Complete)]
+    [InlineData(DecisionSource, 0L, 0L, (int)EvidenceStatus.NotReached)]
+    [InlineData(ExpressionSource, 4L, 0L, (int)EvidenceStatus.Incomplete)]
+    [InlineData(ExpressionSource, 1L, 1L, (int)EvidenceStatus.Complete)]
+    [InlineData(ExpressionSource, 0L, 0L, (int)EvidenceStatus.NotReached)]
+    [InlineData(GuardSource, 4L, 0L, (int)EvidenceStatus.Incomplete)]
+    [InlineData(GuardSource, 1L, 1L, (int)EvidenceStatus.Complete)]
+    [InlineData(GuardSource, 0L, 0L, (int)EvidenceStatus.NotReached)]
+    public void Unique_decision_paths_resolve_without_assigning_true_false_labels(string source, long first, long second, int expectedValue)
     {
         var expected = (EvidenceStatus)expectedValue;
-        const string source = "class C { int M(bool b) { if (b) return 1; return 2; } }";
         var branch = Assert.Single(BranchInventoryBuilder.Build(TestCompilation.Create(source), new CollectorScope(), TestContext.Current.CancellationToken));
         var checksum = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(source)));
         var document = new CoverageSource("fixture.cs", "SHA256", checksum);
@@ -211,9 +220,9 @@ public sealed class CoverletReaderTests
             IsCoverlet = true, HasFrequencyCounts = false,
             Paths = [new CoveragePath("fixture.cs", "M", 1, 20, 0, 1), new CoveragePath("fixture.cs", "M", 1, 20, 1, 1)],
         };
-        var snippets = CoverageSourceBuilder.Build([(branch, BranchCategory.Logic, EvidenceStatus.Reached)], new CoverageObservations([module]));
+        var snippets = CoverageSourceBuilder.Build([(branch, BranchCategory.Logic, EvidenceStatus.Complete)], new CoverageObservations([module]));
         Assert.Empty(Assert.Single(Assert.Single(snippets).Branches).PathHits);
-        Assert.Equal(EvidenceStatus.Reached, CoverageResolver.Resolve(branch, new CoverageObservations([module])));
+        Assert.Equal(EvidenceStatus.Complete, CoverageResolver.Resolve(branch, new CoverageObservations([module])));
     }
 
     [Fact]

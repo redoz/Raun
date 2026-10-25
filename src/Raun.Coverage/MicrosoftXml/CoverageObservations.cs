@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Raun.Coverage.MicrosoftXml;
 
 internal enum CoverageHit { No, Partial, Yes }
-internal enum EvidenceStatus { Complete, Incomplete, Exercised, Reached, Partial, NotReached, Unknown, Unmeasurable, Evaluated }
+internal enum EvidenceStatus { Complete, Incomplete, Exercised, Reached, Partial, NotReached, Unknown, Unmeasurable, Evaluated, Untriggered, SharedRange }
 
 internal sealed record CoverageSource(string Path, string ChecksumType, string Checksum);
 internal sealed record CoverageRange(CoverageSource Source, LinePosition Start, LinePosition End, CoverageHit Hit)

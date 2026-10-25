@@ -14,13 +14,7 @@ internal static class CoverletBranchEvidence
         // Two source decisions on the same line cannot be paired with IL offset groups
         // without a proven lowered-method mapping. Never assign by JSON order or path number.
         var onLine = branch.Syntax.SyntaxTree.GetRoot().DescendantNodes().Where(node =>
-            node.GetLocation().GetLineSpan().StartLinePosition.Line == line).Count(node =>
-            node is IfStatementSyntax or SwitchStatementSyntax or ConditionalExpressionSyntax or SwitchExpressionSyntax
-                or WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or CommonForEachStatementSyntax or CatchFilterClauseSyntax or SwitchExpressionArmSyntax
-                or ConditionalAccessExpressionSyntax || node is BinaryExpressionSyntax binary &&
-                (binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.CoalesceExpression)
-                    || binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.LogicalAndExpression)
-                    || binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.LogicalOrExpression)));
+            node.GetLocation().GetLineSpan().StartLinePosition.Line == line).Count(IsBranchNode);
         if (onLine != 1) { return []; }
         var groups = modules.Where(module => module.IsCoverlet).SelectMany(module => module.Paths)
             .Where(path => path.Line == line + 1 && string.Equals(Path.GetFullPath(path.SourcePath), Path.GetFullPath(branch.Syntax.SyntaxTree.FilePath),
@@ -29,4 +23,12 @@ internal static class CoverletBranchEvidence
         if (groups.Length != 1 || groups[0].Select(path => path.Path).Distinct().Count() != groups[0].Count()) { return []; }
         return groups[0].OrderBy(path => path.Path).Select(path => path.Hits).ToArray();
     }
+
+    internal static bool IsBranchNode(SyntaxNode node)
+        => node is IfStatementSyntax or SwitchStatementSyntax or ConditionalExpressionSyntax or SwitchExpressionSyntax
+            or WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or CommonForEachStatementSyntax or CatchFilterClauseSyntax or SwitchExpressionArmSyntax
+            or ConditionalAccessExpressionSyntax || node is BinaryExpressionSyntax binary &&
+            (binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.CoalesceExpression)
+                || binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.LogicalAndExpression)
+                || binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.LogicalOrExpression));
 }

@@ -30,12 +30,12 @@ public sealed class CoverageResolverTests
     }
 
     [Fact]
-    public void Guards_use_throw_hits_helpers_are_unmeasurable_and_expressions_are_coarse()
+    public void Helpers_are_unmeasurable_and_expressions_are_coarse_without_paths()
     {
         var compilation = TestCompilation.Create("using System; class C { string M(string x) { ArgumentNullException.ThrowIfNull(x); if(x.Length == 0) throw new ArgumentException(); return x ?? throw new ArgumentException(); } }");
         var branches = BranchInventoryBuilder.Build(compilation, new CollectorScope(), TestContext.Current.CancellationToken);
         Assert.Equal(EvidenceStatus.Unmeasurable, Resolve(Assert.Single(branches, b => b.Measurement == MeasurementKind.Helper)));
-        Assert.Equal(EvidenceStatus.Exercised, Resolve(Assert.Single(branches, b => b.Measurement == MeasurementKind.Guard), "yes"));
+        Assert.Equal(EvidenceStatus.Unknown, Resolve(Assert.Single(branches, b => b.Measurement == MeasurementKind.Guard), "no"));
         Assert.Equal(EvidenceStatus.Reached, Resolve(Assert.Single(branches, b => b.Measurement == MeasurementKind.Expression), "yes"));
     }
 
@@ -113,6 +113,38 @@ public sealed class CoverageResolverTests
         Assert.Equal(EvidenceStatus.Exercised, Resolve(branch, "yes"));
         Assert.Equal(EvidenceStatus.NotReached, Resolve(branch, "no"));
     }
+    [Fact]
+    public void Guards_score_the_rejection_from_condition_and_throw()
+    {
+        var guard = Guard("class C { void M(string s) { if (s.Length == 0) throw new System.ArgumentException(); } }");
+        var condition = ((Microsoft.CodeAnalysis.CSharp.Syntax.IfStatementSyntax)guard.Syntax).Condition.GetLocation().GetLineSpan();
+        var probe = guard with { Outcomes = [guard.Outcomes[0], condition] };
+        Assert.Equal(EvidenceStatus.Exercised, CoverageResolver.Resolve(guard, Read(Xml(probe, "yes", "yes"))));
+        Assert.Equal(EvidenceStatus.Untriggered, CoverageResolver.Resolve(guard, Read(Xml(probe, "no", "yes"))));
+        Assert.Equal(EvidenceStatus.NotReached, CoverageResolver.Resolve(guard, Read(Xml(probe, "no", "no"))));
+    }
+
+    [Fact]
+    public void A_guard_without_resolvable_condition_evidence_is_unknown_not_unreached()
+    {
+        var guard = Guard("class C { void M(string s) { if (s.Length == 0) throw new System.ArgumentException(); } }");
+        Assert.Equal(EvidenceStatus.Unknown, Resolve(guard, "no"));
+    }
+
+    [Fact]
+    public void A_partly_executed_range_shared_by_two_branches_is_ambiguous_for_both()
+    {
+        var compilation = TestCompilation.Create("class C { void M(string s) { if (s?.Length == 0) throw new System.ArgumentException(); } }");
+        var branches = BranchInventoryBuilder.Build(compilation, new CollectorScope(), TestContext.Current.CancellationToken);
+        var expression = Assert.Single(branches, b => b.Measurement == MeasurementKind.Expression);
+        Assert.Equal(EvidenceStatus.SharedRange, Resolve(expression, "partial"));
+        var lone = Assert.Single(BranchInventoryBuilder.Build(TestCompilation.Create("class C { string M(string s) => s ?? \"x\"; }"),
+            new CollectorScope(), TestContext.Current.CancellationToken), b => b.Measurement == MeasurementKind.Expression);
+        Assert.Equal(EvidenceStatus.Partial, Resolve(lone, "partial"));
+    }
+
+    private static InventoryBranch Guard(string source) => Assert.Single(BranchInventoryBuilder.Build(
+        TestCompilation.Create(source), new CollectorScope(), TestContext.Current.CancellationToken), b => b.Measurement == MeasurementKind.Guard);
     private static InventoryBranch Decision(string source) => Assert.Single(BranchInventoryBuilder.Build(
         TestCompilation.Create(source), new CollectorScope(), TestContext.Current.CancellationToken));
     private static EvidenceStatus Resolve(InventoryBranch branch, params string[] states)
