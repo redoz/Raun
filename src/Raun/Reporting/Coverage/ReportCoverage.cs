@@ -31,9 +31,22 @@ public sealed record ReportCoverageSource(string Path, int StartLine, string Tex
 }
 public sealed record ReportCoverageExecution(int Start, int Length, string State);
 public sealed record ReportCoverageToken(int Start, int Length, string Kind);
+/// <summary>One classified branch inside a source snippet.</summary>
+/// <param name="Start">Offset of the branch in the snippet text.</param>
+/// <param name="Length">Length of the branch in the snippet text.</param>
+/// <param name="Category">Classification category, or null when the branch is unclassified.</param>
+/// <param name="Outcome">
+/// <c>covered</c> (every path shown to run), <c>partial</c> (some path shown not to run), <c>uncovered</c> (shown never
+/// to run) or <c>unknown</c> (the evidence cannot tell; see <see cref="Reason"/>).
+/// </param>
 public sealed record ReportCoverageBranch(int Start, int Length, BranchCategory? Category, string Outcome)
 {
-    /// <summary>Why the outcome is unknown: expression, filter, shared-range, unresolved or library.</summary>
+    /// <summary>
+    /// Why the outcome is unknown; null unless <see cref="Outcome"/> is <c>unknown</c>. One of <c>expression</c>
+    /// (an expression ran but not which path), <c>filter</c> (an exception filter ran but not which outcome),
+    /// <c>shared-range</c> (partial execution of a range several branches share), <c>unresolved</c> (no evidence ties
+    /// this branch to its paths) or <c>library</c> (the check runs inside a .NET library).
+    /// </summary>
     public string? Reason { get; init; }
 
     /// <summary>Observed path counters; their order does not imply true/false arm identity.</summary>
@@ -45,9 +58,18 @@ public sealed record ReportCoverageCategory(BranchCategory? Category, ReportCove
 /// <summary>Outcome counters; measurable = covered + partial + uncovered.</summary>
 public sealed record ReportCoverageCounts
 {
+    /// <summary>Branches found in source, whatever their outcome.</summary>
     public int Inventory { get; init; }
+
+    /// <summary>Branches with outcome <c>covered</c>.</summary>
     public int Covered { get; init; }
+
+    /// <summary>Branches with outcome <c>partial</c>.</summary>
     public int Partial { get; init; }
+
+    /// <summary>Branches with outcome <c>uncovered</c>.</summary>
     public int Uncovered { get; init; }
+
+    /// <summary>Branches with outcome <c>unknown</c>; not part of the measurable total.</summary>
     public int Unknown { get; init; }
 }

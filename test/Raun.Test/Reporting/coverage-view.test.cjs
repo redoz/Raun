@@ -85,6 +85,22 @@ test('labels count covered of measurable and each other outcome', () => {
   assert.deepEqual(local(coverageLabels({inventory:2,unknown:2}).map(label=>label.text)),["2 can't tell"]);
   assert.ok(coverageLabels({inventory:2,unknown:2})[0].explanation.length>0);
 });
+test('partly covered argument checks explain that they were never tested with an invalid argument', () => {
+  const guard=coverageLabels({inventory:2,covered:1,partial:1},0).find(label=>label.key==='partial');
+  assert.match(guard.explanation,/never tested with an invalid argument/);
+  const logic=coverageLabels({inventory:2,covered:1,partial:1},4).find(label=>label.key==='partial');
+  assert.doesNotMatch(logic.explanation,/invalid argument/);
+  const source={path:'C.cs',startLine:1,text:'if (s is null) throw new E();\nif (x) A();',tokens:[],execution:[],branches:[
+    {start:0,length:29,category:0,outcome:'partial',reason:null},{start:30,length:11,category:4,outcome:'partial',reason:null}]};
+  const lines=descendants(context.api.buildCoverageSource([source],null)).filter(n=>n.attributes['data-source-line']);
+  assert.match(lines[0].title,/^Argument checks → Partly covered: .*never tested with an invalid argument/);
+  assert.equal(lines[1].title,'Logic → Partly covered');
+});
+test("an outcome the report does not know reads as can't tell", () => {
+  const source={path:'C.cs',startLine:1,text:'if (x) A();',tokens:[],execution:[],branches:[{start:0,length:11,category:4,outcome:undefined,reason:null}]};
+  const lines=descendants(context.api.buildCoverageSource([source],null)).filter(n=>n.attributes['data-source-line']);
+  assert.equal(lines[0].title,"Logic → Can't tell");
+});
 test('old-format counters render no NaN, Infinity or undefined text', () => {
   const old={inventory:4,decisionMeasurable:3,complete:1,notReached:2,exercised:1};
   assert.equal(coverageSegments(old).length,0);

@@ -779,8 +779,12 @@
       return (c.covered || 0)+(c.partial || 0)+(c.uncovered || 0);
     }
     function coverageOutcomeLabel(key){
-      return COVERAGE_OUTCOMES.find(outcome=>outcome.key===key)?.label ?? String(key ?? "Unknown");
+      return COVERAGE_OUTCOMES.find(outcome=>outcome.key===key)?.label ?? "Can't tell";
     }
+    // Not a reason: reasons explain unknown outcomes. This explains what a partly covered argument check is missing.
+    const COVERAGE_PARTIAL_EXPLANATIONS = {
+      0:"The check ran, but was not seen both passing and rejecting; usually it was never tested with an invalid argument. Passing valid arguments alone does not trigger a check."
+    };
     function buildRunHeader(report){
       const row=el("div","run-summary-items"), sum=report.summary, tabs=el("nav");
       row.setAttribute("data-run-status",sum.failed > 0 ? "fail" : "pass");
@@ -872,22 +876,22 @@
       }
       return bar;
     }
-    function coverageLabels(counts){
+    function coverageLabels(counts,category){
       const c=counts || {}, labels=[], measurable=coverageMeasurable(c);
       if (measurable) labels.push({key:"covered",text:(c.covered || 0)+" of "+measurable+" covered",
         explanation:"Every outcome the branch has was observed. Branches the coverage data cannot judge are not counted."});
       if (c.partial) labels.push({key:"partial",text:c.partial+" partly covered",
-        explanation:"The branch ran, and at least one of its outcomes was shown not to run."});
+        explanation:COVERAGE_PARTIAL_EXPLANATIONS[category] ?? "The branch ran, and at least one of its outcomes was shown not to run."});
       if (c.uncovered) labels.push({key:"uncovered",text:c.uncovered+" not covered",
         explanation:"The branch never ran."});
       if (c.unknown) labels.push({key:"unknown",text:c.unknown+" can't tell",
         explanation:"The coverage data cannot establish which outcomes ran. These branches are neither counted as covered nor missed; each one's source line explains why."});
       return labels;
     }
-    function coverageProfile(counts){
+    function coverageProfile(counts,category){
       const c=counts || {}, cell=el("div","coverage-profile");
       if (!c.inventory){ cell.appendChild(coverageText("span","coverage-profile-note","—")); return cell; }
-      for (const label of coverageLabels(c)){
+      for (const label of coverageLabels(c,category)){
         const line=coverageText("span",label.key==="covered" ? "coverage-profile-label" : "coverage-profile-note",label.text);
         line.title=label.explanation; cell.appendChild(line);
       }
@@ -946,7 +950,8 @@
           line.setAttribute("data-source-line",String(source.startLine+index/2));
           if (matches.length && source.startLine+index/2===focusLine) line.setAttribute("data-coverage-focus","true");
           if (references.length) line.title=references.map(branch=>coverageKindLabel(branch.category)+" → "+coverageOutcomeLabel(branch.outcome)
-            +(branch.outcome==="unknown" && COVERAGE_REASONS[branch.reason] ? ": "+COVERAGE_REASONS[branch.reason] : "")).join("; ");
+            +(branch.outcome==="unknown" && COVERAGE_REASONS[branch.reason] ? ": "+COVERAGE_REASONS[branch.reason]
+              : branch.outcome==="partial" && COVERAGE_PARTIAL_EXPLANATIONS[branch.category] ? ": "+COVERAGE_PARTIAL_EXPLANATIONS[branch.category] : "")).join("; ");
           if (missedLines.has(source.startLine+index/2)) line.title=(line.title ? line.title+"; " : "")+"Not executed";
           line.appendChild(coverageText("span","coverage-source-number",String(source.startLine+index/2)));
           const content=el("code"), tokens=source.tokens || [];
@@ -1127,7 +1132,7 @@
       for(const category of kinds){
         const kind=el("section","coverage-kind");
         kind.appendChild(coverageText("h4","coverage-kind-name",coverageKindLabel(category.category)+" · "+category.counts.inventory+(category.counts.inventory===1 ? " branch" : " branches")));
-        kind.appendChild(coverageProfile(category.counts));pane.push(kind);
+        kind.appendChild(coverageProfile(category.counts,category.category));pane.push(kind);
       }
       return pane;
     }
