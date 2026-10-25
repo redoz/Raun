@@ -73,6 +73,28 @@ public sealed class BranchInventoryTests
     }
 
     [Fact]
+    public void Hidden_and_remapped_lines_leave_inventory()
+    {
+        // Generated code (Raun's scenario plumbing) is #line hidden, so it has no sequence points and no
+        // coverage can ever be recorded for it; #line-mapped code reports its coverage under the original
+        // file, where that branch is inventoried in its own right.
+        var compilation = TestCompilation.Create("""
+            class C {
+                int Visible(bool b) => b ? 1 : 2;
+            #line hidden
+                int Hidden(bool b) => b ? 1 : 2;
+            #line 7 "Original.cs"
+                int Mapped(bool b) => b ? 1 : 2;
+            #line default
+                int AlsoVisible(bool b) => b ? 1 : 2;
+            }
+            """);
+        var inventory = BranchInventoryBuilder.Build(compilation, new Raun.Coverage.Projects.CollectorScope(), TestContext.Current.CancellationToken);
+        Assert.Equal(["C.AlsoVisible(bool)", "C.Visible(bool)"],
+            inventory.Select(b => b.Descriptor.Member.Signature).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Lambda_and_local_function_branches_belong_to_declared_member()
     {
         var compilation = TestCompilation.Create("""

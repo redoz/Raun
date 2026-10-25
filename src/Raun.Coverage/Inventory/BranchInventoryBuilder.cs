@@ -33,7 +33,7 @@ internal static class BranchInventoryBuilder
             foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (Describe(node, model) is not { } description)
+                if (Describe(node, model) is not { } description || !IsMeasurableLine(tree, node))
                 {
                     continue;
                 }
@@ -56,6 +56,12 @@ internal static class BranchInventoryBuilder
         }
         return branches;
     }
+
+    // `#line hidden` code (such as the generator's scenario plumbing) has no sequence points, so coverage
+    // can never be recorded for it; `#line`-mapped code records its coverage under the original file,
+    // where that branch is inventoried in its own right.
+    private static bool IsMeasurableLine(SyntaxTree tree, SyntaxNode node)
+        => tree.GetLineVisibility(node.SpanStart) != LineVisibility.Hidden && !tree.GetMappedLineSpan(node.Span).HasMappedPath;
 
     private static ISymbol? FindOwner(SyntaxNode node, SemanticModel model, CancellationToken cancellationToken)
     {
