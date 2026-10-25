@@ -40,7 +40,7 @@ const visibleText = nodes => nodes.flatMap(n=>[n.textContent,n.title,n.attribute
 test('the four coverage outcomes are one shared, ordered vocabulary with an explanation per reason', () => {
   assert.deepEqual(local(COVERAGE_OUTCOMES.map(outcome=>outcome.key)),OUTCOME_KEYS);
   assert.deepEqual(local(COVERAGE_OUTCOMES.map(outcome=>outcome.label)),['Covered','Partly covered','Not covered',"Can't tell"]);
-  assert.deepEqual(Object.keys(COVERAGE_REASONS).sort(),['expression','filter','library','shared-range','unresolved']);
+  assert.deepEqual(Object.keys(COVERAGE_REASONS).sort(),['expression','filter','library','shared-range','unresolved','untriggered']);
   assert.equal(COVERAGE_REASONS.filter,'The exception filter ran. Its true and false outcomes cannot be determined from this coverage data.');
   assert.equal(COVERAGE_REASONS['shared-range'],'Several branches share this source range, so partial execution cannot be attributed to this one.');
   assert.match(COVERAGE_REASONS.expression,/\?\?, \?\. and &&/);
@@ -85,16 +85,17 @@ test('labels count covered of measurable and each other outcome', () => {
   assert.deepEqual(local(coverageLabels({inventory:2,unknown:2}).map(label=>label.text)),["2 can't tell"]);
   assert.ok(coverageLabels({inventory:2,unknown:2})[0].explanation.length>0);
 });
-test('partly covered argument checks explain that they were never tested with an invalid argument', () => {
-  const guard=coverageLabels({inventory:2,covered:1,partial:1},0).find(label=>label.key==='partial');
-  assert.match(guard.explanation,/never tested with an invalid argument/);
-  const logic=coverageLabels({inventory:2,covered:1,partial:1},4).find(label=>label.key==='partial');
-  assert.doesNotMatch(logic.explanation,/invalid argument/);
-  const source={path:'C.cs',startLine:1,text:'if (s is null) throw new E();\nif (x) A();',tokens:[],execution:[],branches:[
-    {start:0,length:29,category:0,outcome:'partial',reason:null},{start:30,length:11,category:4,outcome:'partial',reason:null}]};
+test('a check whose rejection never ran explains it from its reason, whatever its category', () => {
+  const source={path:'C.cs',startLine:1,text:'if (s is null) throw new E();\nif (s.Length > 9) throw new IOException();\nif (a && b) A();',tokens:[],execution:[],branches:[
+    {start:0,length:29,category:0,outcome:'partial',reason:'untriggered'},
+    {start:30,length:41,category:1,outcome:'partial',reason:'untriggered'},
+    {start:72,length:16,category:0,outcome:'partial',reason:null}]};
   const lines=descendants(context.api.buildCoverageSource([source],null)).filter(n=>n.attributes['data-source-line']);
-  assert.match(lines[0].title,/^Argument checks → Partly covered: .*never tested with an invalid argument/);
-  assert.equal(lines[1].title,'Logic → Partly covered');
+  assert.match(lines[0].title,/^Argument checks → Partly covered: .*throw never ran/);
+  assert.match(lines[1].title,/^Error handling → Partly covered: .*throw never ran/);
+  assert.equal(lines[2].title,'Argument checks → Partly covered');
+  const label=coverageLabels({inventory:2,covered:1,partial:1}).find(label=>label.key==='partial');
+  assert.doesNotMatch(label.explanation,/invalid argument/);
 });
 test("an outcome the report does not know reads as can't tell", () => {
   const source={path:'C.cs',startLine:1,text:'if (x) A();',tokens:[],execution:[],branches:[{start:0,length:11,category:4,outcome:undefined,reason:null}]};

@@ -10,7 +10,7 @@ public sealed class CoverageOutcomeTests
     [InlineData((int)EvidenceStatus.Exercised, "covered", null)]
     [InlineData((int)EvidenceStatus.Incomplete, "partial", null)]
     [InlineData((int)EvidenceStatus.Partial, "partial", null)]
-    [InlineData((int)EvidenceStatus.Untriggered, "partial", null)]
+    [InlineData((int)EvidenceStatus.Untriggered, "partial", "untriggered")]
     [InlineData((int)EvidenceStatus.NotReached, "uncovered", null)]
     [InlineData((int)EvidenceStatus.Reached, "unknown", "expression")]
     [InlineData((int)EvidenceStatus.Evaluated, "unknown", "filter")]

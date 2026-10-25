@@ -56,7 +56,7 @@ Mapping from `EvidenceStatus`:
 |---|---|---|
 | `Complete` | covered | |
 | `Exercised` for a handler (the catch was entered; the catch is its only outcome) | covered | |
-| Guard (see "Guards" below) | covered / partial / uncovered | |
+| Guard (see "Guards" below) | covered / partial / uncovered | `untriggered` on partial when the condition ran and the throw did not |
 | `Incomplete` | partial | |
 | `Partial` (expression or filter range partly executed), when this branch is the only inventoried branch inside that range | partial | |
 | `Partial`, when the range holds other branches too (the missing block may be theirs) | unknown | `shared-range` |
@@ -98,7 +98,7 @@ exactly one IL branch point, so "every path hit" proves every outcome of that br
   kind-specific counters are removed (beta; breaking on purpose).
 - `ReportCoverageBranch.Outcome` uses the four keys above.
 - `ReportCoverageBranch` gains `Reason` (`string?`): `expression`, `filter`, `shared-range`,
-  `unresolved`, `library`, or null when the outcome is not `unknown`.
+  `unresolved`, `library` for `unknown`; `untriggered` for a partly covered check whose throw never ran (amended 2026-10-25 after the pre-merge review: the explanation comes from the evidence, not the category); otherwise null.
 
 ## Report changes
 

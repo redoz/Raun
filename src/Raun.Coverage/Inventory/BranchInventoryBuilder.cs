@@ -58,8 +58,10 @@ internal static class BranchInventoryBuilder
     }
 
     // `#line hidden` code (such as the generator's scenario plumbing) has no sequence points, so coverage
-    // can never be recorded for it; `#line`-mapped code records its coverage under the original file,
-    // where that branch is inventoried in its own right.
+    // can never be recorded for it. `#line`-mapped code is recorded by the PDB, and so by both collectors,
+    // at its mapped file and line, while this pipeline locates branches by their unmapped position: such a
+    // branch could only ever read "can't tell". Generators that map to non-C# files (Razor, XAML) therefore
+    // contribute no branches.
     private static bool IsMeasurableLine(SyntaxTree tree, SyntaxNode node)
         => tree.GetLineVisibility(node.SpanStart) != LineVisibility.Hidden && !tree.GetMappedLineSpan(node.Span).HasMappedPath;
 

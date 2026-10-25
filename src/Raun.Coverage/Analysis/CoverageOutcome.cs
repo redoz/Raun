@@ -8,7 +8,8 @@ internal static class CoverageOutcome
     public static (string Outcome, string? Reason) Of(EvidenceStatus status) => status switch
     {
         EvidenceStatus.Complete or EvidenceStatus.Exercised => ("covered", null),
-        EvidenceStatus.Incomplete or EvidenceStatus.Partial or EvidenceStatus.Untriggered => ("partial", null),
+        EvidenceStatus.Incomplete or EvidenceStatus.Partial => ("partial", null),
+        EvidenceStatus.Untriggered => ("partial", "untriggered"),
         EvidenceStatus.NotReached => ("uncovered", null),
         EvidenceStatus.Reached => ("unknown", "expression"),
         EvidenceStatus.Evaluated => ("unknown", "filter"),

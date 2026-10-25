@@ -42,10 +42,11 @@ public sealed record ReportCoverageToken(int Start, int Length, string Kind);
 public sealed record ReportCoverageBranch(int Start, int Length, BranchCategory? Category, string Outcome)
 {
     /// <summary>
-    /// Why the outcome is unknown; null unless <see cref="Outcome"/> is <c>unknown</c>. One of <c>expression</c>
-    /// (an expression ran but not which path), <c>filter</c> (an exception filter ran but not which outcome),
-    /// <c>shared-range</c> (partial execution of a range several branches share), <c>unresolved</c> (no evidence ties
-    /// this branch to its paths) or <c>library</c> (the check runs inside a .NET library).
+    /// What the evidence says about the outcome; null when the outcome needs no explanation. For <c>unknown</c>: one
+    /// of <c>expression</c> (an expression ran but not which path), <c>filter</c> (an exception filter ran but not which
+    /// outcome), <c>shared-range</c> (partial execution of a range several branches share), <c>unresolved</c> (no
+    /// evidence ties this branch to its paths) or <c>library</c> (the check runs inside a .NET library). For
+    /// <c>partial</c>: <c>untriggered</c> (a check's condition ran but its throw never did) or null.
     /// </summary>
     public string? Reason { get; init; }
 
