@@ -27,89 +27,82 @@ const el=(tag,cls)=>Object.assign(new ViewNode(tag),{className:cls || ''});
 const svgEl=(tag,attrs)=>{const node=new ViewNode(tag);for (const [key,value] of Object.entries(attrs || {})) node.setAttribute(key,value);return node;};
 const context = vm.createContext({document,el,svgEl,esc:value=>String(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"),fmtDur:ms=>(ms/1000).toFixed(2)+" s",fmtGen:iso=>iso.replace("T"," ").replace("Z"," UTC")});
 vm.runInContext(template.slice(template.indexOf('const shortName ='),template.indexOf('const collapsedGroups =')),context);
-vm.runInContext(template.slice(start, end) + '\nthis.api = {stepNotesHtml,coverageRank, coverageCompare, coverageSegments, coverageLabels, coverageFlow, buildCoverageReport, buildCoverageSource, buildReportViews:typeof buildReportViews === "function" ? buildReportViews : undefined, buildScenarioOutcomes:typeof buildScenarioOutcomes === "function" ? buildScenarioOutcomes : undefined, buildTestsReport:typeof buildTestsReport === "function" ? buildTestsReport : undefined, buildRunHeader:typeof buildRunHeader === "function" ? buildRunHeader : undefined, coverageHierarchy:typeof coverageHierarchy === "function" ? coverageHierarchy : undefined};', context);
+vm.runInContext(template.slice(start, end) + '\nthis.api = {COVERAGE_OUTCOMES:typeof COVERAGE_OUTCOMES === "undefined" ? undefined : COVERAGE_OUTCOMES, COVERAGE_REASONS:typeof COVERAGE_REASONS === "undefined" ? undefined : COVERAGE_REASONS, stepNotesHtml,coverageRank, coverageCompare, coverageSegments, coverageLabels, coverageFlow, buildCoverageReport, buildCoverageSource, buildReportViews:typeof buildReportViews === "function" ? buildReportViews : undefined, buildScenarioOutcomes:typeof buildScenarioOutcomes === "function" ? buildScenarioOutcomes : undefined, buildTestsReport:typeof buildTestsReport === "function" ? buildTestsReport : undefined, buildRunHeader:typeof buildRunHeader === "function" ? buildRunHeader : undefined, coverageHierarchy:typeof coverageHierarchy === "function" ? coverageHierarchy : undefined};', context);
 const {coverageRank, coverageCompare, coverageSegments, coverageLabels} = context.api;
 const item = (name, counts, category=4) => ({name, categories:[{category, counts}]});
 
-test('logic ranking uses complete observable decisions, not expression hits or argument checks', () => {
-  const row = item('Finance', {inventory:100, complete:1, decisionMeasurable:10, reached:80, unknown:10});
-  row.categories.push({category:0, counts:{inventory:20, exercised:20, exerciseMeasurable:20}});
-  assert.equal(coverageRank(row,4).fraction,0.1);
-  assert.equal(coverageRank(row,0).fraction,1);
+const {COVERAGE_OUTCOMES, COVERAGE_REASONS} = context.api;
+const OUTCOME_KEYS = ['covered','partial','uncovered','unknown'];
+// Arrays built inside the vm context have that realm's prototypes; copy them before deepEqual.
+const local = value => JSON.parse(JSON.stringify(value));
+const visibleText = nodes => nodes.flatMap(n=>[n.textContent,n.title,n.attributes?.title,n.attributes?.['aria-label']]).filter(value=>value!=null).join(' ');
+
+test('the four coverage outcomes are one shared, ordered vocabulary with an explanation per reason', () => {
+  assert.deepEqual(local(COVERAGE_OUTCOMES.map(outcome=>outcome.key)),OUTCOME_KEYS);
+  assert.deepEqual(local(COVERAGE_OUTCOMES.map(outcome=>outcome.label)),['Covered','Partly covered','Not covered',"Can't tell"]);
+  assert.deepEqual(Object.keys(COVERAGE_REASONS).sort(),['expression','filter','library','shared-range','unresolved']);
+  assert.equal(COVERAGE_REASONS.filter,'The exception filter ran. Its true and false outcomes cannot be determined from this coverage data.');
+  assert.equal(COVERAGE_REASONS['shared-range'],'Several branches share this source range, so partial execution cannot be attributed to this one.');
+  assert.match(COVERAGE_REASONS.expression,/\?\?, \?\. and &&/);
+  assert.match(COVERAGE_REASONS.library,/\.NET library/);
+  assert.match(COVERAGE_REASONS.unresolved,/^Execution data can exist/);
 });
-test('worst comes first and fully unknown rows are not scored as perfect or missed', () => {
-  const rows=[item('Best',{inventory:10,complete:10,decisionMeasurable:10}),
-    item('Unknown',{inventory:10,unknown:10}), item('Worst',{inventory:10,complete:0,decisionMeasurable:10})];
+test('ranking scores covered over measurable and leaves unknown out of the fraction', () => {
+  const rank=coverageRank(item('Finance',{inventory:100,covered:1,partial:4,uncovered:5,unknown:90}),4);
+  assert.equal(rank.fraction,0.1);
+  assert.equal(rank.missing,9);
+  assert.equal(rank.unknown,90);
+});
+test('every branch kind ranks by the same outcomes', () => {
+  const row=item('Checks',{inventory:4,covered:3,uncovered:1},0);
+  assert.equal(coverageRank(row,0).fraction,0.75);
+});
+test('worst comes first and fully unknown rows are unverified, not scored as perfect or missed', () => {
+  const rows=[item('Best',{inventory:10,covered:10}),
+    item('Unknown',{inventory:10,unknown:10}), item('Worst',{inventory:10,uncovered:10})];
   rows.sort((a,b)=>coverageCompare(a,b,4));
   assert.deepEqual(rows.map(row=>row.name),['Worst','Best','Unknown']);
+  assert.equal(coverageRank(rows[2],4).family,'unverified');
   assert.equal(coverageRank(rows[2],4).fraction,null);
 });
-test('coarse expression reach is a separate ranking family', () => {
-  const row=item('Expression',{inventory:5,reached:1,partial:3,expressionNotReached:1});
-  assert.equal(coverageRank(row,4).family,'expressions');
-  assert.equal(coverageRank(row,4).fraction,0.2);
-});
-test('type totals use integer denominators, never a mean of method percentages', () => {
-  assert.equal(coverageRank(item('Type',{inventory:10,complete:1,decisionMeasurable:10}),4).fraction,0.1);
-});
-test('unknown and unmeasurable evidence stay distinct in the visual profile', () => {
-  const segments=coverageSegments({inventory:12,complete:1,incomplete:2,notReached:3,reached:1,partial:1,expressionNotReached:1,evaluated:1,unknown:2,unmeasurable:1});
-  assert.equal(segments.reduce((sum,segment)=>sum+segment.count,0),12);
-  assert.equal(segments.find(segment=>segment.key==='unknown').count,2);
-  assert.equal(segments.find(segment=>segment.key==='helper').count,1);
-  assert.equal(segments.find(segment=>segment.key==='missed').count,2);
-});
-test('equal coverage prioritizes more known incomplete decisions then sorts names deterministically', () => {
-  const a=item('Small',{inventory:2,complete:1,decisionMeasurable:2});
-  const b=item('Large',{inventory:20,complete:10,decisionMeasurable:20});
+test('equal coverage puts more missing branches first, then sorts names deterministically', () => {
+  const a=item('Small',{inventory:2,covered:1,uncovered:1});
+  const b=item('Large',{inventory:20,covered:10,partial:4,uncovered:6});
   assert.ok(coverageCompare(b,a,4)<0);
+  const rows=[item('Beta',{inventory:2,covered:1,partial:1}),item('Alpha',{inventory:2,covered:1,uncovered:1})];
+  rows.sort((x,y)=>coverageCompare(x,y,4));
+  assert.deepEqual(rows.map(row=>row.name),['Alpha','Beta']);
 });
-
-test('unevaluated filters stay visible and out of exact decision tracks', () => {
-  const segments=coverageSegments({inventory:3,complete:1,decisionMeasurable:1,evaluated:1,notReached:1,filterNotReached:1});
-  assert.equal(segments.reduce((sum,segment)=>sum+segment.count,0),3);
-  assert.equal(segments.some(segment=>segment.key==='missed'),false);
-  assert.equal(segments.find(segment=>segment.key==='filter-missed').family,'filters');
-  const rank=coverageRank(item('Filter',{inventory:2,evaluated:1,notReached:1,filterNotReached:1}),4);
-  assert.equal(rank.family,'filters');
-  assert.equal(rank.fraction,0.5);
+test('segments are the four outcomes in order with zero counts omitted', () => {
+  const segments=coverageSegments({inventory:9,covered:2,partial:0,uncovered:3,unknown:4});
+  assert.deepEqual(local(segments.map(segment=>segment.key)),['covered','uncovered','unknown']);
+  assert.deepEqual(local(segments.map(segment=>segment.count)),[2,3,4]);
+  assert.deepEqual(local(coverageSegments({inventory:1,partial:1}).map(segment=>segment.key)),['partial']);
 });
-test('a filter with no evaluations ranks as zero evaluated rather than unverified', () => {
-  const row=item('Filter',{inventory:1,notReached:1,filterNotReached:1});
-  assert.equal(coverageRank(row,4).family,'filters');
-  assert.equal(coverageRank(row,4).fraction,0);
+test('labels count covered of measurable and each other outcome', () => {
+  assert.deepEqual(local(coverageLabels({inventory:10,covered:2,partial:1,uncovered:3,unknown:4}).map(label=>label.text)),
+    ['2 of 6 covered','1 partly covered','3 not covered',"4 can't tell"]);
+  assert.deepEqual(local(coverageLabels({inventory:2,unknown:2}).map(label=>label.text)),["2 can't tell"]);
+  assert.ok(coverageLabels({inventory:2,unknown:2})[0].explanation.length>0);
 });
-
-test('coverage labels explain what is counted and distinguish missing evidence from missed execution', () => {
-  const labels=coverageLabels({inventory:68,exerciseMeasurable:45,exercised:0,reached:1,partial:1,expressionNotReached:1,unknown:20},1);
-  assert.ok(labels.some(label=>label.text==='0 of 45 error paths tested'));
-  assert.ok(labels.some(label=>label.text==='Coverage undetermined for 20 branches'));
-  assert.ok(labels.some(label=>label.text==='1 expression not reached'));
-  assert.ok(labels.some(label=>label.text==='1 expression partly reached'));
-});
-test('argument check and helper labels name checks rather than generic branches', () => {
-  const labels=coverageLabels({inventory:3,exerciseMeasurable:1,exercised:0,unmeasurable:2},0);
-  assert.ok(labels.some(label=>label.text==='0 of 1 argument checks triggered'));
-  assert.ok(labels.some(label=>label.text==='2 library checks: coverage unavailable'));
-});
-
-test('partly evaluated filters remain separate from expression partial execution', () => {
-  const counts={inventory:3,evaluated:1,filterPartial:1,notReached:1,filterNotReached:1};
-  const segments=coverageSegments(counts);
-  assert.equal(segments.reduce((sum,segment)=>sum+segment.count,0),3);
-  assert.equal(segments.find(segment=>segment.key==='filter-partial').family,'filters');
-  assert.equal(segments.some(segment=>segment.family==='coarse'),false);
-  assert.equal(coverageRank(item('Filter',counts),4).fraction,1/3);
-  assert.ok(coverageLabels(counts,1).some(label=>label.text==='1 exception filter partly evaluated'));
+test('old-format counters render no NaN, Infinity or undefined text', () => {
+  const old={inventory:4,decisionMeasurable:3,complete:1,notReached:2,exercised:1};
+  assert.equal(coverageSegments(old).length,0);
+  assert.doesNotMatch(coverageLabels(old).map(label=>label.text).join(' '),/NaN|Infinity|undefined/);
+  const categories=[{category:4,counts:old}];
+  const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'N',name:'N.C',categories,methods:[]}]});
+  assert.doesNotMatch(visibleText(descendants(view)),/NaN|Infinity|undefined/);
+  const header=context.api.buildRunHeader({summary:{passed:1,failed:0,skipped:0,totalMs:1},generatedAtUtc:'2026-10-11T11:36:52Z',coverage:{status:'available',categories}});
+  assert.doesNotMatch(visibleText(descendants(header)),/NaN|Infinity|undefined/);
 });
 
 const logic=counts=>[{category:4,counts}];
-const treeView=()=>context.api.buildCoverageReport({status:'available',categories:logic({inventory:9,decisionMeasurable:6,complete:2,incomplete:1,notReached:5}),types:[
-  {assembly:'Zeta',namespace:'Z',name:'Z.Billing',categories:[{category:0,counts:{inventory:3,exerciseMeasurable:3,exercised:1}},...logic({inventory:7,decisionMeasurable:4,incomplete:1,notReached:5})],methods:[
-    {signature:'Z.Billing.Refund()',categories:logic({inventory:3,decisionMeasurable:1,incomplete:1,notReached:1})},
-    {signature:'Z.Billing.Charge()',categories:logic({inventory:4,decisionMeasurable:3,notReached:4})}]},
-  {assembly:'Alpha',namespace:'A',name:'A.Worker',categories:logic({inventory:2,decisionMeasurable:2,complete:2}),methods:[
-    {signature:'A.Worker.Run(int)',categories:logic({inventory:2,decisionMeasurable:2,complete:2}),sources:[{path:'src/Worker.cs',startLine:3,text:'if (x) Run();',tokens:[],branches:[]}]}]}
+const treeView=()=>context.api.buildCoverageReport({status:'available',categories:logic({inventory:9,covered:2,partial:1,uncovered:5,unknown:1}),types:[
+  {assembly:'Zeta',namespace:'Z',name:'Z.Billing',categories:[{category:0,counts:{inventory:3,covered:1,uncovered:2}},...logic({inventory:7,partial:1,uncovered:5,unknown:1})],methods:[
+    {signature:'Z.Billing.Refund()',categories:logic({inventory:3,partial:1,uncovered:1,unknown:1})},
+    {signature:'Z.Billing.Charge()',categories:logic({inventory:4,uncovered:4})}]},
+  {assembly:'Alpha',namespace:'A',name:'A.Worker',categories:logic({inventory:2,covered:2}),methods:[
+    {signature:'A.Worker.Run(int)',categories:logic({inventory:2,covered:2}),sources:[{path:'src/Worker.cs',startLine:3,text:'if (x) Run();',tokens:[],branches:[]}]}]}
 ]});
 const treeRows=view=>descendants(view).filter(n=>n.attributes.role==='row' && n.className.split(' ').includes('coverage-row'));
 const rowName=row=>descendants(row).find(n=>n.className==='coverage-row-name').textContent;
@@ -130,16 +123,27 @@ test('coverage opens on the whole run as a tree with assemblies in name order', 
   assert.equal(detailName(view),'Whole run');
 });
 
-test('tree rows show fully tested logic decisions, unreached branches and partly tested decisions', () => {
+test('tree rows show covered of measurable logic branches, not covered and partly covered counts', () => {
   const view=treeView(), zeta=rowNamed(view,'Zeta');
-  const text=descendants(zeta).map(n=>n.textContent || '');
-  assert.ok(text.includes('0/4'));assert.ok(text.includes('5'));assert.ok(text.includes('1'));
+  const cell=key=>descendants(zeta).find(n=>n.className===`coverage-cell coverage-cell-number coverage-cell-${key}`).textContent;
+  assert.ok(descendants(zeta).some(n=>n.className==='coverage-row-score' && n.textContent==='0/6'));
+  assert.equal(cell('missed'),'5');assert.equal(cell('partial'),'1');
   const bar=descendants(zeta).find(n=>n.className==='coverage-bar');
-  assert.equal(bar.attributes.role,'img');assert.match(bar.attributes['aria-label'],/1 partly tested/);assert.match(bar.attributes['aria-label'],/3 untested/);
-  assert.match(zeta.title,/Argument checks: 1 of 3 argument checks triggered/);
+  assert.equal(bar.attributes.role,'img');
+  assert.equal(bar.attributes['aria-label'],'1 partly covered · 5 not covered');
+  assert.match(zeta.title,/Argument checks: 1 of 3 covered; 2 not covered/);
+  assert.match(zeta.title,/Logic: 0 of 6 covered; 1 partly covered; 5 not covered; 1 can't tell/);
   assert.ok(descendants(rowNamed(view,'Alpha')).some(n=>n.textContent==='2/2'));
   const headers=descendants(view).filter(n=>n.attributes.role==='columnheader').map(n=>descendants(n).find(c=>c.tag==='button').textContent);
-  assert.deepEqual(headers,['Scope','Logic decisions','Not reached','Partly tested']);
+  assert.deepEqual(headers,['Scope','Logic covered','Not covered','Partly covered']);
+});
+test('a row whose logic branches are all unknown shows no score', () => {
+  const categories=logic({inventory:3,unknown:3});
+  const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'N',name:'N.C',categories,methods:[]}]});
+  const row=rowNamed(view,'Api');
+  assert.equal(descendants(row).find(n=>n.className==='coverage-row-score').textContent,'—');
+  assert.equal(descendants(row).some(n=>n.className==='coverage-bar'),false);
+  assert.equal(descendants(view).find(n=>n.className==='coverage-scope-score').textContent,'No measurable logic branches in this scope');
 });
 
 test('expanding rows reveals the hierarchy and collapsing hides it again', () => {
@@ -161,7 +165,7 @@ test('a selected scope shows its per-kind summary and a selected method shows it
   rowNamed(view,'Zeta').events.click();
   assert.equal(detailName(view),'Zeta');
   const nodes=()=>descendants(view);
-  assert.ok(nodes().some(n=>n.className==='coverage-scope-score' && n.textContent==='0 of 4 logic decisions fully tested'));
+  assert.ok(nodes().some(n=>n.className==='coverage-scope-score' && n.textContent==='0 of 6 logic branches covered'));
   assert.deepEqual(nodes().filter(n=>n.className==='coverage-kind-name').map(n=>n.textContent),['Argument checks · 3 branches','Logic · 7 branches']);
   assert.equal(nodes().some(n=>n.className==='coverage-source'),false);
   expand(view,'Alpha','A','Worker');rowNamed(view,'Run(…)').events.click();
@@ -190,13 +194,15 @@ test('column headers sort each level and a second click reverses the order', () 
   const sortButton=label=>descendants(header(label)).find(n=>n.tag==='button');
   assert.equal(header('Scope').attributes['aria-sort'],'ascending');
   expand(view,'Zeta','Z','Billing');
-  sortButton('Not reached').events.click();
+  sortButton('Not covered').events.click();
   assert.deepEqual(treeRows(view).map(rowName),['Whole run','Zeta','Z','Billing','Charge()','Refund()','Alpha']);
-  assert.equal(header('Not reached').attributes['aria-sort'],'descending');assert.equal(header('Scope').attributes['aria-sort'],'none');
-  sortButton('Not reached').events.click();
+  assert.equal(header('Not covered').attributes['aria-sort'],'descending');assert.equal(header('Scope').attributes['aria-sort'],'none');
+  sortButton('Not covered').events.click();
   assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha','Zeta','Z','Billing','Refund()','Charge()']);
-  assert.equal(header('Not reached').attributes['aria-sort'],'ascending');
-  sortButton('Logic decisions').events.click();
+  assert.equal(header('Not covered').attributes['aria-sort'],'ascending');
+  sortButton('Partly covered').events.click();
+  assert.deepEqual(treeRows(view).map(rowName).slice(1,6),['Zeta','Z','Billing','Refund()','Charge()']);
+  sortButton('Logic covered').events.click();
   assert.deepEqual(treeRows(view).map(rowName).slice(1,3),['Zeta','Z']);
   sortButton('Scope').events.click();
   assert.deepEqual(treeRows(view).map(rowName).slice(0,3),['Whole run','Alpha','Zeta']);
@@ -229,58 +235,92 @@ test('a selected scope shows its branch flow and a selected method does not', ()
 test('a band filters the tree to scopes with branches in it until it is cleared', () => {
   const view=treeView(), nodes=()=>descendants(view);
   const band=label=>nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith(label));
-  band('Logic → Not reached').events.click();
+  band('Logic → Not covered').events.click();
   assert.deepEqual(treeRows(view).map(rowName),['Whole run','Zeta']);
-  assert.equal(band('Logic → Not reached').attributes['aria-pressed'],'true');
-  assert.ok(nodes().some(n=>n.className==='coverage-tree-filter' && descendants(n).some(c=>c.textContent==='Logic → Not reached')));
+  assert.equal(band('Logic → Not covered').attributes['aria-pressed'],'true');
+  assert.ok(nodes().some(n=>n.className==='coverage-tree-filter' && descendants(n).some(c=>c.textContent==='Logic → Not covered')));
   expand(view,'Zeta','Z','Billing');
   assert.deepEqual(treeRows(view).map(rowName),['Whole run','Zeta','Z','Billing','Charge()','Refund()']);
   rowNamed(view,'Zeta').events.click();
-  assert.equal(band('Logic → Not reached').attributes['aria-pressed'],'true');
-  band('Logic → Not reached').events.click();
+  assert.equal(band('Logic → Not covered').attributes['aria-pressed'],'true');
+  band('Logic → Not covered').events.click();
   assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha','Zeta','Z','Billing','Charge()','Refund()']);
   assert.equal(nodes().some(n=>n.className==='coverage-tree-filter'),false);
+  rowNamed(view,'Zeta').events.click();
+  band('Logic → Partly covered').events.click();
+  assert.deepEqual(treeRows(view).map(rowName),['Whole run','Zeta','Z','Billing','Refund()']);
+  nodes().find(n=>n.tag==='button' && n.textContent==='Clear filter').events.click();
   rowNamed(view,'Whole run').events.click();
-  band('Logic → All decision paths tested').events.click();
+  band('Logic → Covered').events.click();
   assert.deepEqual(treeRows(view).map(rowName),['Whole run','Alpha']);
   nodes().find(n=>n.tag==='button' && n.textContent==='Clear filter').events.click();
   assert.deepEqual(treeRows(view).map(rowName).slice(0,3),['Whole run','Alpha','Zeta']);
 });
 
 test('under a band a method shows only the snippets with branches in that band', () => {
-  const cats=n=>[{category:4,counts:{inventory:n,notReached:n}}];
+  const cats=n=>[{category:4,counts:{inventory:n,uncovered:n}}];
   const source=(text,line,outcome)=>({path:'C.cs',startLine:line,text,tokens:[],branches:[{start:0,length:text.length,category:4,outcome}]});
   const view=context.api.buildCoverageReport({status:'available',categories:cats(2),types:[
     {assembly:'Api',namespace:'N',name:'N.C',categories:cats(2),methods:[
-      {signature:'N.C.Large()',categories:cats(2),sources:[source('if (other) Skip();',10,'covered'),source('if (large) Skip();',20,'missed')]}
+      {signature:'N.C.Large()',categories:cats(2),sources:[source('if (other) Skip();',10,'covered'),source('if (large) Skip();',20,'uncovered')]}
     ]}
   ]});
   const nodes=()=>descendants(view);
-  nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Not reached')).events.click();
+  nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Not covered')).events.click();
   expand(view,'Api','N','C');rowNamed(view,'Large()').events.click();
   assert.deepEqual(nodes().filter(n=>n.className==='coverage-snippet-choice').map(n=>n.textContent),['C.cs:20']);
   assert.ok(nodes().some(n=>n.className==='coverage-branch-match'));
 });
 
-test('branch flow conserves counts directly from each kind to its outcomes', () => {
+test('a partly covered band filters methods and snippets by the branch outcome', () => {
+  const cats=[{category:4,counts:{inventory:3,partial:1,uncovered:1,unknown:1}}];
+  const source=(text,line,outcome,reason=null)=>({path:'C.cs',startLine:line,text,tokens:[],branches:[{start:0,length:text.length,category:4,outcome,reason}],
+    execution:[]});
+  const view=context.api.buildCoverageReport({status:'available',categories:cats,types:[
+    {assembly:'Api',namespace:'N',name:'N.C',categories:cats,methods:[
+      {signature:'N.C.Mixed()',categories:cats,sources:[source('if (a) A();',10,'uncovered'),source('if (b) B();',20,'partial'),source('x ?? y',30,'unknown','expression')]}
+    ]}
+  ]});
+  const nodes=()=>descendants(view);
+  nodes().find(n=>n.tag==='path' && n.attributes['aria-label']?.startsWith('Logic → Partly covered')).events.click();
+  expand(view,'Api','N','C');rowNamed(view,'Mixed()').events.click();
+  assert.deepEqual(nodes().filter(n=>n.className==='coverage-snippet-choice').map(n=>n.textContent),['C.cs:20']);
+  const selection={from:'kind:4',key:'partial'};
+  const panel=descendants(context.api.buildCoverageSource([{path:'C.cs',startLine:1,text:'A();\nB();',tokens:[],execution:[],
+    branches:[{start:0,length:4,category:4,outcome:'uncovered'},{start:5,length:4,category:4,outcome:'partial'}]}],selection));
+  assert.deepEqual(panel.filter(n=>n.className?.split(' ').includes('coverage-source-match')).map(n=>n.attributes['data-source-line']),['2']);
+});
+
+test('a source line names each branch outcome and explains why an unknown one cannot be told', () => {
+  const source={path:'C.cs',startLine:1,text:'catch (E e) when (Check(e)) { }\nif (x) A();',tokens:[],execution:[],branches:[
+    {start:0,length:31,category:1,outcome:'unknown',reason:'filter'},{start:32,length:11,category:4,outcome:'covered',reason:null}]};
+  const lines=descendants(context.api.buildCoverageSource([source],null)).filter(n=>n.attributes['data-source-line']);
+  assert.equal(lines[0].title,"Error handling → Can't tell: "+COVERAGE_REASONS.filter);
+  assert.equal(lines[1].title,'Logic → Covered');
+});
+
+test('branch flow conserves counts from each kind to at most the four outcomes, in order', () => {
   const flow=context.api.coverageFlow([
-    {category:4,counts:{inventory:10,complete:2,incomplete:1,reached:1,partial:2,notReached:2,unknown:2}},
-    {category:0,counts:{inventory:3,exercised:1,unmeasurable:2}}
+    {category:4,counts:{inventory:10,covered:2,partial:3,uncovered:2,unknown:3}},
+    {category:0,counts:{inventory:3,covered:1,unknown:2}},
+    {category:1,counts:{inventory:2,unknown:2}},
+    {category:null,counts:{inventory:2,uncovered:2}}
   ]);
   assert.equal(flow.nodes.some(node=>node.id==='all'),false);
-  assert.equal(flow.nodes.filter(node=>node.column===0).reduce((sum,node)=>sum+node.count,0),13);
+  assert.equal(flow.nodes.filter(node=>node.column===0).reduce((sum,node)=>sum+node.count,0),17);
+  assert.deepEqual(local(flow.nodes.filter(node=>node.column===1).map(node=>node.key)),OUTCOME_KEYS);
+  assert.deepEqual(local(flow.nodes.filter(node=>node.column===1).map(node=>node.label)),local(COVERAGE_OUTCOMES.map(outcome=>outcome.label)));
   for (const node of flow.nodes) {
     if (node.column>0) assert.equal(flow.links.filter(link=>link.to===node.id).reduce((sum,link)=>sum+link.count,0),node.count);
     if (node.column<1) assert.equal(flow.links.filter(link=>link.from===node.id).reduce((sum,link)=>sum+link.count,0),node.count);
   }
-  assert.equal(flow.nodes.find(node=>node.id==='outcome:unknown').count,2);
-  assert.equal(flow.nodes.find(node=>node.id==='outcome:helper').count,2);
+  assert.equal(flow.nodes.find(node=>node.id==='outcome:unknown').count,7);
+  assert.equal(flow.nodes.find(node=>node.id==='kind:null').count,2);
 });
 
-test('branch flow includes unclassified branches and separate partial filter evidence without double counting', () => {
-  const flow=context.api.coverageFlow([{category:null,counts:{inventory:4,evaluated:1,filterPartial:1,filterNotReached:1,notReached:1,unknown:1}}]);
-  assert.equal(flow.nodes.find(node=>node.id==='kind:null').count,4);
-  assert.equal(flow.nodes.filter(node=>node.column===1).reduce((sum,node)=>sum+node.count,0),4);
+test('branch flow omits outcomes nothing reached', () => {
+  const flow=context.api.coverageFlow([{category:2,counts:{inventory:4,partial:1,unknown:3}}]);
+  assert.deepEqual(local(flow.nodes.filter(node=>node.column===1).map(node=>node.key)),['partial','unknown']);
 });
 
 test('an empty branch inventory produces no flow bands', () => {
@@ -294,8 +334,8 @@ test('band focus suppresses rectangular outline and follows SVG path', () => {
 });
 
 test('method source is rendered as safe text with line numbers and branch marks', () => {
-  const categories=[{category:4,counts:{inventory:1,notReached:1}}];
-  const sources=[{path:'Finance.cs',startLine:12,notExecutedLines:[12],text:'if (flag) return "<script>";',tokens:[{start:0,length:2,kind:'keyword'},{start:17,length:8,kind:'string'}],branches:[{start:0,length:25,category:4,outcome:'missed'}]}];
+  const categories=[{category:4,counts:{inventory:1,uncovered:1}}];
+  const sources=[{path:'Finance.cs',startLine:12,notExecutedLines:[12],text:'if (flag) return "<script>";',tokens:[{start:0,length:2,kind:'keyword'},{start:17,length:8,kind:'string'}],branches:[{start:0,length:25,category:4,outcome:'uncovered'}]}];
   const view=context.api.buildCoverageReport({status:'available',categories,types:[{assembly:'Api',namespace:'N',name:'N.Finance',categories,methods:[{signature:'N.Finance.Calculate()',categories,sources}]}]});
   expand(view,'Api','N','Finance');rowNamed(view,'Calculate()').events.click();
   const nodes=descendants(view);
@@ -308,8 +348,8 @@ test('method source is rendered as safe text with line numbers and branch marks'
 });
 
 test('snippet choices switch one source pane and the choice survives reselecting the method', () => {
-  const cats=n=>[{category:4,counts:{inventory:n,notReached:n}}];
-  const source=(text,line)=>({path:'C.cs',startLine:line,text,tokens:[],branches:[{start:0,length:text.length,category:4,outcome:'missed'}]});
+  const cats=n=>[{category:4,counts:{inventory:n,uncovered:n}}];
+  const source=(text,line)=>({path:'C.cs',startLine:line,text,tokens:[],branches:[{start:0,length:text.length,category:4,outcome:'uncovered'}]});
   const view=context.api.buildCoverageReport({status:'available',categories:cats(3),types:[
     {assembly:'Api',namespace:'N',name:'N.C',categories:cats(3),methods:[
       {signature:'N.C.Small()',categories:cats(1),sources:[source('if (small) Skip();',10)]},
@@ -330,9 +370,9 @@ test('snippet choices switch one source pane and the choice survives reselecting
 
 test('drill-down groups semantic namespaces and preserves nested type identity', () => {
   const tree=context.api.coverageHierarchy([
-    {assembly:'Api',namespace:'Business',name:'Business.Outer.Inner',categories:[{category:4,counts:{inventory:2,complete:1,decisionMeasurable:2}}],methods:[{signature:'Business.Outer.Inner.Calculate()',categories:[{category:4,counts:{inventory:2,complete:1,decisionMeasurable:2}}]}]},
-    {assembly:'Api',namespace:'Business',name:'Business.Finance',categories:[{category:4,counts:{inventory:8,decisionMeasurable:8,notReached:8}}],methods:[]},
-    {assembly:'Other',namespace:'',name:'Program',categories:[{category:0,counts:{inventory:1,unmeasurable:1}}],methods:[]}
+    {assembly:'Api',namespace:'Business',name:'Business.Outer.Inner',categories:[{category:4,counts:{inventory:2,covered:1,uncovered:1}}],methods:[{signature:'Business.Outer.Inner.Calculate()',categories:[{category:4,counts:{inventory:2,covered:1,uncovered:1}}]}]},
+    {assembly:'Api',namespace:'Business',name:'Business.Finance',categories:[{category:4,counts:{inventory:8,uncovered:8}}],methods:[]},
+    {assembly:'Other',namespace:'',name:'Program',categories:[{category:0,counts:{inventory:1,unknown:1}}],methods:[]}
   ]);
   assert.equal(tree.children.length,2);
   const assembly=tree.children.find(node=>node.name==='Api');
@@ -343,7 +383,7 @@ test('drill-down groups semantic namespaces and preserves nested type identity',
   assert.equal(assembly.categories[0].counts.inventory,10);
   const method=assembly.children[0].children[0].children[0];
   assert.equal(method.level,'method');
-  assert.equal(method.categories[0].counts.complete,1);
+  assert.equal(method.categories[0].counts.covered,1);
   assert.equal(tree.children[1].children[0].name,'(global namespace)');
 });
 
@@ -381,20 +421,28 @@ test('specific arm execution overrides enclosing mixed expression evidence', () 
 
 test('compact run header keeps summary and measured logic score inline', () => {
   const view=context.api.buildRunHeader({summary:{passed:4,failed:1,skipped:2,totalMs:3210},generatedAtUtc:'2026-10-11T11:36:52Z',coverage:{status:'available',categories:[
-    {category:0,counts:{complete:99,decisionMeasurable:99}},
-    {category:4,counts:{complete:1,decisionMeasurable:3,unknown:2,reached:40}}]}});
+    {category:0,counts:{inventory:99,covered:99}},
+    {category:4,counts:{inventory:5,covered:1,partial:1,uncovered:1,unknown:2}}]}});
   const nodes=descendants(view);
   const text=nodes.map(n=>n.textContent || '').join(' ');
   assert.match(text,/Passed.*4.*Failed.*1.*Skipped.*2.*Logical.*33%.*Wall clock.*3.21 s.*2026-10-11 11:36:52/);
-  assert.ok(nodes.some(n=>n.className==='summary-score' && n.title.includes('2 unresolved')));
   assert.equal(nodes.filter(n=>n.className==='summary-score').length,1);
-  assert.ok(nodes.find(n=>n.className==='summary-score').title.includes('1 of 3'));
+  const title=nodes.find(n=>n.className==='summary-score').title;
+  assert.ok(title.includes('1 of 3 logic branches covered'),title);
+  assert.ok(title.includes("2 can't tell"),title);
+  assert.doesNotMatch(title,/excluded/);
 });
 
-test('header does not invent a logic score without measurable decisions', () => {
-  for (const coverage of [undefined,{status:'pending',branchPaths:{covered:5,total:5},categories:[{category:4,counts:{complete:5,decisionMeasurable:5}}]},{status:'available',categories:[{category:4,counts:{reached:5}}]}]) {
+test('header does not invent a logic score without measurable branches', () => {
+  for (const coverage of [undefined,{status:'pending',branchPaths:{covered:5,total:5},categories:[{category:4,counts:{inventory:5,covered:5}}]},
+    {status:'available',categories:[{category:4,counts:{inventory:5,unknown:5}}]},{status:'available',categories:[{category:4,counts:{decisionMeasurable:3,complete:1}}]}]) {
     const nodes=descendants(context.api.buildRunHeader({summary:{passed:0,failed:0,skipped:0,totalMs:0},generatedAtUtc:'2026-10-11T11:36:52Z',coverage}));
-    assert.equal(nodes.some(n=>/NaN|Infinity|100%|0%/.test(n.textContent || '')),false);
+    assert.equal(nodes.some(n=>/NaN|Infinity|undefined|100%|0%/.test(n.textContent || '')),false);
+    const score=nodes.find(n=>n.className==='summary-score');
+    if (score){
+      assert.equal(descendants(score).find(n=>n.className==='summary-number').textContent,'—');
+      assert.doesNotMatch(score.title,/NaN|Infinity|undefined|excluded/);
+    }
   }
 });
 
@@ -407,7 +455,7 @@ test('run header exposes pass or fail state for the logo', () => {
 });
 
 test('coverage notes fold into the reported source caption and count warnings', () => {
-  const categories=[{category:4,counts:{inventory:1,complete:1,decisionMeasurable:1}}];
+  const categories=[{category:4,counts:{inventory:1,covered:1}}];
   const types=[{assembly:'Api',namespace:'N',name:'N.C',categories,methods:[]}];
   const view=context.api.buildCoverageReport({status:'available',categories,types,diagnostics:['Source scope: runtime dependencies of Tests','Tests: excluded by coverage settings','Api: compilation has errors; all outcomes remain unverified']});
   const nodes=descendants(view);
@@ -475,7 +523,7 @@ test('outcome chart exposes counts and filters by clicking a status', () => {
 
 
 test('header summary buttons contain separate logic and collector totals and control the views', () => {
-  const report={summary:{passed:4,failed:1,skipped:2,totalMs:3000},generatedAtUtc:'2026-10-11T11:36:52Z',coverage:{status:'available',branchPaths:{covered:9,total:16},categories:[{category:4,counts:{complete:1,decisionMeasurable:3}}]}};
+  const report={summary:{passed:4,failed:1,skipped:2,totalMs:3000},generatedAtUtc:'2026-10-11T11:36:52Z',coverage:{status:'available',branchPaths:{covered:9,total:16},categories:[{category:4,counts:{inventory:3,covered:1,uncovered:2}}]}};
   const header=context.api.buildRunHeader(report), nodes=descendants(header);
   const tests=nodes.find(n=>n.tag==='button' && n.dataset.view==='tests'), coverage=nodes.find(n=>n.tag==='button' && n.dataset.view==='coverage');
   assert.ok(tests);assert.ok(coverage);
@@ -525,8 +573,8 @@ test('interleaved scenario classes preserve canonical registration order',()=>{
 
 test('the referenced statement is highlighted precisely within a source line',()=>{
  const source={path:'C.cs',startLine:234,text:'A(); B(); C();',tokens:[],execution:[],
-  branches:[{start:5,length:4,category:4,outcome:'missed'}]};
- const view=context.api.buildCoverageSource([source],{from:'kind:4',key:'missed'});
+  branches:[{start:5,length:4,category:4,outcome:'uncovered'}]};
+ const view=context.api.buildCoverageSource([source],{from:'kind:4',key:'uncovered'});
  const nodes=descendants(view), marked=nodes.filter(n=>n.className==='coverage-branch-match');
  assert.equal(marked.map(n=>descendants(n).filter(child=>child.className?.startsWith('coverage-syntax-')).map(child=>child.textContent).join('')).join(''),'B();');
  const target=nodes.find(n=>n.attributes['data-coverage-focus']==='true');
@@ -536,8 +584,8 @@ test('the referenced statement is highlighted precisely within a source line',()
 test('a multiline branch highlights its whole span and labels the branch line rather than the context line',()=>{
  const text='Before();\nif (flag) {\n  B();\n}\nAfter();';
  const source={path:'C.cs',startLine:232,text,tokens:[],execution:[],
-  branches:[{start:text.indexOf('if'),length:text.indexOf('After')-text.indexOf('if')-1,category:4,outcome:'missed'}]};
- const view=context.api.buildCoverageSource([source],{from:'kind:4',key:'missed'}), nodes=descendants(view);
+  branches:[{start:text.indexOf('if'),length:text.indexOf('After')-text.indexOf('if')-1,category:4,outcome:'uncovered'}]};
+ const view=context.api.buildCoverageSource([source],{from:'kind:4',key:'uncovered'}), nodes=descendants(view);
  const lines=nodes.filter(n=>n.className?.split(' ').includes('coverage-source-match'));
  assert.deepEqual(lines.map(n=>n.attributes['data-source-line']),['233','234','235']);
  assert.equal(nodes.find(n=>n.className==='coverage-source-path').textContent,'C.cs:233');
@@ -547,8 +595,8 @@ test('a multiline branch highlights its whole span and labels the branch line ra
 
 test('band selection only marks the matching branch span on a shared source line',()=>{
  const source={path:'C.cs',startLine:234,text:'A(); B();',tokens:[],execution:[],
-  branches:[{start:0,length:4,category:0,outcome:'missed'},{start:5,length:4,category:4,outcome:'missed'}]};
- const nodes=descendants(context.api.buildCoverageSource([source],{from:'kind:4',key:'missed'}));
+  branches:[{start:0,length:4,category:0,outcome:'uncovered'},{start:5,length:4,category:4,outcome:'uncovered'}]};
+ const nodes=descendants(context.api.buildCoverageSource([source],{from:'kind:4',key:'uncovered'}));
  const marked=nodes.filter(n=>n.className==='coverage-branch-match');
  assert.equal(marked.map(n=>descendants(n).map(child=>child.textContent || '').join('')).join(''),'B();');
 });

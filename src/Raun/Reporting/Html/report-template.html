@@ -427,9 +427,8 @@
   .coverage-profile-note{font-size:11px;color:var(--muted);display:block}
   .coverage-bar{display:flex;height:6px;background:var(--border);margin:3px 0 5px;overflow:hidden}
   .coverage-bar span{display:block;min-width:1px}
-  .coverage-covered{background:#70b58b}.coverage-incomplete{background:#d9ac62}.coverage-missed{background:#ce7776}
-  .coverage-reached,.coverage-evaluated{background:#74a8b3}.coverage-partial,.coverage-filter-partial{background:#b6a076}.coverage-expression-missed,.coverage-filter-missed{background:#a88888}
-  .coverage-unknown{background:#777d87}.coverage-helper{background:repeating-linear-gradient(135deg,#777d87 0 2px,transparent 2px 4px)}
+  .coverage-covered{background:#70b58b}.coverage-partial{background:#d9ac62}.coverage-uncovered{background:#ce7776}
+  .coverage-unknown{background:repeating-linear-gradient(135deg,#777d87 0 2px,transparent 2px 4px)}
   .coverage-family{font-size:11px;color:var(--muted);font-weight:500;margin:18px 0 6px}
   .coverage-section summary:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 
@@ -477,10 +476,8 @@
   .coverage-flow-link:focus-visible{outline:none;stroke:var(--ink);stroke-width:2px}
   .coverage-flow-kind-0{fill:#8ea6b5}.coverage-flow-kind-1{fill:#b69a82}.coverage-flow-kind-2{fill:#90a79b}
   .coverage-flow-kind-3{fill:#a59eb4}.coverage-flow-kind-4{fill:#789db1}.coverage-flow-kind-null{fill:#777d87}
-  .coverage-flow-status-complete,.coverage-flow-status-exercise{fill:#70b58b}
-  .coverage-flow-status-partial{fill:#d9ac62}.coverage-flow-status-reached{fill:#74a8b3}
-  .coverage-flow-status-missed{fill:#ce7776}.coverage-flow-status-unknown{fill:#777d87}
-  .coverage-flow-status-helper{fill:url(#coverage-helper-pattern)}
+  .coverage-flow-status-covered{fill:#70b58b}.coverage-flow-status-partial{fill:#d9ac62}
+  .coverage-flow-status-uncovered{fill:#ce7776}.coverage-flow-status-unknown{fill:url(#coverage-unknown-pattern)}
   .coverage-tree-filter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px 8px 20px;font-size:12px;border-bottom:1px solid var(--border)}
   .coverage-tree-filter-label{font-weight:600}
   .coverage-tree-filter button{margin-left:auto;background:none;color:var(--ink);border:1px solid var(--border-strong);padding:3px 8px;font:inherit;cursor:pointer}
@@ -769,6 +766,21 @@
     }
 
     const COVERAGE_KINDS = ["Argument checks", "Error handling", "Null propagation", "Logging", "Logic"];
+    const COVERAGE_OUTCOMES = [{key:"covered",label:"Covered"},{key:"partial",label:"Partly covered"},{key:"uncovered",label:"Not covered"},{key:"unknown",label:"Can't tell"}];
+    const COVERAGE_REASONS = {
+      expression:"Execution evidence for expressions such as ??, ?. and &&. Coverage cannot distinguish their individual paths, so reaching an expression does not prove every path was tested.",
+      filter:"The exception filter ran. Its true and false outcomes cannot be determined from this coverage data.",
+      "shared-range":"Several branches share this source range, so partial execution cannot be attributed to this one.",
+      unresolved:"Execution data can exist without identifying every path. Implicit fallthrough paths and ambiguous sequence points cannot prove which outcome ran. Missing or mismatched source/build evidence can also prevent measurement. These branches are neither counted as tested nor missed.",
+      library:"The check runs inside a .NET library rather than your source. The report can identify the check, but cannot measure whether it rejected an argument."
+    };
+    function coverageMeasurable(counts){
+      const c=counts || {};
+      return (c.covered || 0)+(c.partial || 0)+(c.uncovered || 0);
+    }
+    function coverageOutcomeLabel(key){
+      return COVERAGE_OUTCOMES.find(outcome=>outcome.key===key)?.label ?? String(key ?? "Unknown");
+    }
     function buildRunHeader(report){
       const row=el("div","run-summary-items"), sum=report.summary, tabs=el("nav");
       row.setAttribute("data-run-status",sum.failed > 0 ? "fail" : "pass");
@@ -790,12 +802,12 @@
       if(report.coverage){
         const coverage=section("coverage","Coverage"), available=report.coverage.status==="available";
         const counts=available ? (report.coverage.categories || []).find(category=>category.category===4)?.counts || {} : {};
-        const total=counts.decisionMeasurable || 0, complete=counts.complete || 0, paths=available ? report.coverage.branchPaths : null;
+        const total=coverageMeasurable(counts), covered=counts.covered || 0, paths=available ? report.coverage.branchPaths : null;
         const score=el("span","summary-score");
-        score.title=total ? complete+" of "+total+" measurable logic decisions tested on every path. Expressions and argument checks are excluded."
-          : "No measurable logic decisions. Coverage may be unavailable or still pending.";
-        if(counts.unknown)score.title+=" "+counts.unknown+" unresolved branches excluded.";
-        const logical=total ? Math.round(100*complete/total)+"%" : "—", overall=paths?.total ? Math.round(100*paths.covered/paths.total)+"%" : "—";
+        score.title=total ? covered+" of "+total+" logic branches covered: every outcome observed."
+          : "No measurable logic branches. Coverage may be unavailable or still pending.";
+        if(counts.unknown)score.title+=" "+counts.unknown+" can't tell from this coverage data and are not scored.";
+        const logical=total ? Math.round(100*covered/total)+"%" : "—", overall=paths?.total ? Math.round(100*paths.covered/paths.total)+"%" : "—";
         score.appendChild(coverageText("span","summary-label","Logical"));score.appendChild(coverageText("span","summary-number",logical));
 
         coverage.appendChild(score);
@@ -832,23 +844,11 @@
       return category ? category.counts : {};
     }
     function coverageRank(item, key){
-      const c = coverageCounts(item, key);
-      const families = {
-        decisions: {total:c.decisionMeasurable || 0, covered:c.complete || 0},
-        guards: {total:c.exerciseMeasurable || 0, covered:c.exercised || 0},
-        expressions: {total:(c.reached || 0)+(c.partial || 0)+(c.expressionNotReached || 0), covered:c.reached || 0},
-        filters: {total:(c.evaluated || 0)+(c.filterPartial || 0)+(c.filterNotReached || 0), covered:c.evaluated || 0}
-      };
-      const order = key === 0 || key === 1 ? ["guards", "decisions", "expressions"]
-        : key === 2 ? ["expressions", "decisions", "guards"] : ["decisions", "guards", "expressions"];
-      order.push("filters");
-      for (let priority=0; priority<order.length; priority++){
-        const family = order[priority], evidence = families[family];
-        if (evidence.total) return {family, priority, fraction:evidence.covered/evidence.total,
-          missing:evidence.total-evidence.covered, unknown:c.unknown || 0};
-      }
-      return {family:c.inventory ? "unverified" : "other", priority:c.inventory ? 4 : 5,
-        fraction:null, missing:0, unknown:c.unknown || 0};
+      const c = coverageCounts(item, key), measurable = coverageMeasurable(c), unknown = c.unknown || 0;
+      if (measurable) return {family:"measured", priority:0, fraction:(c.covered || 0)/measurable,
+        missing:(c.partial || 0)+(c.uncovered || 0), unknown};
+      return {family:c.inventory ? "unverified" : "other", priority:c.inventory ? 1 : 2,
+        fraction:null, missing:0, unknown};
     }
     function coverageCompare(a,b,key){
       const x=coverageRank(a,key), y=coverageRank(b,key);
@@ -859,19 +859,8 @@
     }
     function coverageSegments(counts){
       const c=counts || {};
-      return [
-        {key:"covered",count:(c.exercised || 0)+(c.complete || 0),label:"exercised / complete",family:"exact"},
-        {key:"incomplete",count:c.incomplete || 0,label:"incomplete",family:"exact"},
-        {key:"missed",count:Math.max(0,(c.notReached || 0)-(c.expressionNotReached || 0)-(c.filterNotReached || 0)),label:"not reached",family:"exact"},
-        {key:"reached",count:c.reached || 0,label:"expression reached",family:"coarse"},
-        {key:"partial",count:c.partial || 0,label:"expression partial",family:"coarse"},
-        {key:"expression-missed",count:c.expressionNotReached || 0,label:"expression not reached",family:"coarse"},
-        {key:"evaluated",count:c.evaluated || 0,label:"filter evaluated",family:"filters"},
-        {key:"filter-partial",count:c.filterPartial || 0,label:"filter partly evaluated",family:"filters"},
-        {key:"filter-missed",count:c.filterNotReached || 0,label:"filter not evaluated",family:"filters"},
-        {key:"unknown",count:c.unknown || 0,label:"unknown",family:"unverified"},
-        {key:"helper",count:c.unmeasurable || 0,label:"unmeasurable helper",family:"unverified"}
-      ].filter(segment=>segment.count);
+      return COVERAGE_OUTCOMES.map(outcome=>({key:outcome.key,count:c[outcome.key] || 0,label:outcome.label.toLowerCase()}))
+        .filter(segment=>segment.count);
     }
     function coverageBar(segments){
       const bar=el("div","coverage-bar"), total=segments.reduce((sum,segment)=>sum+segment.count,0);
@@ -883,43 +872,26 @@
       }
       return bar;
     }
-    function coverageLabels(counts,key){
-      const c=counts || {}, labels=[];
-      const number=(count,singular,plural)=>count+" "+(count===1 ? singular : plural);
-      if (c.decisionMeasurable) labels.push({family:"exact",text:(c.complete || 0)+" of "+c.decisionMeasurable+" decisions fully tested",
-        explanation:"Every observable arm of a decision ran. A partly tested decision still has an untested path."});
-      if (c.exerciseMeasurable) labels.push({family:"exact",text:(c.exercised || 0)+" of "+c.exerciseMeasurable+
-        (key===0 ? " argument checks triggered" : key===1 ? " error paths tested" : " throw / handler paths tested"),
-        explanation:key===0 ? "The check's throw ran with an invalid argument. Passing valid arguments alone does not trigger a check."
-          : "The throw or exception handler ran. These counts describe error paths, not all outcomes of an expression."});
-      for (const [field,ending] of [["reached","reached"],["partial","partly reached"],["expressionNotReached","not reached"]]){
-        if (c[field]) labels.push({family:"coarse",text:number(c[field],"expression","expressions")+" "+ending,
-          explanation:"Execution evidence for expressions such as ??, ?. and &&. Coverage cannot distinguish their individual paths, so reaching an expression does not prove every path was tested."});
-      }
-      const filters=(c.evaluated || 0)+(c.filterPartial || 0)+(c.filterNotReached || 0);
-      if (filters) labels.push({family:"filters",text:(c.evaluated || 0)+" of "+filters+" exception filters evaluated",
-        explanation:"The exception filter ran. Its true and false outcomes cannot be determined from this coverage data."});
-      if (c.filterPartial) labels.push({family:"filters",text:number(c.filterPartial,"exception filter","exception filters")+" partly evaluated",
-        explanation:"Coverage shows partial execution within the filter expression. This cannot establish its true and false outcomes."});
-      if (c.unknown) labels.push({family:"unverified",text:"Coverage undetermined for "+number(c.unknown,"branch","branches"),
-        explanation:"Execution data can exist without identifying every path. Implicit fallthrough paths and ambiguous sequence points cannot prove which outcome ran. Missing or mismatched source/build evidence can also prevent measurement. These branches are neither counted as tested nor missed."});
-      if (c.unmeasurable) labels.push({family:"unverified",text:number(c.unmeasurable,"library check","library checks")+": coverage unavailable",
-        explanation:"The check runs inside a .NET library rather than your source. The report can identify the check, but cannot measure whether it rejected an argument."});
+    function coverageLabels(counts){
+      const c=counts || {}, labels=[], measurable=coverageMeasurable(c);
+      if (measurable) labels.push({key:"covered",text:(c.covered || 0)+" of "+measurable+" covered",
+        explanation:"Every outcome the branch has was observed. Branches the coverage data cannot judge are not counted."});
+      if (c.partial) labels.push({key:"partial",text:c.partial+" partly covered",
+        explanation:"The branch ran, and at least one of its outcomes was shown not to run."});
+      if (c.uncovered) labels.push({key:"uncovered",text:c.uncovered+" not covered",
+        explanation:"The branch never ran."});
+      if (c.unknown) labels.push({key:"unknown",text:c.unknown+" can't tell",
+        explanation:"The coverage data cannot establish which outcomes ran. These branches are neither counted as covered nor missed; each one's source line explains why."});
       return labels;
     }
-    function coverageProfile(counts,key){
-      const c=counts || {}, cell=el("div","coverage-profile"), segments=coverageSegments(c);
+    function coverageProfile(counts){
+      const c=counts || {}, cell=el("div","coverage-profile");
       if (!c.inventory){ cell.appendChild(coverageText("span","coverage-profile-note","—")); return cell; }
-      const labels=coverageLabels(c,key);
-      for (const family of ["exact","coarse","filters","unverified"]){
-        const matching=labels.filter(label=>label.family===family);
-        for (const label of matching){
-          const line=coverageText("span",family==="exact" ? "coverage-profile-label" : "coverage-profile-note",label.text);
-          line.title=label.explanation; cell.appendChild(line);
-        }
-        if (matching.length && (family!=="unverified" || !labels.some(label=>label.family!=="unverified")))
-          cell.appendChild(coverageBar(segments.filter(segment=>segment.family===family)));
+      for (const label of coverageLabels(c)){
+        const line=coverageText("span",label.key==="covered" ? "coverage-profile-label" : "coverage-profile-note",label.text);
+        line.title=label.explanation; cell.appendChild(line);
       }
+      cell.appendChild(coverageBar(coverageSegments(c)));
       return cell;
     }
     function coverageAggregate(items){
@@ -973,7 +945,8 @@
           const line=el("div","coverage-source-line"+(matches.length ? " coverage-source-match" : "")+(missedLines.has(source.startLine+index/2) ? " coverage-source-missed" : ""));
           line.setAttribute("data-source-line",String(source.startLine+index/2));
           if (matches.length && source.startLine+index/2===focusLine) line.setAttribute("data-coverage-focus","true");
-          if (references.length) line.title=references.map(branch=>(branch.category==null ? "Unclassified" : COVERAGE_KINDS[branch.category])+" → "+branch.outcome).join("; ");
+          if (references.length) line.title=references.map(branch=>coverageKindLabel(branch.category)+" → "+coverageOutcomeLabel(branch.outcome)
+            +(branch.outcome==="unknown" && COVERAGE_REASONS[branch.reason] ? ": "+COVERAGE_REASONS[branch.reason] : "")).join("; ");
           if (missedLines.has(source.startLine+index/2)) line.title=(line.title ? line.title+"; " : "")+"Not executed";
           line.appendChild(coverageText("span","coverage-source-number",String(source.startLine+index/2)));
           const content=el("code"), tokens=source.tokens || [];
@@ -1030,12 +1003,8 @@
       return (categories || []).filter(category=>category.counts?.inventory).sort((a,b)=>order(a.category)-order(b.category));
     }
     function coverageLogicBar(counts){
-      const c=counts || {}, measurable=c.decisionMeasurable || 0, complete=c.complete || 0, incomplete=c.incomplete || 0;
-      return coverageBar([
-        {key:"covered",count:complete,label:"fully tested"},
-        {key:"incomplete",count:incomplete,label:"partly tested"},
-        {key:"missed",count:Math.max(0,measurable-complete-incomplete),label:"untested"}
-      ].filter(segment=>segment.count));
+      // The row bar pictures its score, covered of measurable; can't-tell branches show in the scope pane.
+      return coverageBar(coverageSegments(counts).filter(segment=>segment.key!=="unknown"));
     }
     function coverageSplitter(parent, sizes={}, label){
       const splitter=el("div","coverage-splitter"), initial=sizes.list || 45, minimum=20, maximum=75;
@@ -1059,9 +1028,9 @@
     function coverageColumns(){
       return [
         {key:"name",label:"Scope",direction:1,value:node=>coverageNodeName(node).toLowerCase()},
-        {key:"logic",label:"Logic decisions",direction:1,value:node=>{const c=coverageCounts(node,4);return c.decisionMeasurable ? (c.complete || 0)/c.decisionMeasurable : Infinity;}},
-        {key:"missed",label:"Not reached",direction:-1,value:node=>coverageCounts(node,4).notReached || 0},
-        {key:"partial",label:"Partly tested",direction:-1,value:node=>coverageCounts(node,4).incomplete || 0}
+        {key:"logic",label:"Logic covered",direction:1,value:node=>{const c=coverageCounts(node,4), measurable=coverageMeasurable(c);return measurable ? (c.covered || 0)/measurable : Infinity;}},
+        {key:"missed",label:"Not covered",direction:-1,value:node=>coverageCounts(node,4).uncovered || 0},
+        {key:"partial",label:"Partly covered",direction:-1,value:node=>coverageCounts(node,4).partial || 0}
       ];
     }
     function coverageSorted(nodes,sort){
@@ -1070,27 +1039,18 @@
       return [...nodes].sort((a,b)=>sort.direction*compare(column.value(a),column.value(b)) || compare(name(a),name(b)));
     }
     function coverageFlow(categories){
-      const outcomes=[
-        {key:"complete",label:"All decision paths tested",count:c=>c.complete || 0},
-        {key:"exercise",label:"Throw / handler entered",count:c=>c.exercised || 0},
-        {key:"partial",label:"Partly executed",count:c=>(c.incomplete || 0)+(c.partial || 0)+(c.filterPartial || 0)},
-        {key:"reached",label:"Expression / filter reached",count:c=>(c.reached || 0)+(c.evaluated || 0)},
-        {key:"missed",label:"Not reached",count:c=>c.notReached || 0},
-        {key:"unknown",label:"Coverage undetermined",count:c=>c.unknown || 0},
-        {key:"helper",label:"Library checks: unavailable",count:c=>c.unmeasurable || 0}
-      ];
       const nodes=[], links=[];
       for (const category of categories || []){
-        const c=category.counts, key=category.category;
+        const c=category.counts || {}, key=category.category;
         if (!c.inventory) continue;
         const id="kind:"+key;
-        nodes.push({id,label:key==null ? "Unclassified" : COVERAGE_KINDS[key],count:c.inventory,column:0,key});
-        for (const outcome of outcomes){
-          const count=outcome.count(c);
+        nodes.push({id,label:coverageKindLabel(key),count:c.inventory,column:0,key});
+        for (const outcome of COVERAGE_OUTCOMES){
+          const count=c[outcome.key] || 0;
           if (count) links.push({from:id,to:"outcome:"+outcome.key,count,key:outcome.key});
         }
       }
-      for (const outcome of outcomes){
+      for (const outcome of COVERAGE_OUTCOMES){
         const id="outcome:"+outcome.key, count=links.filter(link=>link.to===id).reduce((sum,link)=>sum+link.count,0);
         if (count) nodes.push({id,label:outcome.label,count,column:1,key:outcome.key});
       }
@@ -1101,7 +1061,7 @@
       if (!total){figure.appendChild(coverageText("p","coverage-legend","No source branches found."));return figure;}
       const draw=span=>{
         const svg=svgEl("svg",{viewBox:"0 0 "+span+" 230",width:span,height:230,role:onSelect ? "group" : "img","aria-label":"Source coverage. "+flow.nodes.map(node=>node.label+": "+node.count).join(". ")});
-        const defs=svgEl("defs"), pattern=svgEl("pattern",{id:"coverage-helper-pattern",patternUnits:"userSpaceOnUse",width:6,height:6});
+        const defs=svgEl("defs"), pattern=svgEl("pattern",{id:"coverage-unknown-pattern",patternUnits:"userSpaceOnUse",width:6,height:6});
         pattern.appendChild(svgEl("rect",{width:6,height:6,fill:"#777d87"}));
         pattern.appendChild(svgEl("path",{d:"M-1 1L1 -1M0 6L6 0M5 7L7 5",stroke:"#adb2bb","stroke-width":1}));
         defs.appendChild(pattern);svg.appendChild(defs);
@@ -1159,15 +1119,15 @@
     }
     function buildCoverageScope(node,onSelectBand,band){
       const pane=[coverageText("h3","coverage-preview-name",node.name)];
-      const counts=coverageCounts(node,4), measurable=counts.decisionMeasurable || 0;
-      pane.push(coverageText("p","coverage-scope-score",measurable ? (counts.complete || 0)+" of "+measurable+" logic decisions fully tested" : "No measurable logic decisions in this scope"));
+      const counts=coverageCounts(node,4), measurable=coverageMeasurable(counts);
+      pane.push(coverageText("p","coverage-scope-score",measurable ? (counts.covered || 0)+" of "+measurable+" logic branches covered" : "No measurable logic branches in this scope"));
       pane.push(buildCoverageFlow(node.categories,onSelectBand,band));
       const kinds=coverageKinds(node.categories);
       if(!kinds.length)pane.push(coverageText("p","coverage-caption","No source branches found."));
       for(const category of kinds){
         const kind=el("section","coverage-kind");
         kind.appendChild(coverageText("h4","coverage-kind-name",coverageKindLabel(category.category)+" · "+category.counts.inventory+(category.counts.inventory===1 ? " branch" : " branches")));
-        kind.appendChild(coverageProfile(category.counts,category.category));pane.push(kind);
+        kind.appendChild(coverageProfile(category.counts));pane.push(kind);
       }
       return pane;
     }
@@ -1191,7 +1151,7 @@
     function coverageRowTitle(node){
       const lines=node.level==="method" ? [node.signature] : [];
       for(const category of coverageKinds(node.categories))
-        lines.push(coverageKindLabel(category.category)+": "+coverageLabels(category.counts,category.category).map(label=>label.text).join("; "));
+        lines.push(coverageKindLabel(category.category)+": "+coverageLabels(category.counts).map(label=>label.text).join("; "));
       return lines.join("\n");
     }
     function buildCoverageReport(coverage){
@@ -1276,10 +1236,11 @@
           if(hasChildren)marker.addEventListener("click",event=>{event?.stopPropagation();toggle(node);renderRows();});
           name.appendChild(marker);name.appendChild(coverageText("span","coverage-row-name",coverageNodeName(node)));row.appendChild(name);
           const counts=coverageCounts(node,4), logic=el("div","coverage-cell coverage-cell-logic");logic.setAttribute("role","gridcell");
-          if(counts.decisionMeasurable){logic.appendChild(coverageLogicBar(counts));logic.appendChild(coverageText("span","coverage-row-score",(counts.complete || 0)+"/"+counts.decisionMeasurable));}
-          else logic.appendChild(coverageText("span","coverage-row-score","—"));
+          const measurable=coverageMeasurable(counts);
+          if(measurable)logic.appendChild(coverageLogicBar(counts));
+          logic.appendChild(coverageText("span","coverage-row-score",measurable ? (counts.covered || 0)+"/"+measurable : "—"));
           row.appendChild(logic);
-          for(const [key,value] of [["missed",counts.notReached],["partial",counts.incomplete]]){
+          for(const [key,value] of [["missed",counts.uncovered],["partial",counts.partial]]){
             const cell=coverageText("div","coverage-cell coverage-cell-number coverage-cell-"+key,value ? String(value) : "—");cell.setAttribute("role","gridcell");row.appendChild(cell);
           }
           const move=target=>{if(target){select(target);focusPending=true;renderRows();}};

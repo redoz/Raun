@@ -11,6 +11,9 @@ assert.deepEqual(assemblies,['AppointmentTests'],'testconfig.json limits coverag
 const file=path.join(out,'coverage-view.html');
 fs.writeFileSync(file,template.replace('/*__RAUN_REPORT_JSON__*/',()=>JSON.stringify(model).replaceAll('<','\\u003C')));
 const logic=model.coverage.categories.find(category=>category.category===4).counts;
+const measurable=(logic.covered||0)+(logic.partial||0)+(logic.uncovered||0);
+assert.ok(measurable>0,'the sample has measurable logic branches');
+assert.equal(logic.decisionMeasurable,undefined,'the report carries the four outcome counts only');
 
 const rows=page=>page.locator('.coverage-row');
 const names=page=>page.locator('.coverage-row .coverage-row-name').allTextContents();
@@ -25,8 +28,8 @@ const selected=page=>page.locator('.coverage-row[aria-selected="true"] .coverage
  // The tree opens on the whole run, which shows the same logic score as the header.
  assert.deepEqual(await names(page),['Whole run','AppointmentTests']);
  assert.equal(await selected(page),'Whole run');
- assert.equal(await page.locator('.coverage-row[aria-level="1"] .coverage-row-score').textContent(),logic.complete+'/'+logic.decisionMeasurable);
- assert.equal(await page.locator('.coverage-preview .coverage-scope-score').textContent(),logic.complete+' of '+logic.decisionMeasurable+' logic decisions fully tested');
+ assert.equal(await page.locator('.coverage-row[aria-level="1"] .coverage-row-score').textContent(),(logic.covered||0)+'/'+measurable);
+ assert.equal(await page.locator('.coverage-preview .coverage-scope-score').textContent(),(logic.covered||0)+' of '+measurable+' logic branches covered');
  assert.equal((await page.locator('.coverage-collection>summary').textContent()).trim(),'Reported source: 1 assembly');
 
  // The flow fills the pane at 1:1, so its labels keep the body text size, and follows the splitter.
@@ -58,26 +61,31 @@ const selected=page=>page.locator('.coverage-row[aria-selected="true"] .coverage
 
  // Sorting applies per level and reports its direction.
  assert.equal(await page.locator('.coverage-row[aria-level="2"]').getAttribute('aria-expanded'),'true','the drill-down left the assembly open');
- const notReached=page.locator('.coverage-tree-heading.coverage-cell-missed');
- await notReached.locator('button').click();
- assert.equal(await notReached.getAttribute('aria-sort'),'descending');
+ const notCovered=page.locator('.coverage-tree-heading.coverage-cell-missed');
+ await notCovered.locator('button').click();
+ assert.equal(await notCovered.getAttribute('aria-sort'),'descending');
  const counts=(await page.locator('.coverage-row[aria-level="3"] .coverage-cell-missed').allTextContents()).map(text=>text==='—' ? 0 : Number(text));
  assert.deepEqual(counts,[...counts].sort((a,b)=>b-a));
  await page.locator('.coverage-tree-heading.coverage-cell-name button').click();
 
  // A band filters the tree to scopes with branches in it, until it is cleared.
  const all=await rows(page).count();
- const band=page.locator('.coverage-flow-link[aria-label^="Logic → Not reached"]');
+ const band=page.locator('.coverage-flow-link[aria-label^="Logic → Not covered"]');
  const label=await band.getAttribute('aria-label');
  await band.click();
  assert.equal(await page.locator('.coverage-tree-filter-label').textContent(),label.replace(/: [\d,]+ branches$/,''));
  assert.equal(await page.locator('.coverage-flow-link[aria-pressed="true"]').count(),1);
  const filtered=await rows(page).count();
- assert.ok(filtered<all,'the filter hides scopes without unreached logic: '+filtered+' of '+all);
+ assert.ok(filtered<all,'the filter hides scopes without uncovered logic: '+filtered+' of '+all);
  for(const missed of await page.locator('.coverage-row[aria-level="3"] .coverage-cell-missed').allTextContents())assert.notEqual(missed,'—');
  await page.screenshot({path:path.join(out,'band.png')});
  await page.getByRole('button',{name:'Clear filter'}).click();
  assert.equal(await rows(page).count(),all);
+
+ // The outcome column speaks the four outcomes and nothing else.
+ const outcomes=await page.locator('.coverage-flow svg g rect[class^="coverage-flow-status-"]').evaluateAll(rects=>rects.map(rect=>rect.getAttribute('class').replace('coverage-flow-status-','')));
+ assert.ok(outcomes.length>0 && outcomes.every(key=>['covered','partial','uncovered','unknown'].includes(key)),'outcome nodes: '+outcomes);
+ assert.equal(await page.locator('text=/Not reached|decision paths tested|undetermined|Library checks/').count(),0);
 
  // Collector notes open from the caption.
  await page.locator('.coverage-collection>summary').click();
@@ -93,5 +101,5 @@ const selected=page=>page.locator('.coverage-row[aria-selected="true"] .coverage
  await page.emulateMedia({colorScheme:'dark'});await page.setViewportSize({width:1440,height:900});
  await page.screenshot({path:path.join(out,'dark.png')});
  assert.deepEqual(errors,[]);
- console.log('PASS coverage view: sample scope, whole-run score, flow width and type size, keyboard drill-down to source, sorting, band filter, collector notes, mobile and dark.');
+ console.log('PASS coverage view: sample scope, whole-run score, four outcomes, flow width and type size, keyboard drill-down to source, sorting, band filter, collector notes, mobile and dark.');
 }finally{await browser.close();}})().catch(error=>{console.error(error);process.exitCode=1;});
