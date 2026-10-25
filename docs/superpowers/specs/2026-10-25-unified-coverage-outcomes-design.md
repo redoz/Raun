@@ -97,8 +97,8 @@ exactly one IL branch point, so "every path hit" proves every outcome of that br
 - `ReportCoverageCounts` becomes `Inventory`, `Covered`, `Partial`, `Uncovered`, `Unknown`. All
   kind-specific counters are removed (beta; breaking on purpose).
 - `ReportCoverageBranch.Outcome` uses the four keys above.
-- `ReportCoverageBranch` gains `Reason` (`string?`): `expression`, `filter`, `unresolved`,
-  `library`, or null when the outcome is not `unknown`.
+- `ReportCoverageBranch` gains `Reason` (`string?`): `expression`, `filter`, `shared-range`,
+  `unresolved`, `library`, or null when the outcome is not `unknown`.
 
 ## Report changes
 
@@ -125,9 +125,11 @@ exactly one IL branch point, so "every path hit" proves every outcome of that br
   outcome keys); `coverageRowTitle` (follows `coverageLabels`, needs a test); the run-header
   tooltip ("Expressions and argument checks are excluded" becomes false).
 - Path hits: the resolver may decide an outcome from Coverlet paths that the tooltip does not
-  display (`CoverageSourceBuilder` shows paths only for modules with frequency counts). Show
-  `PathHits` for every module whose paths decided the outcome, so the evidence is visible.
+  display (`CoverageSourceBuilder` shows path counts only for modules with frequency counts,
+  because other modules' hits are 0/1, not counts). Unchanged: the line still shows the outcome.
   *(Claude's call.)*
+- Reasons also include `shared-range` (see the mapping table); every reason has one explanation
+  text in the template.
 
 ## Tests
 
