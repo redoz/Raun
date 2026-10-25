@@ -132,6 +132,9 @@ public sealed class CoverletReaderTests
         Assert.Equal(EvidenceStatus.Unknown, CoverageResolver.Resolve(branch, new CoverageObservations([mismatch])));
         var snippets = CoverageSourceBuilder.Build([(branch, BranchCategory.Logic, expected)], new CoverageObservations([module]));
         Assert.Equal(new long[] { first, second }, Assert.Single(Assert.Single(snippets).Branches).PathHits);
+        var singleHit = new CoverageObservations([module with { HasFrequencyCounts = false }]);
+        Assert.Equal(expected, CoverageResolver.Resolve(branch, singleHit));
+        Assert.Empty(Assert.Single(Assert.Single(CoverageSourceBuilder.Build([(branch, BranchCategory.Logic, expected)], singleHit)).Branches).PathHits);
     }
 
     [Fact]

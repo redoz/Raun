@@ -17,7 +17,7 @@ public sealed class CoverageRenderingTests
         {
             var path = Path.Combine(directory, "report.html");
             var category = new ReportCoverageCategory(BranchCategory.Logic,
-                new ReportCoverageCounts { Inventory = 12, Complete = 7, DecisionMeasurable = 10, Unknown = 2 });
+                new ReportCoverageCounts { Inventory = 12, Covered = 7, Partial = 1, Uncovered = 2, Unknown = 2 });
             var sink = new HtmlReportSink(path, TimeProvider.System);
             await sink.PublishAsync(new RunStarted(0));
             await sink.PublishAsync(new RunFinished());
@@ -34,7 +34,7 @@ public sealed class CoverageRenderingTests
             using var payload = JsonDocument.Parse(html[start..end]);
             var data = payload.RootElement.GetProperty("coverage");
             Assert.Equal("available", data.GetProperty("status").GetString());
-            Assert.Equal(7, data.GetProperty("categories")[0].GetProperty("counts").GetProperty("complete").GetInt32());
+            Assert.Equal(7, data.GetProperty("categories")[0].GetProperty("counts").GetProperty("covered").GetInt32());
             Assert.Equal("CalculateFinanceReport()", data.GetProperty("types")[0].GetProperty("methods")[0].GetProperty("signature").GetString());
         }
         finally { Directory.Delete(directory, true); }

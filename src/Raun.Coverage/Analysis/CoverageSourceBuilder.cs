@@ -61,8 +61,9 @@ internal static class CoverageSourceBuilder
                 }
                 var branches = group.Where(fact => span.Contains(fact.Branch.Syntax.SpanStart)).Select(fact =>
                     new ReportCoverageBranch(fact.Branch.Syntax.SpanStart - span.Start,
-                        Math.Min(fact.Branch.Syntax.Span.End, span.End) - fact.Branch.Syntax.SpanStart, fact.Category, Outcome(fact.Status))
+                        Math.Min(fact.Branch.Syntax.Span.End, span.End) - fact.Branch.Syntax.SpanStart, fact.Category, CoverageOutcome.Of(fact.Status).Outcome)
                     {
+                        Reason = CoverageOutcome.Of(fact.Status).Reason,
                         PathHits = evidence.Length == 0 ? [] : Raun.Coverage.Coverlet.CoverletBranchEvidence.PathHits(fact.Branch, observations?.Modules.Where(module => module.HasFrequencyCounts).ToArray() ?? []),
                     }).ToArray();
                 result.Add(new ReportCoverageSource(tree.FilePath, range.Start + 1, source.ToString(span), tokens.OrderBy(token => token.Start).ToArray(), branches)
@@ -103,16 +104,6 @@ internal static class CoverageSourceBuilder
                 : group.Any(range => range.Hit == CoverageHit.Partial) ? CoverageHit.Partial : CoverageHit.No,
         }).ToArray();
     }
-    private static string Outcome(EvidenceStatus status) => status switch
-    {
-        EvidenceStatus.Complete => "complete",
-        EvidenceStatus.Exercised => "exercise",
-        EvidenceStatus.Incomplete or EvidenceStatus.Partial => "partial",
-        EvidenceStatus.Reached or EvidenceStatus.Evaluated => "reached",
-        EvidenceStatus.NotReached => "missed",
-        EvidenceStatus.Unmeasurable => "helper",
-        _ => "unknown",
-    };
 }
 
 

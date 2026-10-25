@@ -33,31 +33,21 @@ public sealed record ReportCoverageExecution(int Start, int Length, string State
 public sealed record ReportCoverageToken(int Start, int Length, string Kind);
 public sealed record ReportCoverageBranch(int Start, int Length, BranchCategory? Category, string Outcome)
 {
+    /// <summary>Why the outcome is unknown: expression, filter, shared-range, unresolved or library.</summary>
+    public string? Reason { get; init; }
+
     /// <summary>Observed path counters; their order does not imply true/false arm identity.</summary>
     public IReadOnlyList<long> PathHits { get; init; } = [];
 }
 
 public sealed record ReportCoverageCategory(BranchCategory? Category, ReportCoverageCounts Counts);
 
-/// <summary>Integer counters. Categories group structural measurements without redefining them.</summary>
+/// <summary>Outcome counters; measurable = covered + partial + uncovered.</summary>
 public sealed record ReportCoverageCounts
 {
     public int Inventory { get; init; }
-    public int Exercised { get; init; }
-    public int ExerciseMeasurable { get; init; }
-    public int Complete { get; init; }
-    public int DecisionMeasurable { get; init; }
-    public int Incomplete { get; init; }
-    public int Reached { get; init; }
+    public int Covered { get; init; }
     public int Partial { get; init; }
-    public int NotReached { get; init; }
-    public int ExpressionNotReached { get; init; }
-    public int FilterPartial { get; init; }
-    public int FilterNotReached { get; init; }
-    public int Evaluated { get; init; }
+    public int Uncovered { get; init; }
     public int Unknown { get; init; }
-    public int Unmeasurable { get; init; }
 }
-
-
-

@@ -108,22 +108,10 @@ public static class ClassifiedCoverageAnalyzer
             .Select(group => new ReportCoverageCategory(group.Key, new ReportCoverageCounts
             {
                 Inventory = group.Count(),
-                Exercised = group.Count(branch => branch.Status == EvidenceStatus.Exercised),
-                ExerciseMeasurable = group.Count(branch => branch.Measurement is MeasurementKind.Guard or MeasurementKind.Handler
-                    && branch.Status is EvidenceStatus.Exercised or EvidenceStatus.NotReached),
-                Complete = group.Count(branch => branch.Status == EvidenceStatus.Complete),
-                DecisionMeasurable = group.Count(branch => branch.Measurement == MeasurementKind.Decision
-                    && branch.Status is EvidenceStatus.Complete or EvidenceStatus.Incomplete or EvidenceStatus.NotReached),
-                Incomplete = group.Count(branch => branch.Status == EvidenceStatus.Incomplete),
-                Reached = group.Count(branch => branch.Status == EvidenceStatus.Reached),
-                Partial = group.Count(branch => branch.Measurement == MeasurementKind.Expression && branch.Status == EvidenceStatus.Partial),
-                FilterPartial = group.Count(branch => branch.Measurement == MeasurementKind.Filter && branch.Status == EvidenceStatus.Partial),
-                NotReached = group.Count(branch => branch.Status == EvidenceStatus.NotReached),
-                ExpressionNotReached = group.Count(branch => branch.Measurement == MeasurementKind.Expression && branch.Status == EvidenceStatus.NotReached),
-                FilterNotReached = group.Count(branch => branch.Measurement == MeasurementKind.Filter && branch.Status == EvidenceStatus.NotReached),
-                Evaluated = group.Count(branch => branch.Status == EvidenceStatus.Evaluated),
-                Unknown = group.Count(branch => branch.Status == EvidenceStatus.Unknown),
-                Unmeasurable = group.Count(branch => branch.Status == EvidenceStatus.Unmeasurable),
+                Covered = group.Count(branch => CoverageOutcome.Of(branch.Status).Outcome == "covered"),
+                Partial = group.Count(branch => CoverageOutcome.Of(branch.Status).Outcome == "partial"),
+                Uncovered = group.Count(branch => CoverageOutcome.Of(branch.Status).Outcome == "uncovered"),
+                Unknown = group.Count(branch => CoverageOutcome.Of(branch.Status).Outcome == "unknown"),
             })).ToArray();
 
     internal sealed record AnalyzedBranch(MemberIdentity Member, BranchCategory? Category, MeasurementKind Measurement, EvidenceStatus Status)

@@ -36,7 +36,8 @@ public sealed class CoverageSourceTests
         var references = source;
         var reference = Assert.Single(references.Branches);
         Assert.Equal(branch.Syntax.ToString(), source.Text.Substring(reference.Start, reference.Length));
-        Assert.Equal("missed", reference.Outcome);
+        Assert.Equal("uncovered", reference.Outcome);
+        Assert.Null(reference.Reason);
     }
     [Fact]
     public void Red_lines_require_verified_negative_evidence_without_positive_or_partial_hits()
@@ -57,8 +58,15 @@ public sealed class CoverageSourceTests
         Assert.Empty(Assert.Single(CoverageSourceBuilder.Build(facts, invalid)).NotExecutedLines);
         Assert.Empty(Assert.Single(CoverageSourceBuilder.Build(facts)).NotExecutedLines);
     }
+    [Theory]
+    [InlineData((int)EvidenceStatus.Complete, "covered", null)]
+    [InlineData((int)EvidenceStatus.Evaluated, "unknown", "filter")]
+    public void Branch_snippets_carry_the_outcome_and_the_reason_it_is_unknown(int statusValue, string outcome, string? reason)
+    {
+        var compilation = TestCompilation.Create("class C { int M(bool b) {\n if (b)\n return 1;\n return 2;\n} }");
+        var branch = Assert.Single(BranchInventoryBuilder.Build(compilation, new CollectorScope(), TestContext.Current.CancellationToken));
+        var reference = Assert.Single(Assert.Single(CoverageSourceBuilder.Build([(branch, BranchCategory.Logic, (EvidenceStatus)statusValue)])).Branches);
+        Assert.Equal(outcome, reference.Outcome);
+        Assert.Equal(reason, reference.Reason);
+    }
 }
-
-
-
-
