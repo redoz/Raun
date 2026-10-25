@@ -154,6 +154,59 @@ public sealed class CoverageResolverTests
         Assert.Equal(EvidenceStatus.Partial, Resolve(lone, "partial"));
     }
 
+    [Fact]
+    public void A_partly_executed_switch_expression_is_partial_although_its_arms_are_inside_its_range()
+    {
+        var expression = Decision("class C { string M(int x) => x switch { 1 => \"a\", _ => \"b\" }; }");
+        Assert.Equal(EvidenceStatus.Partial, Resolve(expression, "partial"));
+    }
+
+    [Fact]
+    public void A_partly_executed_expression_in_a_loop_condition_is_partial()
+    {
+        var expression = Decision("class C { void M(bool? b) { while (b ?? false) { } } }");
+        Assert.Equal(EvidenceStatus.Partial, Resolve(expression, "partial"));
+    }
+
+    [Fact]
+    public void A_partly_executed_filter_that_holds_another_branch_is_shared_range()
+    {
+        var filter = Assert.Single(BranchInventoryBuilder.Build(TestCompilation.Create(
+            "class C { void M() { try { } catch (System.Exception e) when (e.Message?.Length > 0) { } } }"),
+            new CollectorScope(), TestContext.Current.CancellationToken), b => b.Measurement == MeasurementKind.Filter);
+        Assert.Equal(EvidenceStatus.SharedRange, Resolve(filter, "partial"));
+    }
+
+    [Fact]
+    public void An_ambiguous_coverlet_line_does_not_make_an_expression_partial()
+    {
+        const string source = "class C { int M(bool c, int? a, int b) { if (c) return a ?? b; return 0; } }";
+        var branches = BranchInventoryBuilder.Build(TestCompilation.Create(source), new CollectorScope(), TestContext.Current.CancellationToken);
+        var expression = Assert.Single(branches, b => b.Measurement == MeasurementKind.Expression);
+        var statement = (Microsoft.CodeAnalysis.CSharp.Syntax.IfStatementSyntax)Assert.Single(branches, b => b.Measurement == MeasurementKind.Decision).Syntax;
+        // Coverlet line hits: the line ran, and each of its sequence points is marked partly hit.
+        var observations = CoverletLine(source, CoverageHit.Partial, statement.Condition, statement.Statement);
+        Assert.Equal(EvidenceStatus.Unknown, CoverageResolver.Resolve(expression, observations));
+    }
+
+    [Fact]
+    public void An_ambiguous_coverlet_line_does_not_make_a_filter_partial()
+    {
+        const string source = "class C { void M() { try { } catch (System.Exception e) when (e.HResult > 0) { } } }";
+        var filter = Assert.Single(BranchInventoryBuilder.Build(TestCompilation.Create(source), new CollectorScope(), TestContext.Current.CancellationToken),
+            b => b.Measurement == MeasurementKind.Filter);
+        var clause = (Microsoft.CodeAnalysis.CSharp.Syntax.CatchFilterClauseSyntax)filter.Syntax;
+        Assert.Equal(EvidenceStatus.Unknown, CoverageResolver.Resolve(filter, CoverletLine(source, CoverageHit.Partial, clause.FilterExpression)));
+    }
+
+    private static CoverageObservations CoverletLine(string source, CoverageHit hit, params Microsoft.CodeAnalysis.SyntaxNode[] points)
+    {
+        var document = new CoverageSource("fixture.cs", "SHA256", Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source))));
+        var ranges = points.Select(point => point.GetLocation().GetLineSpan())
+            .Select(span => new CoverageRange(document, span.StartLinePosition, span.EndLinePosition, hit)).ToArray();
+        return new CoverageObservations([new CoverageModule("build", "Fixture.dll", ranges) { IsCoverlet = true }]);
+    }
+
     private static InventoryBranch Guard(string source) => Assert.Single(BranchInventoryBuilder.Build(
         TestCompilation.Create(source), new CollectorScope(), TestContext.Current.CancellationToken), b => b.Measurement == MeasurementKind.Guard);
     private static InventoryBranch Decision(string source) => Assert.Single(BranchInventoryBuilder.Build(

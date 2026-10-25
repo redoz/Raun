@@ -73,7 +73,7 @@ internal static class BranchInventoryBuilder
         return symbol;
     }
 
-    private static (BranchForm Form, MeasurementKind Measurement, IReadOnlyList<FileLinePositionSpan?> Outcomes)? Describe(
+    internal static (BranchForm Form, MeasurementKind Measurement, IReadOnlyList<FileLinePositionSpan?> Outcomes)? Describe(
         SyntaxNode node, SemanticModel model)
     {
         switch (node)

@@ -59,6 +59,9 @@ internal static class CoverageResolver
             return hits[0] switch
             {
                 CoverageHit.Yes => branch.Measurement == MeasurementKind.Filter ? EvidenceStatus.Evaluated : EvidenceStatus.Reached,
+                // Coverlet marks every sequence point of an executed multi-point line partial: the line ran, but not
+                // necessarily this range, so nothing about this branch's paths is known.
+                CoverageHit.Partial when modules.Any(module => module.IsCoverlet) => EvidenceStatus.Unknown,
                 CoverageHit.Partial => SharesRange(branch, ranges) ? EvidenceStatus.SharedRange : EvidenceStatus.Partial,
                 _ => EvidenceStatus.NotReached,
             };
@@ -106,9 +109,11 @@ internal static class CoverageResolver
             : matches.Any(range => range.Hit == CoverageHit.Partial) ? CoverageHit.Partial : CoverageHit.No;
     }
 
-    // Checks syntax, not the inventory: it cannot see which nodes were inventoried. Over-including a node only turns
-    // partial into unknown; it never overclaims.
-    // A partly executed range that also holds another inventoried branch's test cannot say which of them missed.
+    /// <summary>
+    /// A partly executed range that also holds the test of another branch the inventory scores cannot say which of
+    /// them missed. Membership comes from <see cref="BranchInventoryBuilder.Describe"/>, so loops and switch expression
+    /// arms, which are never inventoried, do not count; handlers and library helpers have no test inside a range.
+    /// </summary>
     private static bool SharesRange(InventoryBranch branch, CoverageRange[] ranges)
     {
         if (Match(branch.Outcomes[0], branch, ranges, out var range) is null || range is null)
@@ -116,17 +121,14 @@ internal static class CoverageResolver
             return false;
         }
         return branch.Syntax.SyntaxTree.GetRoot().DescendantNodesAndSelf().Any(node =>
-            node != branch.Syntax && Raun.Coverage.Coverlet.CoverletBranchEvidence.IsBranchNode(node) && Overlaps(range, TestOf(node)));
+            node != branch.Syntax && Overlaps(range, TestOf(node))
+            && BranchInventoryBuilder.Describe(node, branch.SemanticModel) is { Measurement: not (MeasurementKind.Handler or MeasurementKind.Helper) });
     }
 
-    // The part of a branch node that executes as its test; a loop or if body is not the test.
+    // The part of an inventoried branch node that executes as its test; an if body is not the test.
     private static FileLinePositionSpan TestOf(SyntaxNode node) => (node switch
     {
         IfStatementSyntax statement => statement.Condition,
-        WhileStatementSyntax statement => statement.Condition,
-        DoStatementSyntax statement => statement.Condition,
-        ForStatementSyntax statement => (SyntaxNode?)statement.Condition ?? statement,
-        CommonForEachStatementSyntax statement => statement.Expression,
         SwitchStatementSyntax statement => statement.Expression,
         SwitchExpressionSyntax expression => expression.GoverningExpression,
         ConditionalExpressionSyntax expression => expression.Condition,
