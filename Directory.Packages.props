@@ -22,22 +22,22 @@
 
     <!-- ILogger bridge: step logs written through the standard .NET logging abstraction.
          Abstractions only â€” no logging implementation is taken as a dependency. -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
 
     <!-- DI: Raun.Mtp needs only the abstractions (IServiceScopeFactory); the test project needs
          the implementation to build a provider. -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
 
     <!-- Aspire integration (Raun.Aspire + the Aspire sample). -->
     <!-- Patch the transitive MessagePack dependency: GHSA-qhrr-8q5h-9q3h. Stay on 2.x: StreamJsonRpc
          (via Aspire) is built against MessagePack 2, and 3.x is a breaking major. -->
     <PackageVersion Include="MessagePack" Version="2.5.307" />
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.3" />
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.3" />
-    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.4" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.4" />
+    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.14" />
 
     <!-- Coverage spike: does the profiler reach Aspire's child processes?
          Moves in lockstep with Microsoft.Testing.Platform above: a version mismatch surfaces as a
