@@ -67,7 +67,26 @@ both together.
    They copy both samples outside the repo, replace framework project references with exact
    package versions, and restore into fresh caches. A third case checks the generated entry point.
    Both workflows run this suite before publishing and upload its HTML report, including on failure.
-4. Tag with git — jj imports tags but does not create them:
+4. Release from the GitHub UI: **Actions → Release → Run workflow**, on `main`. Pick a bump
+   (npm-style: the next tag is computed from the existing `v*` tags) and, for a pre-release, an
+   optional label:
+
+   | Bump | From `v0.3.0-beta.33` | From `v0.3.0` |
+   | --- | --- | --- |
+   | `prerelease` (default) | `v0.3.0-beta.34` | `v0.3.1-beta.1` |
+   | `patch` | `v0.3.0` | `v0.3.1` |
+   | `minor` | `v0.3.0` | `v0.4.0` |
+   | `major` | `v1.0.0` | `v1.0.0` |
+   | `prepatch` / `preminor` / `premajor` | `v0.3.1-beta.1` / `v0.4.0-beta.1` / `v1.0.0-beta.1` | same |
+
+   Tick **Dry run** to see the version in the run summary without tagging. The workflow tags
+   `main` locally, runs every test, and pushes the tag only after they pass, just before
+   publishing. A stable bump refuses to run while `AnalyzerReleases.Unshipped.md` still lists rules
+   (step 2). The calculation lives in `.github/scripts/next_version.py`, tested by
+   `python3 .github/scripts/test_next_version.py`.
+
+   Or tag by hand with git (jj imports tags but does not create them); the tag push runs the same
+   workflow:
 
    ```bash
    git tag -a v0.1.0-beta.1 -m "Raun 0.1.0 beta 1"

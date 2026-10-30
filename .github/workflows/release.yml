@@ -1,24 +1,113 @@
 name: Release
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Release {0} from main{1}', inputs.bump, inputs.dry_run && ' (dry run)' || '') || format('Release {0}', github.ref_name) }}
 
-# Pushing a tag like v0.1.0 (or v0.2.0-beta.1) publishes that exact version. MinVer reads the tag,
-# so the version is never typed anywhere else. See docs/RELEASING.md.
+# Two ways to release, both publishing that exact version. MinVer reads the tag, so the version is
+# never typed anywhere else. See docs/RELEASING.md.
+#   - Actions > Release > Run workflow (from main): pick a bump; the next tag is computed from the
+#     existing ones, and is pushed only after every test passes.
+#   - Push a tag like v0.1.0 (or v0.2.0-beta.1) yourself.
 #
 # Tags publish to nuget.org; main-branch previews remain on GitHub Packages via ci.yml.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: >-
+          Version bump. prerelease: 0.3.0-beta.33 -> 0.3.0-beta.34. patch / minor / major: a stable
+          release (finalizes a pre-release line: 0.3.0-beta.33 -> 0.3.0). prepatch / preminor /
+          premajor: start the next line at beta.1.
+        type: choice
+        options: [prerelease, patch, minor, major, prepatch, preminor, premajor]
+        default: prerelease
+      preid:
+        description: Pre-release label, e.g. rc (blank keeps the current one, else beta)
+        type: string
+        default: ''
+      dry_run:
+        description: Only compute and show the version; tag and publish nothing
+        type: boolean
+        default: false
 
 permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  version:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - name: Release only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run the release from main, not $GITHUB_REF."
+          exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Compute the next version
+        id: next
+        env:
+          BUMP: ${{ inputs.bump }}
+          PREID: ${{ inputs.preid }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          python3 .github/scripts/test_next_version.py
+          tag="$(git tag -l 'v*' | python3 .github/scripts/next_version.py "$BUMP" "$PREID")"
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "::error::Tag $tag already exists."
+            exit 1
+          fi
+          # RS2007 rejects a pre-release suffix in a release header, so only a stable release
+          # moves rules to AnalyzerReleases.Shipped.md (docs/RELEASING.md, checklist step 2).
+          if [[ "$tag" != *-* ]] && grep -qE '^RAUN[0-9]+ *\|' src/Raun.Generator/AnalyzerReleases.Unshipped.md; then
+            echo "::error::Stable release $tag: move the rules in AnalyzerReleases.Unshipped.md to AnalyzerReleases.Shipped.md under '## Release ${tag#v}' first."
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Next version: \`$tag\`"
+            echo "From \`main\` at \`${GITHUB_SHA::8}\`, bump \`$BUMP\`."
+            if [[ "$DRY_RUN" == "true" ]]; then echo "Dry run: nothing was tagged or published."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: version
+    # A tag push skips the version job; a dispatch publishes only after it, and never on a dry run.
+    if: >-
+      always() && (github.event_name == 'push' ||
+      (needs.version.result == 'success' && !inputs.dry_run))
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.version.outputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+
+      # A local tag is enough for MinVer; it reaches origin only after the tests pass.
+      - name: Tag the release commit
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          version="${TAG#v}"
+          title="Raun $version"
+          if [[ "$version" == *-* ]]; then
+            pre="${version#*-}"
+            title="Raun ${version%%-*} ${pre//./ }"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$title"
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
@@ -97,6 +186,11 @@ jobs:
           REPORT_URL: ${{ steps.package-report-html.outputs.artifact-url }}
         run: printf '[Package consumption report](%s)\n' "$REPORT_URL" >> "$GITHUB_STEP_SUMMARY"
 
+      # Pushed with the workflow token, which does not trigger this workflow again for the tag.
+      - name: Push the tag
+        if: github.event_name == 'workflow_dispatch'
+        run: git push origin "refs/tags/$TAG"
+
       - name: NuGet.org login
         id: nuget_login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
@@ -107,7 +201,7 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           for package in Raun Raun.Coverage Raun.Mtp Raun.Aspire; do
             dotnet nuget push "artifacts/$package.$version.nupkg" \
               --source "https://api.nuget.org/v3/index.json" \
@@ -120,7 +214,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           release_flags=()
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+          if [[ "$TAG" == *-* ]]; then
             release_flags+=(--prerelease)
           fi
-          gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg --generate-notes "${release_flags[@]}"
+          gh release create "$TAG" artifacts/*.nupkg --generate-notes "${release_flags[@]}"

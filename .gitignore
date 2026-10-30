@@ -49,3 +49,5 @@ Thumbs.db
 /*.ps1
 /playwright-*.tgz
 node_modules/
+
+__pycache__/
