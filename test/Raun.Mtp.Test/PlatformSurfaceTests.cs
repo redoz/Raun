@@ -103,6 +103,7 @@ public class PlatformSurfaceTests
     {
         var repoRoot = FindRepoRoot();
         var projectPath = Path.Combine(repoRoot, "samples", "AppointmentTests", "AppointmentTests.csproj");
+        await using var sampleLock = await AcquireSampleLockAsync(Path.GetDirectoryName(projectPath)!);
 
         var startInfo = new ProcessStartInfo("dotnet")
         {
@@ -162,6 +163,28 @@ public class PlatformSurfaceTests
         }
 
         return new ProcessResult(process.ExitCode, stdOut.ToString(), stdErr.ToString());
+    }
+
+    /// <summary>This project runs once per target framework, and those test hosts run in parallel.
+    /// Each <c>dotnet run</c> builds the sample into the same <c>obj/Debug</c>, so two at once race on
+    /// its apphost (MSB3030). An exclusive lock file next to the sample serializes them across
+    /// processes. The file stays: deleting it on close would let two waiters lock different files.</summary>
+    private static async Task<FileStream> AcquireSampleLockAsync(string projectDirectory)
+    {
+        var obj = Directory.CreateDirectory(Path.Combine(projectDirectory, "obj"));
+        var path = Path.Combine(obj.FullName, "raun-platform-surface.lock");
+        var waited = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (waited.Elapsed < ProcessTimeout)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250));
+            }
+        }
     }
 
     private static void TryKill(Process process)
