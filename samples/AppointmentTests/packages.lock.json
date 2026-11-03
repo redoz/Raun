@@ -200,7 +200,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.14, )",
-          "Microsoft.Testing.Platform": "[2.5.1, )",
+          "Microsoft.Testing.Platform": "[2.5.2, )",
           "Raun": "[1.0.0, )"
         }
       },
@@ -267,7 +267,7 @@
       },
       "Microsoft.Testing.Platform": {
         "type": "CentralTransitive",
-        "requested": "[2.5.1, )",
+        "requested": "[2.5.2, )",
         "resolved": "2.5.2",
         "contentHash": "ocX0rgGY78dKfmZlZe4hB0/dvlh7wJgUAWS+KfwrqxB9DpNsjshnne9dppCKnFNEOkX4QYsrdUU++NInFPiCBw=="
       }
