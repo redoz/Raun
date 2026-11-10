@@ -18,7 +18,7 @@
       Version 2.4.0 added terminal options (progress, ansi, output minimal,
       show-slowest-tests, show-flaky-tests, show-test-results) needing no code change.
     -->
-    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.5.2" />
 
     <!-- ILogger bridge: step logs written through the standard .NET logging abstraction.
          Abstractions only â€” no logging implementation is taken as a dependency. -->
@@ -48,7 +48,7 @@
     <!-- TRX reporting, for the AppointmentTests sample only: it is what proves (and documents) that
          a platform extension reaches a Raun run through RunAsync's `configure` callback. Moves in
          lockstep with Microsoft.Testing.Platform above. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.5.2" />
 
     <!-- OpenTelemetry, for the Aspire sample only: the test process exports Raun's spans and the API
          exports its own, both over OTLP, so one trace shows a step and the server work it caused.
@@ -80,10 +80,10 @@
 
     <!-- Test infrastructure. xunit.v3 is pinned to match xunit.v3.extensibility.core. -->
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
-    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.3" />
     <!-- Assertions only (Assert.Equal/NotNull/...) for Raun.Mtp consumers: scenario step bodies keep
          `using Xunit;` verbatim. Pinned to match the xunit.v3 line above. -->
-    <PackageVersion Include="xunit.v3.assert" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3.assert" Version="4.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
   </ItemGroup>
