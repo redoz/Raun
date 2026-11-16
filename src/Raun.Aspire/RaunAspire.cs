@@ -96,6 +96,15 @@ public static class RaunAspire
         DistributedApplication? app = null;
         try
         {
+            // A failed start in an earlier session of this host left its application behind; a
+            // retry must not run a second copy next to it.
+            if (holder.Application is { } previous)
+            {
+                holder.Application = null;
+                ctx.Log("disposing the application from the failed earlier start");
+                await previous.DisposeAsync().ConfigureAwait(false);
+            }
+
             ctx.Log("building AppHost");
             var builder = await DistributedApplicationTestingBuilder
                 .CreateAsync<TAppHost>(timeout.Token)

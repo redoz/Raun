@@ -46,7 +46,8 @@ public static class RaunTestApplication
     /// <param name="preflight">
     /// Run-level setup executed once before any scenario and reported as its own <c>Preflight</c>
     /// node, so a failure is a failing test rather than a process that exits before anything reports.
-    /// When it fails, every scenario's steps report skipped naming preflight.
+    /// When it fails, every scenario's steps report skipped naming preflight. A host that serves several
+    /// test sessions runs it once: later sessions reuse a successful start and retry a failed one.
     /// </param>
     /// <param name="maxParallelScenarios">
     /// The suite's default degree of scenario parallelism: how many scenarios may run at once.
@@ -85,6 +86,9 @@ public static class RaunTestApplication
 
         var stopSignal = new RunStopSignal();
 
+        // The framework below may be created once per session; preflight must not be.
+        Func<ScenarioContext, Task>? processPreflight = preflight is null ? null : new ProcessPreflight(preflight).RunAsync;
+
         // --maximum-failed-tests is offered only to a framework that declares a graceful stop.
 #pragma warning disable TPEXP // AddMaximumFailedTestsService is an experimental Microsoft.Testing.Platform API.
         builder.AddMaximumFailedTestsService(extension);
@@ -95,7 +99,7 @@ public static class RaunTestApplication
                 new RaunBannerCapability(),
                 new RaunGracefulStopCapability(stopSignal)),
             (_, serviceProvider) => new RaunTestFramework(
-                serviceProvider, simulateTime, services, preflight, maxParallelScenarios, stopSignal, coverage, maxParallelSteps));
+                serviceProvider, simulateTime, services, processPreflight, maxParallelScenarios, stopSignal, coverage, maxParallelSteps));
 
         using var app = await builder.BuildAsync().ConfigureAwait(false);
         var exitCode = await app.RunAsync().ConfigureAwait(false);
