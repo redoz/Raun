@@ -18,7 +18,8 @@ flowchart LR
 
 ## One run
 
-Preflight starts shared infrastructure once, when configured. A failure there skips the scenarios.
+Preflight starts shared infrastructure once per test host, when configured. A failure there skips the scenarios.
+An optional `sessionPreflight` hook then runs in every test session, for resets between runs that share that infrastructure.
 For each selected scenario, the normal flow is:
 
 ```mermaid

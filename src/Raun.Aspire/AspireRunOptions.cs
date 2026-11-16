@@ -18,6 +18,7 @@ public sealed class AspireRunOptions
     private readonly List<Action<IServiceCollection>> _services = [];
     private readonly List<Action<IDistributedApplicationTestingBuilder>> _builder = [];
     private readonly List<Action<ITestApplicationBuilder>> _testApplication = [];
+    private readonly List<Func<ScenarioContext, Task>> _sessionPreflight = [];
 
     /// <summary>
     /// How long the whole of preflight may take — building, starting, and waiting for every resource
@@ -68,8 +69,32 @@ public sealed class AspireRunOptions
         _testApplication.Add(configure);
     }
 
+    /// <summary>
+    /// Runs <paramref name="setup"/> at the start of every test session, once the application is up —
+    /// for cheap resets between runs that share it, such as clearing a database. The application is
+    /// started once per test host, so a host serving many sessions (Stryker.NET runs one per mutant)
+    /// would otherwise carry each session's data into the next. Reach the application with
+    /// <c>ctx.Aspire()</c>. Additive: callbacks run in registration order. A failure skips that
+    /// session's scenarios only.
+    /// </summary>
+    public void SessionPreflight(Func<ScenarioContext, Task> setup)
+    {
+        ArgumentNullException.ThrowIfNull(setup);
+        _sessionPreflight.Add(setup);
+    }
+
     /// <summary>Resource names awaited during preflight, in declaration order.</summary>
     public IReadOnlyList<string> WaitForResources => _waitFor;
+
+    internal Func<ScenarioContext, Task>? SessionPreflightCallback => _sessionPreflight.Count == 0
+        ? null
+        : async ctx =>
+        {
+            foreach (var setup in _sessionPreflight)
+            {
+                await setup(ctx).ConfigureAwait(false);
+            }
+        };
 
     internal void ApplyServices(IServiceCollection services)
     {

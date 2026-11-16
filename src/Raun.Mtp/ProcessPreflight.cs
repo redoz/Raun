@@ -29,6 +29,33 @@ internal sealed class ProcessPreflight
         this.preflight = preflight;
     }
 
+    /// <summary>
+    /// Builds the body of each session's preflight node: the process-wide <paramref name="preflight"/>
+    /// (started once, shared by every session), then <paramref name="sessionPreflight"/> (run in
+    /// every session). <see langword="null"/> when there is neither, so no preflight node exists.
+    /// </summary>
+    public static Func<ScenarioContext, Task>? Compose(
+        Func<ScenarioContext, Task>? preflight,
+        Func<ScenarioContext, Task>? sessionPreflight)
+    {
+        Func<ScenarioContext, Task>? process = preflight is null ? null : new ProcessPreflight(preflight).RunAsync;
+        if (sessionPreflight is null)
+        {
+            return process;
+        }
+
+        return async context =>
+        {
+            if (process is not null)
+            {
+                await process(context).ConfigureAwait(false);
+            }
+
+            context.Log("running session preflight");
+            await sessionPreflight(context).ConfigureAwait(false);
+        };
+    }
+
     public Task RunAsync(ScenarioContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

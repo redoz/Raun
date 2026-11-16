@@ -12,7 +12,7 @@ namespace Raun.Mtp;
 /// <remarks>
 /// <para>
 /// This is the escape-hatch API. By default the Raun source generator emits a <c>Program.cs</c>
-/// whose <c>Main</c> calls <see cref="RunAsync(string[], Action{ITestApplicationBuilder}?, bool, IServiceProvider?, Func{ScenarioContext,Task}?, int, int)"/>, giving
+/// whose <c>Main</c> calls <see cref="RunAsync(string[], Action{ITestApplicationBuilder}?, bool, IServiceProvider?, Func{ScenarioContext,Task}?, Func{ScenarioContext,Task}?, int, int)"/>, giving
 /// "just add the package" UX. Setting the MSBuild property <c>&lt;RaunGenerateProgram&gt;false&lt;/RaunGenerateProgram&gt;</c>
 /// suppresses that emission so a consumer can write their own <c>Program.cs</c> and call this method
 /// directly, taking full control of the host (custom MTP extensions, builder configuration, etc.)
@@ -49,6 +49,13 @@ public static class RaunTestApplication
     /// When it fails, every scenario's steps report skipped naming preflight. A host that serves several
     /// test sessions runs it once: later sessions reuse a successful start and retry a failed one.
     /// </param>
+    /// <param name="sessionPreflight">
+    /// The per-session counterpart of <paramref name="preflight"/>: setup run at the start of every
+    /// test session, after <paramref name="preflight"/> — for cheap resets such as clearing a database,
+    /// so a host that serves many sessions (Stryker.NET runs one per mutant) starts each from a clean
+    /// state. It runs inside the session's <c>Preflight</c> node, so a failure skips that session's
+    /// scenarios only; the next session runs it again.
+    /// </param>
     /// <param name="maxParallelScenarios">
     /// The suite's default degree of scenario parallelism: how many scenarios may run at once.
     /// <c>0</c> (the default) means the processor count; <c>1</c> runs scenarios one after another.
@@ -62,6 +69,7 @@ public static class RaunTestApplication
         bool simulateTime = false,
         IServiceProvider? services = null,
         Func<ScenarioContext, Task>? preflight = null,
+        Func<ScenarioContext, Task>? sessionPreflight = null,
         int maxParallelScenarios = 0,
         int maxParallelSteps = 0)
     {
@@ -87,7 +95,7 @@ public static class RaunTestApplication
         var stopSignal = new RunStopSignal();
 
         // The framework below may be created once per session; preflight must not be.
-        Func<ScenarioContext, Task>? processPreflight = preflight is null ? null : new ProcessPreflight(preflight).RunAsync;
+        var preflightNode = ProcessPreflight.Compose(preflight, sessionPreflight);
 
         // --maximum-failed-tests is offered only to a framework that declares a graceful stop.
 #pragma warning disable TPEXP // AddMaximumFailedTestsService is an experimental Microsoft.Testing.Platform API.
@@ -99,7 +107,7 @@ public static class RaunTestApplication
                 new RaunBannerCapability(),
                 new RaunGracefulStopCapability(stopSignal)),
             (_, serviceProvider) => new RaunTestFramework(
-                serviceProvider, simulateTime, services, processPreflight, maxParallelScenarios, stopSignal, coverage, maxParallelSteps));
+                serviceProvider, simulateTime, services, preflightNode, maxParallelScenarios, stopSignal, coverage, maxParallelSteps));
 
         using var app = await builder.BuildAsync().ConfigureAwait(false);
         var exitCode = await app.RunAsync().ConfigureAwait(false);

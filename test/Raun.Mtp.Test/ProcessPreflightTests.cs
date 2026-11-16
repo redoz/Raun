@@ -49,11 +49,75 @@ public class ProcessPreflightTests
     }
 
     private static async Task<Recorder> Session(ProcessPreflight preflight)
+        => await Session(preflight.RunAsync);
+
+    private static async Task<Recorder> Session(Func<ScenarioContext, Task>? preflight)
     {
         var sink = new Recorder();
-        await new RunLoop(() => [Scenario], preflight: preflight.RunAsync)
+        await new RunLoop(() => [Scenario], preflight: preflight)
             .RunAsync(selector: null, sink, CancellationToken.None);
         return sink;
+    }
+
+    [Fact]
+    public async Task The_session_preflight_runs_in_every_session_after_the_shared_start()
+    {
+        var calls = new List<string>();
+        var preflight = ProcessPreflight.Compose(
+            _ => { calls.Add("start"); return Task.CompletedTask; },
+            _ => { calls.Add("reset"); return Task.CompletedTask; });
+
+        await Session(preflight);
+        var second = await Session(preflight);
+
+        Assert.Equal(["start", "reset", "reset"], calls);
+        Assert.Equal(StepStatus.Passed, second.StatusOf("step"));
+    }
+
+    [Fact]
+    public async Task A_failed_session_preflight_skips_only_its_own_session()
+    {
+        var starts = 0;
+        var resets = 0;
+        var preflight = ProcessPreflight.Compose(
+            _ => { starts++; return Task.CompletedTask; },
+            _ => ++resets == 1
+                ? Task.FromException(new InvalidOperationException("database locked"))
+                : Task.CompletedTask);
+
+        var first = await Session(preflight);
+        var second = await Session(preflight);
+
+        Assert.Equal(1, starts);
+        Assert.Equal(StepStatus.Failed, first.StatusOf("preflight"));
+        Assert.Equal(StepStatus.Skipped, first.StatusOf("step"));
+        Assert.Equal(StepStatus.Passed, second.StatusOf("step"));
+    }
+
+    [Fact]
+    public async Task The_session_preflight_does_not_run_when_the_start_fails()
+    {
+        var resets = 0;
+        var preflight = ProcessPreflight.Compose(
+            _ => Task.FromException(new InvalidOperationException("container runtime not running")),
+            _ => { resets++; return Task.CompletedTask; });
+
+        var session = await Session(preflight);
+
+        Assert.Equal(0, resets);
+        Assert.Equal(StepStatus.Skipped, session.StatusOf("step"));
+    }
+
+    [Fact]
+    public async Task A_session_preflight_alone_gets_its_own_preflight_node()
+    {
+        var resets = 0;
+        var preflight = ProcessPreflight.Compose(null, _ => { resets++; return Task.CompletedTask; });
+
+        var session = await Session(preflight);
+
+        Assert.Equal(1, resets);
+        Assert.Equal(StepStatus.Passed, session.StatusOf("preflight"));
     }
 
     [Fact]

@@ -114,10 +114,15 @@ Build and dispose your service provider there. Pass it to Raun and register MTP 
 return await RaunTestApplication.RunAsync(args,
     services: services,
     preflight: ctx => StartEnvironment(ctx.CancellationToken),
+    sessionPreflight: ctx => ResetData(ctx.CancellationToken),
     configure: builder => builder.AddTrxReportProvider());
 ```
 
 Preflight runs once and reports as a test node. Failure skips all scenarios.
+A host that serves several test sessions (an IDE, or Stryker.NET running one session per mutant) still starts it only once:
+later sessions reuse a successful start and retry a failed one.
+`sessionPreflight` is optional. It is for cheap resets, such as clearing a database, and runs at the start of every session
+after `preflight`, in the same node. A failure skips only that session's scenarios.
 The TRX example needs `Microsoft.Testing.Extensions.TrxReport` and `using Microsoft.Testing.Extensions;`; enable it with `--report-trx`.
 The generated entry point does not register optional extensions.
 
@@ -159,6 +164,12 @@ This advances the simulated clock without a real delay. It has no effect in norm
 
 ```csharp
 return await RaunAspire.RunAsync<Projects.MyAppHost>(args, aspire => aspire.WaitFor("api"));
+```
+
+The AppHost starts once per test host. To reset state at the start of each test session, register `SessionPreflight`:
+
+```csharp
+aspire.SessionPreflight(ctx => ResetDatabase(ctx.Aspire(), ctx.CancellationToken));
 ```
 
 See [AspireAppointments](../../samples/AspireAppointments) for clients, service registration, and trace export.
