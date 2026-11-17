@@ -26,12 +26,12 @@ internal sealed class ContentionGate
     }
 
     /// <summary>
-    /// Tries to take every use in <paramref name="uses"/>. Returns false, taking nothing, when any
-    /// of them is refused; <paramref name="refusedBy"/> then names the first refusing resource.
+    /// Takes every use in <paramref name="uses"/> and returns null, or takes nothing and returns
+    /// the first resource that refused.
     /// </summary>
     /// <exception cref="InvalidOperationException">A resource type does not carry exactly one kind
     /// attribute, or its pool capacity is below 1.</exception>
-    public bool TryAcquire(IReadOnlyList<ContendedResourceUse> uses, [NotNullWhen(false)] out Type? refusedBy)
+    public Type? Acquire(IReadOnlyList<ContendedResourceUse> uses)
     {
         ArgumentNullException.ThrowIfNull(uses);
         var reduced = Reduce(uses);
@@ -44,8 +44,7 @@ internal sealed class ContentionGate
                 var slots = SlotsOf(use.Resource);
                 if (!Admits(slots, capacity, use.Mode))
                 {
-                    refusedBy = use.Resource;
-                    return false;
+                    return use.Resource;
                 }
             }
 
@@ -62,8 +61,7 @@ internal sealed class ContentionGate
                 }
             }
 
-            refusedBy = null;
-            return true;
+            return null;
         }
     }
 

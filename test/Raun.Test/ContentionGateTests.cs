@@ -17,7 +17,7 @@ public class ContentionGateTests
     public void An_empty_use_set_is_always_admitted()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([], out var refusedBy));
+        var refusedBy = gate.Acquire([]);
         Assert.Null(refusedBy);
     }
 
@@ -25,14 +25,14 @@ public class ContentionGateTests
     public void Exclusive_resource_has_one_slot_for_shared_and_exclusive_uses_alike()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Shared<ExclusiveDb>()], out _));
+        Assert.Null(gate.Acquire([Shared<ExclusiveDb>()]));
 
-        Assert.False(gate.TryAcquire([Shared<ExclusiveDb>()], out var refusedBy));
+        var refusedBy = gate.Acquire([Shared<ExclusiveDb>()]);
         Assert.Equal(typeof(ExclusiveDb), refusedBy);
-        Assert.False(gate.TryAcquire([Exclusive<ExclusiveDb>()], out _));
+        Assert.NotNull(gate.Acquire([Exclusive<ExclusiveDb>()]));
 
         gate.Release([Shared<ExclusiveDb>()]);
-        Assert.True(gate.TryAcquire([Exclusive<ExclusiveDb>()], out _));
+        Assert.Null(gate.Acquire([Exclusive<ExclusiveDb>()]));
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class ContentionGateTests
         var gate = new ContentionGate();
         for (var i = 0; i < 50; i++)
         {
-            Assert.True(gate.TryAcquire([Shared<SharedCatalog>()], out _));
+            Assert.Null(gate.Acquire([Shared<SharedCatalog>()]));
         }
     }
 
@@ -49,55 +49,55 @@ public class ContentionGateTests
     public void Exclusive_use_of_a_shared_resource_waits_for_zero_holders_and_blocks_new_ones()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Shared<SharedCatalog>()], out _));
+        Assert.Null(gate.Acquire([Shared<SharedCatalog>()]));
 
-        Assert.False(gate.TryAcquire([Exclusive<SharedCatalog>()], out var refusedBy));
+        var refusedBy = gate.Acquire([Exclusive<SharedCatalog>()]);
         Assert.Equal(typeof(SharedCatalog), refusedBy);
 
         gate.Release([Shared<SharedCatalog>()]);
-        Assert.True(gate.TryAcquire([Exclusive<SharedCatalog>()], out _));
-        Assert.False(gate.TryAcquire([Shared<SharedCatalog>()], out _));
+        Assert.Null(gate.Acquire([Exclusive<SharedCatalog>()]));
+        Assert.NotNull(gate.Acquire([Shared<SharedCatalog>()]));
 
         gate.Release([Exclusive<SharedCatalog>()]);
-        Assert.True(gate.TryAcquire([Shared<SharedCatalog>()], out _));
+        Assert.Null(gate.Acquire([Shared<SharedCatalog>()]));
     }
 
     [Fact]
     public void Pooled_resource_caps_shared_holders_at_its_capacity()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Shared<PooledSmtp>()], out _));
-        Assert.True(gate.TryAcquire([Shared<PooledSmtp>()], out _));
+        Assert.Null(gate.Acquire([Shared<PooledSmtp>()]));
+        Assert.Null(gate.Acquire([Shared<PooledSmtp>()]));
 
-        Assert.False(gate.TryAcquire([Shared<PooledSmtp>()], out var refusedBy));
+        var refusedBy = gate.Acquire([Shared<PooledSmtp>()]);
         Assert.Equal(typeof(PooledSmtp), refusedBy);
 
         gate.Release([Shared<PooledSmtp>()]);
-        Assert.True(gate.TryAcquire([Shared<PooledSmtp>()], out _));
+        Assert.Null(gate.Acquire([Shared<PooledSmtp>()]));
     }
 
     [Fact]
     public void Exclusive_use_of_a_pooled_resource_takes_every_slot()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Exclusive<PooledSmtp>()], out _));
-        Assert.False(gate.TryAcquire([Shared<PooledSmtp>()], out _));
+        Assert.Null(gate.Acquire([Exclusive<PooledSmtp>()]));
+        Assert.NotNull(gate.Acquire([Shared<PooledSmtp>()]));
 
         gate.Release([Exclusive<PooledSmtp>()]);
-        Assert.True(gate.TryAcquire([Shared<PooledSmtp>()], out _));
-        Assert.False(gate.TryAcquire([Exclusive<PooledSmtp>()], out _));
+        Assert.Null(gate.Acquire([Shared<PooledSmtp>()]));
+        Assert.NotNull(gate.Acquire([Exclusive<PooledSmtp>()]));
     }
 
     [Fact]
     public void A_multi_use_set_is_granted_all_or_nothing()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Exclusive<ExclusiveDb>()], out _));
+        Assert.Null(gate.Acquire([Exclusive<ExclusiveDb>()]));
 
         // Catalog is free, Db is not: nothing may be taken, so Catalog stays free for an exclusive use.
-        Assert.False(gate.TryAcquire([Shared<SharedCatalog>(), Shared<ExclusiveDb>()], out var refusedBy));
+        var refusedBy = gate.Acquire([Shared<SharedCatalog>(), Shared<ExclusiveDb>()]);
         Assert.Equal(typeof(ExclusiveDb), refusedBy);
-        Assert.True(gate.TryAcquire([Exclusive<SharedCatalog>()], out _));
+        Assert.Null(gate.Acquire([Exclusive<SharedCatalog>()]));
     }
 
     [Fact]
@@ -108,8 +108,8 @@ public class ContentionGateTests
         Assert.Equal(LockMode.Exclusive, use.Mode);
 
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Shared<SharedCatalog>(), Exclusive<SharedCatalog>()], out _));
-        Assert.False(gate.TryAcquire([Shared<SharedCatalog>()], out _)); // held exclusively, not shared
+        Assert.Null(gate.Acquire([Shared<SharedCatalog>(), Exclusive<SharedCatalog>()]));
+        Assert.NotNull(gate.Acquire([Shared<SharedCatalog>()])); // held exclusively, not shared
     }
 
     [Fact]
@@ -117,13 +117,13 @@ public class ContentionGateTests
     {
         var gate = new ContentionGate();
 
-        var none = Assert.Throws<InvalidOperationException>(() => gate.TryAcquire([Shared<NoKind>()], out _));
+        var none = Assert.Throws<InvalidOperationException>(() => gate.Acquire([Shared<NoKind>()]));
         Assert.Contains(nameof(NoKind), none.Message, StringComparison.Ordinal);
 
-        var two = Assert.Throws<InvalidOperationException>(() => gate.TryAcquire([Shared<TwoKinds>()], out _));
+        var two = Assert.Throws<InvalidOperationException>(() => gate.Acquire([Shared<TwoKinds>()]));
         Assert.Contains(nameof(TwoKinds), two.Message, StringComparison.Ordinal);
 
-        var zero = Assert.Throws<InvalidOperationException>(() => gate.TryAcquire([Shared<ZeroCapacity>()], out _));
+        var zero = Assert.Throws<InvalidOperationException>(() => gate.Acquire([Shared<ZeroCapacity>()]));
         Assert.Contains("at least 1", zero.Message, StringComparison.Ordinal);
     }
 
@@ -138,7 +138,7 @@ public class ContentionGateTests
     public void Releasing_the_same_use_twice_is_an_error()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Shared<SharedCatalog>()], out _));
+        Assert.Null(gate.Acquire([Shared<SharedCatalog>()]));
         gate.Release([Shared<SharedCatalog>()]);
 
         Assert.Throws<InvalidOperationException>(() => gate.Release([Shared<SharedCatalog>()]));
@@ -148,7 +148,7 @@ public class ContentionGateTests
     public void Releasing_with_a_different_mode_than_it_was_acquired_is_an_error()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Shared<SharedCatalog>()], out _));
+        Assert.Null(gate.Acquire([Shared<SharedCatalog>()]));
 
         Assert.Throws<InvalidOperationException>(() => gate.Release([Exclusive<SharedCatalog>()]));
     }
@@ -157,7 +157,7 @@ public class ContentionGateTests
     public void A_failed_release_leaves_every_use_in_the_set_still_held()
     {
         var gate = new ContentionGate();
-        Assert.True(gate.TryAcquire([Shared<SharedCatalog>(), Exclusive<ExclusiveDb>()], out _));
+        Assert.Null(gate.Acquire([Shared<SharedCatalog>(), Exclusive<ExclusiveDb>()]));
 
         // SharedCatalog is validly held; PooledSmtp was never acquired. The whole release must
         // fail without touching SharedCatalog's slot.
@@ -165,6 +165,6 @@ public class ContentionGateTests
             () => gate.Release([Shared<SharedCatalog>(), Shared<PooledSmtp>()]));
 
         // Still held shared: an exclusive acquire is refused.
-        Assert.False(gate.TryAcquire([Exclusive<SharedCatalog>()], out _));
+        Assert.NotNull(gate.Acquire([Exclusive<SharedCatalog>()]));
     }
 }

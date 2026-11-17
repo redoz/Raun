@@ -256,7 +256,7 @@ public sealed class RunLoop
                 Type? refusedBy;
                 try
                 {
-                    gate.TryAcquire(definition.Uses, out refusedBy);
+                    refusedBy = gate.Acquire(definition.Uses);
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -269,8 +269,6 @@ public sealed class RunLoop
                     break;
                 }
 
-                // TryAcquire's [NotNullWhen(false)] means refusedBy is set exactly when it refused;
-                // check refusedBy itself rather than the bool result, so the compiler can narrow it.
                 if (refusedBy is not null)
                 {
                     // A slot was free and the gate said no: that is contention, worth reporting.

@@ -4,12 +4,10 @@ using Xunit;
 namespace Raun.Test;
 
 /// <summary>
-/// The <c>[Scenario]</c> authoring attribute used to live in <c>Raun.Xunit</c> and derived from
-/// xUnit's <c>FactAttribute</c> so xUnit's discovery could find it. Discovery is Raun's own now, so
-/// the attribute is a plain marker the core ships (in namespace <c>Raun</c>, so authoring stays
-/// <c>using Raun;</c>, and against <c>Raun</c> alone). The source generator matches it by metadata name and reads the
-/// display-name constructor argument and the <c>Timeout</c> named argument, so the shape must be
-/// preserved: first ctor parameter is the display name, plus a <c>Timeout</c> (ms) property.
+/// The <c>[Scenario]</c> attribute is a plain marker in namespace <c>Raun</c>. The source generator
+/// matches it by metadata name and reads the display-name constructor argument and the
+/// <c>Timeout</c> named argument, so that shape must hold: first constructor parameter is the
+/// display name, plus a <c>Timeout</c> (ms) property.
 /// </summary>
 public class ScenarioAttributeTests
 {
@@ -47,7 +45,7 @@ public class ScenarioAttributeTests
     {
         // The generator reads ConstructorArguments[0] as the scenario display name.
         var attr = new global::Raun.ScenarioAttribute("customer books an appointment");
-        Assert.Equal("customer books an appointment", attr.ScenarioDisplayName);
+        Assert.Equal("customer books an appointment", attr.DisplayName);
     }
 
     [Fact]
