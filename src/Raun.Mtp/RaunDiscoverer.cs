@@ -85,6 +85,59 @@ internal static class RaunDiscoverer
         return node;
     }
 
+    /// <summary>
+    /// Builds the single <see cref="TestNode"/> that stands for a whole scenario
+    /// (<see cref="TestGranularity.Scenario"/>): uid <see cref="ScenarioDefinition.ScenarioId"/>,
+    /// named after the scenario, pointing at its first step with a known source. Returns
+    /// <see langword="null"/> when <paramref name="selector"/> reaches none of its steps, or when it
+    /// has no real step to stand for.
+    /// </summary>
+    public static TestNode? BuildScenarioNode(ScenarioDefinition definition, NodeSelector? selector = null)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var selected = false;
+        TestFileLocationProperty? location = null;
+        foreach (var step in definition.Nodes)
+        {
+            if (step.IsSynthetic)
+            {
+                continue;
+            }
+
+            selected |= selector is null || selector.Matches(definition, step);
+            if (location is null && TryMakeFileLocation(step, out var found))
+            {
+                location = found;
+            }
+        }
+
+        if (!selected)
+        {
+            return null;
+        }
+
+        var node = new TestNode
+        {
+            Uid = definition.ScenarioId,
+            DisplayName = definition.DisplayName,
+        };
+
+        node.Properties.Add(DiscoveredTestNodeStateProperty.CachedInstance);
+        node.Properties.Add(ScenarioTestIdentity.Create(definition));
+        foreach (var tag in ScenarioNodePath.Tags(definition))
+        {
+            node.Properties.Add(tag);
+        }
+
+        if (location is not null)
+        {
+            node.Properties.Add(location);
+        }
+
+        return node;
+    }
+
     private static bool TryMakeFileLocation(ScenarioNode step, out TestFileLocationProperty location)
     {
         // SourceLine is 1-based, or 0 when unknown; without a file there is nothing to navigate to.

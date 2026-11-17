@@ -243,4 +243,74 @@ public class RaunDiscovererTests
             ["area=auth", "owner=payments"],
             node.Properties.OfType<TestMetadataProperty>().Select(p => p.Key + "=" + p.Value).Order(StringComparer.Ordinal));
     }
+
+    // --- a scenario as a single test (TestGranularity.Scenario) ---
+
+    [Fact]
+    public void A_scenario_node_is_named_and_identified_by_the_scenario()
+    {
+        var definition = new ScenarioDefinition
+        {
+            ScenarioId = "scn",
+            DisplayName = "my scenario",
+            MethodName = "MyApp.Booking.Scenarios.BookAppointment",
+            Tags = [new("area", "auth")],
+            Nodes = [Node(0, "a", "step a"), Node(1, "b", "step b")],
+        };
+
+        var node = RaunDiscoverer.BuildScenarioNode(definition);
+
+        Assert.NotNull(node);
+        Assert.Equal("scn", node.Uid.Value);
+        Assert.Equal("my scenario", node.DisplayName);
+        Assert.NotEmpty(node.Properties.OfType<DiscoveredTestNodeStateProperty>());
+        Assert.Equal("Scenarios", Assert.Single(node.Properties.OfType<TestMethodIdentifierProperty>()).TypeName);
+        Assert.Equal("area", Assert.Single(node.Properties.OfType<TestMetadataProperty>()).Key);
+    }
+
+    [Fact]
+    public void A_scenario_node_points_at_its_first_real_step_with_a_known_source()
+    {
+        var definition = Definition(nodes:
+        [
+            Node(0, "m", "«merge»", file: @"C:\src\Plumbing.cs", line: 1, synthetic: true),
+            Node(1, "a", "step a"),
+            Node(2, "b", "step b", file: @"C:\src\Booking.cs", line: 42),
+            Node(3, "c", "step c", file: @"C:\src\Booking.cs", line: 43),
+        ]);
+
+        var node = RaunDiscoverer.BuildScenarioNode(definition);
+
+        var location = Assert.Single(node!.Properties.OfType<TestFileLocationProperty>());
+        Assert.Equal(@"C:\src\Booking.cs", location.FilePath);
+        Assert.Equal(42, location.LineSpan.Start.Line);
+    }
+
+    [Fact]
+    public void A_scenario_node_has_no_location_when_no_step_has_a_known_source()
+    {
+        var node = RaunDiscoverer.BuildScenarioNode(Definition(nodes: [Node(0, "a", "step a")]));
+
+        Assert.Empty(node!.Properties.OfType<TestFileLocationProperty>());
+    }
+
+    [Fact]
+    public void A_scenario_the_selector_does_not_reach_is_not_discovered()
+    {
+        var definition = Definition(nodes: [Node(0, "a", "step a"), Node(1, "b", "step b")]);
+
+        var elsewhere = new Raun.Running.UidNodeSelector(new HashSet<string> { "other:a" });
+        var here = new Raun.Running.UidNodeSelector(new HashSet<string> { "scn:b" });
+
+        Assert.Null(RaunDiscoverer.BuildScenarioNode(definition, elsewhere));
+        Assert.NotNull(RaunDiscoverer.BuildScenarioNode(definition, here));
+    }
+
+    [Fact]
+    public void A_scenario_of_nothing_but_plumbing_is_not_discovered()
+    {
+        var definition = Definition(nodes: [Node(0, "m", "«merge»", synthetic: true)]);
+
+        Assert.Null(RaunDiscoverer.BuildScenarioNode(definition));
+    }
 }
