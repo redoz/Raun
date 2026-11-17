@@ -123,6 +123,7 @@ A host that serves several test sessions (an IDE, or Stryker.NET running one ses
 later sessions reuse a successful start and retry a failed one.
 `sessionPreflight` is optional. It is for cheap resets, such as clearing a database, and runs at the start of every session
 after `preflight`, in the same node. A failure skips only that session's scenarios.
+See [Mutation testing with Stryker.NET](#mutation-testing-with-strykernet) for how scenarios are reported there.
 The TRX example needs `Microsoft.Testing.Extensions.TrxReport` and `using Microsoft.Testing.Extensions;`; enable it with `--report-trx`.
 The generated entry point does not register optional extensions.
 
@@ -151,6 +152,33 @@ Dynamic instrumentation is not supported on Linux or macOS Arm64, where this set
 Raun classifies branches as argument checks, error handling, null propagation, logging, or logic.
 Add project rules with `builder.UseBranchClassificationMiddleware(() => new ProjectRule())` and `IBranchClassificationMiddleware` from `Raun.Coverage`.
 See the [provider setup](../../samples/AspireAppointments/AspireAppointments.Tests/Program.cs).
+
+## Mutation testing with Stryker.NET
+
+Run Stryker with its Microsoft.Testing.Platform runner: `dotnet stryker --test-runner mtp`.
+
+Under Stryker, Raun reports each scenario as one test instead of one test per step.
+Stryker runs every test on its own to learn which code it covers. Running one step means running the steps before it,
+so with a test per step a ten-step scenario costs 55 step runs instead of 10.
+With a test per scenario each step runs once, and a mutant is checked against whole scenarios.
+
+A scenario test fails when any of its steps fails, and its output lists every step with its outcome.
+A branch that was not taken does not count against it. A scenario in which nothing ran is skipped.
+The HTML report still shows steps.
+
+Raun detects Stryker by the `STRYKER_MUTANT_FILE` variable Stryker sets on the test host. No setup is needed.
+To choose yourself, pass `testGranularity` in a custom `Program.cs`:
+
+```csharp
+return await RaunTestApplication.RunAsync(args, testGranularity: TestGranularity.Scenario);
+```
+
+`TestGranularity.Step` keeps one test per step even under Stryker. With Aspire, set `options.TestGranularity`.
+For a single run, set the environment variable `RAUN_TEST_GRANULARITY` to `step` or `scenario`; it overrides both.
+The choice is fixed when the test host starts.
+
+In this mode a scenario test's uid is the scenario id. A step uid selects nothing.
+`--treenode-filter` selects every scenario in which it matches a step.
 
 ## Tracing, simulated time, and Aspire
 
