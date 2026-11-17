@@ -22,7 +22,7 @@ internal static class Literals
     /// <summary>The absolute value of a negative int, as the token under a unary minus. It is taken
     /// as a <see cref="long"/> because negating <see cref="int.MinValue"/> as an int overflows back
     /// to itself (printing <c>--2147483648</c>), and its text is spelled here because
-    /// <c>Literal(long)</c> would append an <c>L</c> suffix the old emitted form never had.</summary>
+    /// <c>Literal(long)</c> would append an <c>L</c> suffix and make the operand a long.</summary>
     private static LiteralExpressionSyntax Magnitude(long magnitude)
         => LiteralExpression(
             SyntaxKind.NumericLiteralExpression,

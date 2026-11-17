@@ -464,7 +464,7 @@ public sealed class ScenarioScheduler
         }
 
         await scenarioWatch.CompleteAsync().ConfigureAwait(false);
-        watchdog.Dispose(); // teardown has its own lifecycle policy (finding 3)
+        watchdog.Dispose(); // teardown has its own deadlines
         await timerCts.CancelAsync().ConfigureAwait(false); // the scenario is done; stop the timer
 
         if (teardownIndex >= 0)
@@ -796,7 +796,6 @@ public sealed class ScenarioScheduler
             }
         }
 
-        // Keeps an abandoned step's eventual fault from surfacing as an unobserved task exception.
         async Task ApplyTerminalAsync(int i, StepStatus terminal, string reason)
         {
             pending.Remove(i);
@@ -976,7 +975,7 @@ public sealed class ScenarioScheduler
         // In simulated mode each step runs on its own clock seeded at base + start offset, so the
         // step's timing AND its resource-effect timestamps share one consistent timeline. Duration is
         // whatever the body advanced that clock. In real mode the step clock is the injected provider
-        // and duration comes from the stopwatch — byte-for-byte the original path.
+        // and duration comes from the stopwatch.
         var simClock = _simulatedTime ? new SimulatedClock(scenarioStart + simStartOffset) : null;
         var stepTimeProvider = simClock ?? _timeProvider;
         var startedAt = simClock is not null ? scenarioStart + simStartOffset : _timeProvider.GetUtcNow();

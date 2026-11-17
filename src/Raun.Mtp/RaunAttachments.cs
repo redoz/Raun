@@ -8,8 +8,6 @@ namespace Raun.Mtp;
 /// Where a step's attachments are written before they are published as MTP file artifacts.
 /// </summary>
 /// <remarks>
-/// They used to go to <c>%TEMP%\raun-mtp\&lt;step uid&gt;</c> and stay there for ever: invisible to
-/// whoever ran the tests, never cleaned up by anything, and carrying whatever a step chose to attach.
 /// A run's output belongs in the run's own results directory (the one <c>--results-directory</c>
 /// names and <c>--report-html</c> already writes to), where it is visible, scoped to one session, and
 /// the user's to keep or delete. They are <em>not</em> deleted when the session closes: the artifacts

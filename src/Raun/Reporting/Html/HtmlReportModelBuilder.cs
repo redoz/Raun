@@ -7,7 +7,7 @@ namespace Raun.Reporting.Html;
 /// <summary>
 /// Builds the deterministic <see cref="HtmlReportModel"/> from the run-event stream. All layout
 /// (lane packing, resource rollup, ms-offset reduction) happens here — not in the renderer — so the
-/// JSON is snapshot-testable (design §4). Drive it with <see cref="OnRunStarted"/> (the canonical
+/// JSON is snapshot-testable. Drive it with <see cref="OnRunStarted"/> (the canonical
 /// scenario order), <see cref="OnScenarioStarted"/>, one <see cref="OnStepFinished"/> per terminal
 /// step, then <see cref="Build"/>. Scenarios run concurrently, so step events of different
 /// scenarios interleave; each is routed by its definition, and the report keeps the run's order.

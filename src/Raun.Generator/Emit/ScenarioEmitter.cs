@@ -236,7 +236,6 @@ internal static class ScenarioEmitter
                 })))));
         }
 
-        // Only when declared, so use-free scenarios emit exactly what they did before.
         if (scenario.Uses.Count > 0)
         {
             members.Add(Set("Uses", ArrayOf(
@@ -244,7 +243,6 @@ internal static class ScenarioEmitter
                 scenario.Uses.Select(UseEntry))));
         }
 
-        // Only when tagged, so untagged scenarios emit exactly what they did before.
         if (scenario.Tags.Count > 0)
         {
             members.Add(Set("Tags", ArrayOf(

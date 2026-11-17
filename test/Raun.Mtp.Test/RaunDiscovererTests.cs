@@ -6,7 +6,7 @@ using Xunit;
 namespace Raun.Mtp.Test;
 
 /// <summary>
-/// Phase 3 behavioral tests for discovery. Raun's MTP framework turns each registered
+/// Behavioral tests for discovery. Raun's MTP framework turns each registered
 /// <see cref="ScenarioDefinition"/> into one <see cref="TestNode"/> per <see cref="ScenarioNode"/>
 /// (step nodes only, no parent scenario node), with a stable <c>{ScenarioId}:{StepId}</c> uid, a
 /// <c>{scenario} ▸ {step}</c> display name, a <see cref="TestFileLocationProperty"/> for "go to

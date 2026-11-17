@@ -77,7 +77,7 @@ internal static class RaunDiscoverer
             node.Properties.Add(tag);
         }
 
-        if (TryMakeFileLocation(step, out var location))
+        if (StepReporting.FileLocation(step) is { } location)
         {
             node.Properties.Add(location);
         }
@@ -99,10 +99,7 @@ internal static class RaunDiscoverer
             }
 
             selected |= selector is null || selector.Matches(definition, step);
-            if (location is null && TryMakeFileLocation(step, out var found))
-            {
-                location = found;
-            }
+            location ??= StepReporting.FileLocation(step);
         }
 
         if (!selected)
@@ -129,19 +126,5 @@ internal static class RaunDiscoverer
         }
 
         return node;
-    }
-
-    private static bool TryMakeFileLocation(ScenarioNode step, out TestFileLocationProperty location)
-    {
-        // SourceLine is 1-based, or 0 when unknown; without a file there is nothing to navigate to.
-        if (!string.IsNullOrEmpty(step.SourceFile) && step.SourceLine > 0)
-        {
-            var position = new LinePosition(step.SourceLine, 0);
-            location = new TestFileLocationProperty(step.SourceFile, new LinePositionSpan(position, position));
-            return true;
-        }
-
-        location = null!;
-        return false;
     }
 }

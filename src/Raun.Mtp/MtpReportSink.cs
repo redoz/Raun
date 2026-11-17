@@ -10,7 +10,7 @@ namespace Raun.Mtp;
 /// <summary>
 /// Session-scoped sink that bridges the run-event stream onto the Microsoft.Testing.Platform message
 /// bus: one <see cref="TestNodeUpdateMessage"/> per step lifecycle event, so each scenario step is a
-/// first-class MTP node. Replaces the per-scenario <c>RaunStepReporter</c>; identical messages, but
+/// first-class MTP node. Messages are
 /// keyed off the <see cref="ScenarioDefinition"/> carried on each event so one instance serves the
 /// whole run. The step-numbering labels are computed once per scenario (on <see cref="ScenarioStarted"/>)
 /// and cached by <see cref="ScenarioDefinition.ScenarioId"/>.
@@ -66,13 +66,12 @@ internal sealed class MtpReportSink : RunEventSink
         // A not-taken branch is reported as skipped with its "not taken: …" reason (see MapState), so
         // the console tally stays honest: the step exists, it did not run, and here is why. The
         // scheduler raises no OnStepStarting for it, so the node goes straight from discovered to
-        // skipped — the same shape any runner's own skipped test has. Before 2026-09-05 it received
-        // no terminal state at all and silently vanished from the count.
+        // skipped — the same shape any runner's own skipped test has.
         var testNode = BuildNode(e.Definition, result.Node, result.DisplayName);
         testNode.Properties.Add(StepReporting.MapState(result));
 
-        // Absolute window from the scheduler-stamped StartedAt (design §3.B bonus): accurate even
-        // for concurrent steps, replacing the old finish-anchored (UtcNow - Duration) approximation.
+        // Absolute window from the scheduler-stamped StartedAt: accurate even for concurrent steps,
+        // which a finish-anchored (UtcNow - Duration) window is not.
         testNode.Properties.Add(new TimingProperty(
             new TimingInfo(result.StartedAt, result.StartedAt + result.Duration, result.Duration)));
 
@@ -88,9 +87,11 @@ internal sealed class MtpReportSink : RunEventSink
 
     private TestNode BuildNode(ScenarioDefinition definition, ScenarioNode node, string displayName)
     {
-        var labels = _labels.TryGetValue(definition.ScenarioId, out var cached)
-            ? cached
-            : StepNumbering.Compute(definition); // defensive: step before its ScenarioStarted
+        if (!_labels.TryGetValue(definition.ScenarioId, out var labels))
+        {
+            throw new InvalidOperationException(
+                $"Step event for '{definition.ScenarioId}' before its ScenarioStarted.");
+        }
 
         var testNode = new TestNode
         {
@@ -104,11 +105,9 @@ internal sealed class MtpReportSink : RunEventSink
             testNode.Properties.Add(tag);
         }
 
-        if (!string.IsNullOrEmpty(node.SourceFile) && node.SourceLine > 0)
+        if (StepReporting.FileLocation(node) is { } location)
         {
-            var position = new LinePosition(node.SourceLine, 0);
-            testNode.Properties.Add(new TestFileLocationProperty(
-                node.SourceFile, new LinePositionSpan(position, position)));
+            testNode.Properties.Add(location);
         }
 
         return testNode;

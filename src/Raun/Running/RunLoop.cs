@@ -207,7 +207,7 @@ public sealed class RunLoop
         finally
         {
             // RunFinished always publishes, even when the body above throws (a launcher can orphan a
-            // scenario fault; the old sequential foreach never had a second scenario to orphan).
+            // scenario fault).
             await bus.PublishAsync(new RunFinished()).ConfigureAwait(false);
         }
     }

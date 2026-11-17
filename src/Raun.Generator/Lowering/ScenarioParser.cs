@@ -220,7 +220,7 @@ internal sealed class ScenarioParser
 
         // Always emitted: the generator cannot see OnTeardown calls (they happen at run time inside
         // DSL bodies), so emitting conditionally would let a registered cleanup fail silently. With
-        // nothing registered the scheduler reports it NotTaken.
+        // nothing registered the scheduler reports it Passed.
         var teardownIndex = _nextIndex++;
         _steps.Add(new ParsedStep
         {
@@ -2188,10 +2188,8 @@ internal sealed class ScenarioParser
 
             if (ArgumentFor(parameter.Name, p) is not { } expression)
             {
-                // No supplied argument. The trailing-ScenarioContext case is correct (nothing to claim).
-                // The omitted-optional case (a declared role on a defaulted param that the call left out)
-                // is a deliberate, known gap: the role silently vanishes. Diagnosing it is intentionally
-                // deferred to RAUN009 (Task 9); a future reader should not treat this skip as a bug.
+                // No supplied argument: the trailing ScenarioContext, or an optional parameter the call
+                // left out. No claim is recorded for the latter, and nothing diagnoses it.
                 continue;
             }
 

@@ -9,7 +9,7 @@ using Xunit;
 namespace Raun.Mtp.Test;
 
 /// <summary>
-/// Phase 3 behavioral tests for the session-scoped MTP sink: a <see cref="MtpReportSink"/> implements
+/// Behavioral tests for the session-scoped MTP sink: a <see cref="MtpReportSink"/> implements
 /// <see cref="IRunEventSink"/> and maps each step lifecycle event onto a Microsoft.Testing.Platform
 /// <see cref="TestNodeUpdateMessage"/>. start -> <see cref="InProgressTestNodeStateProperty"/>;
 /// <see cref="StepStatus.Passed"/> -> <see cref="PassedTestNodeStateProperty"/>;
@@ -138,6 +138,19 @@ public class MtpReportSinkTests
         var node = Assert.Single(bus.Nodes);
         Assert.Equal("s:a", node.Uid.Value);
         Assert.NotEmpty(node.Properties.OfType<InProgressTestNodeStateProperty>());
+    }
+
+    [Fact]
+    public async Task A_step_event_before_its_ScenarioStarted_is_refused()
+    {
+        var def = Definition(id: "s", nodes: [Node(0, "a", "step a")]);
+        var (sink, bus) = NewSink();
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await sink.PublishAsync(new StepStarted(def, new StepContext { Node = def.Nodes[0], DisplayName = "step a" })));
+
+        Assert.Contains("'s'", error.Message, StringComparison.Ordinal);
+        Assert.Empty(bus.Nodes);
     }
 
     [Fact]
@@ -365,8 +378,7 @@ public class MtpReportSinkTests
         var finished = bus.Nodes[^1];
         var timing = Assert.Single(finished.Properties.OfType<TimingProperty>());
         Assert.Equal(TimeSpan.FromMilliseconds(250), timing.GlobalTiming.Duration);
-        // The window is StartedAt-anchored (design §3.B bonus): asserts the actual behavioral change
-        // so that reverting to the old finish-anchored computation breaks this test.
+        // The window is StartedAt-anchored: a finish-anchored computation breaks this test.
         Assert.Equal(TestInstant, timing.GlobalTiming.StartTime);
     }
 
@@ -612,6 +624,7 @@ public class MtpReportSinkTests
         var def = Definition("s", "my scenario", Node(0, "a", "step a"));
         var (sink, bus) = NewSink();
 
+        await sink.PublishAsync(new ScenarioStarted(def));
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],

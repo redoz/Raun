@@ -5,7 +5,7 @@ using Microsoft.Testing.Platform.Services;
 namespace Raun.Mtp.HtmlReport;
 
 /// <summary>Resolves the absolute HTML report path from MTP's command-line options + configuration,
-/// or returns <see langword="null"/> when <c>--report-html</c> is absent (design §3.E).</summary>
+/// or returns <see langword="null"/> when <c>--report-html</c> is absent.</summary>
 internal static class HtmlReportPath
 {
     // MTP's well-known results-directory configuration key (PlatformConfigurationConstants is internal).

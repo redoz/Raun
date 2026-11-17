@@ -1,6 +1,6 @@
 namespace Raun.Reporting.Html;
 
-/// <summary>The full, self-contained report payload embedded into the HTML (design §4). All times are
+/// <summary>The full, self-contained report payload embedded into the HTML. All times are
 /// pre-reduced to millisecond offsets from each scenario's start so the renderer does no clock math.</summary>
 internal sealed record HtmlReportModel
 {

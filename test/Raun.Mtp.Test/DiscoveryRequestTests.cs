@@ -9,7 +9,7 @@ using Xunit;
 namespace Raun.Mtp.Test;
 
 /// <summary>
-/// Phase 3 behavioral tests for the discovery request path: <c>OnDiscover</c> enumerates the
+/// Behavioral tests for the discovery request path: <c>OnDiscover</c> enumerates the
 /// <see cref="ScenarioRegistry"/>, builds the per-step nodes, and publishes one
 /// <see cref="TestNodeUpdateMessage"/> per step on the MTP message bus. Each scenario is registered
 /// under a test-unique method name so the global registry stays isolated across tests.

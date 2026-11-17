@@ -697,7 +697,7 @@ public class RunLoopTests
         Assert.Single(sink.Events.OfType<RunFinished>());
     }
 
-    // -- Simulated-time opt-in threaded through the loop (A4) -------------------------------------
+    // -- Simulated-time opt-in threaded through the loop ------------------------------------------
 
     [Fact]
     public async Task Default_runner_in_simulated_mode_yields_nonzero_overlapping_timings()

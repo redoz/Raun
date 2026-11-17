@@ -3,7 +3,7 @@ using Raun.Scheduling;
 
 namespace Raun.Reporting;
 
-/// <summary>Base type for the runner-neutral run-event stream (design §3.A).</summary>
+/// <summary>Base type for the runner-neutral run-event stream.</summary>
 public abstract record RunEvent;
 
 /// <summary>Raised once at the start of a run, before any scenario. <paramref name="Scenarios"/> is

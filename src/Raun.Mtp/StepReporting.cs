@@ -76,6 +76,19 @@ internal static class StepReporting
         }
     }
 
+    /// <summary>Where a step is declared, for "go to source"; null when the generator recorded no
+    /// file or line (<see cref="ScenarioNode.SourceLine"/> is 0 when unknown).</summary>
+    public static TestFileLocationProperty? FileLocation(ScenarioNode node)
+    {
+        if (string.IsNullOrEmpty(node.SourceFile) || node.SourceLine <= 0)
+        {
+            return null;
+        }
+
+        var position = new LinePosition(node.SourceLine, 0);
+        return new TestFileLocationProperty(node.SourceFile, new LinePositionSpan(position, position));
+    }
+
     public static IEnumerable<string> OutputLines(StepResult result)
     {
         if (result.Logs.Count == 0 && result.TraceId is null)

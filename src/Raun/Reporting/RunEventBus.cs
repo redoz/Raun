@@ -4,7 +4,7 @@ namespace Raun.Reporting;
 /// Fans a <see cref="RunEvent"/> out to child sinks serially, in registration order, awaiting each.
 /// A throwing sink is isolated: the bus records its first error in <see cref="Failures"/> and keeps
 /// delivering to the remaining sinks and to that sink on later events. A broken report sink must
-/// never fail the run or starve the MTP reporter (design §3.A "Failure isolation").
+/// never fail the run or starve the MTP reporter.
 /// </summary>
 public sealed class RunEventBus : IRunEventSink
 {

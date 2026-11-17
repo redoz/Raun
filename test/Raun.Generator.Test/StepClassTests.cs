@@ -11,7 +11,7 @@ using Xunit;
 namespace Raun.Generator.Test;
 
 /// <summary>
-/// Step classes and the scenario world (docs/superpowers/specs/2026-09-29-step-classes-and-scenario-world-design.md),
+/// Step classes and the scenario world,
 /// tested by running what the generator emits: grouped calls under every phase, the Setup node, the
 /// world's per-scenario seed, its lifetime through failure and cancellation, parallel siblings on one
 /// world, and the receiver diagnostics.

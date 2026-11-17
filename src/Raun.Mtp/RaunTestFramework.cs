@@ -261,7 +261,7 @@ public class RaunTestFramework :
     /// Performs discovery for the session: enumerates every scenario registered in
     /// <see cref="ScenarioRegistry"/>, lowers it via its factory, and publishes one
     /// <see cref="TestNodeUpdateMessage"/> per step node (see <see cref="RaunDiscoverer"/>).
-    /// Step nodes only — no parent scenario node (design decision ①).
+    /// Step nodes only — no parent scenario node.
     /// </summary>
     protected virtual async ValueTask OnDiscoverAsync(
         SessionUid sessionUid,
@@ -365,7 +365,7 @@ public class RaunTestFramework :
         if (bus.Failures.Count > 0)
         {
             // Surface each sink failure through MTP's logger so a broken --report-html write is
-            // visible to the user via --diagnostic output (design §3.A/§3.E). The debug
+            // visible to the user via --diagnostic output. The debug
             // NodeDiagnostics path is kept as a fallback for the unit-test code path where
             // _services is null (parameterless ctor).
             ILogger? logger = _services?.GetLoggerFactory().CreateLogger(typeof(RaunTestFramework).FullName!);

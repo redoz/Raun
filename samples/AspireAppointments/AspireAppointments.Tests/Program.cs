@@ -17,7 +17,7 @@ using Raun.Mtp;
 // Tracing. Raun emits one span per scenario and one per step from the "Raun" ActivitySource, and
 // never exports; the suite decides where they go. Exporting only when an OTLP endpoint is configured
 // keeps a plain `dotnet run` quiet. With the endpoint set (a standalone Aspire dashboard is one
-// `docker run` away — see docs/superpowers/specs/2026-09-06-tracing-design.md), each scenario is one
+// `docker run` away), each scenario is one
 // trace: the step span, the HttpClient span under it, and the API's own spans under that, because the
 // step span is Activity.Current while the step runs and HttpClient forwards its traceparent.
 using var tracing = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") is null

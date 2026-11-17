@@ -7,7 +7,7 @@ using Xunit;
 namespace Raun.Mtp.Test;
 
 /// <summary>
-/// Phase 0 behavioral tests for the MTP <c>ITestFramework</c> shell: session create/close
+/// Behavioral tests for the MTP <c>ITestFramework</c> shell: session create/close
 /// lifecycle (open, close, duplicate-open, double-close, unknown-close) and the base
 /// <c>ExecuteRequestAsync</c> routing contract (discover vs run routing to the right handler).
 /// </summary>
