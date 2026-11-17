@@ -8,6 +8,7 @@ settings that package consumers get from Raun.Mtp automatically.
 dotnet run --project samples/GettingStarted -- --report-html
 dotnet run --project samples/AppointmentTests -- --report-html
 dotnet run --project samples/AspireAppointments/AspireAppointments.Tests -- --report-html
+(cd samples/MutationTesting && dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/scenario)
 ```
 
 AppointmentTests uses a custom Main to simulate durations and register TRX. AspireAppointments
@@ -27,6 +28,7 @@ The projects are also included in `dotnet test Raun.slnx`.
 | Nested groups, custom phases, logs, ILogger, text attachments | [Lifecycle steps](AppointmentTests/LifecycleDsl.cs) and [clinic cancellation](AppointmentTests/CancellationScenarios.cs) |
 | Real AppHost preflight, DI, HTTP clients, shared/exclusive admission, notes | [Aspire scenarios](AspireAppointments/AspireAppointments.Tests/Scenarios.cs) and [host](AspireAppointments/AspireAppointments.Tests/Program.cs) |
 | Coverage leaf and optional trace export | [Aspire host](AspireAppointments/AspireAppointments.Tests/Program.cs); coverage collection/export requires the documented options/environment |
+| Mutation testing: one test per scenario under Stryker.NET, a sentinel mutant | [MutationTesting](MutationTesting/README.md) |
 
 The registry journey represents a realistic service boundary. Its external row has PatientId and
 FullName; its domain patient has Id and Name. Both map to Patient + pat-42. Approval changes

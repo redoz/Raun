@@ -41,6 +41,38 @@ jobs:
       - name: Test
         run: dotnet test Raun.slnx -c Release --no-build
 
+      # Stryker.NET mutates the Booking sample and runs its Raun scenarios against every mutant.
+      # It runs twice: by default Raun reports one test per scenario under Stryker, and with
+      # RAUN_TEST_GRANULARITY=step it reports one per step. The check below needs both runs.
+      # Stryker's MTP runner is a preview feature; the pinned version is in .config/dotnet-tools.json.
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
+      - name: Mutation testing sample (scenario tests)
+        working-directory: samples/MutationTesting
+        run: dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/scenario
+
+      - name: Mutation testing sample (step tests)
+        working-directory: samples/MutationTesting
+        env:
+          RAUN_TEST_GRANULARITY: step
+        run: dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/step
+
+      # A broken test host would kill every mutant and look like a perfect score, so the check
+      # also requires the sentinel mutant (never asserted on) to survive.
+      - name: Check mutation reports
+        run: |
+          node --test test/Stryker/check-report.test.cjs
+          node test/Stryker/check-report.cjs artifacts/stryker/scenario/reports/mutation-report.json artifacts/stryker/step/reports/mutation-report.json
+
+      - name: Upload mutation reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-reports
+          path: artifacts/stryker/
+          if-no-files-found: ignore
+
       - name: Report interaction tests
         run: node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs
 

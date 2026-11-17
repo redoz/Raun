@@ -156,6 +156,8 @@ See the [provider setup](../../samples/AspireAppointments/AspireAppointments.Tes
 ## Mutation testing with Stryker.NET
 
 Run Stryker with its Microsoft.Testing.Platform runner: `dotnet stryker --test-runner mtp`.
+That runner is a preview feature of Stryker.NET.
+The [mutation testing sample](../../samples/MutationTesting/README.md) runs it in CI and checks the reports.
 
 Under Stryker, Raun reports each scenario as one test instead of one test per step.
 Stryker runs every test on its own to learn which code it covers. Running one step means running the steps before it,
