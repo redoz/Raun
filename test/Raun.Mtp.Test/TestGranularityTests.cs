@@ -38,8 +38,6 @@ public class TestGranularityTests
     [Fact]
     public void An_unknown_override_value_fails_naming_the_valid_values()
     {
-        // A typo must not quietly fall back to per-step tests: under Stryker that costs hours and
-        // looks like nothing is wrong.
         var error = Assert.Throws<InvalidOperationException>(
             () => TestGranularityResolver.Resolve(null, Environment("scenrio", null)));
 

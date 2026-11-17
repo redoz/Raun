@@ -50,8 +50,6 @@ public class WholeScenarioSelectorTests
     [Fact]
     public void A_step_uid_selects_nothing_when_scenarios_are_the_tests()
     {
-        // What an IDE with a stale per-step test list would send. Running the whole scenario for it
-        // would report a test the caller never asked about; selecting nothing is the honest answer.
         var scn = Definition("scn", Node(0, "a"), Node(1, "b"));
 
         var selector = WholeScenarioSelector.ForScenarioIds(Set("scn:a"));
@@ -74,7 +72,6 @@ public class WholeScenarioSelectorTests
     [Fact]
     public void A_filter_that_matches_only_plumbing_selects_nothing()
     {
-        // Merge nodes are never tests, so a filter cannot have meant one.
         var scn = Definition("scn", Node(0, "a"), Node(1, "merge", synthetic: true));
 
         var selector = WholeScenarioSelector.Widening(new UidNodeSelector(Set("scn:merge")));

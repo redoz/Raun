@@ -85,13 +85,6 @@ internal static class RaunDiscoverer
         return node;
     }
 
-    /// <summary>
-    /// Builds the single <see cref="TestNode"/> that stands for a whole scenario
-    /// (<see cref="TestGranularity.Scenario"/>): uid <see cref="ScenarioDefinition.ScenarioId"/>,
-    /// named after the scenario, pointing at its first step with a known source. Returns
-    /// <see langword="null"/> when <paramref name="selector"/> reaches none of its steps, or when it
-    /// has no real step to stand for.
-    /// </summary>
     public static TestNode? BuildScenarioNode(ScenarioDefinition definition, NodeSelector? selector = null)
     {
         ArgumentNullException.ThrowIfNull(definition);

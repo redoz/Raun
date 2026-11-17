@@ -59,8 +59,6 @@ public class RaunTestFramework :
     private readonly RunStopSignal? _stopSignal;
     private readonly IRaunCoverageIntegration? _coverage;
 
-    // Resolved once and never again: a runner that maps tests by uid across its discovery and run
-    // requests (Stryker.NET) breaks if the uids change between them.
     private readonly TestGranularity _granularity =
         TestGranularityResolver.Resolve(configured: null, Environment.GetEnvironmentVariable);
 
@@ -131,9 +129,6 @@ public class RaunTestFramework :
         _granularity = TestGranularityResolver.Resolve(testGranularity, Environment.GetEnvironmentVariable);
     }
 
-    /// <summary>Test ctor: the suite's <paramref name="testGranularity"/> choice and the
-    /// <paramref name="environment"/> lookup it is resolved against, without touching the process
-    /// environment.</summary>
     internal RaunTestFramework(
         TestGranularity? testGranularity,
         Func<string, string?> environment,
@@ -310,8 +305,6 @@ public class RaunTestFramework :
         operationComplete();
     }
 
-    /// <summary>The test nodes one scenario contributes to discovery: one per step, or the single
-    /// scenario node under <see cref="TestGranularity.Scenario"/>.</summary>
     private IReadOnlyList<TestNode> DiscoverNodes(ScenarioDefinition definition, NodeSelector? selector)
     {
         if (_granularity == TestGranularity.Step)
@@ -401,20 +394,6 @@ public class RaunTestFramework :
     /// </summary>
     private NodeSelector? ReadSelector(ITestExecutionFilter? filter, out string? unsupported)
     {
-        var selector = ReadStepSelector(filter, out unsupported);
-
-        // When a scenario is the test, it is selected whole or not at all: a uid names a scenario,
-        // and a path filter written against steps selects every scenario it reaches into.
-        return _granularity == TestGranularity.Step
-            ? selector
-            : filter is TestNodeUidListFilter scenarios
-                ? WholeScenarioSelector.ForScenarioIds(
-                    scenarios.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase))
-                : selector is null ? null : WholeScenarioSelector.Widening(selector);
-    }
-
-    private static NodeSelector? ReadStepSelector(ITestExecutionFilter? filter, out string? unsupported)
-    {
         unsupported = null;
         switch (filter)
         {
@@ -425,11 +404,14 @@ public class RaunTestFramework :
 #pragma warning restore TPEXP
                 return null;
             case TestNodeUidListFilter uidFilter:
-                return new UidNodeSelector(
-                    uidFilter.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase));
+                var uids = uidFilter.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                return _granularity == TestGranularity.Step
+                    ? new UidNodeSelector(uids)
+                    : WholeScenarioSelector.ForScenarioIds(uids);
 #pragma warning disable TPEXP // TreeNodeFilter is an experimental Microsoft.Testing.Platform API.
             case TreeNodeFilter treeFilter:
-                return new TreeNodeSelector(treeFilter);
+                var tree = new TreeNodeSelector(treeFilter);
+                return _granularity == TestGranularity.Step ? tree : WholeScenarioSelector.Widening(tree);
 #pragma warning restore TPEXP
             default:
                 unsupported = filter.GetType().FullName;

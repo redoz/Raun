@@ -20,7 +20,6 @@ public class ScenarioGranularityFrameworkTests
     private static Func<string, string?> UnderStryker { get; } =
         name => name == "STRYKER_MUTANT_FILE" ? "stryker-mutant-1.txt" : null;
 
-    /// <summary>Registers a three-step scenario under a fresh id and counts how often each step ran.</summary>
     private sealed class Scenario
     {
         private readonly int[] _runs = new int[3];
@@ -83,8 +82,6 @@ public class ScenarioGranularityFrameworkTests
         return bus.Nodes;
     }
 
-    /// <summary>The nodes about <paramref name="scenario"/> (its own node and any step nodes); the
-    /// registry is process-wide, so other tests' scenarios are in every unfiltered listing.</summary>
     private static List<TestNode> About(Scenario scenario, IEnumerable<TestNode> nodes)
         => [.. nodes.Where(n => n.Uid.Value.StartsWith(scenario.Id, StringComparison.Ordinal))];
 
@@ -136,8 +133,6 @@ public class ScenarioGranularityFrameworkTests
     [Fact]
     public async Task Running_the_scenario_by_its_uid_runs_every_step_exactly_once()
     {
-        // The cost this mode exists to remove: asked for one test per step, a runner that executes
-        // tests one at a time ran a, then a+b, then a+b+c.
         var scenario = new Scenario();
         var framework = new RaunTestFramework(TestGranularity.Scenario, NoEnvironment);
 
@@ -153,7 +148,6 @@ public class ScenarioGranularityFrameworkTests
     [Fact]
     public async Task What_discovery_names_is_what_a_run_accepts()
     {
-        // A runner feeds discovered uids straight back as a run filter.
         var scenario = new Scenario();
         var framework = new RaunTestFramework(testGranularity: null, UnderStryker);
 

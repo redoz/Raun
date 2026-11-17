@@ -37,20 +37,19 @@ public class ScenarioMtpReportSinkTests
         Nodes = nodes.Length == 0 ? [Node(0, "a", "step a"), Node(1, "b", "step b"), Node(2, "c", "step c")] : nodes,
     };
 
-    /// <summary>A result for step <paramref name="index"/>, starting <paramref name="index"/> seconds
-    /// into the scenario and running for half a second.</summary>
     private static StepResult Result(
         ScenarioDefinition definition,
         int index,
         StepStatus status,
         Exception? exception = null,
         string? skipReason = null,
-        string[]? logs = null) => new()
+        string[]? logs = null,
+        DateTimeOffset? startedAt = null) => new()
         {
             Node = definition.Nodes[index],
             DisplayName = definition.Nodes[index].DisplayNameTemplate,
             Status = status,
-            StartedAt = Start + TimeSpan.FromSeconds(index),
+            StartedAt = startedAt ?? Start + TimeSpan.FromSeconds(index),
             Duration = status is StepStatus.Passed or StepStatus.Failed ? TimeSpan.FromMilliseconds(500) : TimeSpan.Zero,
             Exception = exception,
             SkipReason = skipReason,
@@ -66,7 +65,6 @@ public class ScenarioMtpReportSinkTests
         return (new ScenarioMtpReportSink(new SessionUid("sess"), bus, new StubProducer(), AttachmentRoot), bus);
     }
 
-    /// <summary>Runs a whole scenario through a fresh sink and returns its terminal node.</summary>
     private static async Task<TestNode> Finish(ScenarioDefinition definition, params StepResult[] results)
     {
         var (sink, bus) = NewSink();
@@ -97,7 +95,6 @@ public class ScenarioMtpReportSinkTests
     [Fact]
     public async Task Steps_publish_nothing_of_their_own()
     {
-        // The whole point: a runner that lists tests must see the scenario and only the scenario.
         var (sink, bus) = NewSink();
         var def = Definition();
 
@@ -106,6 +103,23 @@ public class ScenarioMtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, Result(def, 1, StepStatus.Failed, new InvalidOperationException("x"))));
 
         Assert.Single(bus.Nodes);
+    }
+
+    [Fact]
+    public async Task Steps_that_started_at_the_same_instant_are_listed_in_scenario_order()
+    {
+        var def = Definition();
+
+        var node = await Finish(def,
+            Result(def, 2, StepStatus.Passed, startedAt: Start),
+            Result(def, 0, StepStatus.Passed, startedAt: Start),
+            Result(def, 1, StepStatus.Passed, startedAt: Start));
+
+        var output = Assert.Single(node.Properties.OfType<StandardOutputProperty>()).StandardOutput;
+        var a = output.IndexOf("1. step a", StringComparison.Ordinal);
+        var b = output.IndexOf("2. step b", StringComparison.Ordinal);
+        var c = output.IndexOf("3. step c", StringComparison.Ordinal);
+        Assert.True(a >= 0 && a < b && b < c, output);
     }
 
     [Fact]
@@ -151,7 +165,6 @@ public class ScenarioMtpReportSinkTests
         var def = Definition();
         var first = new XunitException("first");
 
-        // Handed over out of order: the fold goes by when a step started, not by list position.
         var node = await Finish(def,
             Result(def, 2, StepStatus.Failed, new InvalidOperationException("second")),
             Result(def, 1, StepStatus.Failed, first),
@@ -163,8 +176,6 @@ public class ScenarioMtpReportSinkTests
     [Fact]
     public async Task A_timeout_outranks_an_earlier_failure()
     {
-        // A mutation tester treats "timed out" and "failed" differently, and a timeout says more
-        // about the run than the assertion that happened to fail before it.
         var def = Definition();
         var timeout = new TimeoutException("too slow");
 
@@ -214,7 +225,6 @@ public class ScenarioMtpReportSinkTests
     [Fact]
     public async Task A_scenario_that_finishes_with_no_results_is_skipped_not_passed()
     {
-        // "Passed" would let a mutant survive on a scenario that never ran.
         var def = Definition();
 
         var node = await Finish(def);

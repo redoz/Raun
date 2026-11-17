@@ -244,8 +244,6 @@ public class RaunDiscovererTests
             node.Properties.OfType<TestMetadataProperty>().Select(p => p.Key + "=" + p.Value).Order(StringComparer.Ordinal));
     }
 
-    // --- a scenario as a single test (TestGranularity.Scenario) ---
-
     [Fact]
     public void A_scenario_node_is_named_and_identified_by_the_scenario()
     {
