@@ -37,6 +37,23 @@ public class ResourceKeyParameterTests
     }
 
     [Fact]
+    public async Task A_key_left_to_its_default_still_traces_the_resource()
+    {
+        var source = Source("Updated", "string")
+            .Replace("[StepName(\"touch {patientId} / {patientId:id} / {patientId:data}\")]", "[StepName(\"touch the default patient\")]", StringComparison.Ordinal)
+            .Replace("string patientId)", "string patientId = \"123\")", StringComparison.Ordinal)
+            .Replace("await Given.Touch(patient.Id);", "await Given.Touch();", StringComparison.Ordinal);
+        var generated = GeneratorHarness.Run(source);
+        generated.AssertCompiles();
+        var results = await generated.Definitions().Single().RunAsync();
+        Assert.All(results, result => Assert.Equal(StepStatus.Passed, result.Status));
+        var created = Assert.Single(results[1].Effects);
+        var touched = Assert.Single(results[2].Effects);
+        Assert.Equal(created.Identity, touched.Identity);
+        Assert.Equal(ResourceEffect.Update, touched.Effect);
+    }
+
+    [Fact]
     public async Task Key_and_object_claims_conflict_even_when_the_key_is_a_constant()
     {
         var source = Source("Updated", "string").Replace(

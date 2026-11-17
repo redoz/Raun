@@ -2188,9 +2188,16 @@ internal sealed class ScenarioParser
 
             if (ArgumentFor(parameter.Name, p) is not { } expression)
             {
-                // No supplied argument: the trailing ScenarioContext, or an optional parameter the call
-                // left out. No claim is recorded for the latter, and nothing diagnoses it.
-                continue;
+                // The call left the parameter out. Only a key with a string default still names a
+                // resource the step touches; a null default, like the trailing ScenarioContext, names
+                // nothing.
+                if (parameter is not { HasExplicitDefaultValue: true, ExplicitDefaultValue: string defaultKey })
+                {
+                    continue;
+                }
+
+                expression = ResourceArgumentValue(
+                    parameter, LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(defaultKey)));
             }
 
             claims.Add(new ResourceRoleClaim(role, expression, IsReturn: false) { Action = AttributeReader.ParameterAction(parameter) is { AttributeIdentity: not null } action ? action : null });
