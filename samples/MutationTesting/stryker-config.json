@@ -1,0 +1,8 @@
+{
+  "stryker-config": {
+    "project": "Booking.csproj",
+    "test-projects": ["Booking.Tests/Booking.Tests.csproj"],
+    "test-runner": "mtp",
+    "reporters": ["json", "progress"]
+  }
+}

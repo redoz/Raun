@@ -4,6 +4,7 @@ obj/
 [Dd]ebug/
 [Rr]elease/
 artifacts/
+StrykerOutput/
 
 # Test / coverage
 [Tt]est[Rr]esults/

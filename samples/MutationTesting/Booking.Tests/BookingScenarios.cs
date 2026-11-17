@@ -1,4 +1,3 @@
-using Booking;
 using Raun;
 using Xunit;
 
@@ -6,7 +5,7 @@ namespace Booking.Tests;
 
 public sealed class BookingScenarios : Scenarios<NoWorld>
 {
-    public OpeningGiven Given => Steps<OpeningGiven>();
+    public SlotGiven Given => Steps<SlotGiven>();
     public BookingWhen When => Steps<BookingWhen>();
     public BookingThen Then => Steps<BookingThen>();
 
@@ -43,7 +42,7 @@ public sealed class BookingScenarios : Scenarios<NoWorld>
     }
 }
 
-public sealed class OpeningGiven : Given<NoWorld>
+public sealed class SlotGiven : Given<NoWorld>
 {
     [StepName("Given a {capacity}-seat slot at {hour}:00")]
     public Task<Slot> SlotWithCapacity(int hour, int capacity) => Task.FromResult(new Slot(hour, capacity));
@@ -57,7 +56,7 @@ public sealed class BookingWhen : When<NoWorld>
     [StepName("When {booked} bookings are checked against the slot")]
     public Task<bool> CheckRoom(Slot slot, int booked) => Task.FromResult(BookingRules.HasRoom(slot, booked));
 
-    [StepName("When a {minutes} minute session is priced")]
+    [StepName("When a {minutes} minute session is priced for member={isMember}")]
     public Task<decimal> PriceOf(int minutes, bool isMember) => Task.FromResult(BookingRules.Fee(minutes, isMember));
 
     [StepName("When the slot is described")]
