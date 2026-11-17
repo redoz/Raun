@@ -1,6 +1,7 @@
 using Aspire.Hosting.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Testing.Platform.Builder;
+using Raun.Mtp;
 
 namespace Raun;
 
@@ -34,6 +35,13 @@ public sealed class AspireRunOptions
 
     /// <summary>Maximum active steps per scenario; 0 means unbounded. --max-parallel-steps overrides this default.</summary>
     public int MaxParallelSteps { get; set; }
+
+    /// <summary>
+    /// What the suite reports as one test: every step or every scenario. <see langword="null"/> (the
+    /// default) decides automatically — one test per step, except under Stryker.NET, where a scenario
+    /// is one test. The environment variable <c>RAUN_TEST_GRANULARITY</c> overrides it for a single run.
+    /// </summary>
+    public TestGranularity? TestGranularity { get; set; }
 
     /// <summary>
     /// Names resources that must report healthy before any scenario runs. Additive: calling it twice

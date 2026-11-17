@@ -1,5 +1,4 @@
 using Raun.Model;
-using Raun.Mtp.Filtering;
 using Raun.Running;
 using Xunit;
 

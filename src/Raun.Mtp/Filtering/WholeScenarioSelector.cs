@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using Raun.Model;
 using Raun.Running;
 
-namespace Raun.Mtp.Filtering;
+namespace Raun.Mtp;
 
 /// <summary>
 /// Selection for <see cref="TestGranularity.Scenario"/>: a scenario is one test, so it is selected

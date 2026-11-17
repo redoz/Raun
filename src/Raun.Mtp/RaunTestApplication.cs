@@ -12,7 +12,7 @@ namespace Raun.Mtp;
 /// <remarks>
 /// <para>
 /// This is the escape-hatch API. By default the Raun source generator emits a <c>Program.cs</c>
-/// whose <c>Main</c> calls <see cref="RunAsync(string[], Action{ITestApplicationBuilder}?, bool, IServiceProvider?, Func{ScenarioContext,Task}?, Func{ScenarioContext,Task}?, int, int)"/>, giving
+/// whose <c>Main</c> calls <see cref="RunAsync(string[], Action{ITestApplicationBuilder}?, bool, IServiceProvider?, Func{ScenarioContext,Task}?, Func{ScenarioContext,Task}?, int, int, TestGranularity?)"/>, giving
 /// "just add the package" UX. Setting the MSBuild property <c>&lt;RaunGenerateProgram&gt;false&lt;/RaunGenerateProgram&gt;</c>
 /// suppresses that emission so a consumer can write their own <c>Program.cs</c> and call this method
 /// directly, taking full control of the host (custom MTP extensions, builder configuration, etc.)
@@ -62,6 +62,14 @@ public static class RaunTestApplication
     /// <c>--max-parallel-scenarios &lt;n&gt;</c> overrides it per run. The separate step limit controls concurrency within each scenario. Scenarios that contend for the same thing declare it with <c>[Uses&lt;T&gt;]</c>.
     /// </param>
     /// <param name="maxParallelSteps">Maximum active steps per scenario; 0 means unbounded. --max-parallel-steps overrides this code default.</param>
+    /// <param name="testGranularity">
+    /// What the suite reports as one test: every step (<see cref="TestGranularity.Step"/>) or every
+    /// scenario (<see cref="TestGranularity.Scenario"/>). <see langword="null"/> (the default) decides
+    /// automatically: one test per step, except under Stryker.NET, which runs every test on its own —
+    /// there a scenario is one test, so its steps run once instead of once per later step. Setting
+    /// the environment variable <c>RAUN_TEST_GRANULARITY</c> to <c>step</c> or <c>scenario</c>
+    /// overrides this for a single run.
+    /// </param>
     /// <returns>The process exit code to return from <c>Main</c>.</returns>
     public static async Task<int> RunAsync(
         string[] args,
@@ -71,7 +79,8 @@ public static class RaunTestApplication
         Func<ScenarioContext, Task>? preflight = null,
         Func<ScenarioContext, Task>? sessionPreflight = null,
         int maxParallelScenarios = 0,
-        int maxParallelSteps = 0)
+        int maxParallelSteps = 0,
+        TestGranularity? testGranularity = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentOutOfRangeException.ThrowIfNegative(maxParallelSteps);
@@ -107,7 +116,7 @@ public static class RaunTestApplication
                 new RaunBannerCapability(),
                 new RaunGracefulStopCapability(stopSignal)),
             (_, serviceProvider) => new RaunTestFramework(
-                serviceProvider, simulateTime, services, preflightNode, maxParallelScenarios, stopSignal, coverage, maxParallelSteps));
+                serviceProvider, simulateTime, services, preflightNode, maxParallelScenarios, stopSignal, coverage, maxParallelSteps, testGranularity));
 
         using var app = await builder.BuildAsync().ConfigureAwait(false);
         var exitCode = await app.RunAsync().ConfigureAwait(false);

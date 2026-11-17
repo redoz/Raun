@@ -62,7 +62,8 @@ public static class RaunAspire
                     preflight: ctx => StartAsync<TAppHost>(holder, options, ctx),
                     sessionPreflight: options.SessionPreflightCallback,
                     maxParallelScenarios: options.MaxParallelScenarios,
-                    maxParallelSteps: options.MaxParallelSteps).ConfigureAwait(false);
+                    maxParallelSteps: options.MaxParallelSteps,
+                    testGranularity: options.TestGranularity).ConfigureAwait(false);
             }
         }
         finally

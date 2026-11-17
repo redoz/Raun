@@ -59,6 +59,11 @@ public class RaunTestFramework :
     private readonly RunStopSignal? _stopSignal;
     private readonly IRaunCoverageIntegration? _coverage;
 
+    // Resolved once and never again: a runner that maps tests by uid across its discovery and run
+    // requests (Stryker.NET) breaks if the uids change between them.
+    private readonly TestGranularity _granularity =
+        TestGranularityResolver.Resolve(configured: null, Environment.GetEnvironmentVariable);
+
     /// <summary>Parameterless ctor for tests and the default registration path.</summary>
     public RaunTestFramework() { }
 
@@ -117,11 +122,25 @@ public class RaunTestFramework :
         int maxParallelScenarios,
         RunStopSignal? stopSignal,
         IRaunCoverageIntegration? coverage = null,
-        int maxParallelSteps = 0)
+        int maxParallelSteps = 0,
+        TestGranularity? testGranularity = null)
         : this(services, simulateTime, userServices, preflight, maxParallelScenarios, maxParallelSteps)
     {
         _stopSignal = stopSignal;
         _coverage = coverage;
+        _granularity = TestGranularityResolver.Resolve(testGranularity, Environment.GetEnvironmentVariable);
+    }
+
+    /// <summary>Test ctor: the suite's <paramref name="testGranularity"/> choice and the
+    /// <paramref name="environment"/> lookup it is resolved against, without touching the process
+    /// environment.</summary>
+    internal RaunTestFramework(
+        TestGranularity? testGranularity,
+        Func<string, string?> environment,
+        Func<ScenarioContext, Task>? preflight = null)
+    {
+        _granularity = TestGranularityResolver.Resolve(testGranularity, environment);
+        _preflight = preflight;
     }
 
     /// <inheritdoc/>
@@ -266,7 +285,7 @@ public class RaunTestFramework :
         // containers or migrate databases.
         if (_preflight is not null)
         {
-            foreach (var node in RaunDiscoverer.BuildNodes(Preflight.Definition(_preflight), selector))
+            foreach (var node in DiscoverNodes(Preflight.Definition(_preflight), selector))
             {
                 NodeDiagnostics.Log("discover", node);
                 await messageBus
@@ -279,7 +298,7 @@ public class RaunTestFramework :
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            foreach (var node in RaunDiscoverer.BuildNodes(definition, selector))
+            foreach (var node in DiscoverNodes(definition, selector))
             {
                 NodeDiagnostics.Log("discover", node);
                 await messageBus
@@ -289,6 +308,18 @@ public class RaunTestFramework :
         }
 
         operationComplete();
+    }
+
+    /// <summary>The test nodes one scenario contributes to discovery: one per step, or the single
+    /// scenario node under <see cref="TestGranularity.Scenario"/>.</summary>
+    private IReadOnlyList<TestNode> DiscoverNodes(ScenarioDefinition definition, NodeSelector? selector)
+    {
+        if (_granularity == TestGranularity.Step)
+        {
+            return RaunDiscoverer.BuildNodes(definition, selector);
+        }
+
+        return RaunDiscoverer.BuildScenarioNode(definition, selector) is { } node ? [node] : [];
     }
 
     /// <summary>
@@ -307,7 +338,12 @@ public class RaunTestFramework :
         await WarnUnsupportedFilterAsync(unsupported).ConfigureAwait(false);
 
         var attachmentRoot = RaunAttachments.Resolve(_services, sessionUid);
-        var sinks = new List<IRunEventSink> { new MtpReportSink(sessionUid, messageBus, this, attachmentRoot) };
+        var sinks = new List<IRunEventSink>
+        {
+            _granularity == TestGranularity.Step
+                ? new MtpReportSink(sessionUid, messageBus, this, attachmentRoot)
+                : new ScenarioMtpReportSink(sessionUid, messageBus, this, attachmentRoot),
+        };
         if (HtmlReport.HtmlReportPath.Resolve(_services) is { } reportPath)
         {
             var coverageRequested = _coverage is not null && _services is not null
@@ -363,7 +399,21 @@ public class RaunTestFramework :
     /// <paramref name="unsupported"/>: over-selecting is recoverable and visible, whereas aborting
     /// would turn a future platform filter into a failed run the user cannot act on.
     /// </summary>
-    private static NodeSelector? ReadSelector(ITestExecutionFilter? filter, out string? unsupported)
+    private NodeSelector? ReadSelector(ITestExecutionFilter? filter, out string? unsupported)
+    {
+        var selector = ReadStepSelector(filter, out unsupported);
+
+        // When a scenario is the test, it is selected whole or not at all: a uid names a scenario,
+        // and a path filter written against steps selects every scenario it reaches into.
+        return _granularity == TestGranularity.Step
+            ? selector
+            : filter is TestNodeUidListFilter scenarios
+                ? WholeScenarioSelector.ForScenarioIds(
+                    scenarios.TestNodeUids.Select(u => u.Value).ToHashSet(StringComparer.OrdinalIgnoreCase))
+                : selector is null ? null : WholeScenarioSelector.Widening(selector);
+    }
+
+    private static NodeSelector? ReadStepSelector(ITestExecutionFilter? filter, out string? unsupported)
     {
         unsupported = null;
         switch (filter)
