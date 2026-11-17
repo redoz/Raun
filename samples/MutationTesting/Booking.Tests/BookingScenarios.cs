@@ -25,22 +25,24 @@ public sealed class BookingScenarios : Scenarios<NoWorld>
         var slot = await Given.SlotWithCapacity(9, 3);
         var oneFree = await When.CheckRoom(slot, 2);
         var full = await When.CheckRoom(slot, 3);
-        await Then.OnlyTheNearlyFullSlotHasRoom(oneFree, full);
         await When.Describe(slot);
+        await Then.OnlyTheNearlyFullSlotHasRoom(oneFree, full);
     }
 
     [Scenario("fees are charged per started half hour")]
     public async Task Fees()
     {
-        var half = await When.PriceOf(30, false);
-        var started = await When.PriceOf(31, false);
-        var hour = await When.PriceOf(60, false);
-        var memberHalf = await When.PriceOf(30, true);
-        var memberStarted = await When.PriceOf(31, true);
-        var memberHour = await When.PriceOf(60, true);
+        var half = await When.PriceOf(30, Tariff.Standard);
+        var started = await When.PriceOf(31, Tariff.Standard);
+        var hour = await When.PriceOf(60, Tariff.Standard);
+        var memberHalf = await When.PriceOf(30, Tariff.Member);
+        var memberStarted = await When.PriceOf(31, Tariff.Member);
+        var memberHour = await When.PriceOf(60, Tariff.Member);
         await Then.FeesMatchTheTariff(half, started, hour, memberHalf, memberStarted, memberHour);
     }
 }
+
+public enum Tariff { Standard, Member }
 
 public sealed class SlotGiven : Given<NoWorld>
 {
@@ -56,8 +58,8 @@ public sealed class BookingWhen : When<NoWorld>
     [StepName("When {booked} bookings are checked against the slot")]
     public Task<bool> CheckRoom(Slot slot, int booked) => Task.FromResult(BookingRules.HasRoom(slot, booked));
 
-    [StepName("When a {minutes} minute session is priced for member={isMember}")]
-    public Task<decimal> PriceOf(int minutes, bool isMember) => Task.FromResult(BookingRules.Fee(minutes, isMember));
+    [StepName("When a {minutes} minute session is priced at the {tariff} rate")]
+    public Task<decimal> PriceOf(int minutes, Tariff tariff) => Task.FromResult(BookingRules.Fee(minutes, tariff == Tariff.Member));
 
     [StepName("When the slot is described")]
     public Task Describe(Slot slot)

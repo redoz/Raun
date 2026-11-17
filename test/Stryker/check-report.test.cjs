@@ -81,3 +81,14 @@ test('cli exits 1 naming a missing report path',()=>{
   assert.equal(r.status,1);
   assert.ok(r.stderr.includes(missing),r.stderr);
 });
+test('fails when no non-sentinel mutant is killed',()=>{
+  const named=(f,run)=>f.some(x=>x===`${run} run: no non-sentinel mutant is Killed`);
+  const allIgnored=[mutant(2,'Survived'),mutant(3,'Ignored')];
+  const a=check(scenario({mutants:allIgnored}),step({mutants:allIgnored}));
+  assert.ok(named(a,'scenario')&&named(a,'step'),a.join('\n'));
+  const sentinelOnly=[mutant(2,'Survived')];
+  const b=check(scenario({mutants:sentinelOnly}),step());
+  assert.ok(named(b,'scenario'),b.join('\n'));
+  const c=check(scenario(),step({mutants:sentinelOnly}));
+  assert.ok(named(c,'step'),c.join('\n'));
+});

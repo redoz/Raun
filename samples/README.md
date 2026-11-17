@@ -8,6 +8,7 @@ settings that package consumers get from Raun.Mtp automatically.
 dotnet run --project samples/GettingStarted -- --report-html
 dotnet run --project samples/AppointmentTests -- --report-html
 dotnet run --project samples/AspireAppointments/AspireAppointments.Tests -- --report-html
+dotnet tool restore
 (cd samples/MutationTesting && dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/scenario)
 ```
 

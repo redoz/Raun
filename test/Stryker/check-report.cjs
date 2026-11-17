@@ -12,10 +12,11 @@ function sentinelLine(source){
   return i<0?null:i+1;
 }
 
-// Flattens a report to key -> { status, sentinel, label }, plus a list of file-level problems.
+// Flattens a report to key -> { status, label }; run-level problems are pushed onto the caller's failures.
 function mutants(report,run,failures){
   const map=new Map();
   let anySentinel=false;
+  let killed=0;
   for(const [file,f] of Object.entries(report.files??{})){
     const line=sentinelLine(f.source);
     if(line!==null)anySentinel=true;
@@ -29,12 +30,15 @@ function mutants(report,run,failures){
         if(m.status!=='Survived')failures.push(`${run} run: sentinel mutant ${label} is ${m.status}, expected Survived`);
       }else if(!PASSING.has(m.status)){
         failures.push(`${run} run: mutant ${label} is ${m.status}`);
+      }else if(m.status==='Killed'){
+        killed++;
       }
     }
     if(line!==null&&onSentinel===0)failures.push(`${run} run: no mutant on the sentinel line ${norm(file)}:${line}`);
   }
   if(!anySentinel)failures.push(`${run} run: no sentinel line found in any file`);
   if(map.size===0)failures.push(`${run} run: no mutants`);
+  else if(killed===0)failures.push(`${run} run: no non-sentinel mutant is Killed`);
   return map;
 }
 

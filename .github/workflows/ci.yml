@@ -50,20 +50,18 @@ jobs:
 
       - name: Mutation testing sample (scenario tests)
         working-directory: samples/MutationTesting
-        run: dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/scenario
+        run: dotnet stryker -f stryker-config.json --log-to-file -O ../../artifacts/stryker/scenario
 
       - name: Mutation testing sample (step tests)
         working-directory: samples/MutationTesting
         env:
           RAUN_TEST_GRANULARITY: step
-        run: dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/step
+        run: dotnet stryker -f stryker-config.json --log-to-file -O ../../artifacts/stryker/step
 
       # A broken test host would kill every mutant and look like a perfect score, so the check
       # also requires the sentinel mutant (never asserted on) to survive.
       - name: Check mutation reports
-        run: |
-          node --test test/Stryker/check-report.test.cjs
-          node test/Stryker/check-report.cjs artifacts/stryker/scenario/reports/mutation-report.json artifacts/stryker/step/reports/mutation-report.json
+        run: node test/Stryker/check-report.cjs artifacts/stryker/scenario/reports/mutation-report.json artifacts/stryker/step/reports/mutation-report.json
 
       - name: Upload mutation reports
         if: always()
@@ -74,7 +72,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Report interaction tests
-        run: node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs
+        run: node --test test/Raun.Test/Reporting/message-view.test.cjs test/Raun.Test/Reporting/coverage-view.test.cjs test/Stryker/check-report.test.cjs
 
       - name: Install report browser test tools
         working-directory: test/Browser

@@ -75,12 +75,18 @@ late step asserts on a value an early step computed, so step granularity would r
 **Check.** A node script (the repo already runs node checks in CI), `test/Stryker/check-report.cjs`,
 reads both `mutation-report.json` files and fails on any of:
 
-- run 1 lists a test whose name is not a scenario display name, or lists a different number of
-  tests than the sample has scenarios;
-- run 2 lists scenario-level tests instead of steps;
-- a mutant outside the sentinel line is not killed in run 1;
-- the sentinel mutant is killed in either run (guards the anti-goal);
+- run 1 lists a test id that looks like a step uid (contains `:`), or run 2 lists an id that is not
+  `{scenarioId}:{stepId}`;
+- the set of scenario ids differs between the runs;
+- a mutant outside the sentinel line has a status other than Killed, Timeout, CompileError or Ignored,
+  in either run;
+- a run has no non-sentinel mutant that is Killed (the scenarios must actually kill mutants);
+- the sentinel mutant is not Survived in either run (guards the anti-goal);
 - any mutant's status differs between the two runs.
+
+The check uses test ids, not names or counts: in the step run Stryker's report gives each step test its
+scenario's name, and the report lists only tests that cover a mutant, so a hard-coded count would tie
+the script to the sample.
 
 **CI.** Three steps in the existing job, after `Test`: tool restore, the two Stryker runs, the
 check. The reports are uploaded as an artifact.

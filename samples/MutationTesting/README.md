@@ -4,14 +4,15 @@
 Stryker.NET mutates the library and runs the scenarios against every mutant.
 Stryker's Microsoft.Testing.Platform runner is a preview feature of Stryker.NET.
 
-Under Stryker, Raun reports one test per scenario instead of one per step. Stryker runs every covering test on
-its own for each mutant, and selecting a step runs all the steps before it, so per-step tests would re-run
-the earlier steps over and over. Raun detects Stryker through the `STRYKER_MUTANT_FILE` environment variable;
+Under Stryker, Raun reports one test per scenario instead of one per step. Stryker runs every test on its own
+to learn which code it covers, and running one step means running the steps before it, so per-step tests
+would re-run the earlier steps over and over. Raun detects Stryker through the `STRYKER_MUTANT_FILE` environment variable;
 `RAUN_TEST_GRANULARITY=step|scenario` overrides that.
 
-The sample runs Stryker twice, from this directory:
+The sample runs Stryker twice. Restore the pinned tool once from the repository root, then run from this directory:
 
 ```sh
+dotnet tool restore   # repository root
 dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/scenario
 RAUN_TEST_GRANULARITY=step dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/step
 ```
@@ -23,7 +24,8 @@ node test/Stryker/check-report.cjs artifacts/stryker/scenario/reports/mutation-r
 ```
 
 The check requires that the first run lists scenario tests, that the second lists step tests for the same
-scenarios, that both runs agree on every mutant, and that every mutant outside the sentinel line is killed.
+scenarios, that both runs agree on every mutant, and that every mutant outside the sentinel line is killed,
+timed out, failed to compile or was ignored by Stryker, with at least one of them killed.
 
 ## The sentinel
 
