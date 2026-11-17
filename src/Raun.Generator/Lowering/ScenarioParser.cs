@@ -1654,8 +1654,8 @@ internal sealed class ScenarioParser
 
         if (_world is not { } world || _setupIndex < 0)
         {
-            // Unreachable: a scenario without a world is refused before its body is walked.
-            return null;
+            throw new System.InvalidOperationException(
+                "A step class call was reached in a scenario without a world; such a scenario is refused before its body is walked.");
         }
 
         stepWorld = SymbolHelpers.WorldOfStepClass(receiverType) ?? stepWorld;

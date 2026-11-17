@@ -228,6 +228,10 @@ public sealed class ScenarioScheduler
                         case StepStatus.NotTaken:
                             (notTaken ??= []).Add(nodes[dep].OperationName);
                             break;
+                        case StepStatus.Passed:
+                            break;
+                        default:
+                            throw new UnreachableException($"Unhandled step status {status[dep]}.");
                     }
                 }
 
@@ -248,6 +252,11 @@ public sealed class ScenarioScheduler
                         case StepStatus.Skipped:
                             (skipped ??= []).Add(nodes[wait].OperationName);
                             break;
+                        case StepStatus.Passed:
+                        case StepStatus.NotTaken:
+                            break;
+                        default:
+                            throw new UnreachableException($"Unhandled step status {status[wait]}.");
                     }
                 }
 
@@ -277,9 +286,12 @@ public sealed class ScenarioScheduler
                             // report an untaken nested branch as though something had gone wrong.
                             (notTaken ??= []).Add(nodes[guard.ConditionIndex].OperationName);
                             break;
-                        default: // Failed / Skipped
+                        case StepStatus.Failed:
+                        case StepStatus.Skipped:
                             (skipped ??= []).Add(nodes[guard.ConditionIndex].OperationName);
                             break;
+                        default:
+                            throw new UnreachableException($"Unhandled step status {status[guard.ConditionIndex]}.");
                     }
                 }
 
@@ -877,9 +889,12 @@ public sealed class ScenarioScheduler
                         break;
                     case StepStatus.NotTaken:
                         break;
-                    default: // Failed / Skipped
+                    case StepStatus.Failed:
+                    case StepStatus.Skipped:
                         (bad ??= []).Add(nodes[source].OperationName);
                         break;
+                    default:
+                        throw new UnreachableException($"Unhandled step status {status[source]}.");
                 }
             }
 

@@ -368,54 +368,46 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     /// suite is still being assembled. An Exclusive-kind resource is out of scope too: capacity 1 always
     /// binds once two or more scenarios use it, so it never qualifies here.
     /// </summary>
+    /// <remarks>
+    /// Unlike the other callbacks this one has no RAUN000 catch: reporting from a compilation-end
+    /// action requires the descriptor to carry <c>WellKnownDiagnosticTags.CompilationEnd</c> (RS1037),
+    /// which RAUN000 cannot, because it is also reported live. A bug here surfaces as AD0001.
+    /// </remarks>
     private static void ReportInertContendedResources(
         CompilationAnalysisContext context, ConcurrentDictionary<INamedTypeSymbol, ResourceUsageAccumulator> usage)
     {
         foreach (var pair in usage)
         {
-            try
+            var resource = pair.Key;
+            var (scenarioCount, anyExclusive, useLocations) = pair.Value.Snapshot();
+
+            // Deliberately excluded: a resource used by fewer than two scenarios is inert today but
+            // is the normal state while a suite is being built up — warning here would fire on work
+            // in progress, not a real gap.
+            if (scenarioCount < 2 || anyExclusive)
             {
-                var resource = pair.Key;
-                var (scenarioCount, anyExclusive, useLocations) = pair.Value.Snapshot();
-
-                // Deliberately excluded: a resource used by fewer than two scenarios is inert today but
-                // is the normal state while a suite is being built up — warning here would fire on work
-                // in progress, not a real gap.
-                if (scenarioCount < 2 || anyExclusive)
-                {
-                    continue;
-                }
-
-                var kind = ReadContendedResourceKind(resource);
-                if (kind.KindsDeclared != 1 || kind.PoolTooSmall)
-                {
-                    // RAUN015 already flags a malformed kind declaration — including a pool whose
-                    // capacity isn't valid — so a type it has already condemned must never also reach
-                    // RAUN016's reporting logic.
-                    continue;
-                }
-
-                if (kind.Kind != "Shared")
-                {
-                    // Pooled (at or under capacity): not-yet-binding, not permanently inert — see the
-                    // method doc. Exclusive: capacity 1 always binds once scenarioCount >= 2 (guarded
-                    // above).
-                    continue;
-                }
-
-                var location = resource.Locations.FirstOrDefault(l => l.IsInSource) ?? PickFallbackLocation(useLocations);
-                context.ReportDiagnostic(Diagnostic.Create(Descriptors.InertContendedResourceUse, location, resource.Name));
+                continue;
             }
-            catch
+
+            var kind = ReadContendedResourceKind(resource);
+            if (kind.KindsDeclared != 1 || kind.PoolTooSmall)
             {
-                // The accumulator was already built by AnalyzeScenarioResourceUse, which has its own
-                // RAUN000 catch; this loop only reads it and picks a location deterministically, so a
-                // throw here means a bug in this analyzer, not in user code. Swallow rather than report:
-                // reporting RAUN000 from a compilation-end action would force it to carry
-                // WellKnownDiagnosticTags.CompilationEnd (RS1037), which is false for RAUN000 — it is
-                // also reported live from syntax-node and symbol actions, where a generator crash most
-                // needs to stay visible rather than risk deferral to full-solution analysis.
+                // RAUN015 already flags a malformed kind declaration — including a pool whose
+                // capacity isn't valid — so a type it has already condemned must never also reach
+                // RAUN016's reporting logic.
+                continue;
             }
+
+            if (kind.Kind != "Shared")
+            {
+                // Pooled (at or under capacity): not-yet-binding, not permanently inert — see the
+                // method doc. Exclusive: capacity 1 always binds once scenarioCount >= 2 (guarded
+                // above).
+                continue;
+            }
+
+            var location = resource.Locations.FirstOrDefault(l => l.IsInSource) ?? PickFallbackLocation(useLocations);
+            context.ReportDiagnostic(Diagnostic.Create(Descriptors.InertContendedResourceUse, location, resource.Name));
         }
     }
 
