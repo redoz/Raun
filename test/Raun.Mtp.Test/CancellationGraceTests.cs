@@ -46,9 +46,8 @@ public class CancellationGraceTests
     }
 
     [Fact]
-    public void Resolve_returns_the_code_default_without_services_or_without_the_option()
+    public void Resolve_returns_the_code_default_without_the_option()
     {
-        Assert.Equal(TimeSpan.FromSeconds(60), CancellationGrace.Resolve(services: null));
         Assert.Equal(TimeSpan.FromSeconds(60), CancellationGrace.Resolve(new OptionsProvider(null)));
     }
 

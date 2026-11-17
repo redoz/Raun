@@ -7,8 +7,7 @@ internal static class StepParallelism
 {
     public static bool TryParse(string[]? arguments, out int degree) => ScenarioParallelism.TryParse(arguments, out degree);
 
-    public static int Resolve(IServiceProvider? services, int codeDefault)
-        => services is not null
-            && services.GetCommandLineOptions().TryGetOptionArgumentList(RunOptionsProvider.MaxParallelStepsOption, out var arguments)
+    public static int Resolve(IServiceProvider services, int codeDefault)
+        => services.GetCommandLineOptions().TryGetOptionArgumentList(RunOptionsProvider.MaxParallelStepsOption, out var arguments)
             && TryParse(arguments, out var degree) ? degree : codeDefault;
 }

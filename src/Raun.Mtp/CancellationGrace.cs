@@ -16,10 +16,9 @@ internal static class CancellationGrace
             && int.TryParse(arguments[0], NumberStyles.None, CultureInfo.InvariantCulture, out milliseconds);
     }
 
-    internal static TimeSpan Resolve(IServiceProvider? services)
+    internal static TimeSpan Resolve(IServiceProvider services)
     {
-        return services is not null
-            && services.GetCommandLineOptions().TryGetOptionArgumentList(Option, out var arguments)
+        return services.GetCommandLineOptions().TryGetOptionArgumentList(Option, out var arguments)
             && TryParse(arguments, out var milliseconds)
             ? TimeSpan.FromMilliseconds(milliseconds)
             : ScenarioScheduler.DefaultCancellationGracePeriod;

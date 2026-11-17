@@ -18,7 +18,7 @@ namespace Raun.Mtp;
 internal static class RaunAttachments
 {
     // MTP's well-known results-directory configuration key (PlatformConfigurationConstants is internal).
-    private const string ResultsDirectoryKey = "platformOptions:resultDirectory";
+    internal const string ResultsDirectoryKey = "platformOptions:resultDirectory";
 
     /// <summary>The folder name created under the results directory.</summary>
     public const string FolderName = "raun-attachments";
@@ -31,25 +31,8 @@ internal static class RaunAttachments
     }
 
     /// <summary>Reads the results directory off the framework's MTP service provider.</summary>
-    public static string Resolve(IServiceProvider? services, SessionUid sessionUid)
-    {
-        string? resultsDirectory = null;
-        if (services is not null)
-        {
-            try
-            {
-                IConfiguration configuration = services.GetConfiguration();
-                resultsDirectory = configuration[ResultsDirectoryKey];
-            }
-            catch (InvalidOperationException)
-            {
-                // A provider that is not a platform one (the framework can be driven directly in
-                // tests, and its parameterless ctor has no services at all): fall back below.
-            }
-        }
-
-        return Resolve(resultsDirectory, sessionUid.Value);
-    }
+    public static string Resolve(IServiceProvider services, SessionUid sessionUid)
+        => Resolve(services.GetConfiguration()[ResultsDirectoryKey], sessionUid.Value);
 
     /// <summary>Removes the session's attachment folder when nothing was written into it. Best-effort:
     /// a folder that cannot be removed is left alone rather than failing the session.</summary>

@@ -93,7 +93,7 @@ public class ScenarioGranularityFrameworkTests
     public async Task Under_stryker_a_scenario_is_discovered_as_one_test()
     {
         var scenario = new Scenario();
-        var framework = new RaunTestFramework(testGranularity: null, UnderStryker);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: null, environment: UnderStryker);
 
         var node = Assert.Single(About(scenario, await Discover(framework)));
 
@@ -105,7 +105,7 @@ public class ScenarioGranularityFrameworkTests
     public async Task Without_stryker_discovery_stays_one_test_per_step()
     {
         var scenario = new Scenario();
-        var framework = new RaunTestFramework(testGranularity: null, NoEnvironment);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: null, environment: NoEnvironment);
 
         var uids = About(scenario, await Discover(framework)).Select(n => n.Uid.Value);
 
@@ -116,7 +116,7 @@ public class ScenarioGranularityFrameworkTests
     public async Task A_suite_that_asks_for_steps_keeps_them_even_under_stryker()
     {
         var scenario = new Scenario();
-        var framework = new RaunTestFramework(TestGranularity.Step, UnderStryker);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: TestGranularity.Step, environment: UnderStryker);
 
         Assert.Equal(3, About(scenario, await Discover(framework)).Count);
     }
@@ -125,7 +125,7 @@ public class ScenarioGranularityFrameworkTests
     public async Task A_suite_can_ask_for_scenario_tests_without_stryker()
     {
         var scenario = new Scenario();
-        var framework = new RaunTestFramework(TestGranularity.Scenario, NoEnvironment);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: TestGranularity.Scenario, environment: NoEnvironment);
 
         Assert.Single(About(scenario, await Discover(framework)));
     }
@@ -134,7 +134,7 @@ public class ScenarioGranularityFrameworkTests
     public async Task Running_the_scenario_by_its_uid_runs_every_step_exactly_once()
     {
         var scenario = new Scenario();
-        var framework = new RaunTestFramework(TestGranularity.Scenario, NoEnvironment);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: TestGranularity.Scenario, environment: NoEnvironment);
 
         var nodes = About(scenario, await Run(framework, Uids(scenario.Id)));
 
@@ -149,7 +149,7 @@ public class ScenarioGranularityFrameworkTests
     public async Task What_discovery_names_is_what_a_run_accepts()
     {
         var scenario = new Scenario();
-        var framework = new RaunTestFramework(testGranularity: null, UnderStryker);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: null, environment: UnderStryker);
 
         var discovered = Assert.Single(About(scenario, await Discover(framework)));
         await Run(framework, Uids(discovered.Uid.Value));
@@ -162,7 +162,7 @@ public class ScenarioGranularityFrameworkTests
     {
         var wanted = new Scenario();
         var other = new Scenario();
-        var framework = new RaunTestFramework(TestGranularity.Scenario, NoEnvironment);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: TestGranularity.Scenario, environment: NoEnvironment);
 
         var nodes = await Discover(framework, Uids(wanted.Id));
 
@@ -174,7 +174,7 @@ public class ScenarioGranularityFrameworkTests
     public async Task A_step_uid_runs_nothing_when_scenarios_are_the_tests()
     {
         var scenario = new Scenario();
-        var framework = new RaunTestFramework(TestGranularity.Scenario, NoEnvironment);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: TestGranularity.Scenario, environment: NoEnvironment);
 
         var nodes = About(scenario, await Run(framework, Uids($"{scenario.Id}:b")));
 
@@ -187,7 +187,7 @@ public class ScenarioGranularityFrameworkTests
     {
         var failure = new XunitException("expected 2, got 3");
         var scenario = new Scenario(failInB: failure);
-        var framework = new RaunTestFramework(TestGranularity.Scenario, NoEnvironment);
+        var framework = new RaunTestFramework(new TestPlatformServices(), testGranularity: TestGranularity.Scenario, environment: NoEnvironment);
 
         var nodes = About(scenario, await Run(framework, Uids(scenario.Id)));
 
@@ -201,7 +201,7 @@ public class ScenarioGranularityFrameworkTests
     {
         var scenario = new Scenario();
         var framework = new RaunTestFramework(
-            TestGranularity.Scenario, NoEnvironment,
+            new TestPlatformServices(), testGranularity: TestGranularity.Scenario, environment: NoEnvironment,
             preflight: _ => throw new InvalidOperationException("no database"));
 
         var all = await Run(framework, Uids(scenario.Id));
@@ -216,7 +216,7 @@ public class ScenarioGranularityFrameworkTests
     public async Task Preflight_is_discovered_as_one_test_too()
     {
         var framework = new RaunTestFramework(
-            TestGranularity.Scenario, NoEnvironment, preflight: _ => Task.CompletedTask);
+            new TestPlatformServices(), testGranularity: TestGranularity.Scenario, environment: NoEnvironment, preflight: _ => Task.CompletedTask);
 
         var nodes = await Discover(framework);
 

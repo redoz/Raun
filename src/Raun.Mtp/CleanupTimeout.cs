@@ -11,9 +11,8 @@ internal static class CleanupTimeout
     internal static bool TryParse(string[]? arguments, out int milliseconds)
         => CancellationGrace.TryParse(arguments, out milliseconds) && milliseconds > 0;
 
-    internal static TimeSpan Resolve(IServiceProvider? services)
-        => services is not null
-            && services.GetCommandLineOptions().TryGetOptionArgumentList(Option, out var arguments)
+    internal static TimeSpan Resolve(IServiceProvider services)
+        => services.GetCommandLineOptions().TryGetOptionArgumentList(Option, out var arguments)
             && TryParse(arguments, out var milliseconds)
             ? TimeSpan.FromMilliseconds(milliseconds)
             : ScenarioScheduler.DefaultCleanupTimeout;

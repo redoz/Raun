@@ -43,9 +43,8 @@ public class ScenarioParallelismTests
     }
 
     [Fact]
-    public void Resolve_returns_the_code_default_without_services_or_without_the_option()
+    public void Resolve_returns_the_code_default_without_the_option()
     {
-        Assert.Equal(3, ScenarioParallelism.Resolve(services: null, codeDefault: 3));
         Assert.Equal(3, ScenarioParallelism.Resolve(new OptionsProvider(null), codeDefault: 3));
     }
 

@@ -25,7 +25,7 @@ public class PreflightDiscoveryTests
         // A --list-tests request must not start containers or migrate a database.
         var invoked = false;
         var framework = new RaunTestFramework(
-            new StubProvider(), simulateTime: false, userServices: null,
+            new TestPlatformServices(), simulateTime: false, userServices: null,
             preflight: _ => { invoked = true; return Task.CompletedTask; });
 
         var uid = new Microsoft.Testing.Platform.TestHost.SessionUid("preflight-discover");
@@ -42,22 +42,4 @@ public class PreflightDiscoveryTests
             Microsoft.Testing.Platform.Extensions.Messages.IData data) => Task.CompletedTask;
     }
 
-    private sealed class StubProvider : IServiceProvider
-    {
-        public object? GetService(Type serviceType) =>
-            serviceType == typeof(Microsoft.Testing.Platform.CommandLine.ICommandLineOptions)
-                ? new NoOptions()
-                : null;
-
-        private sealed class NoOptions : Microsoft.Testing.Platform.CommandLine.ICommandLineOptions
-        {
-            public bool IsOptionSet(string optionName) => false;
-
-            public bool TryGetOptionArgumentList(string optionName, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string[]? arguments)
-            {
-                arguments = null;
-                return false;
-            }
-        }
-    }
 }

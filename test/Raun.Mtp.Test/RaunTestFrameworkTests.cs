@@ -19,7 +19,7 @@ public static class RaunTestFrameworkTests
         public async Task Create_then_close_session_succeeds()
         {
             var uid = new SessionUid("session-1");
-            var framework = new RaunTestFramework();
+            var framework = new RaunTestFramework(new TestPlatformServices());
 
             var createResult = await framework.CreateTestSession(uid);
             Assert.True(createResult.IsSuccess);
@@ -32,7 +32,7 @@ public static class RaunTestFrameworkTests
         public async Task Creating_same_session_twice_fails()
         {
             var uid = new SessionUid("dup");
-            var framework = new RaunTestFramework();
+            var framework = new RaunTestFramework(new TestPlatformServices());
 
             var first = await framework.CreateTestSession(uid);
             var second = await framework.CreateTestSession(uid);
@@ -45,7 +45,7 @@ public static class RaunTestFrameworkTests
         [Fact]
         public async Task Closing_unknown_session_fails()
         {
-            var framework = new RaunTestFramework();
+            var framework = new RaunTestFramework(new TestPlatformServices());
 
             var result = await framework.CloseTestSession(new SessionUid("never-opened"));
 
@@ -57,7 +57,7 @@ public static class RaunTestFrameworkTests
         public async Task Re_closing_a_session_fails()
         {
             var uid = new SessionUid("once");
-            var framework = new RaunTestFramework();
+            var framework = new RaunTestFramework(new TestPlatformServices());
 
             await framework.CreateTestSession(uid);
             var firstClose = await framework.CloseTestSession(uid);
@@ -70,7 +70,7 @@ public static class RaunTestFrameworkTests
         [Fact]
         public async Task Discovery_against_unknown_session_throws_and_does_not_complete()
         {
-            var framework = new RaunTestFramework();
+            var framework = new RaunTestFramework(new TestPlatformServices());
             var completed = false;
 
             var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
@@ -88,7 +88,7 @@ public static class RaunTestFrameworkTests
         [Fact]
         public async Task Execution_against_unknown_session_throws_and_does_not_complete()
         {
-            var framework = new RaunTestFramework();
+            var framework = new RaunTestFramework(new TestPlatformServices());
             var completed = false;
 
             var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>

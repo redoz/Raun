@@ -50,7 +50,7 @@ public class DiscoveryRequestTests
             Node(0, "a", "step a"),
             Node(1, "b", "step b"));
 
-        var framework = new RaunTestFramework();
+        var framework = new RaunTestFramework(new TestPlatformServices());
         var uid = new SessionUid("disc-1");
         await framework.CreateTestSession(uid);
 
@@ -70,7 +70,7 @@ public class DiscoveryRequestTests
     {
         RegisterScenario("meta-scn", "meta scenario", Node(0, "only", "the only step"));
 
-        var framework = new RaunTestFramework();
+        var framework = new RaunTestFramework(new TestPlatformServices());
         var uid = new SessionUid("disc-2");
         await framework.CreateTestSession(uid);
 
@@ -97,7 +97,7 @@ public class DiscoveryRequestTests
             Node(1, "b", "step b"),
             Node(2, "c", "step c"));
 
-        var framework = new RaunTestFramework();
+        var framework = new RaunTestFramework(new TestPlatformServices());
         var uid = new SessionUid("disc-filter");
         await framework.CreateTestSession(uid);
 
@@ -114,7 +114,7 @@ public class DiscoveryRequestTests
     {
         RegisterScenario("sess-scn", "session scenario", Node(0, "a", "step a"));
 
-        var framework = new RaunTestFramework();
+        var framework = new RaunTestFramework(new TestPlatformServices());
         var uid = new SessionUid("disc-session-uid");
         await framework.CreateTestSession(uid);
 

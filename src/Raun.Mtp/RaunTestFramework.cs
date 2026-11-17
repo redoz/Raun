@@ -1,8 +1,3 @@
-// CA1033: the ITestFramework / IDataProducer members are implemented explicitly so Raun's own
-// SessionUid-keyed worker API (CreateTestSession/OnDiscover/...) is the visible surface; the class
-// is intentionally left unsealed so later phases (and tests) can override the discover/run bodies.
-#pragma warning disable CA1033 // Interface methods should be callable by child types
-
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -36,21 +31,18 @@ namespace Raun.Mtp;
 /// this shell only has to bridge MTP's request pipeline to it.
 /// </para>
 /// <para>
-/// This type is public because the escape-hatch bootstrap (<see cref="RaunTestApplication.RunAsync"/>)
-/// registers it; the discovery and run bodies (<see cref="OnDiscoverAsync"/> /
-/// <see cref="OnExecuteAsync"/>) are filled in by later phases. The interface methods are thin
-/// wrappers over the <see cref="SessionUid"/>-keyed worker methods so they can be unit-tested
-/// without constructing MTP's internal session-context types.
+/// The interface methods are thin wrappers over the <see cref="SessionUid"/>-keyed worker methods
+/// so they can be unit-tested without constructing MTP's internal session-context types.
 /// </para>
 /// </remarks>
-public class RaunTestFramework :
+internal sealed class RaunTestFramework :
     IExtension, ITestPlatformTestFramework, IDataProducer
 {
     /// <summary>Stable extension UID for Raun's MTP test framework.</summary>
     internal const string ExtensionUid = "raun.mtp.testframework";
 
     private readonly ConcurrentDictionary<string, byte> sessions = new(StringComparer.Ordinal);
-    private readonly IServiceProvider? _services;
+    private readonly IServiceProvider _services;
     private readonly IServiceProvider? _userServices;
     private readonly Func<ScenarioContext, Task>? _preflight;
     private readonly bool _simulateTime;
@@ -59,83 +51,41 @@ public class RaunTestFramework :
     private readonly RunStopSignal? _stopSignal;
     private readonly IRaunCoverageIntegration? _coverage;
 
-    private readonly TestGranularity _granularity =
-        TestGranularityResolver.Resolve(configured: null, Environment.GetEnvironmentVariable);
+    private readonly TestGranularity _granularity;
 
-    /// <summary>Parameterless ctor for tests and the default registration path.</summary>
-    public RaunTestFramework() { }
-
-    /// <summary>Production ctor: the MTP <see cref="IServiceProvider"/> supplies command-line options
-    /// (the <c>--report-html</c> flag) and the resolved results directory.</summary>
-    public RaunTestFramework(IServiceProvider services) => _services = services;
-
-    /// <summary>Carries the sample-local opt-in <paramref name="simulateTime"/> flag (off in production)
-    /// from <see cref="RaunTestApplication"/>'s <c>RunAsync</c> down to the run loop / scheduler.
-    /// Defaults elsewhere keep production runs on real timing.</summary>
-    public RaunTestFramework(IServiceProvider services, bool simulateTime)
-        : this(services) => _simulateTime = simulateTime;
-
-    /// <summary>Production ctor with the consumer's own provider. <paramref name="services"/> is
-    /// MTP's (framework-internal: command-line options, logger factory); <paramref name="userServices"/>
-    /// is what reaches step bodies as <c>ctx.Services</c>. Keeping them apart is deliberate — steps
-    /// must not be able to resolve platform internals.</summary>
-    public RaunTestFramework(IServiceProvider services, bool simulateTime, IServiceProvider? userServices)
-        : this(services, simulateTime) => _userServices = userServices;
-
-    /// <summary>Production ctor including run-level setup. <paramref name="preflight"/> runs once
-    /// before any scenario and is reported as its own node; null means no preflight node exists.</summary>
-    public RaunTestFramework(
-        IServiceProvider services,
-        bool simulateTime,
-        IServiceProvider? userServices,
-        Func<ScenarioContext, Task>? preflight)
-        : this(services, simulateTime, userServices) => _preflight = preflight;
-
-    /// <summary>Production ctor including the suite's default degree of scenario parallelism
-    /// (<c>0</c> = processor count, <c>1</c> = sequential); <c>--max-parallel-scenarios</c> overrides it per run.</summary>
-    public RaunTestFramework(
-        IServiceProvider services,
-        bool simulateTime,
-        IServiceProvider? userServices,
-        Func<ScenarioContext, Task>? preflight,
-        int maxParallelScenarios)
-        : this(services, simulateTime, userServices, preflight) => _maxParallelScenarios = maxParallelScenarios;
-
-    /// <summary>Production ctor with separate scenario and per-scenario step limits.</summary>
-    public RaunTestFramework(IServiceProvider services, bool simulateTime, IServiceProvider? userServices,
-        Func<ScenarioContext, Task>? preflight, int maxParallelScenarios, int maxParallelSteps)
-        : this(services, simulateTime, userServices, preflight, maxParallelScenarios)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(maxParallelSteps);
-        _maxParallelSteps = maxParallelSteps;
-    }
-
-    /// <summary>Production ctor including the platform's graceful-stop signal, so
-    /// <c>--maximum-failed-tests</c> can stop the loop from admitting further scenarios.</summary>
+    /// <summary>
+    /// <paramref name="services"/> is MTP's provider (framework-internal: command-line options,
+    /// configuration, logger factory); <paramref name="userServices"/> is what reaches step bodies as
+    /// <c>ctx.Services</c>. Keeping them apart is deliberate: steps must not be able to resolve
+    /// platform internals. <paramref name="preflight"/> runs once before any scenario and is reported
+    /// as its own node. The parallelism limits are the suite's defaults (<c>0</c> = processor count
+    /// for scenarios, unlimited for steps), which the command line overrides per run.
+    /// <paramref name="stopSignal"/> lets <c>--maximum-failed-tests</c> stop the loop from admitting
+    /// further scenarios. <paramref name="environment"/> stands in for the process environment.
+    /// </summary>
     internal RaunTestFramework(
         IServiceProvider services,
-        bool simulateTime,
-        IServiceProvider? userServices,
-        Func<ScenarioContext, Task>? preflight,
-        int maxParallelScenarios,
-        RunStopSignal? stopSignal,
+        bool simulateTime = false,
+        IServiceProvider? userServices = null,
+        Func<ScenarioContext, Task>? preflight = null,
+        int maxParallelScenarios = 0,
+        RunStopSignal? stopSignal = null,
         IRaunCoverageIntegration? coverage = null,
         int maxParallelSteps = 0,
-        TestGranularity? testGranularity = null)
-        : this(services, simulateTime, userServices, preflight, maxParallelScenarios, maxParallelSteps)
+        TestGranularity? testGranularity = null,
+        Func<string, string?>? environment = null)
     {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxParallelSteps);
+        _services = services;
+        _simulateTime = simulateTime;
+        _userServices = userServices;
+        _preflight = preflight;
+        _maxParallelScenarios = maxParallelScenarios;
         _stopSignal = stopSignal;
         _coverage = coverage;
-        _granularity = TestGranularityResolver.Resolve(testGranularity, Environment.GetEnvironmentVariable);
-    }
-
-    internal RaunTestFramework(
-        TestGranularity? testGranularity,
-        Func<string, string?> environment,
-        Func<ScenarioContext, Task>? preflight = null)
-    {
-        _granularity = TestGranularityResolver.Resolve(testGranularity, environment);
-        _preflight = preflight;
+        _maxParallelSteps = maxParallelSteps;
+        _granularity = TestGranularityResolver.Resolve(testGranularity, environment ?? Environment.GetEnvironmentVariable);
     }
 
     /// <inheritdoc/>
@@ -263,7 +213,7 @@ public class RaunTestFramework :
     /// <see cref="TestNodeUpdateMessage"/> per step node (see <see cref="RaunDiscoverer"/>).
     /// Step nodes only — no parent scenario node.
     /// </summary>
-    protected virtual async ValueTask OnDiscoverAsync(
+    private async ValueTask OnDiscoverAsync(
         SessionUid sessionUid,
         ITestExecutionFilter? filter,
         IMessageBus messageBus,
@@ -320,7 +270,7 @@ public class RaunTestFramework :
     /// reduced to the distinct scenarios it selects, each is run once through a
     /// <see cref="ScenarioScheduler"/>, and every executed step is published (siblings light up).
     /// </summary>
-    protected virtual async ValueTask OnExecuteAsync(
+    private async ValueTask OnExecuteAsync(
         SessionUid sessionUid,
         ITestExecutionFilter? filter,
         IMessageBus messageBus,
@@ -339,7 +289,7 @@ public class RaunTestFramework :
         };
         if (HtmlReport.HtmlReportPath.Resolve(_services) is { } reportPath)
         {
-            var coverageRequested = _coverage is not null && _services is not null
+            var coverageRequested = _coverage is not null
                 && (_services.GetCommandLineOptions().IsOptionSet("coverage") || _services.GetCommandLineOptions().IsOptionSet("coverlet"));
             var report = new HtmlReportSink(reportPath, TimeProvider.System, coverageRequested, HtmlReport.HtmlReportPath.ResolveSourceOptions(_services));
             sinks.Add(report);
@@ -364,18 +314,11 @@ public class RaunTestFramework :
 
         if (bus.Failures.Count > 0)
         {
-            // Surface each sink failure through MTP's logger so a broken --report-html write is
-            // visible to the user via --diagnostic output. The debug
-            // NodeDiagnostics path is kept as a fallback for the unit-test code path where
-            // _services is null (parameterless ctor).
-            ILogger? logger = _services?.GetLoggerFactory().CreateLogger(typeof(RaunTestFramework).FullName!);
+            // Through MTP's logger, so a broken --report-html write shows in --diagnostic output.
+            var logger = _services.GetLoggerFactory().CreateLogger(typeof(RaunTestFramework).FullName!);
             foreach (var failure in bus.Failures)
             {
-                if (logger is not null)
-                {
-                    await logger.LogWarningAsync($"report sink failure: {failure}").ConfigureAwait(false);
-                }
-
+                await logger.LogWarningAsync($"report sink failure: {failure}").ConfigureAwait(false);
                 NodeDiagnostics.Log("report-sink-failure", failure.ToString());
             }
         }
@@ -419,7 +362,7 @@ public class RaunTestFramework :
         }
     }
 
-    /// <summary>Warns that a filter type was ignored, through the platform logger when there is one.</summary>
+    /// <summary>Warns through the platform logger that a filter type was ignored.</summary>
     private async Task WarnUnsupportedFilterAsync(string? unsupported)
     {
         if (unsupported is null)
@@ -428,11 +371,8 @@ public class RaunTestFramework :
         }
 
         var message = $"ignoring unsupported execution filter type '{unsupported}'; selecting every test";
-        ILogger? logger = _services?.GetLoggerFactory().CreateLogger(typeof(RaunTestFramework).FullName!);
-        if (logger is not null)
-        {
-            await logger.LogWarningAsync(message).ConfigureAwait(false);
-        }
+        var logger = _services.GetLoggerFactory().CreateLogger(typeof(RaunTestFramework).FullName!);
+        await logger.LogWarningAsync(message).ConfigureAwait(false);
 
         NodeDiagnostics.Log("unsupported-filter", message);
     }

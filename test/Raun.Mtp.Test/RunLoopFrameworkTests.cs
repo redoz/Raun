@@ -69,7 +69,7 @@ public class RunLoopFrameworkTests
             Node(0, "a", "a"),
             Node(1, "b", "b", dependsOn: [0])));
 
-        var framework = new RaunTestFramework();
+        var framework = new RaunTestFramework(new TestPlatformServices());
         var uid = new SessionUid("fw-run");
         await framework.CreateTestSession(uid);
 
@@ -100,7 +100,7 @@ public class RunLoopFrameworkTests
             Node(0, "a", "a"),
             Node(1, "b", "b", dependsOn: [0])));
 
-        var framework = new RaunTestFramework();
+        var framework = new RaunTestFramework(new TestPlatformServices());
         var uid = new SessionUid("uf-run");
         await framework.CreateTestSession(uid);
 
@@ -124,7 +124,7 @@ public class RunLoopFrameworkTests
         ScenarioRegistry.Register(method, () => Definition("sim-fw", "sim scenario",
             Node(0, "a", "a", invoke: Elapse(work))));
 
-        var framework = new RaunTestFramework(services: null!, simulateTime: true);
+        var framework = new RaunTestFramework(new TestPlatformServices(), simulateTime: true);
         var uid = new SessionUid("sim-fw-run");
         await framework.CreateTestSession(uid);
 
@@ -151,8 +151,8 @@ public class RunLoopFrameworkTests
         ScenarioRegistry.Register(method, () => Definition("di-fw", "di scenario",
             Node(0, "a", "a", invoke: (_, ctx) => { seen = ctx.Services; return Task.FromResult<object?>(null); })));
 
-        var mtpProvider = new StubServiceProvider();
-        var userProvider = new StubServiceProvider();
+        var mtpProvider = new TestPlatformServices();
+        var userProvider = new TestPlatformServices();
         var framework = new RaunTestFramework(mtpProvider, simulateTime: false, userProvider);
         var uid = new SessionUid("di-fw-run");
         await framework.CreateTestSession(uid);
@@ -173,7 +173,7 @@ public class RunLoopFrameworkTests
         ScenarioRegistry.Register(method, () => Definition("di-none", "no di scenario",
             Node(0, "a", "a", invoke: (_, ctx) => { seen = ctx.Services; ran = true; return Task.FromResult<object?>(null); })));
 
-        var framework = new RaunTestFramework(new StubServiceProvider());
+        var framework = new RaunTestFramework(new TestPlatformServices());
         var uid = new SessionUid("di-none-run");
         await framework.CreateTestSession(uid);
 
@@ -181,30 +181,6 @@ public class RunLoopFrameworkTests
 
         Assert.True(ran);
         Assert.Null(seen);
-    }
-
-    /// <summary>
-    /// A provider standing in for MTP's own. Identity is what these tests assert on; it only has to
-    /// answer <see cref="ICommandLineOptions"/> because the framework consults it (for --report-html)
-    /// before the run loop starts, and MTP's accessor extension throws on a missing service.
-    /// </summary>
-    private sealed class StubServiceProvider : IServiceProvider
-    {
-        public object? GetService(Type serviceType) =>
-            serviceType == typeof(ICommandLineOptions) ? new NoOptions() : null;
-
-        private sealed class NoOptions : ICommandLineOptions
-        {
-            public bool IsOptionSet(string optionName) => false;
-
-            public bool TryGetOptionArgumentList(
-                string optionName,
-                [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string[]? arguments)
-            {
-                arguments = null;
-                return false;
-            }
-        }
     }
 
     private sealed class RecordingMessageBus : IMessageBus

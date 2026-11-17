@@ -8,9 +8,6 @@ namespace Raun.Mtp.HtmlReport;
 /// or returns <see langword="null"/> when <c>--report-html</c> is absent.</summary>
 internal static class HtmlReportPath
 {
-    // MTP's well-known results-directory configuration key (PlatformConfigurationConstants is internal).
-    private const string ResultsDirectoryKey = "platformOptions:resultDirectory";
-
     /// <summary>Pure resolution from the three inputs. Falls back to the current directory when MTP
     /// did not supply a results directory.</summary>
     public static string? Resolve(bool enabled, string? filename, string? resultsDirectory)
@@ -25,9 +22,8 @@ internal static class HtmlReportPath
         return Path.Combine(dir, name);
     }
 
-    internal static Raun.Reporting.Html.HtmlReportSourceOptions? ResolveSourceOptions(IServiceProvider? services)
+    internal static Raun.Reporting.Html.HtmlReportSourceOptions? ResolveSourceOptions(IServiceProvider services)
     {
-        if (services is null) { return null; }
         var options = services.GetCommandLineOptions();
         if (!options.TryGetOptionArgumentList(HtmlReportOptionsProvider.SourceBaseUrlOption, out var values)
             || values.Length == 0) { return null; }
@@ -37,13 +33,8 @@ internal static class HtmlReportPath
     }
 
     /// <summary>Reads the inputs off the framework's MTP service provider.</summary>
-    public static string? Resolve(IServiceProvider? services)
+    public static string? Resolve(IServiceProvider services)
     {
-        if (services is null)
-        {
-            return null;
-        }
-
         ICommandLineOptions options = services.GetCommandLineOptions();
         if (!options.IsOptionSet(HtmlReportOptionsProvider.EnableOption))
         {
@@ -56,6 +47,6 @@ internal static class HtmlReportPath
             : null;
 
         IConfiguration configuration = services.GetConfiguration();
-        return Resolve(enabled: true, filename, resultsDirectory: configuration[ResultsDirectoryKey]);
+        return Resolve(enabled: true, filename, resultsDirectory: configuration[RaunAttachments.ResultsDirectoryKey]);
     }
 }

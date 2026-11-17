@@ -18,15 +18,9 @@ internal static class ScenarioParallelism
     /// <summary>
     /// The degree for this run: <c>--max-parallel-scenarios</c> when given and valid, otherwise
     /// <paramref name="codeDefault"/> (what <c>RaunTestApplication.RunAsync</c> was called with).
-    /// A null <paramref name="services"/> is the unit-test path with no MTP host.
     /// </summary>
-    public static int Resolve(IServiceProvider? services, int codeDefault)
+    public static int Resolve(IServiceProvider services, int codeDefault)
     {
-        if (services is null)
-        {
-            return codeDefault;
-        }
-
         ICommandLineOptions options = services.GetCommandLineOptions();
         return options.TryGetOptionArgumentList(RunOptionsProvider.MaxParallelScenariosOption, out var arguments)
             && TryParse(arguments, out var degree)
