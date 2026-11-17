@@ -148,6 +148,7 @@ public class PreflightTests
         Assert.Equal(2, steps.Count);
         Assert.All(steps, e => Assert.Equal(StepStatus.Skipped, e.Result.Status));
         Assert.All(steps, e => Assert.Contains("preflight failed", e.Result.SkipReason!, StringComparison.Ordinal));
+        Assert.All(steps, e => Assert.Null(e.Result.StartedAt)); // they never reached the scheduler
     }
 
     [Fact]

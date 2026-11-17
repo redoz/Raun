@@ -106,9 +106,21 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
 
         public Type? WaitedFor { get; set; }
 
-        // SkipScenarioAsync reports a scenario that never ran with StartedAt = default; such results
-        // have no place on a timeline.
-        private IEnumerable<StepResult> Timed => _results.Where(r => r.StartedAt != default);
+        /// <summary>The steps that ran or were skipped by the scheduler; a step with no start has no
+        /// place on a timeline.</summary>
+        private IEnumerable<(DateTimeOffset StartedAt, TimeSpan Duration)> Timed
+        {
+            get
+            {
+                foreach (var result in _results)
+                {
+                    if (result.StartedAt is { } startedAt)
+                    {
+                        yield return (startedAt, result.Duration);
+                    }
+                }
+            }
+        }
 
         public bool HasSteps => Timed.Any();
 
@@ -162,9 +174,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
             for (var i = 0; i < ordered.Count; i++)
             {
                 var r = ordered[i];
-                // A result with StartedAt = default never ran (SkipScenarioAsync); it has no real
-                // offset from start, so pin it to 0 rather than subtracting into a huge negative span.
-                var offset = r.StartedAt == default ? 0 : Ms(r.StartedAt - start);
+                var offset = r.StartedAt is { } startedAt ? Ms(startedAt - start) : 0;
                 steps.Add(new ReportStep
                 {
                     StepId = r.Node.StepId,
@@ -315,7 +325,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
             var lanes = new int[ordered.Count];
             for (var i = 0; i < ordered.Count; i++)
             {
-                var s = ordered[i].StartedAt == default ? 0 : Ms(ordered[i].StartedAt - start);
+                var s = ordered[i].StartedAt is { } startedAt ? Ms(startedAt - start) : 0;
                 var e = s + Ms(ordered[i].Duration);
                 var lane = -1;
                 for (var l = 0; l < laneEnds.Count; l++)

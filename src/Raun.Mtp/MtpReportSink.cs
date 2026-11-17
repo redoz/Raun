@@ -72,8 +72,11 @@ internal sealed class MtpReportSink : RunEventSink
 
         // Absolute window from the scheduler-stamped StartedAt: accurate even for concurrent steps,
         // which a finish-anchored (UtcNow - Duration) window is not.
-        testNode.Properties.Add(new TimingProperty(
-            new TimingInfo(result.StartedAt, result.StartedAt + result.Duration, result.Duration)));
+        if (result.StartedAt is { } startedAt)
+        {
+            testNode.Properties.Add(new TimingProperty(
+                new TimingInfo(startedAt, startedAt + result.Duration, result.Duration)));
+        }
 
         var output = string.Concat(StepReporting.OutputLines(result).Select(line => line + Environment.NewLine));
         if (output.Length > 0)

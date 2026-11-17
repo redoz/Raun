@@ -38,9 +38,11 @@ public sealed class StepResult
     public required StepStatus Status { get; init; }
 
     /// <summary>Absolute wall-clock instant the step began (stamped scheduler-side via an injected
-    /// <see cref="TimeProvider"/>). Skipped steps carry the instant at skip time; <see cref="Duration"/>
-    /// stays zero. <c>FinishedAt</c> is derived (<c>StartedAt + Duration</c>), not stored.</summary>
-    public required DateTimeOffset StartedAt { get; init; }
+    /// <see cref="TimeProvider"/>), or null when the step never reached the scheduler because its
+    /// scenario was skipped after a failed preflight. A step the scheduler skipped carries the instant
+    /// at skip time; <see cref="Duration"/> stays zero. <c>FinishedAt</c> is derived
+    /// (<c>StartedAt + Duration</c>), not stored.</summary>
+    public required DateTimeOffset? StartedAt { get; init; }
 
     /// <summary>Wall-clock duration the operation ran (zero for skipped steps).</summary>
     public TimeSpan Duration { get; init; }

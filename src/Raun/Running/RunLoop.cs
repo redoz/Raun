@@ -361,7 +361,7 @@ public sealed class RunLoop
                     DisplayName = titleMessage.Text,
                     TitleMessage = titleMessage,
                     Status = StepStatus.Skipped,
-                    StartedAt = default,
+                    StartedAt = null,
                     SkipReason = Preflight.FailedSkipReason,
                     NoteMessages = StepNotes.FormatMessages(node, formatting),
                 };

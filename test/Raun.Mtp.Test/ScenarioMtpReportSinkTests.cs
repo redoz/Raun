@@ -278,6 +278,45 @@ public class ScenarioMtpReportSinkTests
     }
 
     [Fact]
+    public async Task Steps_that_never_started_do_not_move_the_window()
+    {
+        var def = Definition();
+        var neverStarted = new StepResult
+        {
+            Node = def.Nodes[1],
+            DisplayName = "step b",
+            Status = StepStatus.Skipped,
+            StartedAt = null,
+            SkipReason = "preflight failed",
+        };
+
+        var node = await Finish(def, Result(def, 2, StepStatus.Passed), neverStarted);
+
+        var timing = Assert.Single(node.Properties.OfType<TimingProperty>()).GlobalTiming;
+        Assert.Equal(Start + TimeSpan.FromSeconds(2), timing.StartTime);
+        Assert.Equal(Start + TimeSpan.FromSeconds(2.5), timing.EndTime);
+    }
+
+    [Fact]
+    public async Task A_scenario_whose_steps_never_started_carries_no_timing()
+    {
+        var def = Definition();
+        var neverStarted = def.Nodes.Select(n => new StepResult
+        {
+            Node = n,
+            DisplayName = n.DisplayNameTemplate,
+            Status = StepStatus.Skipped,
+            StartedAt = null,
+            SkipReason = "preflight failed",
+        }).ToArray();
+
+        var node = await Finish(def, neverStarted);
+
+        Assert.Empty(node.Properties.OfType<TimingProperty>());
+        Assert.IsType<SkippedTestNodeStateProperty>(node.Properties.OfType<TestNodeStateProperty>().Single());
+    }
+
+    [Fact]
     public async Task Attachments_of_every_step_land_on_the_scenario_node()
     {
         var root = Path.Combine(Path.GetTempPath(), "raun-attach-test-" + Guid.NewGuid().ToString("N"));

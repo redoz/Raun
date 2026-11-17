@@ -359,6 +359,27 @@ public class MtpReportSinkTests
     }
 
     [Fact]
+    public async Task A_step_that_never_started_carries_no_timing()
+    {
+        var def = Definition(id: "s", nodes: [Node(0, "a", "step a")]);
+        var (sink, bus) = NewSink();
+
+        await sink.PublishAsync(new ScenarioStarted(def));
+        await sink.PublishAsync(new StepFinished(def, new StepResult
+        {
+            Node = def.Nodes[0],
+            DisplayName = "step a",
+            Status = StepStatus.Skipped,
+            StartedAt = null,
+            SkipReason = "preflight failed",
+        }));
+
+        var node = Assert.Single(bus.Nodes);
+        Assert.Empty(node.Properties.OfType<TimingProperty>());
+        Assert.NotEmpty(node.Properties.OfType<SkippedTestNodeStateProperty>());
+    }
+
+    [Fact]
     public async Task Finished_update_carries_timing_property()
     {
         var def = Definition(id: "s", nodes: [Node(0, "a", "step a")]);

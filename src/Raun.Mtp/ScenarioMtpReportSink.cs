@@ -45,9 +45,16 @@ internal sealed class ScenarioMtpReportSink : RunEventSink
 
         if (steps.Count > 0)
         {
-            var start = steps[0].StartedAt;
-            var end = steps.Max(r => r.StartedAt + r.Duration);
-            testNode.Properties.Add(new TimingProperty(new TimingInfo(start, end, end - start)));
+            var windows = steps
+                .Where(r => r.StartedAt is not null)
+                .Select(r => (Start: r.StartedAt!.Value, End: r.StartedAt!.Value + r.Duration))
+                .ToList();
+            if (windows.Count > 0)
+            {
+                var start = windows.Min(w => w.Start);
+                var end = windows.Max(w => w.End);
+                testNode.Properties.Add(new TimingProperty(new TimingInfo(start, end, end - start)));
+            }
 
             testNode.Properties.Add(new StandardOutputProperty(Describe(e.Definition, steps)));
             foreach (var step in steps)
