@@ -15,9 +15,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Version comes from $(RaunRoslynVersion) via Directory.Packages.props. PrivateAssets
-         keeps the Roslyn dependency from flowing to consumers of the generator. -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <!-- Pinned to the baseline, not the central version: a compiler older than the Roslyn this
+         assembly references refuses to load it (CS9057, a warning) and no scenario is generated.
+         The pack folder in Raun.csproj carries the same $(RaunRoslynVersion). PrivateAssets keeps
+         the Roslyn dependency from flowing to consumers of the generator. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="$(RaunRoslynVersion).0" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
