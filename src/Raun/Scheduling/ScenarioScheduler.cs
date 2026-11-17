@@ -1007,7 +1007,10 @@ public sealed class ScenarioScheduler
             stepContexts[node.Index] = context;
         }
 
-        foreach (var note in StepNotes.FormatMessages(node, messageFormatting, inputs))
+        void FormatterFailed(Exception ex)
+            => context.Log($"A title or note formatter threw {ex.GetType().Name}: {ex.Message}");
+
+        foreach (var note in StepNotes.FormatMessages(node, messageFormatting, inputs, FormatterFailed))
         {
             context.AddNote(note);
         }
@@ -1038,7 +1041,7 @@ public sealed class ScenarioScheduler
                 {
                     scenarioToken.ThrowIfCancellationRequested();
                     inputs = new PreparedInputs(inputs, prepare(inputs));
-                    titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs);
+                    titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs, FormatterFailed);
                     titleMessages[node.Index] = titleMessage;
                     displayName = titleMessage.Text;
                     context.SetDisplayName(displayName);
@@ -1084,7 +1087,7 @@ public sealed class ScenarioScheduler
             stopwatch.Stop();
             activity?.SetTag(RaunTelemetry.Attributes.TestCaseResultStatus, "pass");
             titleMessage = context.ArgumentTitleMessage ?? titleMessage;
-            var completedTitle = StepNotes.FormatCompletedTitle(node, titleMessage, output, messageFormatting);
+            var completedTitle = StepNotes.FormatCompletedTitle(node, titleMessage, output, messageFormatting, FormatterFailed);
             return new NodeOutcome(
                 new StepResult
                 {
@@ -1274,7 +1277,7 @@ public sealed class ScenarioScheduler
         {
             if (status[producerIndex] != StepStatus.Passed)
             {
-                throw new InvalidOperationException(
+                throw new StepInputUnavailableException(
                     $"Step input {producerIndex} was read before that node produced a value: the reading step does not depend on it.");
             }
 

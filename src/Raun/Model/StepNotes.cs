@@ -2,10 +2,15 @@ using System.Globalization;
 
 namespace Raun.Model;
 
-/// <summary>Formats step metadata without letting unavailable inputs change the outcome.</summary>
+/// <summary>
+/// Formats step metadata without letting a formatter change the outcome. A formatter that reads an
+/// input with no value falls back silently; one that throws anything else also falls back, and is
+/// handed to <c>onFailure</c> so the step can say so.
+/// </summary>
 internal static class StepNotes
 {
-    internal static StepMessage FormatTitle(ScenarioNode node, MessageFormattingContext formatting, IStepInputs? inputs = null)
+    internal static StepMessage FormatTitle(
+        ScenarioNode node, MessageFormattingContext formatting, IStepInputs? inputs = null, Action<Exception>? onFailure = null)
     {
         try
         {
@@ -19,15 +24,19 @@ internal static class StepNotes
                 return StepMessage.FromText(legacy(inputs ?? UnavailableInputs.Instance));
             }
         }
-        catch
+        catch (StepInputUnavailableException)
         {
-            // Missing inputs or a failing title must not change the test outcome.
+        }
+        catch (Exception ex)
+        {
+            onFailure?.Invoke(ex);
         }
         return StepMessage.FromText(node.DisplayNameTemplate);
     }
 
     internal static StepMessage FormatCompletedTitle(
-        ScenarioNode node, StepMessage initialTitle, object? output, MessageFormattingContext formatting)
+        ScenarioNode node, StepMessage initialTitle, object? output, MessageFormattingContext formatting,
+        Action<Exception>? onFailure = null)
     {
         if (output is not null && node.FormatCompletedTitleMessage is { } completed)
         {
@@ -36,15 +45,16 @@ internal static class StepNotes
                 var titleFormatting = formatting.ForStep(node.Index).WithFormatProvider(CultureInfo.InvariantCulture);
                 return completed(initialTitle, output, titleFormatting) ?? initialTitle;
             }
-            catch
+            catch (Exception ex)
             {
-                // Completion formatting is evidence only; preserve the title recorded at start.
+                onFailure?.Invoke(ex);
             }
         }
         return initialTitle;
     }
 
-    internal static StepMessage[] FormatMessages(ScenarioNode node, MessageFormattingContext formatting, IStepInputs? inputs = null)
+    internal static StepMessage[] FormatMessages(
+        ScenarioNode node, MessageFormattingContext formatting, IStepInputs? inputs = null, Action<Exception>? onFailure = null)
     {
         var notes = new List<StepMessage>();
         var available = inputs ?? UnavailableInputs.Instance;
@@ -71,9 +81,12 @@ internal static class StepNotes
                 var message = format();
                 if (!string.IsNullOrWhiteSpace(message.Text)) { notes.Add(message); }
             }
-            catch
+            catch (StepInputUnavailableException)
             {
-                // Each explanation is independent, so one unavailable input cannot erase the others.
+            }
+            catch (Exception ex)
+            {
+                onFailure?.Invoke(ex);
             }
         }
     }
@@ -83,6 +96,6 @@ internal static class StepNotes
         public static UnavailableInputs Instance { get; } = new();
 
         public T Get<T>(int producerIndex)
-            => throw new InvalidOperationException($"Step input {producerIndex} is unavailable because the scenario did not run.");
+            => throw new StepInputUnavailableException($"Step input {producerIndex} is unavailable because the scenario did not run.");
     }
 }

@@ -21,7 +21,7 @@ internal sealed class ResourceLabelMemory(IReadOnlyList<ScenarioNode> nodes)
             {
                 if (resolver.TryResolveSourceLabel(sourceType, value, out var label)) { observed = label; }
             }
-            catch
+            catch (Exception)
             {
                 // A user label selector is presentation only. Keep earlier usable evidence.
             }

@@ -903,7 +903,7 @@ public class SchedulerTests
 
         var reader = results.Single(r => r.Node.Index == 1);
         Assert.Equal(StepStatus.Failed, reader.Status);
-        var ex = Assert.IsType<InvalidOperationException>(reader.Exception);
+        var ex = Assert.IsAssignableFrom<InvalidOperationException>(reader.Exception);
         Assert.Contains("0", ex.Message, StringComparison.Ordinal);
         Assert.Contains("depend", ex.Message, StringComparison.Ordinal);
     }

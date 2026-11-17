@@ -40,6 +40,39 @@ public sealed class TaskNoteTests
     }
 
     [Fact]
+    public async Task A_note_formatter_that_throws_is_logged_on_its_step_and_does_not_fail_it()
+    {
+        var node = NoteNode(0, (_, _) => Task.FromResult<object?>(42),
+            [_ => throw new FormatException("bad note"), _ => "still here"]);
+
+        var result = Assert.Single(await new ScenarioScheduler().RunAsync(NoteDefinition(node)));
+
+        Assert.Equal(StepStatus.Passed, result.Status);
+        Assert.Equal(["still here"], result.Notes);
+        var line = Assert.Single(result.Logs);
+        Assert.Contains("FormatException", line, StringComparison.Ordinal);
+        Assert.Contains("bad note", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_note_that_reads_an_input_with_no_value_is_dropped_without_a_log_line()
+    {
+        var failing = NoteNode(0, (_, _) => throw new InvalidOperationException("producer failed"));
+        var reader = new ScenarioNode
+        {
+            Index = 1, StepId = "note-1", Phase = "Given", OperationName = "read", DisplayNameTemplate = "read",
+            DependsOn = [0], Invoke = (_, _) => Task.FromResult<object?>(null),
+            FormatNotes = [inputs => "value " + inputs.Get<int>(0)],
+        };
+
+        var results = await new ScenarioScheduler().RunAsync(NoteDefinition(failing, reader));
+
+        Assert.Equal(StepStatus.Skipped, results[1].Status);
+        Assert.Empty(results[1].Notes);
+        Assert.Empty(results[1].Logs);
+    }
+
+    [Fact]
     public async Task A_filtered_step_formats_notes_after_selected_inputs_finish()
     {
         var producer = NoteNode(0, (_, _) => Task.FromResult<object?>(42));
