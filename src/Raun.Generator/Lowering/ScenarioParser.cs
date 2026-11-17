@@ -1023,10 +1023,8 @@ internal sealed class ScenarioParser
         var waits = new SortedSet<int>(arms.SelectMany(a => a.Waits));
         waits.Remove(conditionIndex);
 
-        // A following statement must never DEPEND on an arm's node (DependsOn is all-of and an arm may
-        // not run); it joins on the merges, or on the condition when there are none. It must still
-        // WAIT for every arm's last steps, or it would run concurrently with the inside of the branch —
-        // that is what WaitsFor carries, and a not-taken arm does not cascade through it.
+        // The statement after the branch depends on the merges (or the condition when there are none)
+        // and waits for every arm's last steps: see ScenarioNode.WaitsFor.
         Advance(frontier.Count > 0 ? frontier : [conditionIndex], [.. waits]);
         return ok;
     }

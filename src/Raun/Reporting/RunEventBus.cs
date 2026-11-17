@@ -6,6 +6,12 @@ namespace Raun.Reporting;
 /// delivering to the remaining sinks and to that sink on later events. A broken report sink must
 /// never fail the run or starve the MTP reporter.
 /// </summary>
+/// <remarks>
+/// Scenarios run concurrently, so <see cref="PublishAsync"/> is called from several async flows at
+/// once. Publications take turns in call order: each waits for the previous one to finish before
+/// delivering, so a sink sees one event at a time and needs no locking of its own. A scenario's own
+/// events stay in order; events of different scenarios interleave.
+/// </remarks>
 public sealed class RunEventBus : IRunEventSink
 {
     private readonly IReadOnlyList<IRunEventSink> _sinks;
@@ -24,13 +30,7 @@ public sealed class RunEventBus : IRunEventSink
     /// <summary>The first error each failed sink raised, in sink order; empty when all sinks held.</summary>
     public IReadOnlyList<Exception> Failures => _failures;
 
-    // THREADING: scenarios run concurrently, so PublishAsync is called from several async flows at
-    // once. Publications take turns in call order: each waits for the previous one to finish before
-    // delivering, so every sink still sees one event at a time and the accumulators behind them
-    // (HtmlReportModelBuilder, _failures) need no locking. Within one scenario the scheduler raises
-    // callbacks serially, so a scenario's own events stay in order; different scenarios interleave.
-    // A sink must not call back into the bus from inside its own PublishAsync before yielding — the
-    // turn queue is not reentrant and such a call would wait on itself.
+    /// <summary>Delivers one event to every sink, after every earlier publication has finished.</summary>
     public async ValueTask PublishAsync(RunEvent evt)
     {
         ArgumentNullException.ThrowIfNull(evt);

@@ -172,11 +172,10 @@ public sealed class ScenarioScheduler
         var teardownLog = new TeardownLog();
         var ledger = new ResourceLedger(nodes);
 
-        // Simulated-time bookkeeping. The base instant is sampled once; per-node start/finish offsets
-        // (TimeSpan from base) compose the DAG-correct timeline. Unused in real mode.
-        // The simulated base instant (simulated mode only). Log offsets are measured from the scenario
-        // start held in scenarioStartRef: known up front in simulated mode, learned from the first step
-        // to start in real mode, so no extra clock read shifts any StartedAt.
+        // Simulated mode samples the base instant once; per-node start/finish offsets from it compose
+        // the timeline. Log offsets are measured from the scenario start held in scenarioStartRef:
+        // known up front in simulated mode, learned from the first step to start in real mode, so no
+        // extra clock read shifts any StartedAt.
         var scenarioStart = _simulatedTime ? _timeProvider.GetUtcNow() : default;
         var scenarioStartRef = new ScenarioStart();
         if (_simulatedTime)
@@ -235,9 +234,7 @@ public sealed class ScenarioScheduler
                     }
                 }
 
-                // 1a. Waits-for: ordering only. A not-taken predecessor is a decision that does not
-                // concern this node (the arm was simply not chosen, and this node sits after the if),
-                // so it neither blocks nor cascades; failed/skipped cascade exactly as for DependsOn.
+                // 1a. Waits-for: ordering only (see ScenarioNode.WaitsFor).
                 foreach (var wait in node.WaitsFor)
                 {
                     switch (status[wait])

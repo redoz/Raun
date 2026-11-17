@@ -38,7 +38,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
         var acc = Find(definition.ScenarioId);
         if (acc is null)
         {
-            // Driven without a RunStarted order (a sink under unit test): append as they come.
+            // RunStarted may carry no order (its Scenarios is optional): append as they come.
             acc = new ScenarioAccumulator(definition);
             _scenarios.Add(acc);
         }

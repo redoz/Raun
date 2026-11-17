@@ -388,8 +388,6 @@ public sealed class RunLoop
         Type? waitedFor,
         CancellationToken cancellationToken)
     {
-        // One CTS per scenario run, owned here and linked to the platform token. Tying cancellation
-        // to the run (not to any single step node) is what keeps a sibling from canceling the run.
         using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         await bus.PublishAsync(new ScenarioStarted(definition, waited, waitedFor)).ConfigureAwait(false);
 
@@ -467,7 +465,7 @@ public sealed class RunLoop
 
         if (waited > TimeSpan.Zero)
         {
-            // A refused scenario waited, even when the clock rounds it to 0 ms: report at least 1 so the tag exists.
+            // A wait under a millisecond truncates to 0, which reads as "did not wait": report at least 1.
             activity.SetTag(RaunTelemetry.Attributes.ScenarioWaitedMs, Math.Max(1L, (long)waited.TotalMilliseconds));
             activity.SetTag(RaunTelemetry.Attributes.ScenarioWaitedFor, waitedFor?.Name);
         }
@@ -516,8 +514,7 @@ public sealed class RunLoop
         return targets;
     }
 
-    // Instance (not static) because it reads the simulateTime field to pick the scheduler's timing
-    // mode. The provider comes in per scenario: it is the scenario's DI scope, not the root.
+    // The provider comes in per scenario: it is the scenario's DI scope, not the root.
     private async Task<IReadOnlyList<StepResult>> DefaultRunScenario(
         ScenarioDefinition definition,
         IStepObserver observer,
