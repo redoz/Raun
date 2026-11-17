@@ -146,6 +146,32 @@ such a build up front with `RAUN018`, comparing `$(NETCoreSdkVersion)` against
 Supported baseline today: the .NET 10 SDK 10.0.300 or later. Adding an older baseline means a
 `Raun.Generator.RoslynNN` variant project (see `Directory.Build.props`), not a version bump.
 
+Three things state the baseline and move together: `RaunRoslynVersion` in `Directory.Build.props`
+(the `roslynX.Y` pack folder, and through `VersionOverride` the Roslyn the generator compiles
+against), and `RaunMinimumSdkVersion` in `buildTransitive/Raun.props`. NuGet picks the analyzer
+folder by its name alone; a compiler older than the assembly's real reference then skips the
+generator with warning CS9057 and the build stays green. The central `Microsoft.CodeAnalysis`
+versions in `Directory.Packages.props` are not the generator's: they serve `Raun.Coverage` and the
+generator tests.
+
+| .NET SDK | Roslyn |
+| --- | --- |
+| 10.0.1xx | 5.0 |
+| 10.0.2xx | 5.3 |
+| 10.0.3xx | 5.6 |
+| 10.0.4xx | 5.9 |
+| 11.0.100 | 5.12 |
+
+The `net10.0` dependency groups stay on 10.x `Microsoft.Extensions.*` packages: an 11.x
+dependency fails restore with NU1109 for a .NET 10 consumer that pins transitive packages. On
+`net11.0` the same entries are pruned or act as a lower bound. Dependabot ignores major updates
+of those packages and minor or major updates of Roslyn.
+
+The package-consumption scenarios enforce all of this: they read each packed analyzer's Roslyn
+reference against its folder name, check the `net10.0` dependency groups, and build their
+consumers with the lowest supported SDK installed (CI installs 10.0.300 for it), not the SDK
+`global.json` pins.
+
 The libraries ship `lib/net10.0` and `lib/net11.0` (`RaunTargetFrameworks` in
 `Directory.Build.props`), and the tests run on both. The repository builds with the .NET 11 SDK
 pinned in `global.json`; CI also installs the .NET 10 SDK for the `net10.0` test runs. The generator

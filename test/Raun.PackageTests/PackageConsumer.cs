@@ -42,6 +42,26 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         return repo.FullName;
     }
 
+    /// <summary>The SDK consumers are built with: the lowest installed one that Raun supports
+    /// (<c>RaunMinimumSdkVersion</c> in the shipped props). CI installs exactly the floor.</summary>
+    public static Lazy<string> ConsumerSdk { get; } = new(() =>
+    {
+        var props = XDocument.Load(Path.Combine(FindRepository(), "src", "Raun", "buildTransitive", "Raun.props"));
+        var floor = System.Version.Parse(props.Descendants().Single(e => e.Name.LocalName == "RaunMinimumSdkVersion").Value);
+        var start = new ProcessStartInfo("dotnet", "--list-sdks") { RedirectStandardOutput = true, UseShellExecute = false };
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start dotnet.");
+        var installed = process.StandardOutput.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Split(' ')[0])
+            .Where(sdk => !sdk.Contains('-', StringComparison.Ordinal))
+            .Select(sdk => (Text: sdk, Version: System.Version.Parse(sdk)))
+            .Where(sdk => sdk.Version >= floor)
+            .OrderBy(sdk => sdk.Version)
+            .ToList();
+        process.WaitForExit();
+        Assert.True(installed.Count > 0, $"No installed .NET SDK is at or above Raun's floor {floor}.");
+        return installed[0].Text;
+    });
+
     public static PackageFeed FindFeed()
     {
         var feed = Path.GetFullPath(Environment.GetEnvironmentVariable("RAUN_PACKAGE_FEED") ?? Path.Combine(FindRepository(), "artifacts"));
@@ -103,7 +123,17 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             """);
         File.WriteAllText(Path.Combine(root, "Directory.Build.targets"), "<Project />");
         File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project />");
-        File.Copy(Path.Combine(repo, "global.json"), Path.Combine(root, "global.json"));
+        // Not the repository's global.json: that pins the newest SDK, and a consumer on the oldest
+        // supported one is who meets an analyzer its compiler cannot load.
+        File.WriteAllText(Path.Combine(root, "global.json"),
+            new System.Text.Json.Nodes.JsonObject
+            {
+                ["sdk"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["version"] = ConsumerSdk.Value,
+                    ["rollForward"] = "disable",
+                },
+            }.ToJsonString());
         new XDocument(new XElement("configuration",
             new XElement("packageSources", new XElement("clear"),
                 new XElement("add", new XAttribute("key", "local"), new XAttribute("value", feed)),
@@ -204,6 +234,14 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         start.Environment["NUGET_PACKAGES"] = Path.Combine(Root, ".packages");
         start.Environment["NUGET_HTTP_CACHE_PATH"] = Path.Combine(Root, ".http-cache");
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en-US";
+        // `dotnet run` and `dotnet test` export their own SDK's MSBuild locations. Inherited, they
+        // make the consumer's (older) SDK load this process's (newer) targets.
+        foreach (var inherited in start.Environment.Keys
+                     .Where(key => key.StartsWith("MSBUILD", StringComparison.OrdinalIgnoreCase) || key == "DOTNET_HOST_PATH")
+                     .ToList())
+        {
+            start.Environment.Remove(inherited);
+        }
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start dotnet.");
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();

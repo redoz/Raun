@@ -20,6 +20,15 @@ updates:
         versions: ['>= 18.10']
       - dependency-name: Microsoft.NET.StringTools
         versions: ['>= 18.10']
+      # Roslyn moves by hand. The generator builds against RaunRoslynVersion whatever the central
+      # version says, but Raun.Coverage ships the Workspaces packages as dependencies, and a consumer
+      # pinning Roslyn packages sees every bump.
+      - dependency-name: Microsoft.CodeAnalysis*
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      # The net10.0 libraries must depend on 10.x: an 11.x dependency fails restore (NU1109) for a
+      # .NET 10 consumer pinning transitive packages. Lift when net10.0 is dropped.
+      - dependency-name: Microsoft.Extensions.*
+        update-types: ['version-update:semver-major']
       # A security pin for a transitive dependency of StreamJsonRpc, which is built against 2.x.
       - dependency-name: MessagePack
         update-types: ['version-update:semver-major']

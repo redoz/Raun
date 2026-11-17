@@ -15,6 +15,11 @@ app with a generated entry point. Each consumer lives outside the repository, us
 exact package versions and a fresh cache, and gets Raun packages only from the local
 feed. External dependencies use the versions in the samples' lock files.
 
+Consumers are built with the lowest installed .NET SDK that Raun supports, not the SDK the
+repository pins: a generator the oldest supported compiler cannot load builds fine on the newest.
+A fourth scenario reads the packages themselves: every analyzer must reference a Roslyn no newer
+than its `roslynX.Y` folder names, and the `net10.0` dependency groups must stay on 10.x.
+
 The suite uses project references to bootstrap itself; only its child projects use
 the packages. It stays outside `Raun.slnx` because the packages must exist before it
 runs. CI and release run it after packing and before publishing.

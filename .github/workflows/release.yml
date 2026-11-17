@@ -112,9 +112,14 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           # The SDK global.json pins (.NET 11) builds both targets; net10.0 tests need the 10 runtime.
-          # Exact version: the 10.0.x channel link redirects to a retired download origin (HTTP 409).
+          # 10.0.300 is Raun's SDK floor (RaunMinimumSdkVersion): the package-consumption scenarios
+          # build their consumers with the lowest supported SDK installed, so a generator that an
+          # older compiler cannot load fails here and not at a consumer.
+          # Exact versions: the 10.0.x channel link redirects to a retired download origin (HTTP 409).
           global-json-file: global.json
-          dotnet-version: 10.0.403
+          dotnet-version: |
+            10.0.300
+            10.0.403
 
       - name: Restore (locked)
         run: dotnet restore Raun.slnx --locked-mode

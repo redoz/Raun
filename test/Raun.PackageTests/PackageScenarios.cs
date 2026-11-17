@@ -38,6 +38,13 @@ public sealed class PackageScenarios : Scenarios
         }
         await (Then.ResolvesBuiltPackages(consumer), Then.ReportContainsPassingScenarios(report));
     }
+
+    [Scenario("built packages suit the oldest supported consumer")]
+    public async Task PackagesSuitTheBaseline()
+    {
+        var feed = await Given.BuiltPackages();
+        await (Then.AnalyzersLoadOnTheirRoslynBaseline(feed), Then.Net10DependenciesStayOn10(feed));
+    }
 }
 
 public sealed class PackageGiven : Given
@@ -51,7 +58,7 @@ public sealed class PackageGiven : Given
     public Task<PackageConsumer> IsolatedConsumer([Isolated.Feed] PackageFeed feed, string sample)
     {
         var consumer = PackageConsumer.Prepare(feed, sample, Context);
-        Context.Log($"Created {consumer} from {feed} in {consumer.Root}");
+        Context.Log($"Created {consumer} from {feed} in {consumer.Root}, built with the .NET SDK {PackageConsumer.ConsumerSdk.Value}");
         return Task.FromResult(consumer);
     }
 
@@ -98,6 +105,28 @@ public sealed class PackageThen : Then
         Context.AddAttachment("consumer-report.html", html);
         var count = PackageConsumer.VerifyReport(html);
         Context.Log($"{report} contains {count} passing scenarios.");
+        return Task.CompletedTask;
+    }
+
+    [StepName("Then every analyzer in {feed} loads on the Roslyn its folder names")]
+    public Task AnalyzersLoadOnTheirRoslynBaseline([Read] PackageFeed feed)
+    {
+        foreach (var line in PackageContents.VerifyAnalyzersMatchTheirRoslynFolder(feed.Directory))
+        {
+            Context.Log(line);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    [StepName("Then the net10.0 dependencies of {feed} stay on 10.x")]
+    public Task Net10DependenciesStayOn10([Read] PackageFeed feed)
+    {
+        foreach (var line in PackageContents.VerifyNet10DependenciesStayOn10(feed.Directory))
+        {
+            Context.Log(line);
+        }
+
         return Task.CompletedTask;
     }
 
