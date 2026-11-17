@@ -17,11 +17,11 @@ const step=(o={})=>report({tests:['s1:a','s1:b','s2:a'],mutants:healthyMutants()
 test('passes for a healthy pair of runs',()=>assert.deepEqual(check(scenario(),step()),[]));
 test('fails when the scenario run lists step uids',()=>{
   const f=check(scenario({tests:['s1:a','s2']}),step());
-  assert.ok(f.some(m=>m.includes('s1:a')),f.join('\n'));
+  assert.ok(f.some(m=>/scenario run: test id s1:a looks like a step uid/.test(m)),f.join('\n'));
 });
 test('fails when the step run lists scenario uids',()=>{
   const f=check(scenario(),step({tests:['s1:a','s2']}));
-  assert.ok(f.some(m=>m.includes('s2')),f.join('\n'));
+  assert.ok(f.some(m=>/step run: test id s2 looks like a scenario uid/.test(m)),f.join('\n'));
 });
 test('fails when scenario ids differ between runs',()=>{
   const f=check(scenario(),step({tests:['s1:a','s3:a']}));
@@ -34,13 +34,18 @@ test('fails when a non-sentinel mutant survives',()=>{
 });
 test('fails when the sentinel mutant is killed',()=>{
   const bad=[mutant(2,'Killed'),mutant(3,'Killed')];
-  assert.ok(check(scenario({mutants:bad}),step({mutants:bad})).length>0);
-  assert.ok(check(scenario({mutants:bad}),step()).length>0);
-  assert.ok(check(scenario(),step({mutants:bad})).length>0);
+  const named=(f,run)=>f.some(x=>x.startsWith(`${run} run: sentinel mutant a.cs:2 Boolean is Killed`));
+  const both=check(scenario({mutants:bad}),step({mutants:bad}));
+  assert.ok(named(both,'scenario')&&named(both,'step'),both.join('\n'));
+  const first=check(scenario({mutants:bad}),step());
+  assert.ok(named(first,'scenario'),first.join('\n'));
+  const second=check(scenario(),step({mutants:bad}));
+  assert.ok(named(second,'step'),second.join('\n'));
 });
 test('fails when the sentinel mutant is not covered',()=>{
   const bad=[mutant(2,'NoCoverage'),mutant(3,'Killed')];
-  assert.ok(check(scenario({mutants:bad}),step({mutants:bad})).length>0);
+  const f=check(scenario({mutants:bad}),step({mutants:bad}));
+  assert.ok(f.some(x=>/sentinel mutant a\.cs:2 Boolean is NoCoverage/.test(x)),f.join('\n'));
 });
 test('fails when no sentinel line exists',()=>{
   const source='class A {}\n';
@@ -58,11 +63,14 @@ test('fails when a mutant exists in only one run',()=>{
 });
 test('fails on zero mutants',()=>{
   const f=check(scenario({mutants:[]}),step({mutants:[]}));
-  assert.ok(f.length>0);
+  assert.ok(f.includes('scenario run: no mutants'),f.join('\n'));
+  assert.ok(f.includes('step run: no mutants'),f.join('\n'));
 });
 test('fails on zero tests',()=>{
-  assert.ok(check(scenario({tests:[]}),step()).length>0);
-  assert.ok(check(scenario(),step({tests:[]})).length>0);
+  const a=check(scenario({tests:[]}),step());
+  assert.ok(a.includes('scenario run: no tests'),a.join('\n'));
+  const b=check(scenario(),step({tests:[]}));
+  assert.ok(b.includes('step run: no tests'),b.join('\n'));
 });
 test('pairs mutants across path separators',()=>{
   assert.deepEqual(check(scenario({file:'a\\b.cs'}),step({file:'a/b.cs'})),[]);
