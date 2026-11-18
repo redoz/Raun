@@ -260,7 +260,7 @@ public class TimeoutOwnershipTests
             new ScenarioNode
             {
                 Index = 1, StepId = id + "-cleanup", Phase = "Then", OperationName = "Teardown",
-                DisplayNameTemplate = "Teardown", DependsOn = [], IsTeardown = true,
+                DisplayNameTemplate = "Teardown", DependsOn = [], Kind = NodeKind.Teardown,
                 Invoke = (_, _) => Task.FromResult<object?>(null),
             },
         ],

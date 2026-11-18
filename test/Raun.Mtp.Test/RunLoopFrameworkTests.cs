@@ -38,7 +38,7 @@ public class RunLoopFrameworkTests
             DependsOn = dependsOn ?? [],
             Guards = guards ?? [],
             MergeSources = mergeSources ?? [],
-            IsSynthetic = synthetic,
+            Kind = mergeSources is { Length: > 0 } ? NodeKind.Merge : synthetic ? NodeKind.Case : NodeKind.Step,
             SelectArm = evaluate is null ? null : inputs => evaluate(inputs.Get<object?>(index)) ? 0 : 1,
             Arms = evaluate is null ? [] : ["if", "else"],
             Invoke = invoke ?? ((_, _) => Task.FromResult<object?>(null)),

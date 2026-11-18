@@ -35,7 +35,7 @@ public class MtpReportSinkTests
         SourceLine = line,
         DependsOn = [],
         GroupId = group,
-        IsSynthetic = synthetic,
+        Kind = synthetic ? NodeKind.Case : NodeKind.Step,
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 

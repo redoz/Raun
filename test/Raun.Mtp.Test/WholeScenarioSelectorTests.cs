@@ -18,7 +18,7 @@ public class WholeScenarioSelectorTests
         OperationName = $"Op{index}",
         DisplayNameTemplate = stepId,
         DependsOn = [],
-        IsSynthetic = synthetic,
+        Kind = synthetic ? NodeKind.Case : NodeKind.Step,
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 

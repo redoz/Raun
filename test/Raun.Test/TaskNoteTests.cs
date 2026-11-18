@@ -127,7 +127,7 @@ public sealed class TaskNoteTests
         var teardown = new ScenarioNode
         {
             Index = 1, StepId = "cleanup", Phase = "Teardown", OperationName = "Teardown", DisplayNameTemplate = "Teardown",
-            DependsOn = [], IsTeardown = true, Invoke = (_, _) => Task.FromResult<object?>(null),
+            DependsOn = [], Kind = NodeKind.Teardown, Invoke = (_, _) => Task.FromResult<object?>(null),
         };
         var results = await new ScenarioScheduler().RunAsync(NoteDefinition(node, teardown));
         Assert.Empty(results[0].Notes);

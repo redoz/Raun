@@ -29,7 +29,7 @@ namespace Raun.Generated
                 DependsOn = new int[]
                 {
                 },
-                IsSetup = true,
+                Kind = global::Raun.Model.NodeKind.Setup,
                 Invoke = static async (__inputs, __ctx) =>
                 {
                     var __r = await global::Raun.ScenarioScope.SetupAsync<global::Raun.NoWorld>(__ctx);
@@ -173,8 +173,7 @@ namespace Raun.Generated
                     3,
                     4
                 },
-                IsSynthetic = true,
-                Invoke = static (__inputs, __ctx) => global::System.Threading.Tasks.Task.FromResult<object?>(null)
+                Kind = global::Raun.Model.NodeKind.Merge
             };
             nodes[6] = new global::Raun.Model.ScenarioNode
             {
@@ -218,8 +217,7 @@ namespace Raun.Generated
                 DependsOn = new int[]
                 {
                 },
-                IsTeardown = true,
-                Invoke = static (__inputs, __ctx) => global::System.Threading.Tasks.Task.FromResult<object?>(null)
+                Kind = global::Raun.Model.NodeKind.Teardown
             };
             return new global::Raun.Model.ScenarioDefinition
             {

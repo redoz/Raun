@@ -58,23 +58,27 @@ public sealed class ScenarioNode
     /// </summary>
     public IReadOnlyList<int> WaitsFor { get; init; } = [];
 
-    /// <summary>True for generator plumbing (merge/pass-through nodes) that is not a business step:
-    /// excluded from MTP discovery and step numbering, retained in the HTML report model.</summary>
-    public bool IsSynthetic { get; init; }
+    /// <summary>What this node is. Everything that treats one kind of node differently reads this.</summary>
+    public NodeKind Kind { get; init; }
+
+    /// <summary>True for generator plumbing (<see cref="NodeKind.Case"/> and
+    /// <see cref="NodeKind.Merge"/>) that is not a business step: excluded from MTP discovery and
+    /// step numbering, retained in the HTML report model.</summary>
+    public bool IsSynthetic => Kind is NodeKind.Case or NodeKind.Merge;
 
     /// <summary>
     /// True for the scenario's single generator-emitted teardown node. The INVERSE of
     /// <see cref="IsSynthetic"/>: it is discovered and numbered like an ordinary step (users must see
     /// a failing cleanup in CI), and only the scheduler and the report treat it specially.
     /// </summary>
-    public bool IsTeardown { get; init; }
+    public bool IsTeardown => Kind == NodeKind.Teardown;
 
     /// <summary>
     /// True for the Setup node of a scenario with a world: the first node, which creates the world and
     /// on which every step depends, so a failed Setup skips them all. Discovered and reported like an
     /// ordinary step, but unnumbered, so adding a world does not renumber a scenario's steps.
     /// </summary>
-    public bool IsSetup { get; init; }
+    public bool IsSetup => Kind == NodeKind.Setup;
 
     /// <summary>
     /// For a condition node: which arm runs. Called once, after the node passes, with the scenario's
@@ -93,9 +97,12 @@ public sealed class ScenarioNode
 
     /// <summary>
     /// Runs the underlying DSL operation. Reads its arguments from <see cref="IStepInputs"/>,
-    /// returns the (boxed) output, or null for a non-result <c>Task</c>/<c>ValueTask</c>.
+    /// returns the (boxed) output, or null for a non-result <c>Task</c>/<c>ValueTask</c>. Required
+    /// for the kinds that run (<see cref="NodeKind.Step"/>, <see cref="NodeKind.Setup"/>,
+    /// <see cref="NodeKind.Case"/>); a <see cref="NodeKind.Merge"/> and the
+    /// <see cref="NodeKind.Teardown"/> node are never invoked and leave it null.
     /// </summary>
-    public required Func<IStepInputs, ScenarioContext, Task<object?>> Invoke { get; init; }
+    public Func<IStepInputs, ScenarioContext, Task<object?>>? Invoke { get; init; }
 
     /// <summary>Captures supplied arguments once when the node launches, before title formatting,
     /// claims, and invocation. Never called for discovery or skipped nodes. Failures fail this step.</summary>

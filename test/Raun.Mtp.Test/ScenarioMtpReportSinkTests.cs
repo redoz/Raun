@@ -21,15 +21,13 @@ public class ScenarioMtpReportSinkTests
     private static ScenarioNode Node(
         int index, string stepId, string template, bool synthetic = false, bool setup = false, bool teardown = false) => new()
     {
-        IsSetup = setup,
-        IsTeardown = teardown,
+        Kind = setup ? NodeKind.Setup : teardown ? NodeKind.Teardown : synthetic ? NodeKind.Case : NodeKind.Step,
         Index = index,
         StepId = stepId,
         Phase = "Given",
         OperationName = $"Op{index}",
         DisplayNameTemplate = template,
         DependsOn = [],
-        IsSynthetic = synthetic,
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 

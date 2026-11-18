@@ -113,9 +113,91 @@ public class ModelTests
         DisplayNameTemplate = "«merge»",
         DependsOn = [],
         MergeSources = sources,
-        IsSynthetic = true,
-        Invoke = (_, _) => Task.FromResult<object?>(null),
+        Kind = NodeKind.Merge,
     };
+
+    private static ScenarioNode Plain(int index, NodeKind kind = NodeKind.Step, bool withBody = true, params int[] dependsOn) => new()
+    {
+        Index = index,
+        StepId = $"step-{index}",
+        Phase = "When",
+        OperationName = $"Op{index}",
+        DisplayNameTemplate = $"op {index}",
+        DependsOn = dependsOn,
+        Kind = kind,
+        Invoke = withBody ? (_, _) => Task.FromResult<object?>(null) : null,
+    };
+
+    private static void Refused(ScenarioDefinition definition, string because)
+        => Assert.Contains(because, Assert.Throws<InvalidOperationException>(definition.Validate).Message, StringComparison.Ordinal);
+
+    [Fact]
+    public void Validate_rejects_a_node_whose_index_is_not_its_position()
+        => Refused(Def(Plain(0), Plain(5)), "a node's Index is its position");
+
+    [Fact]
+    public void Validate_rejects_a_second_teardown_node()
+        => Refused(Def(Plain(0), Plain(1, NodeKind.Teardown), Plain(2, NodeKind.Teardown)), "two teardown nodes");
+
+    [Fact]
+    public void Validate_rejects_a_second_setup_node()
+        => Refused(Def(Plain(0, NodeKind.Setup), Plain(1, NodeKind.Setup)), "two setup nodes");
+
+    [Fact]
+    public void Validate_rejects_a_teardown_that_depends_on_a_step()
+        => Refused(Def(Plain(0), Plain(1, NodeKind.Teardown, dependsOn: 0)), "runs after all of them");
+
+    [Fact]
+    public void Validate_rejects_a_step_that_depends_on_the_teardown()
+        => Refused(Def(Plain(0, NodeKind.Teardown), Plain(1, dependsOn: 0)), "refers to the teardown node");
+
+    [Fact]
+    public void Validate_accepts_a_teardown_and_a_merge_without_a_body()
+    {
+        var def = Def(
+            Cond(0),
+            Guarded(1, [new Guard(0, 0)], 0),
+            Guarded(2, [new Guard(0, 1)], 0),
+            Merge(3, 1, 2),
+            Plain(4, NodeKind.Teardown, withBody: false));
+
+        def.Validate(); // does not throw
+    }
+
+    [Theory]
+    [InlineData(NodeKind.Step)]
+    [InlineData(NodeKind.Setup)]
+    [InlineData(NodeKind.Case)]
+    public void Validate_rejects_a_node_that_runs_but_has_no_body(NodeKind kind)
+        => Refused(Def(Plain(0, kind, withBody: false)), "has no Invoke to run");
+
+    [Fact]
+    public void Validate_rejects_a_merge_without_sources()
+        => Refused(Def(Plain(0, NodeKind.Merge, withBody: false)), "a merge without sources");
+
+    [Fact]
+    public void Validate_rejects_merge_sources_on_a_node_that_is_not_a_merge()
+    {
+        var notAMerge = new ScenarioNode
+        {
+            Index = 3, StepId = "step-3", Phase = "When", OperationName = "Op3", DisplayNameTemplate = "op 3",
+            DependsOn = [], MergeSources = [1, 2], Invoke = (_, _) => Task.FromResult<object?>(null),
+        };
+
+        Refused(
+            Def(Cond(0), Guarded(1, [new Guard(0, 0)], 0), Guarded(2, [new Guard(0, 1)], 0), notAMerge),
+            "only a merge selects among sources");
+    }
+
+    [Fact]
+    public void Validate_rejects_a_cycle_through_a_guard()
+    {
+        // The condition depends on the step it guards: neither can start. Without the guard edge in
+        // the cycle check this passed validation and stalled the scheduler at run time.
+        var def = Def(Cond(0, 1), Guarded(1, [new Guard(0, 0)]));
+
+        Refused(def, "dependency cycle");
+    }
 
     [Fact]
     public void Validate_accepts_a_guarded_graph_with_a_merge()

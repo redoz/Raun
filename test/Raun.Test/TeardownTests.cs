@@ -110,7 +110,7 @@ public class TeardownTests
         OperationName = "Teardown",
         DisplayNameTemplate = "Teardown",
         DependsOn = [],
-        IsTeardown = true,
+        Kind = NodeKind.Teardown,
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 

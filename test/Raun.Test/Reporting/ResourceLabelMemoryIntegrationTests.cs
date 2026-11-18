@@ -18,7 +18,7 @@ public class ResourceLabelMemoryIntegrationTests
         Func<StepMessage, object?, MessageFormattingContext, StepMessage>? completed = null) => new()
     {
         Index = index, StepId = $"s{index}", Phase = "Given", OperationName = "Test",
-        DisplayNameTemplate = "test", DependsOn = dependencies ?? [], IsTeardown = teardown, IsSetup = setup,
+        DisplayNameTemplate = "test", DependsOn = dependencies ?? [], Kind = teardown ? NodeKind.Teardown : setup ? NodeKind.Setup : NodeKind.Step,
         Invoke = invoke, FormatTitleMessage = (_, f) => StepMessage.Create(f, $"Use {Key}"),
         FormatCompletedTitleMessage = completed,
         FormatNoteMessages = [(_, f) => StepMessage.Create(f, $"Note {Key}")],

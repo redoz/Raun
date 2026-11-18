@@ -214,7 +214,7 @@ public sealed class StructuredMessageRuntimeTests
         var teardown = new ScenarioNode
         {
             Index = 1, StepId = "cleanup", Phase = "Teardown", OperationName = "Teardown", DisplayNameTemplate = "Teardown",
-            DependsOn = [], IsTeardown = true, Invoke = (_, _) => Task.FromResult<object?>(null),
+            DependsOn = [], Kind = NodeKind.Teardown, Invoke = (_, _) => Task.FromResult<object?>(null),
         };
         var definition = new ScenarioDefinition
         {

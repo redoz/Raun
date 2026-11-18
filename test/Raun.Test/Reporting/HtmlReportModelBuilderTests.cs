@@ -19,7 +19,7 @@ public class HtmlReportModelBuilderTests
         int[]? dependsOn = null, string? group = null, bool isSetup = false, bool isTeardown = false, Guard[]? guards = null, int[]? mergeSources = null, int[]? waitsFor = null, string[]? arms = null) => new()
     {
         Index = index, StepId = stepId, Phase = phase, OperationName = $"Op{index}",
-        DisplayNameTemplate = template, DependsOn = dependsOn ?? [], GroupId = group, IsSetup = isSetup, IsTeardown = isTeardown,
+        DisplayNameTemplate = template, DependsOn = dependsOn ?? [], GroupId = group, Kind = isSetup ? NodeKind.Setup : isTeardown ? NodeKind.Teardown : mergeSources is { Length: > 0 } ? NodeKind.Merge : NodeKind.Step,
         Arms = arms ?? [], Guards = guards ?? [], MergeSources = mergeSources ?? [], WaitsFor = waitsFor ?? [],
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
@@ -78,7 +78,7 @@ public class HtmlReportModelBuilderTests
         var binding = new ScenarioNode
         {
             Index = 0, StepId = "binding", Phase = "When", OperationName = "Case",
-            DisplayNameTemplate = "case Waitlisted waitlisted", IsSynthetic = true, DependsOn = [],
+            DisplayNameTemplate = "case Waitlisted waitlisted", Kind = NodeKind.Case, DependsOn = [],
             Invoke = (_, _) => Task.FromResult<object?>(null),
         };
         var ordinary = Node(1, "ordinary", "Then", "case Waitlisted waitlisted");
@@ -101,8 +101,7 @@ public class HtmlReportModelBuilderTests
         var merge = new ScenarioNode
         {
             Index = 0, StepId = "merge", Phase = "When", OperationName = operation,
-            DisplayNameTemplate = "merge appointment", IsSynthetic = true, DependsOn = [],
-            Invoke = (_, _) => Task.FromResult<object?>(null),
+            DisplayNameTemplate = "merge appointment", Kind = NodeKind.Merge, MergeSources = [1], DependsOn = [],
         };
         var ordinary = Node(1, "ordinary", "Then", "merge appointment");
         var definition = Def(merge, ordinary);

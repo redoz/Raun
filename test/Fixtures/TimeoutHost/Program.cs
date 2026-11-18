@@ -110,7 +110,7 @@ var node = new ScenarioNode
 var teardown = new ScenarioNode
 {
     Index = 1, StepId = "cleanup", Phase = "Then", OperationName = "Teardown",
-    DisplayNameTemplate = "Teardown", DependsOn = [], IsTeardown = true,
+    DisplayNameTemplate = "Teardown", DependsOn = [], Kind = NodeKind.Teardown,
     Invoke = (_, _) => Task.FromResult<object?>(null),
 };
 var definition = new ScenarioDefinition

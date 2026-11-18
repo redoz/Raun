@@ -29,9 +29,7 @@ public class ScenarioOutcomeTests
         OperationName = "Op" + index,
         DisplayNameTemplate = "op " + index,
         DependsOn = [],
-        IsSetup = setup,
-        IsTeardown = teardown,
-        IsSynthetic = synthetic,
+        Kind = setup ? NodeKind.Setup : teardown ? NodeKind.Teardown : synthetic ? NodeKind.Case : NodeKind.Step,
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 

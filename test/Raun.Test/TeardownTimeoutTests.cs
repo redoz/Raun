@@ -225,7 +225,7 @@ public class TeardownTimeoutTests
             new ScenarioNode
             {
                 Index = 1, StepId = "cleanup", Phase = "Then", OperationName = "Teardown", DisplayNameTemplate = "Teardown",
-                DependsOn = [], IsTeardown = true, Invoke = (_, _) => Task.FromResult<object?>(null),
+                DependsOn = [], Kind = NodeKind.Teardown, Invoke = (_, _) => Task.FromResult<object?>(null),
             },
         ],
     };

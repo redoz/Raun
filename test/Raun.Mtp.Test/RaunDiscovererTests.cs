@@ -26,8 +26,7 @@ public class RaunDiscovererTests
         SourceLine = line,
         DependsOn = [],
         GroupId = group,
-        IsSynthetic = synthetic,
-        IsTeardown = teardown,
+        Kind = teardown ? NodeKind.Teardown : synthetic ? NodeKind.Case : NodeKind.Step,
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 

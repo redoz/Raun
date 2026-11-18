@@ -1070,7 +1070,7 @@ public sealed class ScenarioScheduler
             try
             {
                 stepCts.Token.ThrowIfCancellationRequested();
-                output = await node.Invoke(inputs, context).ConfigureAwait(false);
+                output = await node.Invoke!(inputs, context).ConfigureAwait(false); // Validate: every kind that runs has one
             }
             finally
             {

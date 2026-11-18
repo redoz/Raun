@@ -21,7 +21,7 @@ public class StepNumberingTests
         DisplayNameTemplate = "step " + index,
         DependsOn = [],
         GroupId = group,
-        IsSynthetic = synthetic,
+        Kind = synthetic ? NodeKind.Case : NodeKind.Step,
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 

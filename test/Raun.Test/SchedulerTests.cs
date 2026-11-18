@@ -108,8 +108,7 @@ public class SchedulerTests
         DisplayNameTemplate = "«merge»",
         DependsOn = [],
         MergeSources = sources,
-        IsSynthetic = true,
-        Invoke = (_, _) => Task.FromResult<object?>(null),
+        Kind = NodeKind.Merge,
     };
 
     private static async Task<T> WithTimeout<T>(Task<T> task)
@@ -193,8 +192,7 @@ public class SchedulerTests
         DependsOn = [],
         MergeSources = [source],
         Guards = guards,
-        IsSynthetic = true,
-        Invoke = (_, _) => Task.FromResult<object?>(null),
+        Kind = NodeKind.Merge,
     };
 
     [Fact]

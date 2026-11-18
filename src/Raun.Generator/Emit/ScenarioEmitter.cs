@@ -319,19 +319,17 @@ internal static class ScenarioEmitter
             members.Add(Set("WaitsFor", IntArray(step.WaitsFor)));
         }
 
-        if (step.IsSynthetic)
+        // The kind is stated, not left for the runtime to work out from the other members. A step,
+        // the default, says nothing.
+        var kind = step.IsSetup ? "Setup"
+            : step.IsTeardown ? "Teardown"
+            : step.CaseBinding is not null ? "Case"
+            : step.MergeSources.Count > 0 ? "Merge"
+            : null;
+        if (kind is not null)
         {
-            members.Add(Set("IsSynthetic", LiteralExpression(SyntaxKind.TrueLiteralExpression)));
-        }
-
-        if (step.IsTeardown)
-        {
-            members.Add(Set("IsTeardown", LiteralExpression(SyntaxKind.TrueLiteralExpression)));
-        }
-
-        if (step.IsSetup)
-        {
-            members.Add(Set("IsSetup", LiteralExpression(SyntaxKind.TrueLiteralExpression)));
+            members.Add(Set("Kind", MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression, Names.Global("Raun", "Model", "NodeKind"), IdentifierName(kind))));
         }
 
         if (step.Branch is { } branch)
@@ -352,9 +350,13 @@ internal static class ScenarioEmitter
             members.Add(Set("PrepareArguments", preparation));
         }
 
-        members.Add(Set("Invoke", step.CaseBinding is { } binding
-            ? CaseInvokeLambda(binding)
-            : BuildInvokeLambda(step)));
+        // A merge and the teardown node are never invoked: they get no body.
+        if (kind is not ("Merge" or "Teardown"))
+        {
+            members.Add(Set("Invoke", step.CaseBinding is { } binding
+                ? CaseInvokeLambda(binding)
+                : BuildInvokeLambda(step)));
+        }
 
         if (step.NoteExpressions.Count > 0)
         {

@@ -86,10 +86,43 @@ public sealed class ScenarioDefinition
     public void Validate()
     {
         var count = Nodes.Count;
+        var teardown = -1;
+        var setup = -1;
 
         for (var i = 0; i < count; i++)
         {
             var node = Nodes[i];
+
+            // Every edge names a node by its position in the list; the scheduler uses the two
+            // interchangeably.
+            if (node.Index != i)
+            {
+                throw new InvalidOperationException(
+                    $"Node at position {i} ('{node.OperationName}') has Index {node.Index}; a node's Index is its position.");
+            }
+
+            ValidateKind(node);
+            if (node.Kind == NodeKind.Teardown)
+            {
+                if (teardown >= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Scenario '{DisplayName}' has two teardown nodes ({teardown} and {i}); it has one or none.");
+                }
+
+                teardown = i;
+            }
+
+            if (node.Kind == NodeKind.Setup)
+            {
+                if (setup >= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Scenario '{DisplayName}' has two setup nodes ({setup} and {i}); it has one or none.");
+                }
+
+                setup = i;
+            }
             foreach (var dep in node.DependsOn)
             {
                 if (dep < 0 || dep >= count)
@@ -189,6 +222,21 @@ public sealed class ScenarioDefinition
             }
         }
 
+        // The teardown node is not in the graph: it runs after everything else, so nothing can be
+        // ordered after it or read a value from it.
+        if (teardown >= 0)
+        {
+            foreach (var node in Nodes)
+            {
+                if (node.DependsOn.Contains(teardown) || node.WaitsFor.Contains(teardown) || node.MergeSources.Contains(teardown)
+                    || node.Guards.Any(guard => guard.ConditionIndex == teardown))
+                {
+                    throw new InvalidOperationException(
+                        $"Step {node.Index} ('{node.OperationName}') refers to the teardown node {teardown}, which runs after every other node.");
+                }
+            }
+        }
+
         // DFS cycle detection over the index-addressed dependency graph (0 = unvisited,
         // 1 = on stack, 2 = done).
         var state = new int[count];
@@ -199,6 +247,47 @@ public sealed class ScenarioDefinition
                 throw new InvalidOperationException(
                     $"Scenario '{DisplayName}' has a dependency cycle involving step {i}.");
             }
+        }
+    }
+
+    /// <summary>What a node's <see cref="ScenarioNode.Kind"/> promises about its other members.</summary>
+    private static void ValidateKind(ScenarioNode node)
+    {
+        var name = $"Step {node.Index} ('{node.OperationName}')";
+        if (node.Kind == NodeKind.Merge)
+        {
+            if (node.MergeSources.Count == 0)
+            {
+                throw new InvalidOperationException($"{name} is a merge without sources to select from.");
+            }
+
+            if (node.SelectArm is not null)
+            {
+                throw new InvalidOperationException($"{name} is a merge and cannot be a branch condition.");
+            }
+
+            return;
+        }
+
+        if (node.MergeSources.Count > 0)
+        {
+            throw new InvalidOperationException($"{name} has merge sources but is a {node.Kind}; only a merge selects among sources.");
+        }
+
+        if (node.Kind == NodeKind.Teardown)
+        {
+            if (node.DependsOn.Count > 0 || node.WaitsFor.Count > 0 || node.Guards.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"{name} is the teardown node and cannot depend on, wait for or be guarded by another node: it runs after all of them.");
+            }
+
+            return;
+        }
+
+        if (node.Invoke is null)
+        {
+            throw new InvalidOperationException($"{name} is a {node.Kind} and has no Invoke to run.");
         }
     }
 
@@ -224,12 +313,15 @@ public sealed class ScenarioDefinition
     {
         state[index] = 1;
 
-        // Merge sources and waits-for edges are real ordering edges (a merge selects one producer's
-        // output; a wait holds a node until another is terminal), so a cycle through either is as
-        // fatal as one through DependsOn and must be walked the same way.
+        // Merge sources, waits-for edges and guards are real ordering edges (a merge selects one
+        // producer's output; a wait holds a node until another is terminal; a guarded node cannot
+        // start before its condition chose an arm), so a cycle through any of them is as fatal as
+        // one through DependsOn and must be walked the same way. Without the guards a guard cycle
+        // passed validation and stalled the scheduler at run time.
         if (HasCycleThrough(Nodes[index].DependsOn, state)
             || HasCycleThrough(Nodes[index].MergeSources, state)
-            || HasCycleThrough(Nodes[index].WaitsFor, state))
+            || HasCycleThrough(Nodes[index].WaitsFor, state)
+            || HasCycleThrough([.. Nodes[index].Guards.Select(guard => guard.ConditionIndex)], state))
         {
             return true;
         }

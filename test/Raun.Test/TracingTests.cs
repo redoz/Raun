@@ -31,7 +31,7 @@ public class TracingTests
         SourceFile = @"C:\src\Scenarios.cs",
         SourceLine = 10 + index,
         DependsOn = dependsOn ?? [],
-        IsTeardown = teardown,
+        Kind = teardown ? NodeKind.Teardown : NodeKind.Step,
         Invoke = invoke,
     };
 
