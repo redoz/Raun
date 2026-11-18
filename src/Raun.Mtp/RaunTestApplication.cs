@@ -101,7 +101,7 @@ public static class RaunTestApplication
         builder.AddTreeNodeFilterService(extension);
 #pragma warning restore TPEXP
 
-        var stopSignal = new RunStopSignal();
+        var stopRelay = new RunStopRelay();
 
         // The framework below may be created once per session; preflight must not be.
         var preflightNode = ProcessPreflight.Compose(preflight, sessionPreflight);
@@ -114,9 +114,9 @@ public static class RaunTestApplication
         builder.RegisterTestFramework(
             _ => new TestFrameworkCapabilities(
                 new RaunBannerCapability(),
-                new RaunGracefulStopCapability(stopSignal)),
+                new RaunGracefulStopCapability(stopRelay)),
             (_, serviceProvider) => new RaunTestFramework(
-                serviceProvider, simulateTime, services, preflightNode, maxParallelScenarios, stopSignal, coverage, maxParallelSteps, testGranularity));
+                serviceProvider, simulateTime, services, preflightNode, maxParallelScenarios, stopRelay, coverage, maxParallelSteps, testGranularity));
 
         using var app = await builder.BuildAsync().ConfigureAwait(false);
         var exitCode = await app.RunAsync().ConfigureAwait(false);

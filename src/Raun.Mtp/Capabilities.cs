@@ -1,6 +1,5 @@
 using System.Reflection;
 using Microsoft.Testing.Platform.Capabilities.TestFramework;
-using Raun.Running;
 
 namespace Raun.Mtp;
 
@@ -12,18 +11,19 @@ namespace Raun.Mtp;
 #pragma warning disable TPEXP // IGracefulStopTestExecutionCapability and IBannerMessageOwnerCapability are experimental Microsoft.Testing.Platform APIs.
 internal sealed class RaunGracefulStopCapability : IGracefulStopTestExecutionCapability
 {
-    private readonly RunStopSignal _signal;
+    private readonly RunStopRelay _relay;
 
-    public RaunGracefulStopCapability(RunStopSignal signal)
+    public RaunGracefulStopCapability(RunStopRelay relay)
     {
-        ArgumentNullException.ThrowIfNull(signal);
-        _signal = signal;
+        ArgumentNullException.ThrowIfNull(relay);
+        _relay = relay;
     }
 
-    /// <summary>Stops admitting new scenarios; in-flight ones run to completion and still report.</summary>
+    /// <summary>Stops admitting new scenarios in the runs in progress; in-flight scenarios run to
+    /// completion and still report. A run that starts afterwards is a new run.</summary>
     public Task StopTestExecutionAsync(CancellationToken cancellationToken)
     {
-        _signal.Request();
+        _relay.Request();
         return Task.CompletedTask;
     }
 }

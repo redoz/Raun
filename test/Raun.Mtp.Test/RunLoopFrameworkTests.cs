@@ -122,6 +122,36 @@ public class RunLoopFrameworkTests
         Assert.Contains("dispose failed", error.Explanation, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task A_graceful_stop_in_one_session_does_not_disable_the_next_session_of_the_host()
+    {
+        // One host, two sessions (an IDE in server mode, a mutation tester). The platform asks for a
+        // graceful stop during the first; the second must still run its scenarios.
+        var relay = new RunStopRelay();
+        var capability = new RaunGracefulStopCapability(relay);
+        var method = $"Raun.Mtp.Test.StopPerRun.{Guid.NewGuid():N}";
+        ScenarioRegistry.Register(method, () => Definition("stop-scn", "stop scenario", Node(0, "a", "a")));
+        var framework = new RaunTestFramework(new TestPlatformServices(), stopRelay: relay);
+
+        var first = new SessionUid("stop-first");
+        await framework.CreateTestSession(first);
+        using (relay.Begin())
+        {
+            // Stands in for a run of the first session that crossed --maximum-failed-tests.
+            await capability.StopTestExecutionAsync(CancellationToken.None);
+        }
+
+        var second = new SessionUid("stop-second");
+        await framework.CreateTestSession(second);
+        var bus = new RecordingMessageBus();
+
+        // Only this test's scenario: the registry is shared with every other test of the assembly.
+        var filter = new TestNodeUidListFilter([new TestNodeUid("stop-scn:a")]);
+        await framework.OnExecute(second, filter, bus, () => { }, CancellationToken.None);
+
+        Assert.Contains(bus.Nodes, n => n.Uid.Value == "stop-scn:a" && n.Properties.OfType<PassedTestNodeStateProperty>().Length != 0);
+    }
+
     /// <summary>A filter type Raun has never seen — what a future platform version could hand over.</summary>
     private sealed class UnknownFilter : ITestExecutionFilter
     {

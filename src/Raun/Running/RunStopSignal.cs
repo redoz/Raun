@@ -1,12 +1,11 @@
 namespace Raun.Running;
 
 /// <summary>
-/// A "stop admitting work" flag an adapter creates once and hands to the <see cref="RunLoop"/>. The
-/// host asks for a graceful stop (under Microsoft.Testing.Platform, when <c>--maximum-failed-tests</c>
-/// is crossed) and the loop honours it at its admission scan, so nothing in flight is killed. It is
-/// not scoped to a single run: a stop request also suppresses admission on whatever runs follow in
-/// the same process — harmless for a command-line invocation, since the process exits after the one
-/// run, but worth knowing for a host that reuses the process.
+/// A "stop admitting work" flag an adapter hands to one <see cref="RunLoop"/> run. The host asks for
+/// a graceful stop (under Microsoft.Testing.Platform, when <c>--maximum-failed-tests</c> is crossed)
+/// and the loop honours it at its admission scan, so nothing in flight is killed. The flag never
+/// resets, so it belongs to a single run: a host that serves several runs in one process creates a
+/// new signal for each, or a stop in one would keep every later run from admitting anything.
 /// </summary>
 public sealed class RunStopSignal
 {

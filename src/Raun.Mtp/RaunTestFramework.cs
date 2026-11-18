@@ -48,7 +48,7 @@ internal sealed class RaunTestFramework :
     private readonly bool _simulateTime;
     private readonly int _maxParallelScenarios;
     private readonly int _maxParallelSteps;
-    private readonly RunStopSignal? _stopSignal;
+    private readonly RunStopRelay? _stopRelay;
     private readonly IRaunCoverageIntegration? _coverage;
 
     private readonly TestGranularity _granularity;
@@ -60,8 +60,8 @@ internal sealed class RaunTestFramework :
     /// platform internals. <paramref name="preflight"/> runs once before any scenario and is reported
     /// as its own node. The parallelism limits are the suite's defaults (<c>0</c> = processor count
     /// for scenarios, unlimited for steps), which the command line overrides per run.
-    /// <paramref name="stopSignal"/> lets <c>--maximum-failed-tests</c> stop the loop from admitting
-    /// further scenarios. <paramref name="environment"/> stands in for the process environment.
+    /// <paramref name="stopRelay"/> lets <c>--maximum-failed-tests</c> stop the run in progress from
+    /// admitting further scenarios. <paramref name="environment"/> stands in for the process environment.
     /// </summary>
     internal RaunTestFramework(
         IServiceProvider services,
@@ -69,7 +69,7 @@ internal sealed class RaunTestFramework :
         IServiceProvider? userServices = null,
         Func<ScenarioContext, Task>? preflight = null,
         int maxParallelScenarios = 0,
-        RunStopSignal? stopSignal = null,
+        RunStopRelay? stopRelay = null,
         IRaunCoverageIntegration? coverage = null,
         int maxParallelSteps = 0,
         TestGranularity? testGranularity = null,
@@ -82,7 +82,7 @@ internal sealed class RaunTestFramework :
         _userServices = userServices;
         _preflight = preflight;
         _maxParallelScenarios = maxParallelScenarios;
-        _stopSignal = stopSignal;
+        _stopRelay = stopRelay;
         _coverage = coverage;
         _maxParallelSteps = maxParallelSteps;
         _granularity = TestGranularityResolver.Resolve(testGranularity, environment ?? Environment.GetEnvironmentVariable);
@@ -300,13 +300,17 @@ internal sealed class RaunTestFramework :
         }
 
         var bus = new RunEventBus(sinks);
+
+        // A stop signal of this run's own: a stop asked for in an earlier session of the same host
+        // (--maximum-failed-tests crossed) must not keep this one from admitting anything.
+        using var stop = _stopRelay?.Begin();
         var loop = new RunLoop(
             EnumerateRegisteredScenarios,
             simulateTime: _simulateTime,
             services: _userServices,
             preflight: _preflight,
             maxParallelScenarios: ScenarioParallelism.Resolve(_services, _maxParallelScenarios),
-            stopSignal: _stopSignal,
+            stopSignal: stop?.Signal,
             cancellationGracePeriod: CancellationGrace.Resolve(_services),
             cleanupTimeout: CleanupTimeout.Resolve(_services),
             maxParallelSteps: StepParallelism.Resolve(_services, _maxParallelSteps));
