@@ -412,7 +412,7 @@ public sealed class RunLoop
 
             if (scenarioActivity is not null)
             {
-                var status = SuiteRunStatus(results);
+                var status = SuiteRunStatus(ScenarioOutcome.Of(results));
                 scenarioActivity.SetTag(RaunTelemetry.Attributes.TestSuiteRunStatus, status);
                 if (status != "success")
                 {
@@ -471,22 +471,15 @@ public sealed class RunLoop
         return activity;
     }
 
-    /// <summary>The semconv <c>test.suite.run.status</c> for a scenario's results: <c>failure</c> when any
-    /// step failed, <c>aborted</c> when the run was cancelled, otherwise <c>success</c>.</summary>
-    private static string SuiteRunStatus(IReadOnlyList<StepResult> results)
+    /// <summary>The semconv <c>test.suite.run.status</c> of a scenario's outcome.</summary>
+    private static string SuiteRunStatus(ScenarioOutcome outcome) => outcome.Status switch
     {
-        if (results.Any(r => r.Status == StepStatus.Failed))
-        {
-            return "failure";
-        }
-
-        if (results.Any(r => r.Status == StepStatus.Skipped && r.SkipReason == ScenarioScheduler.CanceledSkipReason))
-        {
-            return "aborted";
-        }
-
-        return "success";
-    }
+        ScenarioStatus.Passed => "success",
+        ScenarioStatus.Failed => "failure",
+        ScenarioStatus.TimedOut => "timed_out",
+        ScenarioStatus.Canceled => "aborted",
+        _ => "skipped",
+    };
 
     /// <summary>
     /// The node indices a selector names within one scenario, or <see langword="null"/> for an

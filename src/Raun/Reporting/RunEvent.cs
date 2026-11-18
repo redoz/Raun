@@ -27,7 +27,12 @@ public sealed record StepFinished(ScenarioDefinition Definition, StepResult Resu
 
 /// <summary>Raised when a scenario's steps have all reached terminal status.</summary>
 public sealed record ScenarioFinished(
-    ScenarioDefinition Definition, IReadOnlyList<StepResult> Results) : RunEvent;
+    ScenarioDefinition Definition, IReadOnlyList<StepResult> Results) : RunEvent
+{
+    /// <summary>How the scenario ended, decided from <see cref="Results"/>: read this instead of
+    /// folding the step results again.</summary>
+    public ScenarioOutcome Outcome { get; } = ScenarioOutcome.Of(Results);
+}
 
 /// <summary>Raised once at the end of a run, after the last scenario.</summary>
 public sealed record RunFinished : RunEvent

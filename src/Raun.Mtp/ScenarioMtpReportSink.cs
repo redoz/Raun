@@ -4,7 +4,6 @@ using Microsoft.Testing.Platform.Messages;
 using Microsoft.Testing.Platform.TestHost;
 using Raun.Model;
 using Raun.Reporting;
-using Raun.Scheduling;
 
 namespace Raun.Mtp;
 
@@ -42,7 +41,7 @@ internal sealed class ScenarioMtpReportSink : RunEventSink
             .ToList();
 
         var testNode = BuildNode(e.Definition);
-        testNode.Properties.Add(Fold(steps));
+        testNode.Properties.Add(State(e.Outcome));
 
         if (steps.Count > 0)
         {
@@ -67,63 +66,17 @@ internal sealed class ScenarioMtpReportSink : RunEventSink
         await Publish(testNode).ConfigureAwait(false);
     }
 
-    private static IProperty Fold(List<StepResult> steps)
+    /// <summary>The scenario's outcome as the state of its one test node.</summary>
+    private static IProperty State(ScenarioOutcome outcome) => outcome switch
     {
-        IProperty? failure = null;
-        var passed = false;
-        var canceled = false;
-        var timedOut = false;
-        string? skipReason = null;
+        { Status: ScenarioStatus.Passed } => PassedTestNodeStateProperty.CachedInstance,
 
-        foreach (var step in steps)
-        {
-            switch (step.Status)
-            {
-                case StepStatus.Passed:
-                    // Setup and teardown run around the scenario; teardown passes even after a
-                    // cancellation. Only a step of the scenario itself can pass it.
-                    passed |= !(step.Node.IsSetup || step.Node.IsTeardown);
-                    break;
-                case StepStatus.Skipped:
-                    canceled |= step.SkipReason == ScenarioScheduler.CanceledSkipReason;
-                    timedOut |= step.SkipReason == ScenarioScheduler.TimedOutSkipReason;
-                    skipReason ??= step.SkipReason;
-                    break;
-                case StepStatus.NotTaken:
-                    skipReason ??= step.SkipReason;
-                    break;
-                default:
-                    var state = StepReporting.MapState(step);
-                    if (state is TimeoutTestNodeStateProperty)
-                    {
-                        return state;
-                    }
-
-                    failure ??= state;
-                    break;
-            }
-        }
-
-        if (failure is not null)
-        {
-            return failure;
-        }
-
-        // A scenario stopped short did not pass, whatever finished before the stop.
-        if (timedOut)
-        {
-            return new TimeoutTestNodeStateProperty(ScenarioScheduler.TimedOutSkipReason);
-        }
-
-        if (canceled)
-        {
-            return new SkippedTestNodeStateProperty(ScenarioScheduler.CanceledSkipReason);
-        }
-
-        return passed
-            ? PassedTestNodeStateProperty.CachedInstance
-            : new SkippedTestNodeStateProperty(skipReason ?? "skipped");
-    }
+        // The step that timed out or failed carries the exception; a scenario deadline that fell
+        // between two steps has only its reason.
+        { Decisive: { } step } => StepReporting.MapState(step),
+        { Status: ScenarioStatus.TimedOut } => new TimeoutTestNodeStateProperty(outcome.Reason ?? "timed out"),
+        _ => new SkippedTestNodeStateProperty(outcome.Reason ?? "skipped"),
+    };
 
     private static string Describe(ScenarioDefinition definition, List<StepResult> steps)
     {

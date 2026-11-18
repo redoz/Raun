@@ -291,9 +291,12 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                 }).ToList(),
             }).ToList();
 
-            var status = steps.Any(s => s.Status == "failed") ? "failed"
-                : steps.Any(s => s.Status == "skipped") ? "skipped"
-                : "passed";
+            var status = ScenarioOutcome.Of(ordered).Status switch
+            {
+                ScenarioStatus.Passed => "passed",
+                ScenarioStatus.Failed or ScenarioStatus.TimedOut => "failed",
+                _ => "skipped",
+            };
 
             var durationMs = steps.Count == 0 ? 0 : steps.Max(s => s.OffsetMs + s.DurationMs);
 

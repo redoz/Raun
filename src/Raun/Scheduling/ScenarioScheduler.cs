@@ -521,15 +521,7 @@ public sealed class ScenarioScheduler
             // Success is a property of the SCENARIO, not of the step that registered a cleanup: a
             // failed run should leave the whole world intact, not a half-torn-down mix of it. Steps a
             // filter left out did not fail — they were never asked to run — so they do not count.
-            var succeeded = true;
-            for (var n = 0; n < count; n++)
-            {
-                if (n != i && !excluded[n] && status[n] is not (StepStatus.Passed or StepStatus.NotTaken))
-                {
-                    succeeded = false;
-                    break;
-                }
-            }
+            var succeeded = ScenarioOutcome.Of(results.Where((r, n) => r is not null && n != i)!).Succeeded;
 
             var optionalAllowed = definition.TeardownPolicy switch
             {
