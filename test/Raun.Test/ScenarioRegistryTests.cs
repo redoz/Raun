@@ -40,6 +40,37 @@ public class ScenarioRegistryTests
     }
 
     [Fact]
+    public async Task Listing_while_another_thread_registers_does_not_throw()
+    {
+        // A module initializer runs whenever its assembly is first touched, which can be while a
+        // host is listing what is registered.
+        var catalog = new ScenarioCatalog();
+        using var stop = new CancellationTokenSource();
+        var registering = Task.Run(() =>
+        {
+            for (var i = 0; i < 200_000 && !stop.IsCancellationRequested; i++)
+            {
+                var key = "Ns.Type.Racing" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                catalog.Register(key, () => Empty(key));
+            }
+        });
+
+        try
+        {
+            while (!registering.IsCompleted)
+            {
+                _ = catalog.Keys;
+                _ = catalog.Definitions();
+            }
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await registering;
+        }
+    }
+
+    [Fact]
     public void Missing_key_returns_false()
     {
         Assert.False(ScenarioRegistry.TryGet("Ns.Type.NeverRegistered", out var factory));
