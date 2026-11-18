@@ -110,8 +110,9 @@ public sealed class AsyncServiceScopeTests
             Assert.False(run.IsCompleted);
         }
         finally { releaseSibling.TrySetResult(); }
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => run);
-        Assert.Same(error, actual);
+        var actual = await Assert.ThrowsAsync<ScenarioRunException>(() => run);
+        Assert.Same(error, actual.InnerException);
+        Assert.Contains("dispose failed", actual.Message, StringComparison.Ordinal);
         Assert.Equal(1, service.Disposals);
         Assert.Contains(sink.Events.OfType<ScenarioFinished>(), e => e.Definition.ScenarioId == "sibling");
         Assert.Single(sink.Events.OfType<RunFinished>());

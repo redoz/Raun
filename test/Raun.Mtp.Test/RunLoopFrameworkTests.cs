@@ -85,6 +85,43 @@ public class RunLoopFrameworkTests
         Assert.Contains("fw-scn:b", passed);
     }
 
+    private sealed class ThrowsOnDispose : IDisposable
+    {
+        public void Dispose() => throw new InvalidOperationException("dispose failed");
+    }
+
+    [Fact]
+    public async Task A_failure_outside_every_step_is_reported_as_a_failed_node_and_the_request_completes()
+    {
+        // A scoped service whose Dispose throws fails when the scenario's scope is released, after
+        // its steps were reported. That must not end the host with an unhandled exception.
+        var method = $"Raun.Mtp.Test.RunFailure.{Guid.NewGuid():N}";
+        ScenarioRegistry.Register(method, () => Definition("rf-scn", "run failure scenario",
+            Node(0, "a", "a", invoke: (_, ctx) =>
+            {
+                ctx.Services?.GetService(typeof(ThrowsOnDispose));
+                return Task.FromResult<object?>(null);
+            })));
+
+        var registrations = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddScoped(registrations, _ => new ThrowsOnDispose());
+        await using var userServices = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(registrations);
+        var framework = new RaunTestFramework(new TestPlatformServices(), userServices: userServices);
+        var uid = new SessionUid("rf-run");
+        await framework.CreateTestSession(uid);
+
+        var bus = new RecordingMessageBus();
+        var completed = false;
+        await framework.OnExecute(uid, filter: null, bus, () => completed = true, CancellationToken.None);
+
+        Assert.True(completed);
+        Assert.Contains(bus.Nodes, n => n.Uid.Value == "rf-scn:a" && n.Properties.OfType<PassedTestNodeStateProperty>().Length != 0);
+        var failure = Assert.Single(bus.Nodes, n => n.Uid.Value == RaunTestFramework.RunFailureUid);
+        var error = Assert.Single(failure.Properties.OfType<ErrorTestNodeStateProperty>());
+        Assert.Contains("run failure scenario", error.Explanation, StringComparison.Ordinal);
+        Assert.Contains("dispose failed", error.Explanation, StringComparison.Ordinal);
+    }
+
     /// <summary>A filter type Raun has never seen — what a future platform version could hand over.</summary>
     private sealed class UnknownFilter : ITestExecutionFilter
     {

@@ -427,11 +427,11 @@ public class RunLoopTests
     }
 
     [Fact]
-    public async Task A_misdeclared_resource_token_halts_launching_drains_siblings_and_surfaces_the_error()
+    public async Task A_misdeclared_resource_token_costs_only_its_own_scenario_and_surfaces_the_error()
     {
         // Degree 3: "a" is running and blocked until "release" is set; "bad" declares a token with no
-        // kind attribute, so the gate throws when the scan reaches it. The loop must stop launching,
-        // let "a" finish, publish RunFinished once, and surface the gate's error from RunAsync.
+        // kind attribute, so the gate throws when the scan reaches it. Only "bad" is lost: "never"
+        // still runs, RunFinished publishes once, and the gate's error surfaces from RunAsync.
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var a = Definition("a", "A", Node(0, "x", "x", invoke: async (_, _) => { await release.Task.WaitAsync(TimeSpan.FromSeconds(10)); return null; }));
         var bad = Definition("bad", "Bad", [new ContendedResourceUse(typeof(NoKind), LockMode.Shared)], Node(0, "y", "y"));
@@ -445,11 +445,13 @@ public class RunLoopTests
         // Acquire the gate's throw would have faulted the whole run synchronously already.
         Assert.False(run.IsCompleted);
         release.TrySetResult();
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await run);
+        var ex = await Assert.ThrowsAsync<ScenarioRunException>(async () => await run);
 
+        Assert.Equal("bad", ex.ScenarioId);
+        Assert.Contains("'Bad'", ex.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(NoKind), ex.Message, StringComparison.Ordinal);
-        Assert.Equal(["a"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId));
-        Assert.DoesNotContain("never", sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
+        Assert.Equal(["a", "never"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId).Order());
+        Assert.DoesNotContain("bad", sink.Events.OfType<ScenarioStarted>().Select(e => e.Definition.ScenarioId));
         Assert.Single(sink.Events.OfType<RunFinished>());
     }
 
@@ -689,11 +691,39 @@ public class RunLoopTests
         var sink = new RecordingSink();
         var loop = new RunLoop(() => [a, boom, c], runScenario: Seam, maxParallelScenarios: 3);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        var ex = await Assert.ThrowsAsync<ScenarioRunException>(async () =>
             await loop.RunAsync(selector: null, sink, CancellationToken.None));
 
-        Assert.Equal("scheduler bug", ex.Message);
+        Assert.Equal("boom", ex.ScenarioId);
+        Assert.Equal("scheduler bug", ex.InnerException!.Message);
         Assert.Equal(["a", "c"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId).Order());
+        Assert.Single(sink.Events.OfType<RunFinished>());
+    }
+
+    [Fact]
+    public async Task A_scenario_that_faults_does_not_stop_scenarios_that_had_not_started()
+    {
+        // One at a time: "boom" faults first. The scenarios queued behind it must still run.
+        Task<IReadOnlyList<StepResult>> Seam(
+            ScenarioDefinition definition, IStepObserver observer, IServiceProvider? services,
+            IReadOnlySet<int>? targets, CancellationToken token)
+            => definition.ScenarioId == "boom"
+                ? Task.FromException<IReadOnlyList<StepResult>>(new InvalidOperationException("outside any step"))
+                : Task.FromResult<IReadOnlyList<StepResult>>(definition.Nodes.Select(n => new StepResult
+                {
+                    Node = n, DisplayName = n.DisplayNameTemplate, Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
+                }).ToList());
+
+        var sink = new RecordingSink();
+        var loop = new RunLoop(
+            () => [Definition("boom", "Boom", Node(0, "y", "y")), Definition("b", "B", Node(0, "x", "x")), Definition("c", "C", Node(0, "z", "z"))],
+            runScenario: Seam, maxParallelScenarios: 1);
+
+        var ex = await Assert.ThrowsAsync<ScenarioRunException>(async () =>
+            await loop.RunAsync(selector: null, sink, CancellationToken.None));
+
+        Assert.Equal("boom", ex.ScenarioId);
+        Assert.Equal(["b", "c"], sink.Events.OfType<ScenarioFinished>().Select(e => e.Definition.ScenarioId));
         Assert.Single(sink.Events.OfType<RunFinished>());
     }
 

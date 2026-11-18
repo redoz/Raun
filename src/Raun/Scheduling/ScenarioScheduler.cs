@@ -169,7 +169,7 @@ public sealed class ScenarioScheduler
             }
         }
 
-        var teardownLog = new TeardownLog();
+        var teardownLog = new TeardownLog(runs: teardownIndex >= 0);
         var ledger = new ResourceLedger(nodes);
 
         // Simulated mode samples the base instant once; per-node start/finish offsets from it compose

@@ -128,6 +128,47 @@ public class PreflightTests
     }
 
     [Fact]
+    public async Task A_filter_that_selects_nothing_does_not_run_preflight()
+    {
+        // Otherwise a mistyped filter brings the environment up for nothing and reports one passing test.
+        var ran = false;
+        var sink = new Recorder();
+
+        await new RunLoop(() => [Definition("a", Node(0, "x"))], preflight: _ => { ran = true; return Task.CompletedTask; })
+            .RunAsync(new UidNodeSelector(new HashSet<string> { "no-such-scenario:no-such-step" }), sink, CancellationToken.None);
+
+        Assert.False(ran);
+        Assert.Empty(sink.Finished);
+        Assert.Empty(Assert.Single(sink.Events.OfType<RunStarted>()).Scenarios!);
+    }
+
+    [Fact]
+    public async Task A_filter_that_selects_a_step_still_runs_preflight()
+    {
+        var ran = false;
+        var definition = Definition("a", Node(0, "x"));
+        var sink = new Recorder();
+
+        await new RunLoop(() => [definition], preflight: _ => { ran = true; return Task.CompletedTask; })
+            .RunAsync(new UidNodeSelector(new HashSet<string> { StepUid.Of(definition, definition.Nodes[0]) }), sink, CancellationToken.None);
+
+        Assert.True(ran);
+    }
+
+    [Fact]
+    public async Task A_cleanup_registered_in_preflight_fails_it_instead_of_being_dropped()
+    {
+        // Preflight has no teardown node, so nothing would ever call the cleanup.
+        var sink = await Run(
+            ctx => { ctx.OnTeardown(Cleanup.Required, () => Task.CompletedTask); return Task.CompletedTask; },
+            Definition("a", Node(0, "x")));
+
+        var preflight = Assert.Single(sink.Finished, e => e.Result.Node.StepId == "preflight");
+        Assert.Equal(StepStatus.Failed, preflight.Result.Status);
+        Assert.Contains("no teardown", preflight.Result.Exception!.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_failing_preflight_fails_its_node_and_skips_every_scenario_step()
     {
         var scenarioRan = false;

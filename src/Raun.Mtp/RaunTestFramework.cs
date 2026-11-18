@@ -310,7 +310,17 @@ internal sealed class RaunTestFramework :
             cancellationGracePeriod: CancellationGrace.Resolve(_services),
             cleanupTimeout: CleanupTimeout.Resolve(_services),
             maxParallelSteps: StepParallelism.Resolve(_services, _maxParallelSteps));
-        await loop.RunAsync(selector, bus, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await loop.RunAsync(selector, bus, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Something failed outside any step, after every scenario that could run did. Letting it
+            // escape would end the host with an unhandled exception and no summary; a failed node of
+            // its own makes the run fail and says why.
+            await PublishRunFailureAsync(sessionUid, messageBus, ex).ConfigureAwait(false);
+        }
 
         if (bus.Failures.Count > 0)
         {
@@ -360,6 +370,17 @@ internal sealed class RaunTestFramework :
                 unsupported = filter.GetType().FullName;
                 return null;
         }
+    }
+
+    /// <summary>The uid of the node that reports a failure outside every step.</summary>
+    internal const string RunFailureUid = "raun:run";
+
+    private Task PublishRunFailureAsync(SessionUid sessionUid, IMessageBus messageBus, Exception failure)
+    {
+        var node = new TestNode { Uid = RunFailureUid, DisplayName = "Raun run" };
+        node.Properties.Add(new ErrorTestNodeStateProperty(failure, failure.Message));
+        NodeDiagnostics.Log("run-failure", failure.ToString());
+        return messageBus.PublishAsync(this, new TestNodeUpdateMessage(sessionUid, node));
     }
 
     /// <summary>Warns through the platform logger that a filter type was ignored.</summary>

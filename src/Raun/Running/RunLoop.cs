@@ -160,7 +160,11 @@ public sealed class RunLoop
         ArgumentNullException.ThrowIfNull(bus);
 
         var selected = SelectScenarios(scenarioSource(), selector);
-        var preflightDefinition = preflight is null ? null : Preflight.Definition(preflight);
+
+        // A filter that selects nothing runs nothing, preflight included: bringing the environment
+        // up for no scenario would also turn a mistyped filter into a passing run of one test.
+        var nothingSelected = selector is not null && selected.Count == 0;
+        var preflightDefinition = preflight is null || nothingSelected ? null : Preflight.Definition(preflight);
         IReadOnlyList<ScenarioDefinition> order = preflightDefinition is null ? selected : [preflightDefinition, .. selected];
         await bus.PublishAsync(new RunStarted(selected.Count, order)).ConfigureAwait(false);
 
@@ -180,8 +184,8 @@ public sealed class RunLoop
 
         try
         {
-            // Run-level setup, before any scenario. It runs even when the filter selected nothing: a
-            // filtered run of one step still needs whatever preflight brings up.
+            // Run-level setup, before any scenario: a filtered run of one step still needs whatever
+            // preflight brings up.
             var preflightFailed = false;
             if (preflightDefinition is not null)
             {
@@ -220,11 +224,10 @@ public sealed class RunLoop
     /// Cancellation keeps the sequential loop's contract: the first scenario always launches (an
     /// up-front cancellation still reports its steps as skipped through the scheduler); after any
     /// launch, an observed cancellation stops further launches; whatever is running drains through
-    /// its own linked token. A faulted or canceled scenario task (always a loop/scheduler bug, never
-    /// a step failure — see the comment below) stops further launches the same way, but every
-    /// sibling already in flight still drains through this loop and gets reported before the fault
-    /// is rethrown, so nothing is orphaned and <c>RunFinished</c> still gets its chance to publish
-    /// from the caller's <c>finally</c>.
+    /// its own linked token. A scenario task that faults (never a step failure — see the comment
+    /// below) does not stop the others: every scenario still runs and reports, and the faults are
+    /// thrown together at the end as <see cref="ScenarioRunException"/>, after which
+    /// <c>RunFinished</c> publishes from the caller's <c>finally</c>.
     /// </summary>
     private async ValueTask LaunchAsync(
         IReadOnlyList<ScenarioDefinition> selected,
@@ -239,7 +242,6 @@ public sealed class RunLoop
         var waits = new Dictionary<ScenarioDefinition, Wait>();
         var gate = new ContentionGate();
         var started = false;
-        var halted = false;
         List<Exception>? faults = null;
 
         while (pending.Count > 0 || running.Count > 0)
@@ -247,7 +249,7 @@ public sealed class RunLoop
             var i = 0;
             while (i < pending.Count && running.Count < maxParallelScenarios)
             {
-                if ((started && cancellationToken.IsCancellationRequested) || halted || stopSignal?.IsStopRequested == true)
+                if ((started && cancellationToken.IsCancellationRequested) || stopSignal?.IsStopRequested == true)
                 {
                     break;
                 }
@@ -260,13 +262,11 @@ public sealed class RunLoop
                 }
                 catch (InvalidOperationException ex)
                 {
-                    // A mis-declared resource token (no kind attribute, or a pool capacity below 1) is
-                    // a suite bug, not a step failure: stop admitting further scenarios and let the
-                    // drain loop below run everything already in flight to completion before this is
-                    // rethrown, exactly like any other fault.
-                    (faults ??= []).Add(ex);
-                    halted = true;
-                    break;
+                    // A mis-declared resource token (no kind attribute, or a pool capacity below 1):
+                    // this scenario cannot be admitted, the others can.
+                    pending.RemoveAt(i);
+                    (faults ??= []).Add(new ScenarioRunException(definition, ex));
+                    continue;
                 }
 
                 if (refusedBy is not null)
@@ -305,20 +305,18 @@ public sealed class RunLoop
             running.Remove(finished);
             gate.Release(done.Uses);
 
-            // Step failures never fault a scenario task — RunOneAsync/the scheduler turn them into
-            // StepResult.Failed and return normally — so a faulted or canceled task here is a loop or
-            // scheduler bug. Record it, stop admitting new scenarios, and keep looping so every
-            // in-flight sibling still drains through this same WhenAny path instead of being left
-            // running unobserved against a bus whose run has already returned.
+            // Step failures never fault a scenario task: the scheduler turns them into
+            // StepResult.Failed and returns normally. What faults one is something outside its steps
+            // (a scoped service whose Dispose throws, an invalid definition, a scheduler bug). That
+            // is this scenario's problem: record it and keep going, so the other scenarios still run
+            // and report before the faults are rethrown together.
             if (finished.IsFaulted)
             {
-                halted = true;
-                (faults ??= []).AddRange(finished.Exception!.InnerExceptions);
+                (faults ??= []).AddRange(finished.Exception!.InnerExceptions.Select(ex => new ScenarioRunException(done, ex)));
             }
             else if (finished.IsCanceled)
             {
-                halted = true;
-                (faults ??= []).Add(new TaskCanceledException(finished));
+                (faults ??= []).Add(new ScenarioRunException(done, new TaskCanceledException(finished)));
             }
         }
 
