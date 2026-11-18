@@ -110,12 +110,16 @@ public static class GeneratorHarness
     }
 
     public static GeneratorResult Run(string source, string assemblyName = "ScenarioTests", params MetadataReference[] additionalReferences)
+        => RunFiles([source], assemblyName, additionalReferences);
+
+    /// <summary>Runs the generator over a project of several source files.</summary>
+    public static GeneratorResult RunFiles(IReadOnlyList<string> sources, string assemblyName = "ScenarioTests", params MetadataReference[] additionalReferences)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
-        var tree = CSharpSyntaxTree.ParseText(source, parseOptions);
+        var trees = sources.Select(source => CSharpSyntaxTree.ParseText(source, parseOptions)).ToList();
         var compilation = CSharpCompilation.Create(
             assemblyName + "_" + Guid.NewGuid().ToString("N"),
-            [tree],
+            trees,
             References.AddRange(additionalReferences),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
@@ -125,7 +129,7 @@ public static class GeneratorHarness
             parseOptions: parseOptions);
         driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out var genDiagnostics);
 
-        var generatedTrees = output.SyntaxTrees.Where(t => t != tree).ToList();
+        var generatedTrees = output.SyntaxTrees.Where(t => !trees.Contains(t)).ToList();
         var generatedSource = string.Join("\n\n", generatedTrees.Select(t => t.ToString()));
 
         var emitDiagnostics = ImmutableArray<Diagnostic>.Empty;

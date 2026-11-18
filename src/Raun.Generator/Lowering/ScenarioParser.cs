@@ -249,14 +249,25 @@ internal sealed class ScenarioParser
 
         var tags = CollectTags();
 
-        var usings = CollectUsings().ToList();
+        var usings = CollectUsings(out var imported);
+
+        // The step classes' namespaces, and the scenario's own namespace with its parents: names the
+        // scenario could use without any using directive, because it is declared inside them.
+        var namespaces = new HashSet<INamespaceSymbol>(_dslNamespaces, SymbolEqualityComparer.Default);
+        for (var ns = _method.ContainingNamespace; ns is { IsGlobalNamespace: false }; ns = ns.ContainingNamespace)
+        {
+            namespaces.Add(ns);
+        }
 
         // Ordered by display string: a HashSet's order is an implementation detail, and the emitted
         // using list has to be the same on every run.
-        foreach (var ns in _dslNamespaces.OrderBy(
+        foreach (var ns in namespaces.OrderBy(
             n => n.ToDisplayString(SymbolHelpers.NoGlobal), System.StringComparer.Ordinal))
         {
-            usings.Add(UsingDirective(TypeSyntaxFactory.NamespaceName(ns)));
+            if (imported.Add(ns))
+            {
+                usings.Add(UsingDirective(TypeSyntaxFactory.NamespaceName(ns)));
+            }
         }
 
         return new ParsedScenario
@@ -2294,10 +2305,69 @@ internal sealed class ScenarioParser
     /// <summary>The step's own return value inside the emitted lambda.</summary>
     private static IdentifierNameSyntax ReturnValue => IdentifierName("__r");
 
-    // The emitter dedupes the merged using set, so no need to dedupe here. Trivia is stripped: the
-    // scenario file's comments and formatting have no business in the generated one.
-    private IEnumerable<UsingDirectiveSyntax> CollectUsings()
-        => _syntax.SyntaxTree.GetCompilationUnitRoot().Usings.Select(u => u.WithoutTrivia());
+    /// <summary>
+    /// The using directives in scope where the scenario is written: the file's own, as written, then
+    /// those of every namespace block around the scenario, outermost first. A directive inside a
+    /// namespace is resolved relative to that namespace (<c>using Helpers;</c> inside
+    /// <c>namespace App</c> can mean <c>App.Helpers</c>), so it is re-spelled from what it binds to
+    /// before it moves to the top of the generated file. Trivia is stripped: the scenario file's
+    /// comments and formatting have no business in the generated one.
+    /// </summary>
+    /// <param name="imported">The namespaces these directives import, so that none is imported a
+    /// second time under another spelling (CS0105 in the generated file).</param>
+    private List<UsingDirectiveSyntax> CollectUsings(out HashSet<INamespaceSymbol> imported)
+    {
+        imported = new HashSet<INamespaceSymbol>(SymbolEqualityComparer.Default);
+        var file = _syntax.SyntaxTree.GetCompilationUnitRoot().Usings;
+        foreach (var directive in file)
+        {
+            if (ImportedNamespace(directive) is { } ns)
+            {
+                imported.Add(ns);
+            }
+        }
+
+        var scoped = new List<UsingDirectiveSyntax>();
+        var aliases = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var block in _syntax.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse())
+        {
+            foreach (var directive in block.Usings)
+            {
+                if (ImportedNamespace(directive) is { } ns && !imported.Add(ns))
+                {
+                    continue;
+                }
+
+                if (directive.Alias is { } alias)
+                {
+                    aliases.Add(alias.Name.Identifier.ValueText);
+                }
+
+                scoped.Add((_model.GetSymbolInfo(directive.NamespaceOrType).Symbol switch
+                {
+                    INamespaceSymbol { IsGlobalNamespace: false } target => directive.WithNamespaceOrType(TypeSyntaxFactory.NamespaceName(target)),
+                    ITypeSymbol target => directive.WithNamespaceOrType(TypeSyntaxFactory.From(target)),
+                    _ => directive,
+                }).WithoutTrivia());
+            }
+        }
+
+        // An alias declared again inside a namespace block hides the file's. Only one can stand at
+        // the top of the generated file, and the inner one is what the scenario sees.
+        var usings = file
+            .Where(directive => directive.Alias is not { } alias || !aliases.Contains(alias.Name.Identifier.ValueText))
+            .Select(directive => directive.WithoutTrivia())
+            .ToList();
+        usings.AddRange(scoped);
+        return usings;
+    }
+
+    /// <summary>The namespace a plain <c>using N;</c> imports; null for an alias, a <c>using static</c>,
+    /// or a name that does not bind.</summary>
+    private INamespaceSymbol? ImportedNamespace(UsingDirectiveSyntax directive)
+        => directive.Alias is null && directive.StaticKeyword.IsKind(SyntaxKind.None)
+            ? _model.GetSymbolInfo(directive.NamespaceOrType).Symbol as INamespaceSymbol
+            : null;
 
     /// <summary>
     /// The identity a step's uid is hashed from: the DSL operation, the arguments exactly as the
