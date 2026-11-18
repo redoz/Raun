@@ -5,8 +5,17 @@ using Raun.Reporting.Html;
 
 namespace Raun.Mtp.Coverage;
 
-internal sealed class CoverageSessionCoordinator(Func<FileInfo, CancellationToken, Task<ReportCoverage>> analyze) : IDisposable
+internal sealed class CoverageSessionCoordinator(
+    Func<FileInfo, CancellationToken, Task<ReportCoverage>> analyze, TimeSpan? analysisTimeout = null) : IDisposable
 {
+    /// <summary>
+    /// How long one analysis may take. The collector's delivery is awaited before the test host may
+    /// exit, so an analysis without a bound (it opens the solution and starts <c>dotnet msbuild</c>
+    /// per project) is a test run that hangs at its end with nothing on the screen.
+    /// </summary>
+    internal static readonly TimeSpan DefaultAnalysisTimeout = TimeSpan.FromMinutes(10);
+
+    private readonly TimeSpan _analysisTimeout = analysisTimeout ?? DefaultAnalysisTimeout;
     private readonly SemaphoreSlim _gate = new(1);
     private readonly Dictionary<string, SessionState> _sessions = new(StringComparer.Ordinal);
 
@@ -34,6 +43,7 @@ internal sealed class CoverageSessionCoordinator(Func<FileInfo, CancellationToke
         {
             var state = State(session);
             ReportCoverage coverage;
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             try
             {
                 using var stream = file.OpenRead();
@@ -42,8 +52,20 @@ internal sealed class CoverageSessionCoordinator(Func<FileInfo, CancellationToke
                 {
                     return;
                 }
-                coverage = await analyze(file, cancellationToken).ConfigureAwait(false);
+                budget.CancelAfter(_analysisTimeout);
+
+                // WaitAsync as well: an analysis that ignores its token must not hold the run either.
+                coverage = await analyze(file, budget.Token).WaitAsync(budget.Token).ConfigureAwait(false);
                 state.Artifacts.Add(checksum);
+            }
+            catch (OperationCanceledException) when (budget.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                coverage = new ReportCoverage
+                {
+                    Status = "unavailable",
+                    Diagnostics = [$"Coverage analysis did not finish within {_analysisTimeout} and was stopped."],
+                };
+                NodeDiagnostics.Log("coverage-analysis-timeout", _analysisTimeout.ToString());
             }
             catch (Exception error)
             {
@@ -70,6 +92,42 @@ internal sealed class CoverageSessionCoordinator(Func<FileInfo, CancellationToke
     {
         await _gate.WaitAsync().ConfigureAwait(false);
         _gate.Release();
+    }
+
+    /// <summary>
+    /// Ends the run for coverage: waits for a delivery in progress, then tells every report that
+    /// asked for coverage and received none that none is coming. Without this such a report says
+    /// "waiting for coverage data" forever.
+    /// </summary>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Coverage enrichment is best effort and must preserve test results.")]
+    public async Task CompleteAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            foreach (var state in _sessions.Values)
+            {
+                if (state.Report is null || state.Coverage is not null)
+                {
+                    continue;
+                }
+
+                state.Coverage = new ReportCoverage
+                {
+                    Status = "unavailable",
+                    Diagnostics = ["No coverage data was received before the run ended."],
+                };
+                try
+                {
+                    await state.Report.SetCoverageAsync(state.Coverage, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception error)
+                {
+                    NodeDiagnostics.Log("coverage-report-failure", error.ToString());
+                }
+            }
+        }
+        finally { _gate.Release(); }
     }
 
     private SessionState State(string session)

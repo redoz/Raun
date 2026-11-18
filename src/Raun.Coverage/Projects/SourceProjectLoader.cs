@@ -190,10 +190,23 @@ internal static class SourceProjectLoader
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not evaluate source project properties.");
         var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var error = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Not left behind: a cancelled or timed-out analysis must not keep msbuild nodes running.
+            try { process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) { } // already exited
+            throw;
+        }
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException(await error.ConfigureAwait(false));
+            // MSBuild reports its errors on standard output; standard error is usually empty.
+            var said = (await output.ConfigureAwait(false) + Environment.NewLine + await error.ConfigureAwait(false)).Trim();
+            throw new InvalidOperationException(
+                $"{project.Name}: dotnet msbuild exited {process.ExitCode} while reading project properties. {said}");
         }
         using var json = JsonDocument.Parse(await output.ConfigureAwait(false));
         var properties = json.RootElement.GetProperty("Properties");

@@ -113,6 +113,72 @@ public sealed class CoveragePipelineTests : IDisposable
         await coordinator.DrainAsync();
     }
 
+    private async Task<(HtmlReportSink Sink, string Path)> FinishedReportAsync()
+    {
+        var path = Path.Combine(_directory, "report.html");
+        var sink = new HtmlReportSink(path, TimeProvider.System, true);
+        await sink.PublishAsync(new RunStarted(0));
+        await sink.PublishAsync(new RunFinished());
+        return (sink, path);
+    }
+
+    [Fact]
+    public async Task An_analysis_that_does_not_finish_in_time_leaves_the_run_and_says_coverage_is_unavailable()
+    {
+        // The collector waits for this delivery before the host may exit. An analysis that hangs
+        // (a child msbuild that never returns, say) must cost the report its coverage view, not the
+        // run its exit.
+        using var coordinator = new CoverageSessionCoordinator(
+            async (_, token) => { await Task.Delay(Timeout.Infinite, token); return new ReportCoverage(); },
+            analysisTimeout: TimeSpan.FromMilliseconds(100));
+        var (sink, path) = await FinishedReportAsync();
+        await coordinator.AttachReportAsync("session", sink);
+        var file = Path.Combine(_directory, "coverage.xml");
+        await File.WriteAllTextAsync(file, "<results><modules /></results>", TestContext.Current.CancellationToken);
+
+        await coordinator.AcceptArtifactAsync("session", new FileInfo(file), TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+        var html = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("\"status\":\"unavailable\"", html, StringComparison.Ordinal);
+        Assert.Contains("did not finish within", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_report_that_never_received_coverage_data_says_so_when_the_run_completes()
+    {
+        // Cancelled before the delivery could start, or a collector that produced nothing: the
+        // report must not go on saying it is waiting for coverage data.
+        using var coordinator = new CoverageSessionCoordinator((_, _) => throw new InvalidOperationException("must not analyze"));
+        var (sink, path) = await FinishedReportAsync();
+        await coordinator.AttachReportAsync("session", sink);
+        await coordinator.AcceptArtifactAsync("session", new FileInfo(Path.Combine(_directory, "missing")), new CancellationToken(true));
+
+        await coordinator.CompleteAsync();
+
+        var html = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("\"status\":\"unavailable\"", html, StringComparison.Ordinal);
+        Assert.Contains("No coverage data was received", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Completing_the_run_leaves_received_coverage_alone()
+    {
+        using var coordinator = new CoverageSessionCoordinator(
+            (_, _) => Task.FromResult(new ReportCoverage { Status = "available", Diagnostics = ["analysed"] }));
+        var (sink, path) = await FinishedReportAsync();
+        await coordinator.AttachReportAsync("session", sink);
+        var file = Path.Combine(_directory, "coverage.xml");
+        await File.WriteAllTextAsync(file, "<results><modules /></results>", TestContext.Current.CancellationToken);
+        await coordinator.AcceptArtifactAsync("session", new FileInfo(file), TestContext.Current.CancellationToken);
+
+        await coordinator.CompleteAsync();
+
+        var html = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("\"status\":\"available\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("No coverage data was received", html, StringComparison.Ordinal);
+    }
+
     private sealed class Producer(string uid) : IDataProducer
     {
         [SuppressMessage("Design", "CA1819:Properties should not return arrays", Justification = "Required by MTP.")]

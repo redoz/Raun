@@ -46,7 +46,7 @@ internal sealed class ClassifiedCoverageIntegration : IRaunCoverageIntegration
     public async Task CompleteAsync()
     {
         if (_coverletReport is not null) { await _coverletReport.EnrichAsync().ConfigureAwait(false); }
-        await _coordinator.DrainAsync().ConfigureAwait(false);
+        await _coordinator.CompleteAsync().ConfigureAwait(false);
     }
 
     public void Dispose() => _coordinator.Dispose();

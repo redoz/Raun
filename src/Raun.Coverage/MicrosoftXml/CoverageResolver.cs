@@ -15,15 +15,15 @@ internal static class CoverageResolver
         {
             return EvidenceStatus.Unmeasurable;
         }
+        var source = Normalize(branch.Descriptor.Location.Path);
         var modules = observations.Modules.Where(module =>
             string.Equals(Path.GetFileNameWithoutExtension(module.Name), branch.Descriptor.Member.Assembly, StringComparison.Ordinal)
-            && module.Ranges.Any(range => SamePath(range.Source.Path, branch.Descriptor.Location.Path))).ToArray();
+            && RangesIn(module, source).Length > 0).ToArray();
         if (modules.Length == 0 || modules.Select(module => module.Id).Distinct(StringComparer.Ordinal).Count() != 1)
         {
             return EvidenceStatus.Unknown;
         }
-        var ranges = modules.SelectMany(module => module.Ranges)
-            .Where(range => SamePath(range.Source.Path, branch.Descriptor.Location.Path)).ToArray();
+        var ranges = modules.SelectMany(module => RangesIn(module, source)).ToArray();
         if (ranges.Select(range => range.Source).Distinct().Any(source => !(verification?.Verify(branch, source) ?? VerifySource(branch, source))))
         {
             return EvidenceStatus.Unknown;
@@ -150,9 +150,18 @@ internal static class CoverageResolver
     private static long Size(CoverageRange range)
         => ((long)range.End.Line - range.Start.Line) * 1_000_000 + range.End.Character - range.Start.Character;
 
-    private static bool SamePath(string coveragePath, string sourcePath)
-        => string.Equals(Normalize(coveragePath), Normalize(sourcePath),
-            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    // A module's ranges by the source file they are in, built once per module. Resolving a branch
+    // used to walk every range of the module, normalizing two paths for each: quadratic in the size
+    // of the code under test.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<CoverageRange>, Dictionary<string, CoverageRange[]>> RangesByPath = new();
+
+    private static CoverageRange[] RangesIn(CoverageModule module, string normalizedSourcePath)
+        => RangesByPath.GetValue(module.Ranges, static ranges => ranges
+                .GroupBy(range => Normalize(range.Source.Path), PathComparer)
+                .ToDictionary(group => group.Key, group => group.ToArray(), PathComparer))
+            .TryGetValue(normalizedSourcePath, out var found) ? found : [];
 
     private static string Normalize(string path)
         => Path.GetFullPath(path.Replace(@"\\", @"\", StringComparison.Ordinal));
