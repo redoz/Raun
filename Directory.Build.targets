@@ -113,6 +113,21 @@
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
+  <!--
+    The packages depend on each other at exactly their own version. They are built from one commit
+    and use each other's internals (InternalsVisibleTo), so a consumer who moves one of them and not
+    the others gets a build that restores and compiles and then fails at run time with a
+    MissingMethodException. Pack writes a project reference as an open ">= version" range; this turns
+    it into "[version]", so NuGet refuses the mix at restore.
+  -->
+  <Target Name="RaunPackExactProjectReferenceVersions"
+          AfterTargets="_GetProjectReferenceVersions"
+          Condition="'$(IsPackable)' != 'false'">
+    <ItemGroup>
+      <_ProjectReferencesWithVersions Update="@(_ProjectReferencesWithVersions)" ProjectVersion="[%(ProjectVersion)]" />
+    </ItemGroup>
+  </Target>
+
   <!-- Tests keep their real source paths. CI builds the whole solution with
        -p:ContinuousIntegrationBuild=true, which maps every compiled path to /_/ for reproducible
        packages; a test never ships, but it does read its own location — [CallerFilePath] is how a

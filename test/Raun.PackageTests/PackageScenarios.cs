@@ -43,7 +43,7 @@ public sealed class PackageScenarios : Scenarios
     public async Task PackagesSuitTheBaseline()
     {
         var feed = await Given.BuiltPackages();
-        await (Then.AnalyzersLoadOnTheirRoslynBaseline(feed), Then.Net10DependenciesStayOn10(feed));
+        await (Then.AnalyzersLoadOnTheirRoslynBaseline(feed), Then.Net10DependenciesStayOn10(feed), Then.PackagesDependOnEachOtherExactly(feed));
     }
 }
 
@@ -112,6 +112,17 @@ public sealed class PackageThen : Then
     public Task AnalyzersLoadOnTheirRoslynBaseline([Read] PackageFeed feed)
     {
         foreach (var line in PackageContents.VerifyAnalyzersMatchTheirRoslynFolder(feed.Directory))
+        {
+            Context.Log(line);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    [StepName("Then the packages of {feed} depend on each other at exactly their own version")]
+    public Task PackagesDependOnEachOtherExactly([Read] PackageFeed feed)
+    {
+        foreach (var line in PackageContents.VerifyRaunDependenciesAreExact(feed.Directory))
         {
             Context.Log(line);
         }

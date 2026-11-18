@@ -92,6 +92,41 @@ public static partial class PackageContents
         return checkedDependencies;
     }
 
+    /// <summary>
+    /// A Raun package depends on another Raun package at exactly its own version (<c>[x]</c>). They
+    /// are built together and use each other's internals, so an open range would let a consumer mix
+    /// versions that restore and compile and then fail at run time. Returns what it checked.
+    /// </summary>
+    public static IReadOnlyList<string> VerifyRaunDependenciesAreExact(string feed)
+    {
+        var checkedDependencies = new List<string>();
+        foreach (var package in Directory.EnumerateFiles(feed, "*.nupkg"))
+        {
+            using var archive = ZipFile.OpenRead(package);
+            using var stream = archive.Entries.Single(e => e.FullName.EndsWith(".nuspec", StringComparison.Ordinal)).Open();
+            var nuspec = XDocument.Load(stream);
+            var metadata = nuspec.Descendants().Single(e => e.Name.LocalName == "metadata");
+            var own = metadata.Elements().Single(e => e.Name.LocalName == "version").Value;
+            foreach (var dependency in nuspec.Descendants().Where(e => e.Name.LocalName == "dependency"))
+            {
+                var id = (string)dependency.Attribute("id")!;
+                if (id != "Raun" && !id.StartsWith("Raun.", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var range = (string)dependency.Attribute("version")!;
+                Assert.True(
+                    range == "[" + own + "]",
+                    $"{Path.GetFileName(package)} depends on {id} {range}; it must be exactly [{own}].");
+                checkedDependencies.Add($"{Path.GetFileName(package)}: {id} {range}");
+            }
+        }
+
+        Assert.NotEmpty(checkedDependencies);
+        return checkedDependencies;
+    }
+
     private static List<(string Name, Version Version)> RoslynReferences(ZipArchiveEntry entry)
     {
         using var buffer = new MemoryStream();
