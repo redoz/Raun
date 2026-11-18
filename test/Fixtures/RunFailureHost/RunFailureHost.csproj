@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A real Microsoft.Testing.Platform host whose run fails outside every step: one scenario
+       resolves a scoped service that throws from Dispose. RunFailureProcessTests starts it and reads
+       what the platform prints and the exit code. Not a test project: `dotnet test` must not run it. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <GenerateProgramFile>false</GenerateProgramFile>
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
+    <RaunGenerateProgram>false</RaunGenerateProgram>
+    <!-- Referencing Raun.Mtp makes an exe a test application, which `dotnet test Raun.slnx` would
+         run. This one fails on purpose; only RunFailureProcessTests starts it. -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+  </PropertyGroup>
+  <ItemGroup>
+    <CompilerVisibleProperty Include="RaunGenerateProgram" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Raun.Mtp/Raun.Mtp.csproj" />
+    <ProjectReference Include="../../../src/Raun.Generator/Raun.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

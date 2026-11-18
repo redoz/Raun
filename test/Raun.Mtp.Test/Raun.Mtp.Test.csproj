@@ -30,6 +30,8 @@
     <!-- Run the generator over this project's scenarios, as a real consumer would. -->
     <ProjectReference Include="..\..\src\Raun.Generator\Raun.Generator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- Built with this project, started as its own process by RunFailureProcessTests. -->
+    <ProjectReference Include="..\Fixtures\RunFailureHost\RunFailureHost.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
