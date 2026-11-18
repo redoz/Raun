@@ -11,14 +11,17 @@ internal sealed class CancellationWatchdog : IDisposable
     private readonly TimeSpan grace;
     private readonly CancellationToken hostToken;
     private readonly Thread thread;
+    private readonly Func<long> timestamp;
     private bool disposed;
     private Operation? scenario;
 
-    internal CancellationWatchdog(TimeSpan grace, CancellationToken hostToken)
+    // timestamp: the clock, in Stopwatch ticks; a test replaces it.
+    internal CancellationWatchdog(TimeSpan grace, CancellationToken hostToken, Func<long>? timestamp = null)
     {
         ValidateGrace(grace);
         this.grace = grace;
         this.hostToken = hostToken;
+        this.timestamp = timestamp ?? Stopwatch.GetTimestamp;
         thread = new Thread(Supervise) { IsBackground = true, Name = "Raun cancellation watchdog" };
         thread.Start();
     }
@@ -52,17 +55,23 @@ internal sealed class CancellationWatchdog : IDisposable
             lock (gate)
             {
                 if (disposed) return;
+
+                // One reading of the clock for the whole pass. This thread can lose the processor
+                // between two operations; with a reading per operation, time that passed in that gap
+                // let a step's deadline latch as the step's own timeout in a pass that had just
+                // judged the scenario's deadline, which is at least as old, as not yet reached.
+                var now = timestamp();
+
+                // The scenario goes first, wherever it sits in the list: when its deadline and a
+                // step's have both passed, the scenario owns the timeout and the step is cancelled
+                // by it.
+                if (scenario is { Completed: false } current) Expire(current, now);
                 foreach (var operation in operations)
                 {
                     if (operation.Completed) continue;
-                    var cancelScenario = hostToken.IsCancellationRequested || scenario?.CancellationStarted == true;
-                    if (cancelScenario || operation.Source.IsCancellationRequested ||
-                        (operation.Timeout is { } timeout && Stopwatch.GetElapsedTime(operation.Started) >= timeout))
-                    {
-                        operation.RequestCancellation(timedOut: !cancelScenario && !operation.Source.IsCancellationRequested);
-                    }
+                    if (operation != scenario) Expire(operation, now);
                     if (operation == scenario && !operations.Any(other => other != scenario && !other.Completed)) continue;
-                    if (operation.CancellationStarted && Stopwatch.GetElapsedTime(operation.CanceledAt) >= grace)
+                    if (operation.CancellationStarted && Stopwatch.GetElapsedTime(operation.CanceledAt, now) >= grace)
                     {
                         fatal = $"Raun: {operation.Description} did not stop within cancellation grace {grace}. Terminating the test host; cleanup and reports may be incomplete.";
                         break;
@@ -71,6 +80,16 @@ internal sealed class CancellationWatchdog : IDisposable
                 if (fatal is null) Monitor.Wait(gate, TimeSpan.FromMilliseconds(10));
             }
             if (fatal is not null) Terminate(fatal);
+        }
+    }
+
+    private void Expire(Operation operation, long now)
+    {
+        var cancelScenario = hostToken.IsCancellationRequested || scenario?.CancellationStarted == true;
+        if (cancelScenario || operation.Source.IsCancellationRequested ||
+            (operation.Timeout is { } timeout && Stopwatch.GetElapsedTime(operation.Started, now) >= timeout))
+        {
+            operation.RequestCancellation(timedOut: !cancelScenario && !operation.Source.IsCancellationRequested);
         }
     }
 
@@ -127,7 +146,7 @@ internal sealed class CancellationWatchdog : IDisposable
         internal CancellationTokenSource Source { get; } = source;
         internal TimeSpan? Timeout { get; } = timeout;
         internal string Description { get; } = description;
-        internal long Started { get; } = Stopwatch.GetTimestamp();
+        internal long Started { get; } = owner.timestamp();
         internal long CanceledAt { get; private set; }
         private volatile bool cancellationStarted;
         internal bool CancellationStarted => cancellationStarted;
@@ -141,7 +160,7 @@ internal sealed class CancellationWatchdog : IDisposable
             lock (owner.gate)
             {
                 if (Completed || CancellationStarted) return;
-                CanceledAt = Stopwatch.GetTimestamp();
+                CanceledAt = owner.timestamp();
                 this.timedOut = timedOut;
                 cancellationStarted = true;
                 callbacks = Source.CancelAsync();

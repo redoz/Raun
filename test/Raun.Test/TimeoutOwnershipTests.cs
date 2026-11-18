@@ -179,6 +179,63 @@ public class TimeoutOwnershipTests
         Assert.False(operation.TimedOut, "scenario cancellation was already requested before the child deadline was processed");
     }
 
+    [Fact]
+    public async Task A_child_deadline_that_passes_while_the_watchdog_is_mid_pass_does_not_beat_the_scenario_deadline()
+    {
+        // The supervising thread can lose the processor between looking at the scenario and looking
+        // at a step. Time that passes in that gap must not let the step's deadline latch as its own
+        // timeout while the scenario, which started earlier and has the same deadline, was judged
+        // "not yet": the clock below jumps exactly there.
+        var clock = new JumpingClock();
+        using var root = new CancellationTokenSource();
+        using var child = new CancellationTokenSource();
+        using var watchdog = new CancellationWatchdog(TimeSpan.FromSeconds(5), CancellationToken.None, clock.Read);
+        using var scenario = watchdog.Watch(root, TimeSpan.FromMilliseconds(100), "scenario", isScenario: true);
+        using var operation = watchdog.Watch(child, TimeSpan.FromMilliseconds(100), "child");
+        var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = child.Token.Register(() => canceled.TrySetResult());
+
+        clock.JumpAfterNextRead(before: TimeSpan.FromMilliseconds(50), after: TimeSpan.FromMilliseconds(500));
+
+        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(scenario.TimedOut);
+        Assert.False(operation.TimedOut, "the scenario deadline had passed too, and the scenario owns the timeout");
+    }
+
+    /// <summary>A clock that stands still until told to jump, and then jumps between two reads.</summary>
+    private sealed class JumpingClock
+    {
+        private readonly object gate = new();
+        private long now;
+        private long? afterNextRead;
+
+        public long Read()
+        {
+            lock (gate)
+            {
+                var value = now;
+                if (afterNextRead is { } next)
+                {
+                    now = next;
+                    afterNextRead = null;
+                }
+
+                return value;
+            }
+        }
+
+        public void JumpAfterNextRead(TimeSpan before, TimeSpan after)
+        {
+            lock (gate)
+            {
+                now = Ticks(before);
+                afterNextRead = Ticks(after);
+            }
+        }
+
+        private static long Ticks(TimeSpan time) => (long)(time.TotalSeconds * System.Diagnostics.Stopwatch.Frequency);
+    }
+
     [Theory]
     [InlineData(-1)]
     [InlineData(2147483648)]
