@@ -75,6 +75,107 @@ public class ScenarioBodySemanticsTests
         Assert.Contains(result.GeneratorDiagnostics, d => d.Id == "RAUN034");
     }
 
+    /// <summary>
+    /// The differential check: the same body is compiled twice into one assembly, once as a
+    /// [Scenario] the generator lowers and once as an ordinary method the C# compiler runs as
+    /// written. Every step records its call and arguments. The generator may refuse a body, with a
+    /// diagnostic; what it accepts must record exactly what C# records.
+    /// </summary>
+    [Theory]
+    [InlineData("var a = await Given.Three(); var b = await Given.Add(a, 4); await Given.Record(b);")]
+    [InlineData("var a = await Given.Three(); a = await Given.Add(a, 1); a = await Given.Add(a, a); await Given.Record(a);")]
+    [InlineData("var a = await Given.Three(); await Given.Record(a * 2 + 1); await Given.Record($\"v={a}\"); await Given.Record(a / 2);")]
+    [InlineData("int n; if (await Given.Flag(true)) { n = await Given.Three(); } else { n = await Given.Four(); } await Given.Record(n);")]
+    [InlineData("int n; if (await Given.Flag(false)) { n = await Given.Three(); } else { n = await Given.Four(); } await Given.Record(n);")]
+    [InlineData("var a = await Given.Three(); if (await Given.Flag(true)) { a = await Given.Add(a, 10); } await Given.Record(a);")]
+    [InlineData("var a = await Given.Three(); if (await Given.Flag(false)) { a = await Given.Add(a, 10); } await Given.Record(a);")]
+    [InlineData("var a = await Given.Three(); if (await Given.Flag(true)) { if (await Given.Flag(false)) { a = await Given.Add(a, 1); } else { a = await Given.Add(a, 2); } } await Given.Record(a);")]
+    [InlineData("var (a, b) = await (Given.Three(), Given.Four()); await Given.Record(a - b);")]
+    [InlineData("IAnimal animal = await Given.ADog(); await Given.Check(animal);")]
+    [InlineData("var dog = await Given.ADog(); await Given.Check(dog);")]
+    [InlineData("IAnimal animal; if (await Given.Flag(false)) { animal = await Given.ADog(); } else { animal = await Given.ACat(); } await Given.Check(animal);")]
+    [InlineData("int? maybe = await Given.Three(); await Given.Record(maybe);")]
+    [InlineData("object boxed = await Given.Three(); await Given.Record(boxed);")]
+    [InlineData("double half = await Given.Three(); await Given.Record(half / 2);")]
+    [InlineData("long wide = await Given.Three(); await Given.Record(wide);")]
+    [InlineData("var total = await Given.Three(); total += await Given.Four(); await Given.Record(total);")]
+    [InlineData("var total = await Given.Three(); total -= await Given.Four(); await Given.Record(total);")]
+    [InlineData("var text = await Given.Text(); text ??= await Given.Text(); await Given.Record(text);")]
+    [InlineData("var a = await Given.Three(); var b = a; await Given.Record(b);")]
+    [InlineData("var a = await Given.Three(); await Given.Record(a); await Given.Record(a.ToString().Length);")]
+    [InlineData("var d = await Given.ADog(); await Given.Record(d is IAnimal); await Given.Record(d?.GetType().Name);")]
+    [InlineData("var a = await Given.Add(1, 2); var b = await Given.Add(a, await Given.Three()); await Given.Record(b);")]
+    [InlineData("await Given.Record(await Given.Three());")]
+    public async Task What_the_generator_accepts_runs_what_CSharp_runs(string body)
+    {
+        var result = GeneratorHarness.Run(OracleSource(body));
+        Assert.True(
+            result.EmitDiagnostics.IsEmpty,
+            "the body is not valid C#, or the generated code does not compile: " + string.Join("; ", result.EmitDiagnostics));
+        if (!result.GeneratorDiagnostics.IsEmpty)
+        {
+            // Refused out loud, with nothing generated for it: an honest outcome.
+            Assert.DoesNotContain("Story", result.GeneratedSource, StringComparison.Ordinal);
+            return;
+        }
+
+        var trace = (List<string>)result.Assembly!.GetType("Oracle")!.GetField("Calls")!.GetValue(null)!;
+
+        var plain = result.Assembly.GetType("Plain")!;
+        await (Task)plain.GetMethod("Story")!.Invoke(Activator.CreateInstance(plain), null)!;
+        var expected = trace.ToList();
+        trace.Clear();
+
+        var results = await result.Definitions().Single().RunAsync(maxParallelism: 1);
+        Assert.DoesNotContain(results, step => step.Status is StepStatus.Failed or StepStatus.Skipped);
+
+        Assert.Equal(expected, trace);
+    }
+
+    private static string OracleSource(string body) => $$"""
+        using System;
+        using System.Collections.Generic;
+        using System.Threading.Tasks;
+        using Raun;
+        public static class Oracle
+        {
+            public static readonly List<string> Calls = new();
+            public static void Add(FormattableString call) { lock (Calls) { Calls.Add(FormattableString.Invariant(call)); } }
+        }
+        public interface IAnimal { }
+        public sealed class Dog : IAnimal { }
+        public sealed class Cat : IAnimal { }
+        public sealed class OracleSteps : Given<NoWorld>
+        {
+            public Task<int> Three() { Oracle.Add($"Three()"); return Task.FromResult(3); }
+            public Task<int> Four() { Oracle.Add($"Four()"); return Task.FromResult(4); }
+            public Task<int> Add(int left, int right) { Oracle.Add($"Add({left}, {right})"); return Task.FromResult(left + right); }
+            public Task<bool> Flag(bool value) { Oracle.Add($"Flag({value})"); return Task.FromResult(value); }
+            public Task<string?> Text() { Oracle.Add($"Text()"); return Task.FromResult<string?>("text"); }
+            public Task<Dog> ADog() { Oracle.Add($"ADog()"); return Task.FromResult(new Dog()); }
+            public Task<Cat> ACat() { Oracle.Add($"ACat()"); return Task.FromResult(new Cat()); }
+            public Task Record(object? value) { Oracle.Add($"Record({value?.GetType().Name}:{value})"); return Task.CompletedTask; }
+            public Task Check(IAnimal animal) { Oracle.Add($"Check(IAnimal {animal.GetType().Name})"); return Task.CompletedTask; }
+            public Task Check(Dog dog) { Oracle.Add($"Check(Dog)"); return Task.CompletedTask; }
+        }
+        public sealed class Stories : Scenarios<NoWorld>
+        {
+            public OracleSteps Given => Steps<OracleSteps>();
+            [Scenario] public async Task Story()
+            {
+                {{body}}
+            }
+        }
+        public sealed class Plain
+        {
+            public OracleSteps Given { get; } = new OracleSteps();
+            public async Task Story()
+            {
+                {{body}}
+            }
+        }
+        """;
+
     private static List<string> Seen(GeneratorResult result)
         => (List<string>)result.Assembly!.GetType("Probe")!.GetField("Seen")!.GetValue(null)!;
 
