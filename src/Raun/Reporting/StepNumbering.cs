@@ -4,13 +4,14 @@ using Raun.Model;
 namespace Raun.Reporting;
 
 /// <summary>
-/// Computes per-step display labels for a scenario so a runner that sorts sibling leaves
-/// lexically (VS Test Explorer) renders them in execution order. A standalone step takes the next
+/// Computes the label each step of a scenario is shown under, wherever steps are listed: the HTML
+/// report, and any host's test tree. One numbering, so a step reads "3." in both. Labels sort
+/// lexically in execution order, which a tree that sorts sibling leaves by name needs. A standalone step takes the next
 /// top-level number; a parallel/array group (consecutive nodes sharing a non-null
 /// <see cref="ScenarioNode.GroupId"/>) takes one top-level number with sub-numbered members. Both
 /// the number and the sub-index are zero-padded to a per-scenario width so lexical order equals
-/// numeric order (≤9 steps render <c>1</c>–<c>9</c>; ≥10 render <c>01</c>…). Pure and runner-free,
-/// so it is unit-testable and shared by discovery and execution.
+/// numeric order (≤9 steps render <c>1</c>–<c>9</c>; ≥10 render <c>01</c>…). Pure, and the same
+/// for discovery, execution and reporting.
 /// </summary>
 public static class StepNumbering
 {

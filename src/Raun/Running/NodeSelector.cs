@@ -15,8 +15,8 @@ public abstract class NodeSelector
 }
 
 /// <summary>
-/// Selects the step nodes a runner named by uid (<c>{ScenarioId}:{StepId}</c>) — what an IDE sends
-/// when the user runs one test, and what <c>--filter-uid</c> carries.
+/// Selects steps by uid (<c>{ScenarioId}:{StepId}</c>, see <see cref="StepUid"/>): the identity
+/// every host and sink shares, and so the one way to name a step that needs no host.
 /// </summary>
 public sealed class UidNodeSelector : NodeSelector
 {
