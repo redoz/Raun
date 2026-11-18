@@ -11,69 +11,22 @@ internal static class StepReporting
         StepStatus.Passed => PassedTestNodeStateProperty.CachedInstance,
         StepStatus.Skipped => new SkippedTestNodeStateProperty(result.SkipReason ?? "skipped"),
         StepStatus.NotTaken => new SkippedTestNodeStateProperty(result.SkipReason ?? "not taken"),
-        StepStatus.Failed => MapFailure(result.Exception),
+        StepStatus.Failed => MapFailure(result),
         _ => new ErrorTestNodeStateProperty(
             new InvalidOperationException(
                 string.Format(CultureInfo.InvariantCulture, "Unexpected terminal step status '{0}'.", result.Status))),
     };
 
-    private static IProperty MapFailure(Exception? exception)
+    // The runtime says what kind of failure it is; this only spells that in the platform's states.
+    private static IProperty MapFailure(StepResult result)
     {
-        var ex = exception ?? new InvalidOperationException("Step failed without an exception.");
-        return ex switch
+        var ex = result.Exception ?? new InvalidOperationException("Step failed without an exception.");
+        return result.FailureKind switch
         {
-            TimeoutException => new TimeoutTestNodeStateProperty(ex),
-            _ when IsAssertionException(ex) => new FailedTestNodeStateProperty(ex),
+            StepFailureKind.Timeout => new TimeoutTestNodeStateProperty(ex),
+            StepFailureKind.Assertion => new FailedTestNodeStateProperty(ex),
             _ => new ErrorTestNodeStateProperty(ex),
         };
-    }
-
-    /// <summary>
-    /// <c>XunitException</c> (xunit.v3.assert), <c>AssertionException</c> (NUnit and others),
-    /// <c>AssertionFailedException</c> (FluentAssertions), <c>ShouldAssertException</c> (Shouldly),
-    /// <c>AssertFailedException</c> (MSTest).
-    /// </summary>
-    private static readonly string[] AssertionExceptionNames =
-    [
-        "XunitException",
-        "AssertionException",
-        "AssertionFailedException",
-        "ShouldAssertException",
-        "AssertFailedException",
-    ];
-
-    private static bool IsAssertionException(Exception exception)
-    {
-        for (var type = exception.GetType(); type is not null; type = type.BaseType)
-        {
-            if (IsAssertionName(type.Name))
-            {
-                return true;
-            }
-        }
-
-        foreach (var iface in exception.GetType().GetInterfaces())
-        {
-            if (IsAssertionName(iface.Name))
-            {
-                return true;
-            }
-        }
-
-        return false;
-
-        static bool IsAssertionName(string name)
-        {
-            foreach (var known in AssertionExceptionNames)
-            {
-                if (name.EndsWith(known, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
     }
 
     /// <summary>Where a step is declared, for "go to source"; null when the generator recorded no
