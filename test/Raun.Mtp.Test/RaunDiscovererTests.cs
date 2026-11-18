@@ -35,6 +35,8 @@ public class RaunDiscovererTests
         ScenarioId = id,
         DisplayName = display,
         MethodName = method,
+        Namespace = DeclaringType.NamespaceOf(method),
+        TypeName = DeclaringType.NameOf(method),
         Nodes = nodes,
     };
 
@@ -231,7 +233,7 @@ public class RaunDiscovererTests
         {
             ScenarioId = "scn",
             DisplayName = "my scenario",
-            MethodName = "Ns.Scn",
+            MethodName = "Ns.Scn", Namespace = "", TypeName = "Ns",
             Tags = [new("area", "auth"), new("owner", "payments")],
             Nodes = [Node(0, "a", "step a")],
         };
@@ -250,7 +252,7 @@ public class RaunDiscovererTests
         {
             ScenarioId = "scn",
             DisplayName = "my scenario",
-            MethodName = "MyApp.Booking.Scenarios.BookAppointment",
+            MethodName = "MyApp.Booking.Scenarios.BookAppointment", Namespace = "MyApp.Booking", TypeName = "Scenarios",
             Tags = [new("area", "auth")],
             Nodes = [Node(0, "a", "step a"), Node(1, "b", "step b")],
         };

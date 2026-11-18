@@ -79,13 +79,13 @@ public sealed class ExplicitResourceKeyTests
         var node = Node(0, "step");
         var definition = new ScenarioDefinition
         {
-            ScenarioId = "keys", DisplayName = "keys", MethodName = "Keys.Run", Nodes = [node],
+            ScenarioId = "keys", DisplayName = "keys", MethodName = "Keys.Run", Namespace = "", TypeName = "Keys", Nodes = [node],
         };
         var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(definition);
         builder.OnStepFinished(definition, new StepResult
         {
-            Node = node, DisplayName = "step", Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
+            Node = node, TitleMessage = StepMessage.FromText("step"), Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
             Effects = resources.Effects, Links = resources.Links,
         });
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(builder.Build("now")));

@@ -12,9 +12,8 @@ namespace Raun.Mtp;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Namespace and type come from <see cref="ScenarioIdentity.Resolve"/>: the members the generator
-/// recorded on the definition, or the dotted split of <see cref="ScenarioDefinition.MethodName"/>
-/// for a definition that predates them.
+/// Namespace and type are the ones the definition states (<see cref="ScenarioDefinition.Namespace"/>,
+/// <see cref="ScenarioDefinition.TypeName"/>).
 /// </para>
 /// <para>
 /// The assembly name is resolved once from the entry assembly (the running test app), matching what
@@ -31,15 +30,14 @@ internal static class ScenarioTestIdentity
 
     /// <summary>
     /// Builds the method-identity property for a scenario: namespace and type come from the
-    /// definition (see <see cref="ScenarioIdentity.Resolve"/>), but the method node is the human scenario display
+    /// definition, but the method node is the human scenario display
     /// name so a runner groups steps under the scenario name. A non-empty
     /// <see cref="ScenarioDefinition.ClassDisplayName"/> overrides the type name.
     /// </summary>
     public static TestMethodIdentifierProperty Create(ScenarioDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        ScenarioIdentity.Resolve(definition, out var @namespace, out var typeName);
-        return Create(@namespace, typeName, definition.DisplayName, definition.ClassDisplayName);
+        return Create(definition.Namespace, definition.TypeName, definition.DisplayName, definition.ClassDisplayName);
     }
 
     private static TestMethodIdentifierProperty Create(

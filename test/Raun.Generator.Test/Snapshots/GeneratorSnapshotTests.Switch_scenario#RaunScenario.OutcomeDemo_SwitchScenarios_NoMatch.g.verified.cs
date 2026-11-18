@@ -153,7 +153,6 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "shipment " + ((string)(__inputs.GetArgument<string>(0))) + " scheduled",
                 FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("shipment ").AppendFormatted(((string)(__inputs.GetArgument<string>(0)))).AppendLiteral(" scheduled").Build()
             };
             nodes[4] = new global::Raun.Model.ScenarioNode
@@ -220,7 +219,6 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "customer told " + ((string)(__inputs.GetArgument<string>(0))),
                 FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("customer told ").AppendFormatted(((string)(__inputs.GetArgument<string>(0)))).Build()
             };
             nodes[6] = new global::Raun.Model.ScenarioNode

@@ -2003,7 +2003,7 @@ internal sealed class ScenarioParser
         var resourceClaims = BuildResourceClaims(written, method, resultType is not null, lowered);
         AddUses(method.GetAttributes());
 
-        var (template, formatExpr, titleExpr, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, titleArguments, expressions);
+        var (template, titleExpr, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, titleArguments, expressions);
         var needsCapture = ReadsCapturedArguments(titleExpr)
             || resourceClaims.Any(claim => ReadsCapturedArguments(claim.Expression)
                 || claim.SubjectExpressions.Any(ReadsCapturedArguments));
@@ -2053,10 +2053,9 @@ internal sealed class ScenarioParser
             }
             invokeCall = BuildCall(invocation, member.WithExpression(call.Receiver), lowering.TypeArguments?.Node, localArguments);
             resourceClaims = BuildResourceClaims(written, method, resultType is not null, localArguments);
-            (template, _, inlineTitle, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, localArguments, expressions);
+            (template, inlineTitle, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, localArguments, expressions);
             prepareArguments = null;
             titleExpr = null;
-            formatExpr = null;
         }
 
         var step = new ParsedStep
@@ -2074,7 +2073,6 @@ internal sealed class ScenarioParser
             InlineArgumentStatements = inlineArguments,
             InlineTitleExpression = inlineTitle,
             DisplayNameTemplate = template,
-            FormatExpression = formatExpr,
             TitleExpression = titleExpr,
             CompletedTitleExpression = completedTitleExpr,
             NoteExpressions = call.Notes.Select(note => note.Node).ToArray(),

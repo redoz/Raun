@@ -19,10 +19,7 @@ internal static class StepNotes
                 var titleFormatting = formatting.ForStep(node.Index).WithFormatProvider(CultureInfo.InvariantCulture);
                 return rich(inputs ?? UnavailableInputs.Instance, titleFormatting);
             }
-            if (node.FormatDisplayName is { } legacy)
-            {
-                return StepMessage.FromText(legacy(inputs ?? UnavailableInputs.Instance));
-            }
+
         }
         catch (StepInputUnavailableException)
         {
@@ -58,19 +55,9 @@ internal static class StepNotes
     {
         var notes = new List<StepMessage>();
         var available = inputs ?? UnavailableInputs.Instance;
-        if (node.FormatNoteMessages.Count > 0)
+        foreach (var formatter in node.FormatNoteMessages)
         {
-            foreach (var formatter in node.FormatNoteMessages)
-            {
-                Add(() => formatter(available, formatting.ForStep(node.Index)));
-            }
-        }
-        else
-        {
-            foreach (var formatter in node.FormatNotes)
-            {
-                Add(() => StepMessage.FromText(formatter(available)));
-            }
+            Add(() => formatter(available, formatting.ForStep(node.Index)));
         }
         return [.. notes];
 

@@ -248,7 +248,7 @@ public class TimeoutOwnershipTests
     private static ScenarioDefinition Definition(string id, Func<IStepInputs, ScenarioContext, Task<object?>> body,
         TimeSpan? scenarioTimeout = null, TimeSpan? stepTimeout = null) => new()
     {
-        ScenarioId = id, DisplayName = id, MethodName = id, Timeout = scenarioTimeout,
+        ScenarioId = id, DisplayName = id, MethodName = id, Namespace = "", TypeName = "", Timeout = scenarioTimeout,
         Uses = [new ContendedResourceUse(typeof(Database), LockMode.Exclusive)],
         Nodes =
         [

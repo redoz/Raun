@@ -24,7 +24,7 @@ public class ResourceLabelMemoryIntegrationTests
         FormatNoteMessages = [(_, f) => StepMessage.Create(f, $"Note {Key}")],
     };
     private static ScenarioDefinition Definition(params ScenarioNode[] nodes) => new()
-    { ScenarioId = "test", DisplayName = "test", MethodName = "Test", Nodes = nodes };
+    { ScenarioId = "test", DisplayName = "test", MethodName = "Test", Namespace = "", TypeName = "", Nodes = nodes };
 
     [Fact]
     public async Task Setup_titles_notes_logs_effects_and_cleanup_share_the_same_execution_memory()

@@ -33,7 +33,7 @@ public sealed class TaskNoteTests
             Index = 0, StepId = "step", Phase = "Given", OperationName = "seed", DisplayNameTemplate = "seed", DependsOn = [],
             Invoke = (_, _) => Task.FromResult<object?>(42).Note("Use a known seed"),
         };
-        var definition = new ScenarioDefinition { ScenarioId = "notes", DisplayName = "notes", MethodName = "Notes.Run", Nodes = [node] };
+        var definition = new ScenarioDefinition { ScenarioId = "notes", DisplayName = "notes", MethodName = "Notes.Run", Namespace = "", TypeName = "Notes", Nodes = [node] };
         var result = Assert.Single(await new ScenarioScheduler().RunAsync(definition));
         Assert.Equal(["Use a known seed"], result.Notes);
         Assert.Empty(result.Logs);
@@ -62,7 +62,7 @@ public sealed class TaskNoteTests
         {
             Index = 1, StepId = "note-1", Phase = "Given", OperationName = "read", DisplayNameTemplate = "read",
             DependsOn = [0], Invoke = (_, _) => Task.FromResult<object?>(null),
-            FormatNotes = [inputs => "value " + inputs.Get<int>(0)],
+            FormatNoteMessages = [(inputs, _) => StepMessage.FromText("value " + inputs.Get<int>(0))],
         };
 
         var results = await new ScenarioScheduler().RunAsync(NoteDefinition(failing, reader));
@@ -108,7 +108,7 @@ public sealed class TaskNoteTests
         });
         var definition = new ScenarioDefinition
         {
-            ScenarioId = "notes", DisplayName = "notes", MethodName = "Notes.Run", Nodes = [node], Timeout = TimeSpan.FromMilliseconds(100),
+            ScenarioId = "notes", DisplayName = "notes", MethodName = "Notes.Run", Namespace = "", TypeName = "Notes", Nodes = [node], Timeout = TimeSpan.FromMilliseconds(100),
         };
         var result = Assert.Single(await new ScenarioScheduler().RunAsync(definition));
         completion.TrySetResult(null);
@@ -138,12 +138,13 @@ public sealed class TaskNoteTests
         IReadOnlyList<Func<IStepInputs, string>>? notes = null) => new()
     {
         Index = index, StepId = "note-" + index, Phase = "Given", OperationName = "seed", DisplayNameTemplate = "seed",
-        DependsOn = [], Invoke = invoke, FormatNotes = notes ?? [],
+        DependsOn = [], Invoke = invoke,
+        FormatNoteMessages = [.. (notes ?? []).Select(note => (Func<IStepInputs, MessageFormattingContext, StepMessage>)((inputs, _) => StepMessage.FromText(note(inputs))))],
     };
 
     private static ScenarioDefinition NoteDefinition(params ScenarioNode[] nodes) => new()
     {
-        ScenarioId = "notes", DisplayName = "notes", MethodName = "Notes.Run", Nodes = nodes,
+        ScenarioId = "notes", DisplayName = "notes", MethodName = "Notes.Run", Namespace = "", TypeName = "Notes", Nodes = nodes,
     };
 
     private sealed class NoteSink : IRunEventSink

@@ -58,12 +58,12 @@ public sealed class ResourcePresentationTests
             Index = 0, StepId = "step", Phase = "When", OperationName = "read", DisplayNameTemplate = "read appointment", DependsOn = [],
             Invoke = (_, _) => Task.FromResult<object?>(null),
         };
-        var definition = new ScenarioDefinition { ScenarioId = "sc", DisplayName = "scenario", MethodName = "N.Test", Nodes = [node] };
+        var definition = new ScenarioDefinition { ScenarioId = "sc", DisplayName = "scenario", MethodName = "N.Test", Namespace = "", TypeName = "N", Nodes = [node] };
         var builder = new HtmlReportModelBuilder();
         builder.OnScenarioStarted(definition);
         builder.OnStepFinished(definition, new StepResult
         {
-            Node = node, DisplayName = "read appointment", Status = StepStatus.Passed, StartedAt = effect.Timestamp,
+            Node = node, TitleMessage = StepMessage.FromText("read appointment"), Status = StepStatus.Passed, StartedAt = effect.Timestamp,
             Effects = context.Resources.Effects, LogEntries = context.LogEntries,
         });
         var report = Assert.Single(builder.Build("now").Scenarios);

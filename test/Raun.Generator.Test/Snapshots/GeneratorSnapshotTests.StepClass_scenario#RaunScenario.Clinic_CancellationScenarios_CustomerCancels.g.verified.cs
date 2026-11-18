@@ -104,7 +104,6 @@ namespace Raun.Generated
 #line hidden
                     return (object? )__r;
                 },
-                FormatDisplayName = static __inputs => "" + ((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true))) + " has an appointment",
                 FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true)))).AppendLiteral(" has an appointment").Build()
             };
             nodes[3] = new global::Raun.Model.ScenarioNode
@@ -209,7 +208,6 @@ namespace Raun.Generated
 #line hidden
                     return (object? )__r;
                 },
-                FormatDisplayName = static __inputs => "" + ((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true))) + " cancels " + ((global::Clinic.Appointment)(__inputs.GetArgument<global::Clinic.Appointment>(1, () => __inputs.Get<global::Clinic.Appointment>(2), true))),
                 FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true)))).AppendLiteral(" cancels ").AppendFormatted(((global::Clinic.Appointment)(__inputs.GetArgument<global::Clinic.Appointment>(1, () => __inputs.Get<global::Clinic.Appointment>(2), true)))).Build()
             };
             nodes[6] = new global::Raun.Model.ScenarioNode
@@ -243,7 +241,6 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "" + ((global::Clinic.Appointment)(__inputs.GetArgument<global::Clinic.Appointment>(0, () => __inputs.Get<global::Clinic.Appointment>(5), true))) + " is cancelled",
                 FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendFormatted(((global::Clinic.Appointment)(__inputs.GetArgument<global::Clinic.Appointment>(0, () => __inputs.Get<global::Clinic.Appointment>(5), true)))).AppendLiteral(" is cancelled").Build()
             };
             nodes[7] = new global::Raun.Model.ScenarioNode
@@ -346,7 +343,6 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "the calendar is free for " + ((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true))),
                 FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("the calendar is free for ").AppendFormatted(((global::Clinic.Customer)(__inputs.GetArgument<global::Clinic.Customer>(0, () => __inputs.Get<global::Clinic.Customer>(1), true)))).Build()
             };
             nodes[10] = new global::Raun.Model.ScenarioNode

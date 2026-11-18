@@ -371,7 +371,6 @@ public sealed class RunLoop
                 var result = new StepResult
                 {
                     Node = node,
-                    DisplayName = titleMessage.Text,
                     TitleMessage = titleMessage,
                     Status = StepStatus.Skipped,
                     StartedAt = null,

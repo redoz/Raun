@@ -42,6 +42,7 @@ public class TracingTests
         ScenarioId = scenarioId,
         DisplayName = "tracing scenario " + scenarioId,
         MethodName = "Ns.Tracing." + scenarioId,
+        Namespace = "", TypeName = "",
         Nodes = nodes,
     };
 

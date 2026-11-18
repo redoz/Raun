@@ -29,6 +29,8 @@ public class ScenarioNodePathTests
         ScenarioId = "scn",
         DisplayName = displayName,
         MethodName = methodName,
+        Namespace = DeclaringType.NamespaceOf(methodName),
+        TypeName = DeclaringType.NameOf(methodName),
         ClassDisplayName = classDisplayName,
         Nodes = [step],
     };
@@ -135,7 +137,7 @@ public class ScenarioNodePathTests
     }
 
     [Fact]
-    public void The_namespace_and_class_segments_come_from_the_recorded_identity_when_present()
+    public void The_namespace_and_class_segments_are_the_ones_the_definition_states()
     {
         var step = Node("patient Jane exists");
         var definition = new ScenarioDefinition
@@ -154,23 +156,12 @@ public class ScenarioNodePathTests
         Assert.Equal("Outer+Inner", segments[3]);
     }
 
-    [Fact]
-    public void Without_recorded_identity_the_segments_fall_back_to_splitting_the_method_name()
-    {
-        var step = Node("patient Jane exists");
-        var definition = Definition("Demo.Booking.CustomerBooks", "customer books", null, step);
-
-        var segments = ScenarioNodePath.For(definition, step).Split('/');
-
-        Assert.Equal("Demo", segments[2]);
-        Assert.Equal("Booking", segments[3]);
-    }
 
     private static ScenarioDefinition Tagged(ScenarioNode step) => new()
     {
         ScenarioId = "scn",
         DisplayName = "customer books",
-        MethodName = "Demo.Booking.CustomerBooks",
+        MethodName = "Demo.Booking.CustomerBooks", Namespace = "Demo", TypeName = "Booking",
         Tags = [new("area", "auth"), new("area", "billing"), new("owner", "payments")],
         Nodes = [step],
     };

@@ -91,14 +91,7 @@ internal static class StepReporting
 
     public static IEnumerable<string> OutputLines(StepResult result)
     {
-        if (result.Logs.Count == 0 && result.TraceId is null)
-        {
-            return [];
-        }
-
-        var lines = result.LogEntries.Count > 0
-            ? result.LogEntries.Select(e => e.ToString())
-            : result.Logs;
+        var lines = result.LogEntries.Select(e => e.ToString());
         return result.TraceId is null
             ? lines
             : lines.Append($"[trace] {result.TraceId} span {result.SpanId}");

@@ -28,7 +28,7 @@ public sealed class HtmlReportAnnouncementTests : IDisposable
         {
             ScenarioId = "announce-scn",
             DisplayName = "announce scenario",
-            MethodName = "Ns.Announce",
+            MethodName = "Ns.Announce", Namespace = "", TypeName = "Ns",
             Nodes =
             [
                 new ScenarioNode

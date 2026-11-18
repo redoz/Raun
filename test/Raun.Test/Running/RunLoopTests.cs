@@ -53,6 +53,7 @@ public class RunLoopTests
         ScenarioId = id,
         DisplayName = display,
         MethodName = $"Ns.{id}",
+        Namespace = "", TypeName = "",
         Nodes = nodes,
     };
 
@@ -61,6 +62,7 @@ public class RunLoopTests
         ScenarioId = id,
         DisplayName = display,
         MethodName = $"Ns.{id}",
+        Namespace = "", TypeName = "",
         Nodes = nodes,
         Uses = uses,
     };
@@ -690,7 +692,7 @@ public class RunLoopTests
 
             return definition.Nodes.Select(n => new StepResult
             {
-                Node = n, DisplayName = n.DisplayNameTemplate, Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
+                Node = n, TitleMessage = StepMessage.FromText(n.DisplayNameTemplate), Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
             }).ToList();
         }
 
@@ -720,7 +722,7 @@ public class RunLoopTests
                 ? Task.FromException<IReadOnlyList<StepResult>>(new InvalidOperationException("outside any step"))
                 : Task.FromResult<IReadOnlyList<StepResult>>(definition.Nodes.Select(n => new StepResult
                 {
-                    Node = n, DisplayName = n.DisplayNameTemplate, Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
+                    Node = n, TitleMessage = StepMessage.FromText(n.DisplayNameTemplate), Status = StepStatus.Passed, StartedAt = DateTimeOffset.UtcNow,
                 }).ToList());
 
         var sink = new RecordingSink();

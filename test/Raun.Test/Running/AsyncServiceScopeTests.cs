@@ -59,7 +59,7 @@ public sealed class AsyncServiceScopeTests
             uses: [new ContendedResourceUse(typeof(Exclusive), LockMode.Exclusive)]);
         var second = new ScenarioDefinition
         {
-            ScenarioId = "successor", DisplayName = "successor", MethodName = "Scope.Successor",
+            ScenarioId = "successor", DisplayName = "successor", MethodName = "Scope.Successor", Namespace = "", TypeName = "Scope",
             Uses = first.Uses,
             Nodes = [new ScenarioNode
             {
@@ -94,7 +94,7 @@ public sealed class AsyncServiceScopeTests
             body: async _ => await siblingEntered.Task);
         var second = new ScenarioDefinition
         {
-            ScenarioId = "sibling", DisplayName = "sibling", MethodName = "Scope.Sibling",
+            ScenarioId = "sibling", DisplayName = "sibling", MethodName = "Scope.Sibling", Namespace = "", TypeName = "Scope",
             Nodes = [new ScenarioNode
             {
                 Index = 0, StepId = "sibling", Phase = "Then", OperationName = "Sibling", DisplayNameTemplate = "sibling",

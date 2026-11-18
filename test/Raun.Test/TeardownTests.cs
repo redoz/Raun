@@ -81,7 +81,7 @@ public class TeardownTests
         {
             ScenarioId = "s",
             DisplayName = "s",
-            MethodName = "Ns.S",
+            MethodName = "Ns.S", Namespace = "", TypeName = "Ns",
             Nodes = [],
         };
 
@@ -118,7 +118,7 @@ public class TeardownTests
     {
         ScenarioId = "scn",
         DisplayName = "scenario",
-        MethodName = "Ns.Scn",
+        MethodName = "Ns.Scn", Namespace = "", TypeName = "Ns",
         TeardownPolicy = policy,
         Nodes = nodes,
     };

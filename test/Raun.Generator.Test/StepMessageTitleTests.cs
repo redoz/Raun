@@ -150,7 +150,7 @@ public class StepMessageTitleTests
             PrepareArguments = original.PrepareArguments,
             Invoke = static (_, _) => Task.FromResult<object?>(null),
         };
-        var definition = new ScenarioDefinition { ScenarioId = "manual", DisplayName = "manual", MethodName = "manual", Nodes = new[] { manual } };
+        var definition = new ScenarioDefinition { ScenarioId = "manual", DisplayName = "manual", MethodName = "manual", Namespace = "", TypeName = "", Nodes = new[] { manual } };
         var result = Assert.Single(await new ScenarioScheduler().RunAsync(definition, services));
         Assert.StartsWith("Registered configured ", result.DisplayName, StringComparison.Ordinal);
         Assert.All(References(result.TitleMessage), part => Assert.Equal("configured", part.Resource!.Value.Key.Value));
@@ -291,7 +291,6 @@ public class StepMessageTitleTests
         var definition = Scenario(generated, "Constants");
         Assert.Equal(3, definition.Nodes.Count);
         Assert.Equal("Constants one 7", definition.Nodes[1].DisplayNameTemplate);
-        Assert.Null(definition.Nodes[1].FormatDisplayName);
         Assert.Equal(new[] { 0 }, definition.Nodes[1].DependsOn);
         var plain = (await definition.RunAsync())[1];
         Assert.Equal("Constants one 7", plain.DisplayName);

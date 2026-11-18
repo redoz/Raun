@@ -27,6 +27,8 @@ public class WholeScenarioSelectorTests
         ScenarioId = id,
         DisplayName = id,
         MethodName = $"Ns.{id}",
+        Namespace = "",
+        TypeName = "Ns",
         Nodes = nodes,
     };
 

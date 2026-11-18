@@ -36,7 +36,7 @@ public class ScenarioOutcomeTests
     private static StepResult Step(int index, StepStatus status, string? skipReason = null, Exception? exception = null) => new()
     {
         Node = Nodes[index],
-        DisplayName = Nodes[index].DisplayNameTemplate,
+        TitleMessage = StepMessage.FromText(Nodes[index].DisplayNameTemplate),
         Status = status,
         StartedAt = Start + TimeSpan.FromSeconds(index),
         SkipReason = skipReason,

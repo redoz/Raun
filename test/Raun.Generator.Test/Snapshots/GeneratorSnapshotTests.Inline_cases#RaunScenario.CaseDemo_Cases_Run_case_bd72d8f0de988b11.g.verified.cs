@@ -68,7 +68,6 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "capture " + ((string)(__inputs.GetArgument<string>(0))),
                 FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("capture ").AppendFormatted(((string)(__inputs.GetArgument<string>(0)))).Build()
             };
             nodes[2] = new global::Raun.Model.ScenarioNode

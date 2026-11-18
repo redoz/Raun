@@ -15,14 +15,14 @@ public sealed class ScenarioDefinition
     /// <summary>Fully-qualified name of the originating <c>[Scenario]</c> method.</summary>
     public required string MethodName { get; init; }
 
-    /// <summary>Namespace of the declaring type; empty for the global namespace, and empty when the
-    /// definition came from a generator that predates this member (readers then split
-    /// <see cref="MethodName"/>).</summary>
-    public string Namespace { get; init; } = "";
+    /// <summary>Namespace of the declaring type; empty for the global namespace. Runners group
+    /// scenarios by it, and it is a segment of the tree-filter path.</summary>
+    public required string Namespace { get; init; }
 
     /// <summary>Simple name of the declaring type, nested types joined with <c>+</c>
-    /// (<c>Outer+Inner</c>); empty when unknown, as for <see cref="Namespace"/>.</summary>
-    public string TypeName { get; init; } = "";
+    /// (<c>Outer+Inner</c>). Stated, never derived from <see cref="MethodName"/>: a dotted split
+    /// cannot tell a nested type from a namespace.</summary>
+    public required string TypeName { get; init; }
 
     /// <summary>Optional display name for the scenario's declaring class (from a <c>[DisplayName]</c>
     /// attribute); when null the runner uses the real type name.</summary>

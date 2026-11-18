@@ -5,8 +5,8 @@ namespace Raun.Mtp.Test;
 
 /// <summary>
 /// The <see cref="Microsoft.Testing.Platform.Extensions.Messages.TestMethodIdentifierProperty"/> the
-/// discoverer and reporter attach for runner grouping, built from the definition's identity
-/// (see <c>Raun.Model.ScenarioIdentity</c> for where namespace and type come from).
+/// discoverer and reporter attach for runner grouping, built from the namespace and type the
+/// definition states.
 /// </summary>
 public class ScenarioTestIdentityTests
 {
@@ -22,7 +22,7 @@ public class ScenarioTestIdentityTests
     };
 
     [Fact]
-    public void Create_from_a_definition_prefers_the_namespace_and_type_the_generator_recorded()
+    public void Create_from_a_definition_uses_the_namespace_and_type_it_states()
     {
         // Dotted MethodName would split into ("MyApp.Outer", "Inner"); the model knows better.
         var id = ScenarioTestIdentity.Create(Definition("MyApp.Outer.Inner.Book", "MyApp", "Outer+Inner"));
@@ -35,13 +35,12 @@ public class ScenarioTestIdentityTests
     }
 
     [Fact]
-    public void Create_from_a_definition_without_recorded_identity_splits_the_method_name()
+    public void Create_from_a_definition_never_reads_the_namespace_or_type_out_of_the_method_name()
     {
-        // An older generator's output: Namespace/TypeName left at their defaults.
-        var id = ScenarioTestIdentity.Create(Definition("MyApp.Bookings.Book", "", ""));
+        var id = ScenarioTestIdentity.Create(Definition("MyApp.Bookings.Book", "", "Scenarios"));
 
-        Assert.Equal("MyApp", id.Namespace);
-        Assert.Equal("Bookings", id.TypeName);
+        Assert.Equal("", id.Namespace);
+        Assert.Equal("Scenarios", id.TypeName);
     }
 
     [Fact]

@@ -39,7 +39,6 @@ public class LinearLoweringTests
         var def = Generate().Definitions().Single();
 
         Assert.Equal("patient Jane exists", def.Nodes[1].DisplayNameTemplate);
-        Assert.Null(def.Nodes[1].FormatDisplayName);
     }
 
     [Fact]

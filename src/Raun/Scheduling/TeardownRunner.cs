@@ -171,7 +171,6 @@ internal sealed class TeardownRunner(TimeProvider timeProvider, TimeSpan cancell
         return new StepResult
         {
             Node = node,
-            DisplayName = name,
             TitleMessage = titleMessage,
             Status = errors is null ? StepStatus.Passed : StepStatus.Failed,
             StartedAt = startedAt,

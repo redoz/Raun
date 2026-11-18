@@ -35,7 +35,7 @@ public class ScenarioMtpReportSinkTests
     {
         ScenarioId = id,
         DisplayName = display,
-        MethodName = "Ns.Scenarios.Scn",
+        MethodName = "Ns.Scenarios.Scn", Namespace = "Ns", TypeName = "Scenarios",
         Nodes = nodes.Length == 0 ? [Node(0, "a", "step a"), Node(1, "b", "step b"), Node(2, "c", "step c")] : nodes,
     };
 
@@ -49,13 +49,13 @@ public class ScenarioMtpReportSinkTests
         DateTimeOffset? startedAt = null) => new()
         {
             Node = definition.Nodes[index],
-            DisplayName = definition.Nodes[index].DisplayNameTemplate,
+            TitleMessage = StepMessage.FromText(definition.Nodes[index].DisplayNameTemplate),
             Status = status,
             StartedAt = startedAt ?? Start + TimeSpan.FromSeconds(index),
             Duration = status is StepStatus.Passed or StepStatus.Failed ? TimeSpan.FromMilliseconds(500) : TimeSpan.Zero,
             Exception = exception,
             SkipReason = skipReason,
-            Logs = logs ?? [],
+            LogEntries = [.. (logs ?? []).Select(line => new LogEntry(TimeSpan.Zero, line))],
         };
 
     private static string AttachmentRoot { get; } =
@@ -353,7 +353,7 @@ public class ScenarioMtpReportSinkTests
         Assert.Equal(
             [
                 "1. step a [passed]",
-                "  created Jane",
+                "  +0.000s created Jane",
                 "2. step b [failed]",
                 "3. step c [skipped: dependency failed: step b]",
             ],
@@ -380,7 +380,7 @@ public class ScenarioMtpReportSinkTests
         var neverStarted = new StepResult
         {
             Node = def.Nodes[1],
-            DisplayName = "step b",
+            TitleMessage = StepMessage.FromText("step b"),
             Status = StepStatus.Skipped,
             StartedAt = null,
             SkipReason = "preflight failed",
@@ -400,7 +400,7 @@ public class ScenarioMtpReportSinkTests
         var neverStarted = def.Nodes.Select(n => new StepResult
         {
             Node = n,
-            DisplayName = n.DisplayNameTemplate,
+            TitleMessage = StepMessage.FromText(n.DisplayNameTemplate),
             Status = StepStatus.Skipped,
             StartedAt = null,
             SkipReason = "preflight failed",
@@ -425,7 +425,7 @@ public class ScenarioMtpReportSinkTests
             StepResult WithAttachment(int index, string name, string value) => new()
             {
                 Node = def.Nodes[index],
-                DisplayName = def.Nodes[index].DisplayNameTemplate,
+                TitleMessage = StepMessage.FromText(def.Nodes[index].DisplayNameTemplate),
                 Status = StepStatus.Passed,
                 StartedAt = Start + TimeSpan.FromSeconds(index),
                 Attachments = new Dictionary<string, string> { [name] = value },

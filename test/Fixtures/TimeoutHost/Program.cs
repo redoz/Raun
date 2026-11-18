@@ -9,7 +9,7 @@ if (mode == "report")
     // A whole run with an HTML report: one scenario passes, the next one hangs past the grace.
     static ScenarioDefinition One(string id, Func<IStepInputs, ScenarioContext, Task<object?>> body, TimeSpan? timeout) => new()
     {
-        ScenarioId = id, DisplayName = id, MethodName = "Fixture." + id,
+        ScenarioId = id, DisplayName = id, MethodName = "Fixture." + id, Namespace = "", TypeName = "Fixture",
         Nodes =
         [
             new ScenarioNode
@@ -115,7 +115,7 @@ var teardown = new ScenarioNode
 };
 var definition = new ScenarioDefinition
 {
-    ScenarioId = "timeout-fixture", DisplayName = "timeout fixture", MethodName = "Fixture.Run",
+    ScenarioId = "timeout-fixture", DisplayName = "timeout fixture", MethodName = "Fixture.Run", Namespace = "", TypeName = "Fixture",
     Timeout = mode == "scenario" ? TimeSpan.FromSeconds(mode == "slow-startup" ? 0.1 : 5) : null,
     Nodes = [node, teardown],
 };

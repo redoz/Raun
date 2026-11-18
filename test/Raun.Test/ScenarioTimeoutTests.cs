@@ -44,7 +44,7 @@ public class ScenarioTimeoutTests
     {
         ScenarioId = "scn",
         DisplayName = "scenario",
-        MethodName = "Ns.Scn",
+        MethodName = "Ns.Scn", Namespace = "", TypeName = "Ns",
         Timeout = timeout,
         Nodes = nodes,
     };

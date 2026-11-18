@@ -49,12 +49,12 @@ public class ContendedResourceAttributeTests
     [Fact]
     public void A_definition_has_no_uses_unless_given_some()
     {
-        var bare = new ScenarioDefinition { ScenarioId = "s", DisplayName = "s", MethodName = "N.s", Nodes = [] };
+        var bare = new ScenarioDefinition { ScenarioId = "s", DisplayName = "s", MethodName = "N.s", Namespace = "", TypeName = "N", Nodes = [] };
         Assert.Empty(bare.Uses);
 
         var declared = new ScenarioDefinition
         {
-            ScenarioId = "s", DisplayName = "s", MethodName = "N.s", Nodes = [],
+            ScenarioId = "s", DisplayName = "s", MethodName = "N.s", Namespace = "", TypeName = "N", Nodes = [],
             Uses = [new ContendedResourceUse(typeof(ExclusiveDb), LockMode.Exclusive)],
         };
         var use = Assert.Single(declared.Uses);

@@ -69,18 +69,15 @@ public sealed class StructuredMessageRuntimeTests
     }
 
     [Fact]
-    public async Task Typed_formatters_take_precedence_and_title_is_captured_before_observer_and_body()
+    public async Task The_title_is_formatted_once_and_captured_before_observer_and_body()
     {
         var resource = new Seed("one", "before");
         var titleCalls = 0;
-        var oldCalls = 0;
         var node = new ScenarioNode
         {
             Index = 0, StepId = "step", Phase = "Given", OperationName = "seed", DisplayNameTemplate = "template", DependsOn = [],
             FormatTitleMessage = (_, formatting) => { titleCalls++; return StepMessage.Create(formatting, $"Using {resource:data}"); },
-            FormatDisplayName = _ => { oldCalls++; return "old title"; },
             FormatNoteMessages = [(_, formatting) => StepMessage.Create(formatting, $"Because {resource:id}")],
-            FormatNotes = [_ => { oldCalls++; return "old note"; }],
             Invoke = (_, context) =>
             {
                 Assert.Equal("Using before", context.StepDisplayName);
@@ -91,7 +88,6 @@ public sealed class StructuredMessageRuntimeTests
         var observer = new StartObserver(() => resource.Data = "observer");
         var result = Assert.Single(await new ScenarioScheduler().RunAsync(Definition(node), observer: observer));
         Assert.Equal(1, titleCalls);
-        Assert.Equal(0, oldCalls);
         Assert.Equal("Using before", observer.Name);
         Assert.Equal("Using before", result.DisplayName);
         Assert.Equal("before", Assert.Single(result.TitleMessage.Parts, p => p.Resource.HasValue).Data);
@@ -99,20 +95,19 @@ public sealed class StructuredMessageRuntimeTests
     }
 
     [Fact]
-    public async Task Legacy_manual_formatters_and_initializers_project_to_plain_messages()
+    public async Task A_result_reads_as_plain_text_through_its_messages()
     {
         var node = new ScenarioNode
         {
             Index = 0, StepId = "step", Phase = "Given", OperationName = "seed", DisplayNameTemplate = "template", DependsOn = [],
-            FormatDisplayName = _ => "old title", FormatNotes = [_ => "old note"],
             Invoke = (_, _) => Task.FromResult<object?>(null),
         };
         var result = Assert.Single(await new ScenarioScheduler().RunAsync(Definition(node)));
-        Assert.Equal("old title", result.TitleMessage.Text);
-        Assert.Equal("old note", Assert.Single(result.NoteMessages).Text);
-        var legacy = new StepResult { Node = node, DisplayName = "title", Notes = ["note"], StartedAt = default, Status = StepStatus.Passed };
-        Assert.Equal("title", legacy.TitleMessage.Text);
-        Assert.Equal("note", Assert.Single(legacy.NoteMessages).Text);
+        Assert.Equal("template", result.DisplayName);
+        Assert.Empty(result.Notes);
+        var untitled = new StepResult { Node = node, StartedAt = default, Status = StepStatus.Passed };
+        Assert.Equal("template", untitled.DisplayName);
+        Assert.Equal("template", untitled.TitleMessage.Text);
         var line = new LogEntry(TimeSpan.FromSeconds(1), "line");
         Assert.Equal("line", line.Content!.Text);
         var (elapsed, text) = line;
@@ -120,13 +115,15 @@ public sealed class StructuredMessageRuntimeTests
         Assert.Equal("line", text);
         Assert.Equal("replacement", (line with { Message = "replacement" }).Content!.Text);
         var typed = StepMessage.FromText("typed");
-        var typedFirst = new StepResult
+        var stated = new StepResult
         {
-            Node = node, TitleMessage = typed, DisplayName = "ignored", NoteMessages = [typed], Notes = ["ignored"],
+            Node = node, TitleMessage = typed, NoteMessages = [typed], LogEntries = [line],
             StartedAt = default, Status = StepStatus.Passed,
         };
-        Assert.Same(typed, typedFirst.TitleMessage);
-        Assert.Equal(["typed"], typedFirst.Notes);
+        Assert.Same(typed, stated.TitleMessage);
+        Assert.Equal("typed", stated.DisplayName);
+        Assert.Equal(["typed"], stated.Notes);
+        Assert.Equal(["line"], stated.Logs);
     }
 
     [Fact]
@@ -218,7 +215,7 @@ public sealed class StructuredMessageRuntimeTests
         };
         var definition = new ScenarioDefinition
         {
-            ScenarioId = "timeout", DisplayName = "timeout", MethodName = "Messages.Timeout", Nodes = [node, teardown], Timeout = TimeSpan.FromMilliseconds(100),
+            ScenarioId = "timeout", DisplayName = "timeout", MethodName = "Messages.Timeout", Namespace = "", TypeName = "Messages", Nodes = [node, teardown], Timeout = TimeSpan.FromMilliseconds(100),
         };
         var results = await new ScenarioScheduler().RunAsync(definition);
         completion.TrySetResult(null);
@@ -290,13 +287,13 @@ public sealed class StructuredMessageRuntimeTests
         var node = Node(0, (_, _) => Task.FromResult<object?>(null));
         var result = new StepResult
         {
-            Node = node, DisplayName = "title", Status = StepStatus.Passed, StartedAt = default,
-            Logs = ["stale"], LogEntries = [rich],
+            Node = node, TitleMessage = StepMessage.FromText("title"), Status = StepStatus.Passed, StartedAt = default,
+            LogEntries = [rich],
         };
         Assert.Equal(["one"], result.Logs);
-        var legacy = new StepResult { Node = node, DisplayName = "title", Status = StepStatus.Passed, StartedAt = default, Logs = ["legacy"] };
-        Assert.Equal(["legacy"], legacy.Logs);
-        Assert.Empty(legacy.LogEntries);
+        var silent = new StepResult { Node = node, Status = StepStatus.Passed, StartedAt = default };
+        Assert.Empty(silent.Logs);
+        Assert.Empty(silent.LogEntries);
     }
 
     [Theory]
@@ -364,7 +361,7 @@ public sealed class StructuredMessageRuntimeTests
             var legacy = new ScenarioNode
             {
                 Index = 1, StepId = "legacy", Phase = "Given", OperationName = "legacy", DisplayNameTemplate = "template", DependsOn = [],
-                FormatDisplayName = _ => amount.ToString("F2", CultureInfo.CurrentCulture),
+                FormatTitleMessage = (_, _) => StepMessage.FromText(amount.ToString("F2", CultureInfo.CurrentCulture)),
                 Invoke = (_, _) => Task.FromResult<object?>(null),
             };
             var results = await new ScenarioScheduler().RunAsync(Definition(node, legacy), services);
@@ -420,7 +417,7 @@ public sealed class StructuredMessageRuntimeTests
 
     private static ScenarioDefinition Definition(params ScenarioNode[] nodes) => new()
     {
-        ScenarioId = "structured", DisplayName = "structured", MethodName = "Messages.Run", Nodes = nodes,
+        ScenarioId = "structured", DisplayName = "structured", MethodName = "Messages.Run", Namespace = "", TypeName = "Messages", Nodes = nodes,
     };
 
     private sealed class Seed(string key, string data) : IResourceIdentity

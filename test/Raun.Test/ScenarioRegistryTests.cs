@@ -15,6 +15,7 @@ public class ScenarioRegistryTests
         ScenarioId = displayName ?? method,
         DisplayName = displayName ?? method,
         MethodName = method,
+        Namespace = "", TypeName = "",
         Nodes = [],
     };
 

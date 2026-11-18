@@ -165,7 +165,6 @@ public sealed class ScenarioScheduler
                 results[i] = new StepResult
                 {
                     Node = nodes[i],
-                    DisplayName = nodes[i].DisplayNameTemplate,
                     Status = StepStatus.Skipped,
                     StartedAt = _timeProvider.GetUtcNow(),
                     SkipReason = NotSelectedSkipReason,
@@ -440,7 +439,6 @@ public sealed class ScenarioScheduler
                 results[i] = new StepResult
                 {
                     Node = previous.Node,
-                    DisplayName = titleMessage.Text,
                     TitleMessage = titleMessage,
                     Status = previous.Status,
                     StartedAt = previous.StartedAt,
@@ -549,7 +547,6 @@ public sealed class ScenarioScheduler
                         result = new StepResult
                         {
                             Node = result.Node,
-                            DisplayName = initialTitle.Text,
                             TitleMessage = initialTitle,
                             Status = StepStatus.Failed,
                             StartedAt = result.StartedAt,
@@ -600,7 +597,6 @@ public sealed class ScenarioScheduler
             var result = new StepResult
             {
                 Node = node,
-                DisplayName = name,
                 TitleMessage = titleMessage,
                 Status = StepStatus.Failed,
                 StartedAt = startedAt,
@@ -652,7 +648,6 @@ public sealed class ScenarioScheduler
             var result = new StepResult
             {
                 Node = node,
-                DisplayName = name,
                 TitleMessage = titleMessage,
                 Status = terminal,
                 StartedAt = startedAt,
@@ -748,7 +743,6 @@ public sealed class ScenarioScheduler
             var result = new StepResult
             {
                 Node = node,
-                DisplayName = name,
                 TitleMessage = titleMessage,
                 Status = StepStatus.Passed,
                 StartedAt = startedAt,
@@ -913,7 +907,6 @@ public sealed class ScenarioScheduler
                 new StepResult
                 {
                     Node = node,
-                    DisplayName = completedTitle.Text,
                     TitleMessage = completedTitle,
                     Status = StepStatus.Passed,
                     StartedAt = startedAt,
@@ -961,7 +954,6 @@ public sealed class ScenarioScheduler
                 new StepResult
                 {
                     Node = node,
-                    DisplayName = context.ArgumentTitleMessage?.Text ?? displayName,
                     TitleMessage = context.ArgumentTitleMessage ?? titleMessage,
                     Status = statusValue,
                     StartedAt = startedAt,

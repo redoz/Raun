@@ -174,7 +174,7 @@ public class TeardownTimeoutTests
         }, uses: [new ContendedResourceUse(typeof(Database), LockMode.Exclusive)]);
         var second = new ScenarioDefinition
         {
-            ScenarioId = "successor", DisplayName = "successor", MethodName = "Successor.Run",
+            ScenarioId = "successor", DisplayName = "successor", MethodName = "Successor.Run", Namespace = "", TypeName = "Successor",
             Uses = [new ContendedResourceUse(typeof(Database), LockMode.Exclusive)],
             Nodes = Definition(_ =>
             {
@@ -213,7 +213,7 @@ public class TeardownTimeoutTests
     internal static ScenarioDefinition Definition(Action<ScenarioContext> register, TimeSpan? scenarioTimeout = null,
         Func<ScenarioContext, Task>? body = null, IReadOnlyList<ContendedResourceUse>? uses = null) => new()
     {
-        ScenarioId = "cleanup-timeout", DisplayName = "cleanup scenario", MethodName = "Cleanup.Run",
+        ScenarioId = "cleanup-timeout", DisplayName = "cleanup scenario", MethodName = "Cleanup.Run", Namespace = "", TypeName = "Cleanup",
         Timeout = scenarioTimeout, Uses = uses ?? [],
         Nodes =
         [

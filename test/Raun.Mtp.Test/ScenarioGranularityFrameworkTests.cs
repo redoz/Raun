@@ -32,6 +32,8 @@ public class ScenarioGranularityFrameworkTests
                 ScenarioId = Id,
                 DisplayName = "three steps",
                 MethodName = $"Ns.Scenarios.{Id}",
+                Namespace = "Ns",
+                TypeName = "Scenarios",
                 Nodes =
                 [
                     Step(0, "a", [], null),

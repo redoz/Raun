@@ -43,7 +43,7 @@ public class MtpReportSinkTests
     {
         ScenarioId = id,
         DisplayName = display,
-        MethodName = "Ns.Scn",
+        MethodName = "Ns.Scn", Namespace = "", TypeName = "Ns",
         Nodes = nodes.Length == 0 ? [Node(0, "a", "step a")] : nodes,
     };
 
@@ -75,7 +75,7 @@ public class MtpReportSinkTests
             await sink.PublishAsync(new StepFinished(def, new StepResult
             {
                 Node = def.Nodes[0],
-                DisplayName = "step a",
+                TitleMessage = StepMessage.FromText("step a"),
                 Status = StepStatus.Passed,
                 StartedAt = DateTimeOffset.UnixEpoch,
                 Attachments = new Dictionary<string, string> { ["reminder.txt"] = "hello" },
@@ -182,7 +182,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
             Duration = TimeSpan.FromMilliseconds(1),
@@ -217,7 +217,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
             Duration = TimeSpan.FromMilliseconds(5),
@@ -241,7 +241,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Failed,
             StartedAt = TestInstant,
             Exception = ex,
@@ -278,7 +278,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Failed,
             StartedAt = TestInstant,
             Exception = ex,
@@ -301,7 +301,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Failed,
             StartedAt = TestInstant,
             Exception = ex,
@@ -324,7 +324,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Failed,
             StartedAt = TestInstant,
             Exception = ex,
@@ -347,7 +347,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Skipped,
             StartedAt = TestInstant,
             SkipReason = "dependency failed: creating an appointment",
@@ -368,7 +368,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Skipped,
             StartedAt = null,
             SkipReason = "preflight failed",
@@ -390,7 +390,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
             Duration = TimeSpan.FromMilliseconds(250),
@@ -413,7 +413,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
         }));
@@ -434,7 +434,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "patient Jane exists",
+            TitleMessage = StepMessage.FromText("patient Jane exists"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
         }));
@@ -473,10 +473,10 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
-            Logs = ["first line", "second line"],
+            LogEntries = [new LogEntry(TimeSpan.Zero, "first line"), new LogEntry(TimeSpan.Zero, "second line")],
         }));
 
         var node = Assert.Single(bus.Nodes);
@@ -497,16 +497,21 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
-            Logs = ["looking up jane", "[resource] Create String:jane", "done"],
+            LogEntries =
+            [
+                new LogEntry(TimeSpan.Zero, "looking up jane"),
+                new LogEntry(TimeSpan.Zero, "[resource] Create String:jane"),
+                new LogEntry(TimeSpan.Zero, "done"),
+            ],
         }));
 
         var node = Assert.Single(bus.Nodes);
         var output = Assert.Single(node.Properties.OfType<StandardOutputProperty>()).StandardOutput;
         var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.TrimEnd('\r')).ToArray();
-        Assert.Equal(["looking up jane", "[resource] Create String:jane", "done"], lines);
+        Assert.Equal(["+0.000s looking up jane", "+0.000s [resource] Create String:jane", "+0.000s done"], lines);
     }
 
     [Fact]
@@ -519,10 +524,9 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
-            Logs = ["booked", "[resource] Create String:jane"],
             LogEntries =
             [
                 new LogEntry(TimeSpan.FromMilliseconds(500), "booked"),
@@ -545,7 +549,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepStarted(def, new StepContext { Node = def.Nodes[0], DisplayName = "Given patient Bob" }));
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
-            Node = def.Nodes[0], DisplayName = "Given patient bob-42", Status = StepStatus.Passed, StartedAt = TestInstant,
+            Node = def.Nodes[0], Status = StepStatus.Passed, StartedAt = TestInstant,
             TitleMessage = new StepMessage([new StepMessagePart("Given patient "), new StepMessagePart("bob-42", new ResourceIdentity(typeof(string), "bob-42"))]),
         }));
         var published = bus.Nodes.ToArray();
@@ -585,7 +589,7 @@ public class MtpReportSinkTests
         var task = sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
         }));
@@ -649,7 +653,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.NotTaken,
             StartedAt = TestInstant,
             SkipReason = "not taken: IsPriority",
@@ -671,7 +675,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = merge,
-            DisplayName = "«merge appt»",
+            TitleMessage = StepMessage.FromText("«merge appt»"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
         }));
@@ -687,7 +691,7 @@ public class MtpReportSinkTests
         {
             ScenarioId = "s",
             DisplayName = "my scenario",
-            MethodName = "Ns.Scn",
+            MethodName = "Ns.Scn", Namespace = "", TypeName = "Ns",
             Tags = [new("area", "auth")],
             Nodes = [Node(0, "a", "step a")],
         };
@@ -697,7 +701,7 @@ public class MtpReportSinkTests
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
             Node = def.Nodes[0],
-            DisplayName = "step a",
+            TitleMessage = StepMessage.FromText("step a"),
             Status = StepStatus.Passed,
             StartedAt = TestInstant,
             Duration = TimeSpan.FromMilliseconds(1),

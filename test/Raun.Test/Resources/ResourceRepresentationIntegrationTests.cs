@@ -84,11 +84,11 @@ public sealed class ResourceRepresentationIntegrationTests
         await context.Read(new Patient("42"));
         await context.Update(new ResourceIdentity(typeof(Row), "42"));
         var node = Node(0);
-        var definition = new ScenarioDefinition { ScenarioId = "s", DisplayName = "s", MethodName = "s", Nodes = [node] };
+        var definition = new ScenarioDefinition { ScenarioId = "s", DisplayName = "s", MethodName = "s", Namespace = "", TypeName = "", Nodes = [node] };
         var builder = new HtmlReportModelBuilder();
         builder.OnRunStarted([definition]);
         builder.OnScenarioStarted(definition);
-        builder.OnStepFinished(definition, new StepResult { Node = node, DisplayName = "s", Status = StepStatus.Passed,
+        builder.OnStepFinished(definition, new StepResult { Node = node, TitleMessage = StepMessage.FromText("s"), Status = StepStatus.Passed,
             StartedAt = DateTimeOffset.UtcNow, Effects = context.Effects });
         var report = Assert.Single(builder.Build("now").Scenarios);
         var resource = Assert.Single(report.Resources);

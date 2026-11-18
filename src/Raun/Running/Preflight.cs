@@ -39,8 +39,7 @@ public static class Preflight
             ScenarioId = ScenarioId,
             DisplayName = "Preflight",
             // Its own identity so runners group it apart from scenarios — under namespace Raun,
-            // class Preflight — rather than filing it under an empty namespace. Stated here, not
-            // left to a split of MethodName (which would put it under "" / "Raun").
+            // class Preflight — rather than filing it under an empty namespace.
             MethodName = "Raun.Preflight",
             Namespace = "Raun",
             TypeName = "Preflight",

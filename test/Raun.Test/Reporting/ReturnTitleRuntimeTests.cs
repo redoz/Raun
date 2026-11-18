@@ -172,7 +172,7 @@ public sealed class ReturnTitleRuntimeTests
         };
         var definition = new ScenarioDefinition
         {
-            ScenarioId = "timeout", DisplayName = "timeout", MethodName = "Returns.Timeout", Nodes = [node],
+            ScenarioId = "timeout", DisplayName = "timeout", MethodName = "Returns.Timeout", Namespace = "", TypeName = "Returns", Nodes = [node],
             Timeout = scenarioTimeout ? TimeSpan.FromMilliseconds(100) : null,
         };
         var result = Assert.Single(await new ScenarioScheduler().RunAsync(definition));
@@ -255,7 +255,7 @@ public sealed class ReturnTitleRuntimeTests
 
     private static ScenarioDefinition Definition(params ScenarioNode[] nodes) => new()
     {
-        ScenarioId = "returns", DisplayName = "returns", MethodName = "Returns.Run", Nodes = nodes,
+        ScenarioId = "returns", DisplayName = "returns", MethodName = "Returns.Run", Namespace = "", TypeName = "Returns", Nodes = nodes,
     };
 
     private sealed class Observer(Action? action = null, string? stepId = null) : IStepObserver

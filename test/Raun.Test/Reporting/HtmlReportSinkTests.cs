@@ -27,13 +27,13 @@ public sealed class HtmlReportSinkTests : IDisposable
 
     private static ScenarioDefinition Def() => new()
     {
-        ScenarioId = "scn", DisplayName = "books", MethodName = "Ns.Booking",
+        ScenarioId = "scn", DisplayName = "books", MethodName = "Ns.Booking", Namespace = "", TypeName = "Ns",
         Nodes = [Node(0, "a", "Given", "Given patient Jane exists")],
     };
 
     private static StepResult Passed(ScenarioNode n) => new()
     {
-        Node = n, DisplayName = n.DisplayNameTemplate, Status = StepStatus.Passed,
+        Node = n, TitleMessage = StepMessage.FromText(n.DisplayNameTemplate), Status = StepStatus.Passed,
         StartedAt = T0, Duration = TimeSpan.FromMilliseconds(42),
     };
 
@@ -73,8 +73,8 @@ public sealed class HtmlReportSinkTests : IDisposable
         await sink.PublishAsync(new ScenarioStarted(def));
         await sink.PublishAsync(new StepFinished(def, new StepResult
         {
-            Node = def.Nodes[0], DisplayName = message, Status = StepStatus.Passed, StartedAt = T0,
-            Logs = [message],
+            Node = def.Nodes[0], TitleMessage = StepMessage.FromText(message), Status = StepStatus.Passed, StartedAt = T0,
+            LogEntries = [new LogEntry(TimeSpan.Zero, message)],
         }));
         await sink.PublishAsync(new RunFinished());
         var html = await File.ReadAllTextAsync(path);
@@ -216,7 +216,7 @@ public sealed class HtmlReportSinkTests : IDisposable
         const string captured = "first\n<script>unsafe</script>";
         var result = new StepResult
         {
-            Node = def.Nodes[0], DisplayName = def.Nodes[0].DisplayNameTemplate, Status = StepStatus.Passed,
+            Node = def.Nodes[0], TitleMessage = StepMessage.FromText(def.Nodes[0].DisplayNameTemplate), Status = StepStatus.Passed,
             StartedAt = T0, Attachments = new Dictionary<string, string> { ["response"] = captured },
         };
         await sink.PublishAsync(new RunStarted(1));

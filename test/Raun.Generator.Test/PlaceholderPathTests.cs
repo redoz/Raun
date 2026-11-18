@@ -106,7 +106,7 @@ public class PlaceholderPathTests
 
         var calendar = result.Definitions().Single().Nodes.Single(n => n.OperationName == "Calendar");
         Assert.Equal("Given an employee calendar with {specification.Outcome}", calendar.DisplayNameTemplate);
-        Assert.NotNull(calendar.FormatDisplayName);
+        Assert.NotNull(calendar.FormatTitleMessage);
     }
 
     [Fact]
@@ -117,7 +117,6 @@ public class PlaceholderPathTests
 
         var hour = result.Definitions().Single().Nodes.Single(n => n.OperationName == "Hour");
         Assert.Equal("Given hour 09", hour.DisplayNameTemplate);
-        Assert.Null(hour.FormatDisplayName);
     }
 
     [Fact]

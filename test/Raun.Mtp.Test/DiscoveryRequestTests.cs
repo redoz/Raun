@@ -38,6 +38,8 @@ public class DiscoveryRequestTests
             ScenarioId = scenarioId,
             DisplayName = display,
             MethodName = method,
+            Namespace = "Raun.Mtp.Test",
+            TypeName = "Generated",
             Nodes = nodes,
         });
         return method;

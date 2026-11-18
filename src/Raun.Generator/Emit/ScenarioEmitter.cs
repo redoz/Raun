@@ -365,14 +365,6 @@ internal static class ScenarioEmitter
                     MessageLambda().WithExpressionBody(note)))))));
         }
 
-        if (step.FormatExpression is { } format)
-        {
-            members.Add(Set("FormatDisplayName",
-                SimpleLambdaExpression(Parameter(Identifier("__inputs")))
-                    .WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword)))
-                    .WithExpressionBody(format)));
-        }
-
         if (step.TitleExpression is { } title)
         {
             members.Add(Set("FormatTitleMessage", MessageLambda().WithExpressionBody(title)));

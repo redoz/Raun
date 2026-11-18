@@ -32,7 +32,7 @@ public sealed class StepParallelismTests
         }
         ScenarioDefinition Definition(string id) => new()
         {
-            ScenarioId = id, DisplayName = id, MethodName = "Limit." + id,
+            ScenarioId = id, DisplayName = id, MethodName = "Limit." + id, Namespace = "", TypeName = "",
             Nodes = Enumerable.Range(0, 3).Select(i => new ScenarioNode
             {
                 Index = i, StepId = id + i, Phase = "Given", OperationName = "Work", DisplayNameTemplate = "work",

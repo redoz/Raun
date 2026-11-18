@@ -100,7 +100,6 @@ namespace Raun.Generated
 #line hidden
                     return (object? )null;
                 },
-                FormatDisplayName = static __inputs => "greet " + ((global::Demo.Patient)(__inputs.GetArgument<global::Demo.Patient>(0, () => __inputs.Get<global::Demo.Patient>(1), true))),
                 FormatTitleMessage = static (__inputs, __formatting) => new global::Raun.StepMessageBuilder(__formatting).AppendLiteral("greet ").AppendFormatted(((global::Demo.Patient)(__inputs.GetArgument<global::Demo.Patient>(0, () => __inputs.Get<global::Demo.Patient>(1), true)))).Build()
             };
             nodes[3] = new global::Raun.Model.ScenarioNode

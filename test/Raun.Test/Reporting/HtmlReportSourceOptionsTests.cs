@@ -14,7 +14,7 @@ public sealed class HtmlReportSourceOptionsTests
         var builder = new HtmlReportModelBuilder(options);
         builder.OnScenarioStarted(new Raun.Model.ScenarioDefinition
         {
-            ScenarioId = "source", DisplayName = "booking", MethodName = "Demo.Bookings.Book", Nodes = [],
+            ScenarioId = "source", DisplayName = "booking", MethodName = "Demo.Bookings.Book", Namespace = "Demo", TypeName = "Bookings", Nodes = [],
             SourceFile = Path.Combine(Root, "tests", "Bookings.cs"), SourceLine = 42,
             TypeSourceFile = Path.Combine(Root, "tests", "Bookings.cs"), TypeSourceLine = 12,
         });

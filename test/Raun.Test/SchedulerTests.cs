@@ -33,7 +33,7 @@ public class SchedulerTests
     {
         ScenarioId = "scn",
         DisplayName = "scenario",
-        MethodName = "Ns.Scn",
+        MethodName = "Ns.Scn", Namespace = "", TypeName = "Ns",
         Nodes = nodes,
     };
 
@@ -914,7 +914,7 @@ public class SchedulerTests
         };
         var def = new ScenarioDefinition
         {
-            ScenarioId = "scn", DisplayName = "scenario", MethodName = "Ns.Scn",
+            ScenarioId = "scn", DisplayName = "scenario", MethodName = "Ns.Scn", Namespace = "", TypeName = "Ns",
             Nodes =
             [
                 Cond(0, value: true),

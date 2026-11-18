@@ -10,7 +10,7 @@ namespace Raun.Model;
 /// </summary>
 public readonly record struct LogEntry
 {
-    /// <summary>Creates a log line from its elapsed time and legacy text.</summary>
+    /// <summary>Creates a log line from its elapsed time and plain text.</summary>
     public LogEntry(TimeSpan Elapsed, string Message)
     {
         this.Elapsed = Elapsed;
@@ -30,7 +30,7 @@ public readonly record struct LogEntry
     /// <summary>The frozen message, or null for a default-initialized entry.</summary>
     public StepMessage? Content { get; init; }
 
-    /// <summary>Deconstructs using the legacy elapsed time and text shape.</summary>
+    /// <summary>Deconstructs into elapsed time and plain text.</summary>
     public void Deconstruct(out TimeSpan Elapsed, out string Message)
     {
         Elapsed = this.Elapsed;

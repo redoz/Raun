@@ -91,7 +91,7 @@ public class RunEventBusTests
     {
         var started = new ScenarioStarted(new Raun.Model.ScenarioDefinition
         {
-            ScenarioId = "s", DisplayName = "s", MethodName = "N.s", Nodes = [],
+            ScenarioId = "s", DisplayName = "s", MethodName = "N.s", Namespace = "", TypeName = "N", Nodes = [],
         });
         Assert.Equal(TimeSpan.Zero, started.Waited);
         Assert.Null(started.WaitedFor);

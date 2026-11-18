@@ -187,10 +187,8 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                     DisplayName = r.DisplayName,
                     TitleMessage = Message(r.TitleMessage),
                     NoteMessages = r.NoteMessages.Select(note => Message(note)).ToList(),
-                    LogMessages = r.LogEntries.Count > 0
-                        ? r.LogEntries.Select(e => Message(e.Content ?? StepMessage.FromText(string.Empty),
-                            "+" + e.Elapsed.TotalSeconds.ToString("0.000", CultureInfo.InvariantCulture) + "s ")).ToList()
-                        : r.Logs.Select(line => Message(StepMessage.FromText(line))).ToList(),
+                    LogMessages = r.LogEntries.Select(e => Message(e.Content ?? StepMessage.FromText(string.Empty),
+                        "+" + e.Elapsed.TotalSeconds.ToString("0.000", CultureInfo.InvariantCulture) + "s ")).ToList(),
                     Status = StatusText(r.Status),
                     OffsetMs = offset,
                     DurationMs = Ms(r.Duration),
@@ -209,8 +207,8 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                     Arms = r.Node.Arms.Count == 0 ? null : r.Node.Arms,
                     GroupId = r.Node.GroupId,
                     Notes = r.Notes,
-                    // Timer-prefixed ("+1.234s …") when the scheduler supplied offsets; plain lines otherwise.
-                    Logs = r.LogEntries.Count > 0 ? r.LogEntries.Select(e => e.ToString()).ToList() : r.Logs,
+                    // Timer-prefixed: "+1.234s …".
+                    Logs = r.LogEntries.Select(e => e.ToString()).ToList(),
                     TraceId = r.TraceId,
                     SpanId = r.SpanId,
                     Attachments = r.Attachments

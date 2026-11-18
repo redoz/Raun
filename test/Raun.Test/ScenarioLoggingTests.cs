@@ -37,7 +37,7 @@ public class ScenarioLoggingTests
     {
         ScenarioId = "scn",
         DisplayName = "scenario",
-        MethodName = "Ns.Scn",
+        MethodName = "Ns.Scn", Namespace = "", TypeName = "Ns",
         Nodes = nodes,
     };
 

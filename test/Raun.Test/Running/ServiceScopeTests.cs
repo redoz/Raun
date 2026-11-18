@@ -46,6 +46,7 @@ public class ServiceScopeTests
         ScenarioId = id,
         DisplayName = id,
         MethodName = $"Ns.{id}",
+        Namespace = "", TypeName = "",
         Nodes = nodes,
     };
 

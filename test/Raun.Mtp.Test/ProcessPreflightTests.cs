@@ -15,7 +15,7 @@ public class ProcessPreflightTests
     {
         ScenarioId = "a",
         DisplayName = "a",
-        MethodName = "Ns.a",
+        MethodName = "Ns.a", Namespace = "", TypeName = "Ns",
         Nodes =
         [
             new ScenarioNode

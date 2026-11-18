@@ -21,9 +21,6 @@ public class LinqDisplayNameTests
         Assert.Equal("user user-2 exists", def.Nodes[2].DisplayNameTemplate);
         Assert.Equal("user user-3 exists", def.Nodes[3].DisplayNameTemplate);
 
-        // Fully constant: no runtime formatter is emitted for them.
-        Assert.Null(def.Nodes[1].FormatDisplayName);
-        Assert.Null(def.Nodes[3].FormatDisplayName);
     }
 
     [Fact]
@@ -52,6 +49,6 @@ public class LinqDisplayNameTests
         var def = Assert.Single(result.Definitions());
 
         Assert.Equal("user {name} exists", def.Nodes[1].DisplayNameTemplate);
-        Assert.NotNull(def.Nodes[1].FormatDisplayName);
+        Assert.NotNull(def.Nodes[1].FormatTitleMessage);
     }
 }

@@ -49,6 +49,8 @@ public class RunLoopFrameworkTests
         ScenarioId = id,
         DisplayName = display,
         MethodName = $"Ns.{id}",
+        Namespace = "",
+        TypeName = "Ns",
         Nodes = nodes,
     };
 

@@ -13,7 +13,7 @@ public class DisplayNameTests
         var def = result.Definitions().Single();
 
         var greet = def.Nodes[2];
-        Assert.NotNull(greet.FormatDisplayName);
+        Assert.NotNull(greet.FormatTitleMessage);
         Assert.Contains("{patient}", greet.DisplayNameTemplate); // unresolved fallback template
     }
 

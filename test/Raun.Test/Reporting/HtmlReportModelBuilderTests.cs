@@ -26,13 +26,13 @@ public class HtmlReportModelBuilderTests
 
     private static ScenarioDefinition Def(params ScenarioNode[] nodes) => new()
     {
-        ScenarioId = "scn", DisplayName = "customer books", MethodName = "Ns.Booking",
+        ScenarioId = "scn", DisplayName = "customer books", MethodName = "Ns.Booking", Namespace = "", TypeName = "Ns",
         ClassDisplayName = "Appointment booking", Nodes = nodes,
     };
 
     private static ScenarioDefinition Def(string id, params ScenarioNode[] nodes) => new()
     {
-        ScenarioId = id, DisplayName = id, MethodName = "Ns." + id, Nodes = nodes,
+        ScenarioId = id, DisplayName = id, MethodName = "Ns." + id, Namespace = "", TypeName = "", Nodes = nodes,
     };
 
     private static StepResult Result(ScenarioNode node, DateTimeOffset? startedAt, double ms,
@@ -40,9 +40,9 @@ public class HtmlReportModelBuilderTests
         IReadOnlyList<string>? logs = null, IReadOnlyList<ResourceLink>? lineage = null,
         IReadOnlyDictionary<string, string>? attachments = null) => new()
     {
-        Node = node, DisplayName = node.DisplayNameTemplate, Status = status,
+        Node = node, TitleMessage = StepMessage.FromText(node.DisplayNameTemplate), Status = status,
         StartedAt = startedAt, Duration = TimeSpan.FromMilliseconds(ms),
-        Effects = effects ?? [], Logs = logs ?? [], Links = lineage ?? [],
+        Effects = effects ?? [], LogEntries = [.. (logs ?? []).Select(line => new LogEntry(TimeSpan.Zero, line))], Links = lineage ?? [],
         Attachments = attachments ?? new Dictionary<string, string>(),
     };
 
@@ -169,7 +169,7 @@ public class HtmlReportModelBuilderTests
             [new ResourceObservation { Identity = identity, Effect = ResourceEffect.Update, Label = "Janet", Timestamp = T0 }]));
         builder.OnStepFinished(definition, new StepResult
         {
-            Node = named, DisplayName = "named", Status = StepStatus.Passed, StartedAt = T0.AddMilliseconds(1),
+            Node = named, Status = StepStatus.Passed, StartedAt = T0.AddMilliseconds(1),
             Effects = source == "effect" ? [new ResourceObservation { Identity = identity, Effect = ResourceEffect.Read, Label = "Jane <Doe>", Timestamp = T0 }] : [],
             TitleMessage = source == "title" ? message : StepMessage.FromText("named"),
             NoteMessages = source == "note" ? [message] : [],
@@ -226,7 +226,7 @@ public class HtmlReportModelBuilderTests
             builder.OnScenarioStarted(definition);
             builder.OnStepFinished(definition, new StepResult
             {
-                Node = node, DisplayName = "legacy", Status = StepStatus.Passed, StartedAt = T0, TitleMessage = mention,
+                Node = node, Status = StepStatus.Passed, StartedAt = T0, TitleMessage = mention,
                 NoteMessages = [mention], LogEntries = [new LogEntry { Elapsed = TimeSpan.FromSeconds(1), Content = mention }],
             });
         }
@@ -296,12 +296,12 @@ public class HtmlReportModelBuilderTests
         builder.OnScenarioStarted(def);
         builder.OnStepFinished(def, new StepResult
         {
-            Node = node, DisplayName = node.DisplayNameTemplate, Status = StepStatus.Skipped,
-            StartedAt = T0, Notes = ["Why <this> matters", "A second explanation"], Logs = ["A log line"],
+            Node = node, TitleMessage = StepMessage.FromText(node.DisplayNameTemplate), Status = StepStatus.Skipped,
+            StartedAt = T0, NoteMessages = [StepMessage.FromText("Why <this> matters"), StepMessage.FromText("A second explanation")], LogEntries = [new LogEntry(TimeSpan.Zero, "A log line")],
         });
         var step = Assert.Single(Assert.Single(builder.Build("2026-10-13T00:00:00Z").Scenarios).Steps);
         Assert.Equal(["Why <this> matters", "A second explanation"], step.Notes);
-        Assert.Equal(["A log line"], step.Logs);
+        Assert.Equal(["+0.000s A log line"], step.Logs);
         Assert.Contains("Notes", JsonSerializer.Serialize(step, JsonOptions), StringComparison.Ordinal);
     }
 
@@ -657,7 +657,7 @@ public class HtmlReportModelBuilderTests
     {
         var def = new ScenarioDefinition
         {
-            ScenarioId = "w", DisplayName = "w", MethodName = "Ns.w", Nodes = [Node(0, "x", "Given", "x")],
+            ScenarioId = "w", DisplayName = "w", MethodName = "Ns.w", Namespace = "", TypeName = "Ns", Nodes = [Node(0, "x", "Given", "x")],
             Uses = [new ContendedResourceUse(typeof(ExclusiveDb), LockMode.Exclusive), new ContendedResourceUse(typeof(SharedCatalog), LockMode.Shared)],
         };
 
@@ -677,12 +677,12 @@ public class HtmlReportModelBuilderTests
     {
         var tagged = new ScenarioDefinition
         {
-            ScenarioId = "t", DisplayName = "t", MethodName = "Ns.t", Nodes = [Node(0, "x", "Given", "x")],
+            ScenarioId = "t", DisplayName = "t", MethodName = "Ns.t", Namespace = "", TypeName = "Ns", Nodes = [Node(0, "x", "Given", "x")],
             Tags = [new ScenarioTag("area", "auth"), new ScenarioTag("owner", "payments")],
         };
         var plain = new ScenarioDefinition
         {
-            ScenarioId = "p", DisplayName = "p", MethodName = "Ns.p", Nodes = [Node(0, "x", "Given", "x")],
+            ScenarioId = "p", DisplayName = "p", MethodName = "Ns.p", Namespace = "", TypeName = "Ns", Nodes = [Node(0, "x", "Given", "x")],
         };
 
         var builder = new HtmlReportModelBuilder();

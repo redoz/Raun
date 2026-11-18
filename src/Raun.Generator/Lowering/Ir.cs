@@ -263,7 +263,6 @@ internal sealed record ParsedStep
     private readonly Syn<ExpressionSyntax> _prepareArguments;
     private readonly Syn<ExpressionSyntax> _inlineTitle;
     private readonly EquatableArray<Syn<StatementSyntax>> _inlineArguments;
-    private readonly Syn<ExpressionSyntax> _formatExpression;
     private readonly Syn<ExpressionSyntax> _titleExpression;
     private readonly Syn<ExpressionSyntax> _completedTitleExpression;
     private readonly EquatableArray<Syn<ExpressionSyntax>> _notes;
@@ -322,17 +321,8 @@ internal sealed record ParsedStep
     /// <summary>Display name with constant placeholders already substituted.</summary>
     public string DisplayNameTemplate { get; init; } = "";
 
-    /// <summary>
-    /// When non-null, a string expression (in terms of <c>__inputs</c>) for the runtime display-name
-    /// formatter; null when the display name is fully constant.
-    /// </summary>
-    public ExpressionSyntax? FormatExpression
-    {
-        get => _formatExpression.Node;
-        init => _formatExpression = value;
-    }
-
-    /// <summary>A resource-aware title builder using __inputs and explicit __formatting services.</summary>
+    /// <summary>A title builder using __inputs and explicit __formatting services; null when the
+    /// display name is fully constant.</summary>
     public ExpressionSyntax? TitleExpression
     {
         get => _titleExpression.Node;

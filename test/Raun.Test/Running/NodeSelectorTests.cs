@@ -25,7 +25,7 @@ public class NodeSelectorTests
     {
         ScenarioId = "scn",
         DisplayName = "a scenario",
-        MethodName = "Demo.Scenarios.ASscenario",
+        MethodName = "Demo.Scenarios.ASscenario", Namespace = "Demo", TypeName = "Scenarios",
         Nodes = nodes,
     };
 
