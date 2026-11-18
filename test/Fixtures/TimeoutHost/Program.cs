@@ -4,6 +4,37 @@ using Raun.Model;
 using Raun.Scheduling;
 
 var mode = args[0];
+if (mode == "report")
+{
+    // A whole run with an HTML report: one scenario passes, the next one hangs past the grace.
+    static ScenarioDefinition One(string id, Func<IStepInputs, ScenarioContext, Task<object?>> body, TimeSpan? timeout) => new()
+    {
+        ScenarioId = id, DisplayName = id, MethodName = "Fixture." + id,
+        Nodes =
+        [
+            new ScenarioNode
+            {
+                Index = 0, StepId = id + "-step", Phase = "Given", OperationName = "Body",
+                DisplayNameTemplate = id + " step", DependsOn = [], Timeout = timeout, Invoke = body,
+            },
+        ],
+    };
+    ScenarioDefinition[] scenarios =
+    [
+        One("healthy scenario", (_, _) => Task.FromResult<object?>(null), null),
+        One("hung scenario", (_, _) =>
+        {
+            Console.WriteLine("BODY");
+            Thread.Sleep(Timeout.Infinite);
+            return Task.FromResult<object?>(null);
+        }, TimeSpan.FromMilliseconds(100)),
+    ];
+    var report = new Raun.Reporting.Html.HtmlReportSink(args[1], TimeProvider.System);
+    await new Raun.Running.RunLoop(() => scenarios, maxParallelScenarios: 1, cancellationGracePeriod: TimeSpan.FromSeconds(1))
+        .RunAsync(selector: null, report, CancellationToken.None);
+    Console.WriteLine("COMPLETED");
+    return;
+}
 if (mode == "process-exit") AppDomain.CurrentDomain.ProcessExit += (_, _) =>
 {
     Console.WriteLine("PROCESS_EXIT_HANDLER");

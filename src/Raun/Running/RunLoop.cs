@@ -527,8 +527,13 @@ public sealed class RunLoop
             targets: targets).ConfigureAwait(false);
 
     /// <summary>Republishes the scheduler's per-step callbacks onto the bus, tagged with the scenario.</summary>
-    private sealed class BusObserver(ScenarioDefinition definition, IRunEventSink bus) : IStepObserver
+    private sealed class BusObserver(ScenarioDefinition definition, IRunEventSink bus) : IStepObserver, IHostTerminationObserver
     {
+        // The run ends here, with whatever was reported so far: the sinks get their RunFinished, so a
+        // report is written, and the reason says why steps are missing from it.
+        public Task OnHostTerminatingAsync(string reason)
+            => bus.PublishAsync(new RunFinished { AbortReason = reason }).AsTask();
+
         public Task OnStepStartingAsync(StepContext context)
             => bus.PublishAsync(new StepStarted(definition, context)).AsTask();
 

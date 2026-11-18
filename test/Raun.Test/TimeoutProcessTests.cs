@@ -26,6 +26,33 @@ public class TimeoutProcessTests
     }
 
     [Fact]
+    public async Task The_report_is_written_before_the_host_is_terminated()
+    {
+        // The report used to be written only when the run finished, so a step that never returned
+        // took every other scenario's results with it when the host was killed.
+        var directory = Path.Combine(Path.GetTempPath(), "raun-terminated-report", Guid.NewGuid().ToString("N"));
+        var report = Path.Combine(directory, "report.html");
+        try
+        {
+            var result = await RunAsync("report", report);
+
+            Assert.True(result.ExitCode != 0, $"Output: {result.Output}; Error: {result.Error}");
+            Assert.Contains("Terminating the test host", result.Error, StringComparison.Ordinal);
+            Assert.DoesNotContain("COMPLETED", result.Output, StringComparison.Ordinal);
+            Assert.True(File.Exists(report), "no report was written");
+            var html = await File.ReadAllTextAsync(report, TestContext.Current.CancellationToken);
+            Assert.Contains("healthy scenario step", html, StringComparison.Ordinal);
+            Assert.Contains("\"aborted\":", html, StringComparison.Ordinal);
+            Assert.Contains("hung scenario step", html, StringComparison.Ordinal);
+            Assert.Contains("did not stop within cancellation grace", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Cooperative_work_drains_cleans_up_and_disarms_termination()
     {
         var result = await RunAsync("cooperative");
@@ -95,7 +122,7 @@ public class TimeoutProcessTests
         Assert.Empty(result.Error);
     }
 
-    private static async Task<(int ExitCode, string Output, string Error)> RunAsync(string mode)
+    private static async Task<(int ExitCode, string Output, string Error)> RunAsync(string mode, params string[] more)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "Raun.slnx"))) root = root.Parent;
@@ -108,6 +135,7 @@ public class TimeoutProcessTests
         };
         start.ArgumentList.Add(Path.Combine(root.FullName, "test", "Fixtures", "TimeoutHost", "bin", configuration, "net10.0", "TimeoutHost.dll"));
         start.ArgumentList.Add(mode);
+        foreach (var argument in more) start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();

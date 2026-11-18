@@ -91,6 +91,12 @@ public sealed class ScenarioScheduler
         CancellationToken cancellationToken = default)
     {
         definition.Validate();
+
+        // Asked directly, not through the serialized observer: the host is about to be terminated
+        // because something does not return, and that something may hold the observer's turn.
+        var beforeTermination = observer is IHostTerminationObserver last
+            ? last.OnHostTerminatingAsync
+            : (Func<string, Task>?)null;
         observer = observer is null ? null : new SerializedObserver(observer);
 
         var nodes = definition.Nodes;
@@ -116,7 +122,7 @@ public sealed class ScenarioScheduler
             : (TimeSpan?)null;
         var stepContexts = scenarioTimeout is null ? null : new ScenarioContext?[count];
         using var timeoutCts = new CancellationTokenSource();
-        using var watchdog = new CancellationWatchdog(_cancellationGracePeriod, cancellationToken);
+        using var watchdog = new CancellationWatchdog(_cancellationGracePeriod, cancellationToken, beforeTermination: beforeTermination);
         var scenarioWatch = watchdog.Watch(timeoutCts, scenarioTimeout, $"scenario '{definition.DisplayName}'", isScenario: true);
         using var hostRegistration = cancellationToken.Register(() => scenarioWatch.RequestCancellation());
         if (cancellationToken.IsCancellationRequested) scenarioWatch.RequestCancellation();
@@ -577,7 +583,7 @@ public sealed class ScenarioScheduler
             var stopwatch = Stopwatch.StartNew();
             List<Exception>? errors = null;
 
-            using var cleanupWatchdog = new CancellationWatchdog(_cancellationGracePeriod, CancellationToken.None);
+            using var cleanupWatchdog = new CancellationWatchdog(_cancellationGracePeriod, CancellationToken.None, beforeTermination: beforeTermination);
             ScenarioContext.SetCurrent(teardownContext);
             try
             {

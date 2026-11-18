@@ -7,6 +7,10 @@ internal sealed record HtmlReportModel
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public Raun.Reporting.Coverage.ReportCoverage? Coverage { get; init; }
     public required string GeneratedAtUtc { get; init; }
+
+    /// <summary>Why the run was cut short (the host was terminated), or null for a run that finished.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Aborted { get; init; }
     public required ReportSummary Summary { get; init; }
     public required IReadOnlyList<ReportScenario> Scenarios { get; init; }
 }

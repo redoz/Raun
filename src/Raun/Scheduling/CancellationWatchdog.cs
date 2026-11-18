@@ -12,16 +12,23 @@ internal sealed class CancellationWatchdog : IDisposable
     private readonly CancellationToken hostToken;
     private readonly Thread thread;
     private readonly Func<long> timestamp;
+    private readonly Func<string, Task>? beforeTermination;
     private bool disposed;
     private Operation? scenario;
 
+    /// <summary>How long <c>beforeTermination</c> may take before the host is terminated regardless.</summary>
+    internal static readonly TimeSpan TerminationFlushBudget = TimeSpan.FromSeconds(5);
+
     // timestamp: the clock, in Stopwatch ticks; a test replaces it.
-    internal CancellationWatchdog(TimeSpan grace, CancellationToken hostToken, Func<long>? timestamp = null)
+    // beforeTermination: given the reason, a bounded last chance to write reports before the host is killed.
+    internal CancellationWatchdog(
+        TimeSpan grace, CancellationToken hostToken, Func<long>? timestamp = null, Func<string, Task>? beforeTermination = null)
     {
         ValidateGrace(grace);
         this.grace = grace;
         this.hostToken = hostToken;
         this.timestamp = timestamp ?? Stopwatch.GetTimestamp;
+        this.beforeTermination = beforeTermination;
         thread = new Thread(Supervise) { IsBackground = true, Name = "Raun cancellation watchdog" };
         thread.Start();
     }
@@ -79,7 +86,7 @@ internal sealed class CancellationWatchdog : IDisposable
                 }
                 if (fatal is null) Monitor.Wait(gate, TimeSpan.FromMilliseconds(10));
             }
-            if (fatal is not null) Terminate(fatal);
+            if (fatal is not null) Terminate(fatal, beforeTermination);
         }
     }
 
@@ -93,17 +100,22 @@ internal sealed class CancellationWatchdog : IDisposable
         }
     }
 
-    private static void Terminate(string message)
+    private static void Terminate(string message, Func<string, Task>? beforeTermination)
     {
         // A replaced/blocked stderr must not hold the watchdog hostage. Diagnostics get a small,
-        // bounded chance to reach the parent; process termination never waits on reporting sinks.
+        // bounded chance to reach the parent, and reporting gets a bounded chance to write what the
+        // run produced so far; process termination never waits on either beyond its budget.
         try
         {
             Task.Run(() => Console.Error.WriteLine(message)).Wait(TimeSpan.FromMilliseconds(100));
+            if (beforeTermination is not null)
+            {
+                Task.Run(() => beforeTermination(message)).Wait(TerminationFlushBudget);
+            }
         }
         catch (AggregateException)
         {
-            // Termination still happens when diagnostic output fails.
+            // Termination still happens when diagnostic output or the last report write fails.
         }
         finally
         {

@@ -30,4 +30,13 @@ public sealed record ScenarioFinished(
     ScenarioDefinition Definition, IReadOnlyList<StepResult> Results) : RunEvent;
 
 /// <summary>Raised once at the end of a run, after the last scenario.</summary>
-public sealed record RunFinished : RunEvent;
+public sealed record RunFinished : RunEvent
+{
+    /// <summary>
+    /// Why the run ended before its scenarios did, or <see langword="null"/> for a run that finished.
+    /// Set when the test host is about to be terminated because a step or cleanup did not stop
+    /// within the cancellation grace: this is then the last event, raised so that a report sink can
+    /// still write what it has. Steps that were running have no result.
+    /// </summary>
+    public string? AbortReason { get; init; }
+}

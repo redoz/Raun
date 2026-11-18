@@ -74,7 +74,7 @@ public sealed class HtmlReportSink : RunEventSink
     {
         lock (_gate)
         {
-            _model = _builder.Build(_timeProvider.GetUtcNow().UtcDateTime.ToString("O"));
+            _model = _builder.Build(_timeProvider.GetUtcNow().UtcDateTime.ToString("O")) with { Aborted = e.AbortReason };
             return new ValueTask(QueueWrite(CancellationToken.None));
         }
     }
