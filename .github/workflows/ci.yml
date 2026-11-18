@@ -88,10 +88,10 @@ jobs:
       - name: Resource matrix browser tests
         run: |
           dotnet run --project samples/AppointmentTests/AppointmentTests.csproj -c Release --no-build -- --report-html --results-directory "$PWD/artifacts/matrix-sample"
-          node test/Browser/resource-matrix.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
-          node test/Browser/scenario-flow.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
-          node test/Browser/coverage-view.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
-          node test/Browser/scenario-tags.cjs "$PWD/artifacts/matrix-sample/raun-report.html"
+          node test/Browser/resource-matrix.cjs "$PWD/artifacts/matrix-sample/AppointmentTests_net10.0.html"
+          node test/Browser/scenario-flow.cjs "$PWD/artifacts/matrix-sample/AppointmentTests_net10.0.html"
+          node test/Browser/coverage-view.cjs "$PWD/artifacts/matrix-sample/AppointmentTests_net10.0.html"
+          node test/Browser/scenario-tags.cjs "$PWD/artifacts/matrix-sample/AppointmentTests_net10.0.html"
 
       - name: Pack (verifies the packages assemble on every push)
         run: |
@@ -127,7 +127,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: artifacts/package-consumption/raun-report.html
+          path: artifacts/package-consumption/Raun.PackageTests_net10.0.html
           archive: false
           if-no-files-found: ignore
 

@@ -278,7 +278,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             arguments.AddRange(["--coverage", "--coverage-output-format", "xml"]);
         }
         await DotnetAsync(context, [.. arguments]);
-        var report = new ConsumerReport(Path.Combine(ReportDirectory, "raun-report.html"), Name);
+        var report = new ConsumerReport(Assert.Single(Directory.GetFiles(ReportDirectory, "*.html")), Name);
         context.OnTeardown(async teardown =>
         {
             File.Delete(report.File);

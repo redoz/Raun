@@ -58,7 +58,7 @@ The report shows time spent waiting.
 
 ## Reports and test selection
 
-`--report-html` writes a self-contained report. Its Scenarios view shows step results, timing, a resource matrix, logs, attachments, and errors.
+`--report-html` writes a self-contained report into the results directory, named after the test assembly and its target framework (`Clinic.Tests_net10.0.html`), so several projects or frameworks can share one results directory; `--report-html-filename` sets another name. The run lists the report among its artifacts, and says so on the console when it could not be written. Its Scenarios view shows step results, timing, a resource matrix, logs, attachments, and errors.
 Select a resource reference to highlight its uses; click outside the matrix or press Esc to clear the selection.
 The IDE reports each step as a test. Selecting a step runs its dependencies, branch conditions, merge sources, and cleanup, but no later steps.
 

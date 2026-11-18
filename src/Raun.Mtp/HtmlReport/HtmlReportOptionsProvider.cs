@@ -6,8 +6,9 @@ namespace Raun.Mtp.HtmlReport;
 
 /// <summary>
 /// Registers Raun's HTML-report command-line options with Microsoft.Testing.Platform:
-/// <c>--report-html</c> (a flag) and <c>--report-html-filename &lt;name&gt;</c> (default
-/// <c>raun-report.html</c>). The report is written under MTP's <c>--results-directory</c>.
+/// <c>--report-html</c> (a flag) and <c>--report-html-filename &lt;name&gt;</c> (default: the test
+/// assembly and target framework, see <see cref="HtmlReportPath.DefaultFilename"/>). The report is
+/// written under MTP's <c>--results-directory</c>.
 /// The optional <c>--report-source-base-url</c> and
 /// <c>--report-source-root</c> options add repository source links. Generic names — Raun owns its loaded extension set, so collision risk is low.
 /// </summary>
@@ -17,12 +18,11 @@ internal sealed class HtmlReportOptionsProvider : ICommandLineOptionsProvider
     internal const string FilenameOption = "report-html-filename";
     internal const string SourceBaseUrlOption = "report-source-base-url";
     internal const string SourceRootOption = "report-source-root";
-    internal const string DefaultFilename = "raun-report.html";
 
     public string Uid => "raun.mtp.htmlreport";
     public string Version => "1.0.0";
     public string DisplayName => "Raun HTML report";
-    public string Description => "Writes a self-contained raun-report.html (per-scenario step list with logs, effects and resource lineage).";
+    public string Description => "Writes a self-contained HTML report (per-scenario step list with logs, effects and resource lineage).";
 
     public Task<bool> IsEnabledAsync() => Task.FromResult(true);
 
@@ -32,7 +32,7 @@ internal sealed class HtmlReportOptionsProvider : ICommandLineOptionsProvider
             "Write a self-contained HTML run report under the results directory.",
             ArgumentArity.Zero, isHidden: false),
         new CommandLineOption(FilenameOption,
-            $"Filename for the HTML report (default '{DefaultFilename}').",
+            "Filename for the HTML report (default '<assembly>_<framework>.html', e.g. 'Clinic.Tests_net10.0.html').",
             ArgumentArity.ExactlyOne, isHidden: false),
         new CommandLineOption(SourceBaseUrlOption,
             "Repository file-view URL, including the branch or commit, for HTML report source links.",

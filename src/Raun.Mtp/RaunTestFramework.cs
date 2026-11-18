@@ -3,8 +3,10 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Microsoft.Testing.Platform.Extensions;
 using Microsoft.Testing.Platform.Extensions.Messages;
+using Microsoft.Testing.Platform.Extensions.OutputDevice;
 using Microsoft.Testing.Platform.Extensions.TestFramework;
 using Microsoft.Testing.Platform.Logging;
+using Microsoft.Testing.Platform.OutputDevice;
 using Microsoft.Testing.Platform.Messages;
 using Microsoft.Testing.Platform.Requests;
 using Microsoft.Testing.Platform.Services;
@@ -36,7 +38,7 @@ namespace Raun.Mtp;
 /// </para>
 /// </remarks>
 internal sealed class RaunTestFramework :
-    IExtension, ITestPlatformTestFramework, IDataProducer
+    IExtension, ITestPlatformTestFramework, IDataProducer, IOutputDeviceDataProducer
 {
     /// <summary>Stable extension UID for Raun's MTP test framework.</summary>
     internal const string ExtensionUid = "raun.mtp.testframework";
@@ -105,7 +107,7 @@ internal sealed class RaunTestFramework :
 
     /// <inheritdoc/>
     [SuppressMessage("Design", "CA1819:Properties should not return arrays", Justification = "Required by the Microsoft.Testing.Platform IDataProducer.DataTypesProduced contract.")]
-    public Type[] DataTypesProduced => [typeof(TestNodeUpdateMessage)];
+    public Type[] DataTypesProduced => [typeof(TestNodeUpdateMessage), typeof(SessionFileArtifact)];
 
     Task<CreateTestSessionResult> ITestPlatformTestFramework.CreateTestSessionAsync(CreateTestSessionContext context)
         => CreateTestSession(context.SessionUid);
@@ -287,11 +289,13 @@ internal sealed class RaunTestFramework :
                 ? new MtpReportSink(sessionUid, messageBus, this, attachmentRoot)
                 : new ScenarioMtpReportSink(sessionUid, messageBus, this, attachmentRoot),
         };
-        if (HtmlReport.HtmlReportPath.Resolve(_services) is { } reportPath)
+        var reportPath = HtmlReport.HtmlReportPath.Resolve(_services);
+        HtmlReportSink? report = null;
+        if (reportPath is not null)
         {
             var coverageRequested = _coverage is not null
                 && (_services.GetCommandLineOptions().IsOptionSet("coverage") || _services.GetCommandLineOptions().IsOptionSet("coverlet"));
-            var report = new HtmlReportSink(reportPath, TimeProvider.System, coverageRequested, HtmlReport.HtmlReportPath.ResolveSourceOptions(_services));
+            report = new HtmlReportSink(reportPath, TimeProvider.System, coverageRequested, HtmlReport.HtmlReportPath.ResolveSourceOptions(_services));
             sinks.Add(report);
             if (coverageRequested)
             {
@@ -337,7 +341,39 @@ internal sealed class RaunTestFramework :
             }
         }
 
+        if (report is not null)
+        {
+            await AnnounceReportAsync(sessionUid, messageBus, reportPath!, bus.FailureOf(report), cancellationToken).ConfigureAwait(false);
+        }
+
         operationComplete();
+    }
+
+    /// <summary>
+    /// Tells the user where the report is, or that there is none. A report that could not be written
+    /// is said on the console: an older file under the same name may still be there, and without a
+    /// word it reads as this run's.
+    /// </summary>
+    private async Task AnnounceReportAsync(
+        SessionUid sessionUid, IMessageBus messageBus, string reportPath, Exception? failure, CancellationToken cancellationToken)
+    {
+        if (failure is null)
+        {
+            await messageBus.PublishAsync(
+                this,
+                new SessionFileArtifact(sessionUid, new FileInfo(reportPath), "Raun report", "The HTML report of this run."))
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (_services.GetService(typeof(IOutputDevice)) is IOutputDevice output)
+        {
+            await output.DisplayAsync(
+                this,
+                new WarningMessageOutputDeviceData(
+                    $"Raun: the HTML report could not be written to '{reportPath}': {failure.GetType().Name}: {failure.Message}"),
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>

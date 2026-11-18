@@ -30,6 +30,22 @@ public sealed class RunEventBus : IRunEventSink
     /// <summary>The first error each failed sink raised, in sink order; empty when all sinks held.</summary>
     public IReadOnlyList<Exception> Failures => _failures;
 
+    /// <summary>The first error <paramref name="sink"/> raised, or <see langword="null"/> when it
+    /// held or is not one of this bus's sinks.</summary>
+    public Exception? FailureOf(IRunEventSink sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+        for (var i = 0; i < _sinks.Count; i++)
+        {
+            if (ReferenceEquals(_sinks[i], sink))
+            {
+                return _firstError[i];
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Delivers one event to every sink, after every earlier publication has finished.</summary>
     public async ValueTask PublishAsync(RunEvent evt)
     {

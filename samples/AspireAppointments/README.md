@@ -10,7 +10,7 @@ From the repository root, with .NET SDK 10.0.300 or later:
 dotnet run --project samples/AspireAppointments/AspireAppointments.Tests -- --report-html --results-directory "$PWD/out"
 ```
 
-Open `out/raun-report.html`. Preflight starts the AppHost and waits for the API's health check.
+Open `out/AspireAppointments.Tests_net10.0.html`. Preflight starts the AppHost and waits for the API's health check.
 
 | What to look for | Where to read |
 | --- | --- |

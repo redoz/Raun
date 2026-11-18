@@ -8,7 +8,7 @@ From the repository root, with .NET SDK 10.0.300 or later:
 dotnet run --project samples/AppointmentTests -- --report-html --results-directory "$PWD/out"
 ```
 
-Open `out/raun-report.html`. Expand a scenario to see its steps and resource matrix.
+Open `out/AppointmentTests_net10.0.html` (the report is named after the test assembly and its target framework). Expand a scenario to see its steps and resource matrix.
 Expand a step for its logs; use attachment buttons to inspect saved text.
 The sample supplies elapsed times without waiting, so the report includes useful timing examples.
 Scenarios run concurrently. A branch that is not taken appears as skipped.
