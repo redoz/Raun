@@ -88,7 +88,12 @@ internal static class CoverageResolver
         {
             return null;
         }
-        var candidates = ranges.Where(range => Contains(range, span)).ToArray();
+
+        // A range that holds the whole lambda or local function the branch is written in belongs to
+        // the code around it: the statement that creates the lambda runs without its body running.
+        var function = branch.Syntax.Ancestors().FirstOrDefault(node => node is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)
+            ?.GetLocation().GetLineSpan();
+        var candidates = ranges.Where(range => Contains(range, span) && !(function is { } body && Contains(range, body))).ToArray();
         if (candidates.Length == 0)
         {
             return null;

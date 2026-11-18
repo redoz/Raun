@@ -207,6 +207,83 @@ public sealed class CoverageResolverTests
         return new CoverageObservations([new CoverageModule("build", "Fixture.dll", ranges) { IsCoverlet = true }]);
     }
 
+    private const string HandlerInLambda = """
+        class C
+        {
+            void Run(System.Action action) { }
+            void M(int[] items)
+            {
+                Run(() =>
+                {
+                    try { System.Console.WriteLine(1); }
+                    catch { foreach (var item in items) System.Console.WriteLine(item); }
+                });
+            }
+        }
+        """;
+
+    [Theory]
+    [InlineData("catch { foreach (var item in items) System.Console.WriteLine(item); }", "items")]
+    [InlineData("catch { while (items.Length > 9) System.Console.WriteLine(1); }", "items.Length > 9")]
+    [InlineData("catch { for (var i = 0; i < 3; i++) System.Console.WriteLine(i); }", "var i = 0")]
+    [InlineData("catch { lock (items) System.Console.WriteLine(1); }", "items")]
+    [InlineData("catch { using (var reader = new System.IO.StringReader(\"\")) System.Console.WriteLine(1); }", "var reader = new System.IO.StringReader(\"\")")]
+    [InlineData("catch { try { System.Console.WriteLine(2); } finally { } }", "System.Console.WriteLine(2);")]
+    [InlineData("catch { do { System.Console.WriteLine(3); } while (items.Length > 9); }", "System.Console.WriteLine(3);")]
+    public void A_handler_that_starts_with_a_compound_statement_is_entered_at_that_statements_first_sequence_point(string handler, string entry)
+    {
+        // No sequence point spans a whole loop, lock, using or try. An entry that is the whole
+        // statement can only be matched by a range of something around it.
+        var source = "class C { void M(int[] items) { try { System.Console.WriteLine(1); } " + handler + " } }";
+        var branch = Assert.Single(
+            BranchInventoryBuilder.Build(TestCompilation.Create(source), new CollectorScope(), TestContext.Current.CancellationToken),
+            b => b.Measurement == MeasurementKind.Handler);
+
+        var span = branch.Outcomes[0]!.Value;
+        var text = branch.Syntax.SyntaxTree.GetText();
+        var start = text.Lines.GetPosition(span.StartLinePosition);
+        var end = text.Lines.GetPosition(span.EndLinePosition);
+        Assert.Equal(entry, text.ToString(Microsoft.CodeAnalysis.Text.TextSpan.FromBounds(start, end)));
+    }
+
+    [Fact]
+    public void A_handler_inside_a_lambda_is_not_covered_by_the_statement_that_holds_the_lambda()
+    {
+        // The statement that passes the lambda runs at startup; the lambda's catch block may never
+        // run. The only range around the handler's entry is that outer statement's.
+        var branch = Assert.Single(
+            BranchInventoryBuilder.Build(TestCompilation.Create(HandlerInLambda), new CollectorScope(), TestContext.Current.CancellationToken),
+            b => b.Measurement == MeasurementKind.Handler);
+        var outer = branch.Syntax.Ancestors().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionStatementSyntax>().Last()
+            .GetLocation().GetLineSpan();
+
+        var status = CoverageResolver.Resolve(branch, Read(Xml(branch, (outer, "yes"))));
+
+        Assert.Equal(EvidenceStatus.Unknown, status);
+    }
+
+    [Fact]
+    public void A_handler_inside_a_lambda_is_scored_from_the_ranges_inside_the_lambda()
+    {
+        var branch = Assert.Single(
+            BranchInventoryBuilder.Build(TestCompilation.Create(HandlerInLambda), new CollectorScope(), TestContext.Current.CancellationToken),
+            b => b.Measurement == MeasurementKind.Handler);
+        var outer = branch.Syntax.Ancestors().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionStatementSyntax>().Last()
+            .GetLocation().GetLineSpan();
+        var entry = branch.Outcomes[0]!.Value;
+
+        Assert.Equal(EvidenceStatus.NotReached, CoverageResolver.Resolve(branch, Read(Xml(branch, (outer, "yes"), (entry, "no")))));
+        Assert.Equal(EvidenceStatus.Exercised, CoverageResolver.Resolve(branch, Read(Xml(branch, (outer, "yes"), (entry, "yes")))));
+    }
+
+    private static string Xml(InventoryBranch branch, params (Microsoft.CodeAnalysis.FileLinePositionSpan Span, string State)[] ranges)
+    {
+        var checksum = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(branch.Syntax.SyntaxTree.GetText().ToString())));
+        var xml = ranges.Select(range =>
+            $"<range source_id='0' start_line='{range.Span.StartLinePosition.Line + 1}' start_column='{range.Span.StartLinePosition.Character + 1}' end_line='{range.Span.EndLinePosition.Line + 1}' end_column='{range.Span.EndLinePosition.Character + 1}' covered='{range.State}' />");
+        return $"<results><modules><module id='same-build' name='Fixture.dll'><source_files><source_file id='0' path='fixture.cs' checksum_type='SHA256' checksum=\"{checksum}\" /></source_files><functions><function><ranges>{string.Concat(xml)}</ranges></function></functions></module></modules></results>";
+    }
+
     private static InventoryBranch Guard(string source) => Assert.Single(BranchInventoryBuilder.Build(
         TestCompilation.Create(source), new CollectorScope(), TestContext.Current.CancellationToken), b => b.Measurement == MeasurementKind.Guard);
     private static InventoryBranch Decision(string source) => Assert.Single(BranchInventoryBuilder.Build(

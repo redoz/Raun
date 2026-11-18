@@ -149,12 +149,29 @@ internal static class BranchInventoryBuilder
             .FirstOrDefault(statement => statement is not LocalFunctionStatementSyntax and not EmptyStatementSyntax));
     }
 
+    // Where a statement starts executing, as something a collector's range can contain. A statement
+    // with parts of its own (a loop, a lock, a using, a try) has no sequence point that spans all of
+    // it; its whole span could only be matched by a range of something around it, such as the
+    // statement holding the lambda it sits in. So such a statement is entered at the part that
+    // executes first.
     private static FileLinePositionSpan? EntrySpan(StatementSyntax? statement)
         => statement switch
         {
             BlockSyntax block => FirstStatement(block) is { } first ? EntrySpan(first) : block.OpenBraceToken.GetLocation().GetLineSpan(),
             IfStatementSyntax conditional => Span(conditional.Condition),
             SwitchStatementSyntax selection => Span(selection.Expression),
+            CommonForEachStatementSyntax loop => Span(loop.Expression),
+            WhileStatementSyntax loop => Span(loop.Condition),
+            DoStatementSyntax loop => EntrySpan(loop.Statement),
+            ForStatementSyntax loop => Span(
+                (SyntaxNode?)loop.Declaration ?? loop.Initializers.FirstOrDefault() ?? loop.Condition) ?? EntrySpan(loop.Statement),
+            UsingStatementSyntax resource => Span((SyntaxNode?)resource.Declaration ?? resource.Expression),
+            LockStatementSyntax locked => Span(locked.Expression),
+            FixedStatementSyntax pinned => Span(pinned.Declaration),
+            TryStatementSyntax attempt => EntrySpan(attempt.Block),
+            CheckedStatementSyntax check => EntrySpan(check.Block),
+            UnsafeStatementSyntax danger => EntrySpan(danger.Block),
+            LabeledStatementSyntax labeled => EntrySpan(labeled.Statement),
             _ => Span(statement),
         };
     private static ThrowStatementSyntax? DirectThrow(StatementSyntax statement)
