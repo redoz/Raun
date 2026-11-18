@@ -47,7 +47,8 @@ internal static class SourceProjectLoader
             diagnostics.Add("Source scope: runtime dependencies of " + root.Name);
             var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
             var pending = new Queue<Project>();
-            var visited = new Dictionary<string, ProjectId>(comparer);
+            var visited = new Dictionary<string, Project>(comparer);
+            var runtimeDirectory = string.IsNullOrEmpty(entryAssemblyPath) ? null : Path.GetDirectoryName(Path.GetFullPath(entryAssemblyPath));
             pending.Enqueue(root);
             while (pending.TryDequeue(out var project))
             {
@@ -55,10 +56,17 @@ internal static class SourceProjectLoader
                 var path = Path.GetFullPath(project.FilePath!);
                 if (visited.TryGetValue(path, out var existing))
                 {
-                    if (!existing.Equals(project.Id)) { throw new InvalidOperationException(project.Name + ": several compiled variants occur in the runtime graph."); }
+                    // A project built for several frameworks, reached through projects of different
+                    // frameworks. One build of it is loaded when the tests run; the one met first stands
+                    // in for it here (the runtime's own build, when the output directory could tell).
+                    if (!existing.Id.Equals(project.Id))
+                    {
+                        var note = existing.Name + ": also reached as compiled variant " + project.Name + "; only " + existing.Name + " is analysed";
+                        if (!diagnostics.Contains(note, StringComparer.Ordinal)) { diagnostics.Add(note); }
+                    }
                     continue;
                 }
-                visited.Add(path, project.Id);
+                visited.Add(path, project);
                 if (project.Language != LanguageNames.CSharp) { continue; }
                 var properties = await ReadPropertiesAsync(project, configuration, cancellationToken).ConfigureAwait(false);
                 foreach (var reference in properties.References)
@@ -68,10 +76,15 @@ internal static class SourceProjectLoader
                         .Where(item => item?.FilePath is not null && comparer.Equals(Path.GetFullPath(item.FilePath), reference)).ToArray();
                     var candidates = current.Projects.Where(item => item.FilePath is not null
                         && comparer.Equals(Path.GetFullPath(item.FilePath), reference)).ToArray();
-                    if (referenced.Length == 1) { pending.Enqueue(referenced[0]!); }
-                    else if (candidates.Length == 1) { pending.Enqueue(candidates[0]); }
+                    if (RuntimeVariant(candidates, runtimeDirectory) is { } loadedAtRuntime) { pending.Enqueue(loadedAtRuntime); }
+                    else if (referenced.Length == 1) { pending.Enqueue(referenced[0]!); }
                     else if (candidates.Length == 0) { pending.Enqueue(await workspace.OpenProjectAsync(reference, cancellationToken: cancellationToken).ConfigureAwait(false)); }
-                    else { throw new InvalidOperationException("Several compiled variants match runtime dependency " + reference); }
+                    else
+                    {
+                        // Nothing says which build runs: take the first, and say so.
+                        pending.Enqueue(candidates[0]);
+                        if (candidates.Length > 1) { diagnostics.Add(candidates[0].Name + ": chosen among " + candidates.Length + " compiled variants of " + Path.GetFileName(reference)); }
+                    }
                 }
                 // Exclusions apply to the assembly, not to the dependency graph below it.
                 var outputPath = project.OutputFilePath ?? properties.OutputPath;
@@ -106,6 +119,38 @@ internal static class SourceProjectLoader
             workspace.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Among the compiled variants of one project (one per target framework), the one whose assembly
+    /// is the file in the test application's output directory: the build that is loaded when the
+    /// tests run. Null when there is one variant or none, or when the output directory cannot tell
+    /// (nothing built, or the assembly is not copied there).
+    /// </summary>
+    private static Project? RuntimeVariant(Project[] candidates, string? runtimeDirectory)
+    {
+        if (candidates.Length < 2 || runtimeDirectory is null)
+        {
+            return null;
+        }
+
+        var matches = candidates.Where(candidate => candidate.OutputFilePath is { } output
+            && SameFile(output, Path.Combine(runtimeDirectory, Path.GetFileName(output)))).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
+    }
+
+    private static bool SameFile(string left, string right)
+    {
+        try
+        {
+            var first = new FileInfo(left);
+            var second = new FileInfo(right);
+            return first.Exists && second.Exists && first.Length == second.Length
+                && System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(left)).AsSpan()
+                    .SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(right)));
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
     private static Project FindRoot(Solution solution, string? entryAssemblyPath, string? invocationDirectory)
