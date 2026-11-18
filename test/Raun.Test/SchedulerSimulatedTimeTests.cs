@@ -79,6 +79,29 @@ public class SchedulerSimulatedTimeTests
     }
 
     [Fact]
+    public async Task Teardown_starts_when_the_last_step_ends_not_when_the_scenario_started()
+    {
+        var slow = TimeSpan.FromMilliseconds(70);
+        var fast = TimeSpan.FromMilliseconds(50);
+        var def = Def(
+            Node(0, Elapse(TimeSpan.FromMilliseconds(30))),
+            Node(1, Elapse(slow), [0]),
+            Node(2, Elapse(fast), [0]),
+            new ScenarioNode
+            {
+                Index = 3, StepId = "teardown", Phase = "Then", OperationName = "Teardown",
+                DisplayNameTemplate = "Teardown", DependsOn = [], Kind = NodeKind.Teardown,
+            });
+
+        var results = await WithTimeout(SimScheduler().RunAsync(def));
+
+        // On the simulated timeline teardown comes after the step that ends last; it used to be
+        // stamped with the scenario's start, ahead of every step.
+        Assert.Equal(Base + TimeSpan.FromMilliseconds(30) + slow, results[3].StartedAt);
+        Assert.Equal(TimeSpan.Zero, results[3].Duration);
+    }
+
+    [Fact]
     public async Task Parallel_siblings_overlap_and_their_join_starts_at_the_max_not_the_sum()
     {
         var slow = TimeSpan.FromMilliseconds(70);

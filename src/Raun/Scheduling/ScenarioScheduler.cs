@@ -509,26 +509,18 @@ public sealed class ScenarioScheduler
 
         return results.Select(r => r!).ToList();
 
-        // Runs after the scheduling loop, so a cancelled scenario token has already stopped the DAG
-        // and cannot suppress the cleanups that exist to prevent leaks. Cleanup delegates are invoked
-        // directly, never through a step's cancellation source.
+        // Teardown is not a node of the graph: it runs here, after the scheduling loop, and its
+        // cleanups are run by TeardownRunner. This is only the scheduler's side of it: where it
+        // stands on the timeline, and telling the observer.
         async Task RunTeardownAsync(int i)
         {
             var node = nodes[i];
             var titleMessage = StepNotes.FormatTitle(node, messageFormatting, inputs);
-            var name = titleMessage.Text;
 
             // Success is a property of the SCENARIO, not of the step that registered a cleanup: a
             // failed run should leave the whole world intact, not a half-torn-down mix of it. Steps a
             // filter left out did not fail — they were never asked to run — so they do not count.
             var succeeded = ScenarioOutcome.Of(results.Where((r, n) => r is not null && n != i)!).Succeeded;
-
-            var optionalAllowed = definition.TeardownPolicy switch
-            {
-                Run.Always => true,
-                Run.OnSuccess => succeeded,
-                _ => false,
-            };
 
             // Reverse topological order of the owning step, then reverse registration order within a
             // step. Registration order alone is nondeterministic: steps run concurrently.
@@ -540,152 +532,37 @@ public sealed class ScenarioScheduler
             var startedAt = _timeProvider.GetUtcNow();
             if (_simulatedTime)
             {
-                simStartOffset![i] = TimeSpan.Zero;
-                simFinishOffset![i] = TimeSpan.Zero;
+                // On the simulated timeline teardown starts when the step that ends last has ended.
+                var offset = TimeSpan.Zero;
+                for (var n = 0; n < count; n++)
+                {
+                    if (n != i && simFinishOffset![n] > offset)
+                    {
+                        offset = simFinishOffset[n];
+                    }
+                }
+
+                simStartOffset![i] = offset;
+                simFinishOffset![i] = offset;
+                startedAt = scenarioStart + offset;
             }
 
             if (observer is not null)
             {
                 await observer.OnStepStartingAsync(
-                    new StepContext { Node = node, DisplayName = name }).ConfigureAwait(false);
+                    new StepContext { Node = node, DisplayName = titleMessage.Text }).ConfigureAwait(false);
             }
 
-            // The STATUS answers one question — did teardown succeed? Whether the policy skipped
-            // anything is information, not a verdict, so it goes in the log. Otherwise every suite
-            // that never uses teardown, and every deliberate Run.Never, would carry a non-passing node.
-            //
-            // One context for the teardown node. Cleanups log and attach through it — the step that
-            // registered them has long since been reported — and it is the ambient
-            // ScenarioContext.Current while they run, so domain code below a cleanup attributes its
-            // lines here. Callback views get fresh independent deadline tokens, so cancellation of
-            // the scenario cannot suppress cleanup. It is NOT attached to the conflict ledger: teardown runs after every other node is
-            // terminal, so it is ordered after all of them, and a cleanup's Delete must never be refused
-            // as a conflict with the step that created the thing.
-            var teardownContext = new ScenarioContext(
-                node.StepId, name, services, messageFormatting.ForStep(node.Index), _timeProvider, CancellationToken.None);
-            foreach (var note in StepNotes.FormatMessages(node, messageFormatting, inputs))
-            {
-                teardownContext.AddNote(note);
-            }
-            teardownContext.AttachScenario(definition.Info);
-            teardownContext.AttachScenarioStart(scenarioStartRef.Of(startedAt));
-            using var teardownActivity = StartStepActivity(definition, node, name);
-            teardownContext.AttachActivity(teardownActivity);
-            var skipped = new List<string>();
-            var stopwatch = Stopwatch.StartNew();
-            List<Exception>? errors = null;
-
-            using var cleanupWatchdog = new CancellationWatchdog(_cancellationGracePeriod, CancellationToken.None, beforeTermination: beforeTermination);
-            ScenarioContext.SetCurrent(teardownContext);
-            try
-            {
-                foreach (var entry in ordered)
-                {
-                    var owner = nodes[entry.OwningStepIndex].OperationName;
-                    if (entry.Kind == Cleanup.Optional && !optionalAllowed)
-                    {
-                        skipped.Add(owner);
-                        continue;
-                    }
-
-#pragma warning disable CA2000 // This using owns the CTS; its nested watchdog handle drains callbacks before disposal.
-                    using (var cleanupCts = new CancellationTokenSource())
-#pragma warning restore CA2000
-                    {
-                        var identity = $"cleanup registration #{entry.Sequence} from step '{owner}' in scenario '{definition.DisplayName}'";
-                        using var cleanupWatch = cleanupWatchdog.Watch(cleanupCts, _cleanupTimeout, identity);
-                        var callbackContext = teardownContext.WithCancellationToken(cleanupCts.Token);
-                        ScenarioContext.SetCurrent(callbackContext);
-                        try
-                        {
-                            try
-                            {
-                                await entry.Cleanup(callbackContext).ConfigureAwait(false);
-                            }
-                            finally
-                            {
-                                await cleanupWatch.CompleteAsync().ConfigureAwait(false);
-                            }
-                            if (cleanupWatch.TimedOut)
-                            {
-                                throw new TimeoutException($"{identity} exceeded its timeout of {_cleanupTimeout}.");
-                            }
-                            teardownContext.Log($"cleaned up: {owner}");
-                        }
-                        catch (Exception ex)
-                        {
-                            // Advance only after actual callback/cancellation work has stopped.
-                            Exception error = cleanupWatch.TimedOut
-                                ? new TimeoutException($"{identity} exceeded its timeout of {_cleanupTimeout}.", ex)
-                                : new InvalidOperationException($"{identity} failed: {ex.Message}", ex);
-                            (errors ??= []).Add(error);
-                            teardownContext.Log($"cleanup FAILED: {owner} [registration #{entry.Sequence}] — {error.Message}");
-                        }
-                        finally
-                        {
-                            await cleanupWatch.CompleteAsync().ConfigureAwait(false);
-                            ScenarioContext.SetCurrent(teardownContext);
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                ScenarioContext.SetCurrent(null);
-            }
-
-            stopwatch.Stop();
-
-            if (ordered.Count == 0)
-            {
-                teardownContext.Log("no cleanup registered");
-            }
-
-            if (skipped.Count > 0)
-            {
-                var why = $"teardown policy is {definition.TeardownPolicy}"
-                    + (definition.TeardownPolicy == Run.OnSuccess && !succeeded
-                        ? " and the scenario failed"
-                        : string.Empty);
-                teardownContext.Log($"skipped {skipped.Count} optional cleanup(s) — {why}: {string.Join(", ", skipped)}");
-            }
-
-            status[i] = errors is null ? StepStatus.Passed : StepStatus.Failed;
-            if (teardownActivity is not null)
-            {
-                teardownActivity.SetTag(RaunTelemetry.Attributes.TestCaseResultStatus, errors is null ? "pass" : "fail");
-                if (errors is not null)
-                {
-                    teardownActivity.SetStatus(ActivityStatusCode.Error, $"{errors.Count} teardown action(s) failed.");
-                    foreach (var error in errors)
-                    {
-                        teardownActivity.AddException(error);
-                    }
-                }
-            }
-
-            results[i] = new StepResult
-            {
-                Node = node,
-                DisplayName = name,
-                TitleMessage = titleMessage,
-                Status = status[i],
-                StartedAt = startedAt,
-                Duration = stopwatch.Elapsed,
-                TraceId = teardownActivity?.TraceId.ToString(),
-                SpanId = teardownActivity?.SpanId.ToString(),
-                NoteMessages = teardownContext.NoteMessages,
-                LogEntries = teardownContext.LogEntries,
-                Attachments = teardownContext.Attachments,
-                Effects = teardownContext.Resources.Effects,
-                Links = teardownContext.Resources.Links,
-                Exception = errors is null
-                    ? null
-                    : new AggregateException($"{errors.Count} teardown action(s) failed.", errors),
-            };
+            var result = await new TeardownRunner(_timeProvider, _cancellationGracePeriod, _cleanupTimeout)
+                .RunAsync(new TeardownRunner.Request(
+                    definition, node, titleMessage, ordered, succeeded, startedAt, _simulatedTime, services,
+                    messageFormatting, inputs, scenarioStartRef, beforeTermination))
+                .ConfigureAwait(false);
+            status[i] = result.Status;
+            results[i] = result;
             if (observer is not null)
             {
-                await observer.OnStepFinishedAsync(results[i]!).ConfigureAwait(false);
+                await observer.OnStepFinishedAsync(result).ConfigureAwait(false);
             }
         }
 
@@ -1160,7 +1037,7 @@ public sealed class ScenarioScheduler
     }
 
     /// <summary>Starts a step's span with its identity tags, or returns null when nothing listens.</summary>
-    private static Activity? StartStepActivity(ScenarioDefinition definition, ScenarioNode node, string displayName)
+    internal static Activity? StartStepActivity(ScenarioDefinition definition, ScenarioNode node, string displayName)
     {
         var activity = RaunTelemetry.Source.StartActivity(displayName, ActivityKind.Internal);
         if (activity is null || !activity.IsAllDataRequested)
@@ -1217,7 +1094,7 @@ public sealed class ScenarioScheduler
 
     /// <summary>The instant a scenario's log offsets are measured from: fixed up front in simulated mode,
     /// otherwise the first step's StartedAt. Thread-safe: concurrent first steps agree on one value.</summary>
-    private sealed class ScenarioStart
+    internal sealed class ScenarioStart
     {
         private long _ticks = -1;
 
