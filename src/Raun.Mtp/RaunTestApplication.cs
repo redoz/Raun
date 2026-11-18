@@ -104,7 +104,7 @@ public static class RaunTestApplication
         var stopRelay = new RunStopRelay();
 
         // The framework below may be created once per session; preflight must not be.
-        var preflightNode = ProcessPreflight.Compose(preflight, sessionPreflight);
+        var preflightNode = Raun.Running.ProcessPreflight.Compose(preflight, sessionPreflight);
 
         // --maximum-failed-tests is offered only to a framework that declares a graceful stop.
 #pragma warning disable TPEXP // AddMaximumFailedTestsService is an experimental Microsoft.Testing.Platform API.

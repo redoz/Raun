@@ -1,7 +1,7 @@
-namespace Raun.Mtp;
+namespace Raun.Running;
 
 /// <summary>
-/// Makes a preflight run once per test host process rather than once per test session.
+/// Makes a preflight run once per host process rather than once per run.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,12 +17,13 @@ namespace Raun.Mtp;
 /// say) does not need a new host.
 /// </para>
 /// </remarks>
-internal sealed class ProcessPreflight
+public sealed class ProcessPreflight
 {
     private readonly Func<ScenarioContext, Task> preflight;
     private readonly object gate = new();
     private Lazy<Task>? attempt;
 
+    /// <summary>Wraps <paramref name="preflight"/> so that every run in this process shares one start of it.</summary>
     public ProcessPreflight(Func<ScenarioContext, Task> preflight)
     {
         ArgumentNullException.ThrowIfNull(preflight);
@@ -56,6 +57,9 @@ internal sealed class ProcessPreflight
         };
     }
 
+    /// <summary>The body of one run's preflight node: starts the preflight, waits for the start
+    /// another run made, or returns at once when that start succeeded. A start that failed or was
+    /// cancelled is made again.</summary>
     public Task RunAsync(ScenarioContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

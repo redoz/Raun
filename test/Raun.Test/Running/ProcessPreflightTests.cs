@@ -3,7 +3,7 @@ using Raun.Reporting;
 using Raun.Running;
 using Xunit;
 
-namespace Raun.Mtp.Test;
+namespace Raun.Test;
 
 /// <summary>
 /// One test host can serve many sessions (an IDE in server mode, Stryker.NET reusing a host for every
