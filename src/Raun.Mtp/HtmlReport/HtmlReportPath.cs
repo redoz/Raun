@@ -8,12 +8,12 @@ namespace Raun.Mtp.HtmlReport;
 
 /// <summary>Resolves the absolute HTML report path from MTP's command-line options + configuration,
 /// or returns <see langword="null"/> when <c>--report-html</c> is absent.</summary>
-internal static class HtmlReportPath
+public static class HtmlReportPath
 {
     /// <summary>Pure resolution from its inputs. Falls back to the current directory when MTP
     /// did not supply a results directory, and to <see cref="DefaultFilename"/> when no filename
     /// was asked for.</summary>
-    public static string? Resolve(
+    internal static string? Resolve(
         bool enabled, string? filename, string? resultsDirectory, string? assemblyName = null, string? targetFrameworkName = null)
     {
         if (!enabled)
@@ -35,7 +35,7 @@ internal static class HtmlReportPath
     /// <param name="assemblyName">The test application's assembly name; unknown falls back to <c>raun-report</c>.</param>
     /// <param name="targetFrameworkName">A framework name as in <see cref="AppContext.TargetFrameworkName"/>
     /// (<c>.NETCoreApp,Version=v10.0</c>); left out of the filename when unknown.</param>
-    public static string DefaultFilename(string? assemblyName, string? targetFrameworkName)
+    internal static string DefaultFilename(string? assemblyName, string? targetFrameworkName)
     {
         var name = string.IsNullOrWhiteSpace(assemblyName) ? "raun-report" : assemblyName;
         return ShortFrameworkName(targetFrameworkName) is { } framework
@@ -67,7 +67,9 @@ internal static class HtmlReportPath
         return new Raun.Reporting.Html.HtmlReportSourceOptions { BaseUrl = new Uri(values[0]), SourceRoot = root };
     }
 
-    /// <summary>Reads the inputs off the framework's MTP service provider.</summary>
+    /// <summary>Where this run writes its HTML report, read off the platform's service provider
+    /// (command-line options and the results directory); <see langword="null"/> when
+    /// <c>--report-html</c> was not given. For an extension that adds to the report file.</summary>
     public static string? Resolve(IServiceProvider services)
     {
         ICommandLineOptions options = services.GetCommandLineOptions();

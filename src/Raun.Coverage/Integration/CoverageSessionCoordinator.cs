@@ -65,12 +65,12 @@ internal sealed class CoverageSessionCoordinator(
                     Status = "unavailable",
                     Diagnostics = [$"Coverage analysis did not finish within {_analysisTimeout} and was stopped."],
                 };
-                NodeDiagnostics.Log("coverage-analysis-timeout", _analysisTimeout.ToString());
+                Raun.Diagnostics.DebugTrace.Write("coverage-analysis-timeout", _analysisTimeout.ToString());
             }
             catch (Exception error)
             {
                 coverage = new ReportCoverage { Status = "unavailable", Diagnostics = [error.Message] };
-                NodeDiagnostics.Log("coverage-analysis-failure", error.ToString());
+                Raun.Diagnostics.DebugTrace.Write("coverage-analysis-failure", error.ToString());
             }
             state.Coverage = coverage;
             if (state.Report is not null)
@@ -81,7 +81,7 @@ internal sealed class CoverageSessionCoordinator(
                 }
                 catch (Exception error)
                 {
-                    NodeDiagnostics.Log("coverage-report-failure", error.ToString());
+                    Raun.Diagnostics.DebugTrace.Write("coverage-report-failure", error.ToString());
                 }
             }
         }
@@ -123,7 +123,7 @@ internal sealed class CoverageSessionCoordinator(
                 }
                 catch (Exception error)
                 {
-                    NodeDiagnostics.Log("coverage-report-failure", error.ToString());
+                    Raun.Diagnostics.DebugTrace.Write("coverage-report-failure", error.ToString());
                 }
             }
         }

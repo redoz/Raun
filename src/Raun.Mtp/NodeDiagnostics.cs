@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.Testing.Platform.Extensions.Messages;
+using Raun.Diagnostics;
 
 namespace Raun.Mtp;
 
@@ -14,11 +15,8 @@ namespace Raun.Mtp;
 /// </summary>
 internal static class NodeDiagnostics
 {
-    private static readonly string? Sink = Environment.GetEnvironmentVariable("RAUN_NODE_DEBUG");
-    private static readonly object FileLock = new();
-
     /// <summary>Whether tracing is enabled (the <c>RAUN_NODE_DEBUG</c> environment variable is set).</summary>
-    public static bool Enabled => !string.IsNullOrEmpty(Sink);
+    public static bool Enabled => DebugTrace.Enabled;
 
     /// <summary>Traces one published node under the given <paramref name="phase"/> (e.g. "discover", "run").</summary>
     public static void Log(string phase, TestNode node)
@@ -28,26 +26,18 @@ internal static class NodeDiagnostics
             return;
         }
 
-        Write(Describe(phase, node));
+        DebugTrace.Write(phase, Describe(node));
     }
 
     /// <summary>Traces a plain message under the given <paramref name="phase"/> (e.g. "report-sink-failure").</summary>
-    public static void Log(string phase, string message)
-    {
-        if (!Enabled)
-        {
-            return;
-        }
+    public static void Log(string phase, string message) => DebugTrace.Write(phase, message);
 
-        Write($"[raun-node] {phase} {message}");
-    }
-
-    private static string Describe(string phase, TestNode node)
+    private static string Describe(TestNode node)
     {
         var state = node.Properties.OfType<TestNodeStateProperty>().FirstOrDefault()?.GetType().Name ?? "(none)";
 
         var builder = new StringBuilder();
-        builder.Append(CultureInfo.InvariantCulture, $"[raun-node] {phase} uid='{node.Uid.Value}' name='{node.DisplayName}' state={state}");
+        builder.Append(CultureInfo.InvariantCulture, $"uid='{node.Uid.Value}' name='{node.DisplayName}' state={state}");
 
         var identity = node.Properties.OfType<TestMethodIdentifierProperty>().FirstOrDefault();
         if (identity is not null)
@@ -64,31 +54,5 @@ internal static class NodeDiagnostics
         builder.Append(CultureInfo.InvariantCulture, $" count={node.Properties.Count} props=[{props}]");
 
         return builder.ToString();
-    }
-
-    private static void Write(string line)
-    {
-        if (string.Equals(Sink, "1", StringComparison.Ordinal)
-            || string.Equals(Sink, "stderr", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(Sink, "console", StringComparison.OrdinalIgnoreCase))
-        {
-            Console.Error.WriteLine(line);
-            return;
-        }
-
-        try
-        {
-            lock (FileLock)
-            {
-                File.AppendAllText(Sink!, line + Environment.NewLine);
-            }
-        }
-        catch (IOException)
-        {
-            // Diagnostics are best-effort; never let tracing break a run.
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
     }
 }

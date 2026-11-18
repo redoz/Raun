@@ -56,13 +56,13 @@ internal sealed class CoverletReportEnricher(
         }
         catch (Exception error)
         {
-            NodeDiagnostics.Log("coverage-analysis-failure", error.ToString());
+            Raun.Diagnostics.DebugTrace.Write("coverage-analysis-failure", error.ToString());
             coverage = new ReportCoverage { Status = "unavailable", Diagnostics = [error.Message] };
         }
         try
         {
             await HtmlReportSink.EnrichFileAsync(reportPath, coverage, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception error) { NodeDiagnostics.Log("coverage-report-failure", error.ToString()); }
+        catch (Exception error) { Raun.Diagnostics.DebugTrace.Write("coverage-report-failure", error.ToString()); }
     }
 }

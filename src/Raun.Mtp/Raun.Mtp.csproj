@@ -25,7 +25,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Raun.Mtp.Test" />
-    <InternalsVisibleTo Include="Raun.Coverage" />
   </ItemGroup>
 
   <ItemGroup>

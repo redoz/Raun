@@ -33,7 +33,7 @@ internal sealed class CoverageSourceConfiguration
         catch (Exception error)
         {
             Error = error.Message;
-            NodeDiagnostics.Log("coverage-configuration-failure", error.ToString());
+            Raun.Diagnostics.DebugTrace.Write("coverage-configuration-failure", error.ToString());
         }
     }
 }

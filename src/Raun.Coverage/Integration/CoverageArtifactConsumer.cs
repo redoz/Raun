@@ -22,7 +22,7 @@ internal sealed class CoverageArtifactConsumer(CoverageSessionCoordinator coordi
         if (data is SessionFileArtifact artifact && artifact.DisplayName == "Code Coverage"
             && dataProducer.Uid == "TestingPlatformCoverageDynamicTestSessionLifetimeHandler")
         {
-            NodeDiagnostics.Log("coverage-artifact", dataProducer.Uid);
+            Raun.Diagnostics.DebugTrace.Write("coverage-artifact", dataProducer.Uid);
             return coordinator.AcceptArtifactAsync(artifact.SessionUid.Value, artifact.FileInfo, cancellationToken);
         }
         return Task.CompletedTask;
