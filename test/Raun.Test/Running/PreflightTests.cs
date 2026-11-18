@@ -57,6 +57,61 @@ public class PreflightTests
         return sink;
     }
 
+    private static ScenarioDefinition Chain() => Definition(
+        "chain",
+        Node(0, "first"),
+        new ScenarioNode
+        {
+            Index = 1, StepId = "second", Phase = "When", OperationName = "Op1", DisplayNameTemplate = "op 1",
+            DependsOn = [0], Invoke = (_, _) => Task.FromResult<object?>(null),
+        },
+        new ScenarioNode
+        {
+            Index = 2, StepId = "third", Phase = "Then", OperationName = "Op2", DisplayNameTemplate = "op 2",
+            DependsOn = [1], Invoke = (_, _) => Task.FromResult<object?>(null),
+        });
+
+    [Fact]
+    public async Task A_failed_preflight_reports_only_the_steps_the_run_selected()
+    {
+        // Running one step from an IDE with a broken preflight: that step and what it needs are
+        // skipped naming preflight. The step after it was never part of the run and must not flip.
+        var sink = new Recorder();
+        var chain = Chain();
+
+        await new RunLoop(() => [chain], preflight: _ => throw new InvalidOperationException("no container runtime"))
+            .RunAsync(new UidNodeSelector(new HashSet<string> { "chain:second" }), sink, CancellationToken.None);
+
+        Assert.Equal(
+            ["first", "second"],
+            sink.Finished.Where(e => e.Definition == chain).Select(e => e.Result.Node.StepId));
+        var finished = Assert.Single(sink.Events.OfType<ScenarioFinished>(), e => e.Definition == chain);
+        Assert.Equal(
+            [Preflight.FailedSkipReason, Preflight.FailedSkipReason, Raun.Scheduling.ScenarioScheduler.NotSelectedSkipReason],
+            finished.Results.Select(r => r.SkipReason));
+    }
+
+    [Fact]
+    public async Task A_cancelled_preflight_skips_the_scenarios_as_cancelled_not_as_a_preflight_failure()
+    {
+        // The host stops the run while preflight is starting the environment. Nothing failed.
+        var sink = new Recorder();
+        using var host = new CancellationTokenSource();
+
+        await new RunLoop(() => [Definition("a", Node(0, "x"))], preflight: async ctx =>
+            {
+                await host.CancelAsync();
+                await Task.Delay(Timeout.Infinite, ctx.CancellationToken);
+            })
+            .RunAsync(selector: null, sink, host.Token);
+
+        var step = Assert.Single(sink.Finished, e => e.Result.Node.StepId == "x");
+        Assert.Equal(StepStatus.Skipped, step.Result.Status);
+        Assert.Equal(Raun.Scheduling.ScenarioScheduler.CanceledSkipReason, step.Result.SkipReason);
+        var scenario = Assert.Single(sink.Events.OfType<ScenarioFinished>(), e => e.Definition.ScenarioId == "a");
+        Assert.Equal(ScenarioStatus.Canceled, scenario.Outcome.Status);
+    }
+
     [Fact]
     public async Task Preflight_runs_once_before_any_scenario_step()
     {

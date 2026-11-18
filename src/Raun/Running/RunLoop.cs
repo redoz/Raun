@@ -186,21 +186,29 @@ public sealed class RunLoop
         {
             // Run-level setup, before any scenario: a filtered run of one step still needs whatever
             // preflight brings up.
-            var preflightFailed = false;
+            string? skipReason = null;
             if (preflightDefinition is not null)
             {
                 var results = await RunOneAsync(preflightDefinition, bus, selector: null, runContext, runId, waited: TimeSpan.Zero, waitedFor: null, cancellationToken)
                     .ConfigureAwait(false);
-                preflightFailed = results.Any(r => r.Status is StepStatus.Failed or StepStatus.Skipped);
+
+                // A preflight the host cancelled did not fail, and the scenarios behind it are
+                // cancelled too, not victims of a failure.
+                skipReason = ScenarioOutcome.Of(results).Status switch
+                {
+                    ScenarioStatus.Passed => null,
+                    ScenarioStatus.Canceled => ScenarioScheduler.CanceledSkipReason,
+                    _ => Preflight.FailedSkipReason,
+                };
             }
 
-            if (preflightFailed)
+            if (skipReason is not null)
             {
-                // Attribute the failure to a row rather than to an exit code: every step reports skipped
-                // naming preflight, and the run still completes so the report is whole.
+                // Attribute the failure to a row rather than to an exit code: every selected step
+                // reports skipped naming preflight, and the run still completes so the report is whole.
                 foreach (var definition in selected)
                 {
-                    await SkipScenarioAsync(definition, bus, runContext, runId).ConfigureAwait(false);
+                    await SkipScenarioAsync(definition, bus, selector, skipReason, runContext, runId).ConfigureAwait(false);
                 }
             }
             else
@@ -333,10 +341,17 @@ public sealed class RunLoop
     /// <summary>When a scenario was first refused by the gate, and by which resource.</summary>
     private readonly record struct Wait(long Since, Type By);
 
-    /// <summary>Reports every step of a scenario that never ran because preflight failed.</summary>
+    /// <summary>
+    /// Reports the steps of a scenario that never ran because preflight did not pass. Only the steps
+    /// the run selected, with what they need, exactly as the scheduler would have run them: a step
+    /// outside that set was never part of the run, so no sink hears of it and its result says "not
+    /// selected".
+    /// </summary>
     private async ValueTask SkipScenarioAsync(
-        ScenarioDefinition definition, IRunEventSink bus, ActivityContext? runContext, string runId)
+        ScenarioDefinition definition, IRunEventSink bus, NodeSelector? selector, string reason, ActivityContext? runContext, string runId)
     {
+        var targets = SelectTargets(definition, selector);
+        var included = targets is null ? null : ScenarioGraph.Closure(definition.Nodes, targets);
         await bus.PublishAsync(new ScenarioStarted(definition)).ConfigureAwait(false);
         using var scenarioActivity = StartScenarioActivity(definition, runContext, runId, waited: TimeSpan.Zero, waitedFor: null);
         scenarioActivity?.SetTag(RaunTelemetry.Attributes.TestSuiteRunStatus, "skipped");
@@ -350,6 +365,8 @@ public sealed class RunLoop
             var results = new List<StepResult>(definition.Nodes.Count);
             foreach (var node in definition.Nodes)
             {
+                // The teardown node is part of every run of its scenario, filtered or not.
+                var selectedNode = included is null || node.IsTeardown || included.Contains(node.Index);
                 var titleMessage = StepNotes.FormatTitle(node, formatting);
                 var result = new StepResult
                 {
@@ -358,11 +375,14 @@ public sealed class RunLoop
                     TitleMessage = titleMessage,
                     Status = StepStatus.Skipped,
                     StartedAt = null,
-                    SkipReason = Preflight.FailedSkipReason,
+                    SkipReason = selectedNode ? reason : ScenarioScheduler.NotSelectedSkipReason,
                     NoteMessages = StepNotes.FormatMessages(node, formatting),
                 };
                 results.Add(result);
-                await bus.PublishAsync(new StepFinished(definition, result)).ConfigureAwait(false);
+                if (selectedNode)
+                {
+                    await bus.PublishAsync(new StepFinished(definition, result)).ConfigureAwait(false);
+                }
             }
 
             await bus.PublishAsync(new ScenarioFinished(definition, results)).ConfigureAwait(false);
