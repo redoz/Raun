@@ -13,6 +13,13 @@ internal static class Program
 #pragma warning disable CA2000
         var services = new ServiceCollection().AddScoped<Session>().BuildServiceProvider();
 #pragma warning restore CA2000
+        if (Environment.GetEnvironmentVariable("RAUN_FIXTURE_STALE_CONTRACT") == "1")
+        {
+            // What a referenced library built against another Raun does when its module loads.
+            ScenarioRegistry.Register(
+                ScenarioRegistry.ContractVersion + 1, "Stale.Library.Scenario", static () => throw new InvalidOperationException("stale code ran"));
+        }
+
         return await RaunTestApplication.RunAsync(args, services: services).ConfigureAwait(false);
     }
 }

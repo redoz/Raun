@@ -18,7 +18,7 @@ namespace Raun.Generated
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register("ResourceDemo.ResourceScenarios.SuspendedUserCannotSignIn", Scenario_ResourceDemo_ResourceScenarios_SuspendedUserCannotSignIn);
+            global::Raun.ScenarioRegistry.Register(1, "ResourceDemo.ResourceScenarios.SuspendedUserCannotSignIn", Scenario_ResourceDemo_ResourceScenarios_SuspendedUserCannotSignIn);
         }
     }
 }

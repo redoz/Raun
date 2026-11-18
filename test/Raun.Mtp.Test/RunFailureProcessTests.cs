@@ -34,7 +34,20 @@ public class RunFailureProcessTests
         Assert.Contains("succeeded: 6", result.Output, StringComparison.Ordinal);
     }
 
-    private static async Task<(int ExitCode, string Output, string Error)> RunAsync()
+    [Fact]
+    public async Task Scenarios_generated_for_another_contract_fail_the_real_host_and_say_what_to_rebuild()
+    {
+        var result = await RunAsync(staleContract: true);
+
+        var all = result.Output + result.Error;
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("generated for a different Raun", all, StringComparison.Ordinal);
+        Assert.Contains("'RunFailureHost'", all, StringComparison.Ordinal);
+        Assert.Contains("Rebuild", all, StringComparison.Ordinal);
+        Assert.DoesNotContain("stale code ran", all, StringComparison.Ordinal);
+    }
+
+    private static async Task<(int ExitCode, string Output, string Error)> RunAsync(bool staleContract = false)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "Raun.slnx"))) root = root.Parent;
@@ -52,6 +65,7 @@ public class RunFailureProcessTests
 
         // The platform localizes its output; the assertions read the English text.
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
+        start.Environment["RAUN_FIXTURE_STALE_CONTRACT"] = staleContract ? "1" : "0";
         using var process = Process.Start(start)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();

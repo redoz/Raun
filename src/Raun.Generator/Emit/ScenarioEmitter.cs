@@ -32,6 +32,14 @@ internal static class ScenarioEmitter
     /// <summary>The hint name of the registry file.</summary>
     public const string RegistryHintName = "RaunScenarios.g.cs";
 
+    /// <summary>
+    /// The contract this generator generates for; the same number as the runtime's
+    /// <c>Raun.ScenarioRegistry.ContractVersion</c>, written as a literal into every registration so
+    /// the runtime that loads the code can tell what it was generated for. Raise both together
+    /// whenever code generated before a change could no longer run correctly after it.
+    /// </summary>
+    public const int ContractVersion = 1;
+
     /// <summary>One scenario's file: its builder method, under the usings its own source file carried.</summary>
     public static string EmitScenario(ParsedScenario scenario, bool hasResourceMappings = false)
         => Render([scenario], [BuildScenarioBuilder(scenario, hasResourceMappings)]);
@@ -145,7 +153,7 @@ internal static class ScenarioEmitter
 
     private static MethodDeclarationSyntax BuildModuleInitializer(IReadOnlyList<RegistryEntry> scenarios)
     {
-        // global::Raun.ScenarioRegistry.Register("...", Scenario_X);
+        // global::Raun.ScenarioRegistry.Register(<contract>, "...", Scenario_X);
         var statements = scenarios.Select(s =>
             (StatementSyntax)ExpressionStatement(
                 InvocationExpression(
@@ -155,6 +163,7 @@ internal static class ScenarioEmitter
                         IdentifierName("Register")))
                     .WithArgumentList(ArgumentList(SeparatedList<ArgumentSyntax>(new[]
                     {
+                        Argument(Num(ContractVersion)),
                         Argument(Lit(s.RegistrationKey ?? s.MethodFullName)),
                         Argument(IdentifierName($"Scenario_{s.SafeName}")),
                     })))));

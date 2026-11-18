@@ -35,8 +35,8 @@ public class GeneratorSnapshotTests
     public void Array_scenario() =>
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.Dsl + SampleSources.ArrayScenario));
 
-    /// <summary>Pins the runtime display-name formatter's shape: a string concatenation of literals
-    /// and parenthesized <c>__inputs.Get&lt;…&gt;(i)</c> holes, not a hand-escaped interpolation.</summary>
+    /// <summary>Pins the runtime title formatter's shape: a message builder fed literals and
+    /// <c>__inputs</c> holes.</summary>
     [Fact]
     public void RuntimeName_scenario() =>
         VerifyDriver(GeneratorHarness.RunDriver(SampleSources.Dsl + SampleSources.RuntimeNameScenario));

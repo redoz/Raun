@@ -18,7 +18,7 @@ namespace Raun.Generated
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register("Demo.BookingScenarios.Booking", Scenario_Demo_BookingScenarios_Booking);
+            global::Raun.ScenarioRegistry.Register(1, "Demo.BookingScenarios.Booking", Scenario_Demo_BookingScenarios_Booking);
         }
     }
 }

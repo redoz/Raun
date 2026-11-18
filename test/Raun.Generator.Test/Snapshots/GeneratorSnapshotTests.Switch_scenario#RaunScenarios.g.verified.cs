@@ -20,9 +20,9 @@ namespace Raun.Generated
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register("OutcomeDemo.SwitchScenarios.Route", Scenario_OutcomeDemo_SwitchScenarios_Route);
-            global::Raun.ScenarioRegistry.Register("OutcomeDemo.SwitchScenarios.NoMatch", Scenario_OutcomeDemo_SwitchScenarios_NoMatch);
-            global::Raun.ScenarioRegistry.Register("OutcomeDemo.SwitchScenarios.Merge", Scenario_OutcomeDemo_SwitchScenarios_Merge);
+            global::Raun.ScenarioRegistry.Register(1, "OutcomeDemo.SwitchScenarios.Route", Scenario_OutcomeDemo_SwitchScenarios_Route);
+            global::Raun.ScenarioRegistry.Register(1, "OutcomeDemo.SwitchScenarios.NoMatch", Scenario_OutcomeDemo_SwitchScenarios_NoMatch);
+            global::Raun.ScenarioRegistry.Register(1, "OutcomeDemo.SwitchScenarios.Merge", Scenario_OutcomeDemo_SwitchScenarios_Merge);
         }
     }
 }

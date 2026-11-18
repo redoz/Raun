@@ -1,0 +1,19 @@
+contract 1
+global::Raun.ContendedResourceUse
+global::Raun.LockMode.Exclusive
+global::Raun.LockMode.Shared
+global::Raun.Model.Guard
+global::Raun.Model.NodeKind.Case
+global::Raun.Model.NodeKind.Merge
+global::Raun.Model.NodeKind.Setup
+global::Raun.Model.NodeKind.Teardown
+global::Raun.Model.ScenarioDefinition
+global::Raun.Model.ScenarioNode
+global::Raun.NoWorld
+global::Raun.Run
+global::Raun.ScenarioRegistry.Register
+global::Raun.ScenarioScope
+global::Raun.ScenarioScope.SetupAsync
+global::Raun.StepMessage
+global::Raun.StepMessageBuilder
+global::Raun.StepMessagePart
