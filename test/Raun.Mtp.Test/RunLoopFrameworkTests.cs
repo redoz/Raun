@@ -122,6 +122,58 @@ public class RunLoopFrameworkTests
         Assert.Contains("dispose failed", error.Explanation, StringComparison.Ordinal);
     }
 
+    /// <summary>A platform message bus that refuses one node's updates, as a broken connection to the
+    /// client would.</summary>
+    private sealed class RefusingMessageBus(string refusedUid) : IMessageBus
+    {
+        private readonly List<TestNode> accepted = [];
+
+        public IReadOnlyList<TestNode> Nodes
+        {
+            get { lock (accepted) { return [.. accepted]; } }
+        }
+
+        public Task PublishAsync(IDataProducer dataProducer, IData data)
+        {
+            if (data is TestNodeUpdateMessage update)
+            {
+                if (update.TestNode.Uid.Value == refusedUid)
+                {
+                    throw new IOException("the client went away");
+                }
+
+                lock (accepted) { accepted.Add(update.TestNode); }
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task A_result_that_could_not_be_reported_to_the_platform_fails_the_run()
+    {
+        // The reporter to the platform is the one sink whose failure cannot be shrugged off: a step
+        // whose result never arrived would leave the run looking greener than it was.
+        var method = $"Raun.Mtp.Test.Unreported.{Guid.NewGuid():N}";
+        ScenarioRegistry.Register(method, () => Definition("unreported-scn", "unreported scenario",
+            Node(0, "a", "a"),
+            Node(1, "b", "b", dependsOn: [0])));
+        var framework = new RaunTestFramework(new TestPlatformServices());
+        var uid = new SessionUid("unreported-run");
+        await framework.CreateTestSession(uid);
+        var bus = new RefusingMessageBus("unreported-scn:a");
+        var completed = false;
+
+        var filter = new TestNodeUidListFilter([new TestNodeUid("unreported-scn:b")]);
+        await framework.OnExecute(uid, filter, bus, () => completed = true, CancellationToken.None);
+
+        Assert.True(completed);
+        var failure = Assert.Single(bus.Nodes, n => n.Uid.Value == RaunTestFramework.RunFailureUid);
+        var error = Assert.Single(failure.Properties.OfType<ErrorTestNodeStateProperty>());
+        Assert.Contains("could not be reported", error.Explanation, StringComparison.Ordinal);
+        Assert.Contains("the client went away", error.Explanation, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_graceful_stop_in_one_session_does_not_disable_the_next_session_of_the_host()
     {

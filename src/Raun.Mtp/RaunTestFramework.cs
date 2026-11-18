@@ -318,6 +318,7 @@ internal sealed class RaunTestFramework :
             cancellationGracePeriod: CancellationGrace.Resolve(_services),
             cleanupTimeout: CleanupTimeout.Resolve(_services),
             maxParallelSteps: StepParallelism.Resolve(_services, _maxParallelSteps));
+        var runFailures = new List<Exception>();
         try
         {
             await loop.RunAsync(selector, bus, cancellationToken).ConfigureAwait(false);
@@ -327,7 +328,23 @@ internal sealed class RaunTestFramework :
             // Something failed outside any step, after every scenario that could run did. Letting it
             // escape would end the host with an unhandled exception and no summary; a failed node of
             // its own makes the run fail and says why.
-            await PublishRunFailureAsync(sessionUid, messageBus, ex).ConfigureAwait(false);
+            runFailures.Add(ex);
+        }
+
+        // The reporter to the platform is the one sink that is not best effort. The bus keeps a
+        // broken sink from stopping the run, which is right for a report file; a result that never
+        // reached the platform leaves a node in progress and the run looking greener than it was.
+        if (bus.FailureOf(sinks[0]) is { } unreported)
+        {
+            runFailures.Add(new InvalidOperationException(
+                $"A result could not be reported to the test platform, so this run's results are incomplete: {unreported.GetType().Name}: {unreported.Message}",
+                unreported));
+        }
+
+        if (runFailures.Count > 0)
+        {
+            await PublishRunFailureAsync(
+                sessionUid, messageBus, runFailures.Count == 1 ? runFailures[0] : new AggregateException(runFailures)).ConfigureAwait(false);
         }
 
         if (bus.Failures.Count > 0)
