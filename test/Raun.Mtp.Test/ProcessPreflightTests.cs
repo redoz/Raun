@@ -166,4 +166,23 @@ public class ProcessPreflightTests
         Assert.Equal(StepStatus.Skipped, first.StatusOf("step"));
         Assert.Equal(StepStatus.Passed, second.StatusOf("step"));
     }
+
+    [Fact]
+    public async Task A_preflight_that_throws_before_returning_a_task_is_retried_by_the_next_session()
+    {
+        // Not async: the exception leaves the delegate itself, there is no task to carry it.
+        var runs = 0;
+        var preflight = new ProcessPreflight(_ => ++runs == 1
+            ? throw new InvalidOperationException("container runtime not running")
+            : Task.CompletedTask);
+
+        var first = await Session(preflight);
+        var second = await Session(preflight);
+
+        Assert.Equal(2, runs);
+        Assert.Equal(StepStatus.Failed, first.StatusOf("preflight"));
+        Assert.Equal(StepStatus.Skipped, first.StatusOf("step"));
+        Assert.Equal(StepStatus.Passed, second.StatusOf("preflight"));
+        Assert.Equal(StepStatus.Passed, second.StatusOf("step"));
+    }
 }

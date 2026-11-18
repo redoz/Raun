@@ -69,8 +69,11 @@ internal sealed class ProcessPreflight
                 || (attempt.IsValueCreated && (attempt.Value.IsFaulted || attempt.Value.IsCanceled));
             if (started)
             {
-                // Invoked outside the lock: the delegate's synchronous part may be long.
-                attempt = new Lazy<Task>(() => preflight(context));
+                // Invoked outside the lock: the delegate's synchronous part may be long. Through an
+                // async method, so a preflight that throws before it returns a task still yields a
+                // faulted task. Lazy would otherwise cache the exception without ever counting as
+                // created, and every later session would rethrow it instead of retrying.
+                attempt = new Lazy<Task>(() => InvokeAsync(context));
             }
 
             current = attempt!;
@@ -83,4 +86,6 @@ internal sealed class ProcessPreflight
 
         return current.Value.WaitAsync(context.CancellationToken);
     }
+
+    private async Task InvokeAsync(ScenarioContext context) => await preflight(context).ConfigureAwait(false);
 }
