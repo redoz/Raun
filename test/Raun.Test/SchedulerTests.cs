@@ -907,4 +907,24 @@ public class SchedulerTests
         Assert.Contains("0", ex.Message, StringComparison.Ordinal);
         Assert.Contains("depend", ex.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Sibling_steps_that_never_await_still_run_side_by_side()
+    {
+        // Each body blocks its thread until the other has started too. Run one after the other on
+        // the scheduler's own loop, the first would wait for a sibling that cannot start.
+        using var bothRunning = new Barrier(2);
+        var met = new bool[2];
+        Func<IStepInputs, ScenarioContext, Task<object?>> MeetTheSibling(int who) => (_, _) =>
+        {
+            met[who] = bothRunning.SignalAndWait(TimeSpan.FromSeconds(5));
+            return Task.FromResult<object?>(null);
+        };
+        var def = Def(Node(0, MeetTheSibling(0)), Node(1, MeetTheSibling(1)));
+
+        var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
+
+        Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
+        Assert.Equal([true, true], met);
+    }
 }

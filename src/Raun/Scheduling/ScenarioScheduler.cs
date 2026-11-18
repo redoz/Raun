@@ -1024,6 +1024,12 @@ public sealed class ScenarioScheduler
         using var activity = StartStepActivity(definition, node, displayName);
         context.AttachActivity(activity);
 
+        // Leave the scheduler's loop before anything the scenario wrote runs. An async method runs on
+        // its caller until its first incomplete await, so without this a step that blocks or computes
+        // before awaiting (or never awaits) would hold the loop: its siblings could not start beside
+        // it, and the loop could not see the scenario deadline pass.
+        await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+
         // Ambient for the duration of this step. Set inside RunNodeAsync (which each step enters on
         // its own async flow) so it is visible to the step body and to anything it awaits, but never
         // to the scheduler loop or to a sibling step.

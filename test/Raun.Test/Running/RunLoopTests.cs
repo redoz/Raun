@@ -627,16 +627,25 @@ public class RunLoopTests
     {
         // Degree 3, five scenarios: the first pass launches up to three; the first body cancels the
         // platform token, so no later slot may be refilled — scenarios four and five never start.
+        // The other bodies hold their slot until the token is cancelled: step bodies run beside the
+        // scheduler, so without that a slot could free, and be refilled, before the first body ran.
         using var cts = new CancellationTokenSource();
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var launched = new List<string>();
         var sync = new object();
 
         ScenarioDefinition Def(string id, bool cancels) => Definition(id, id,
-            Node(0, "a", "a", invoke: (_, _) =>
+            Node(0, "a", "a", invoke: async (_, _) =>
             {
                 lock (sync) { launched.Add(id); }
-                if (cancels) { cts.Cancel(); }
-                return Task.FromResult<object?>(null);
+                if (cancels)
+                {
+                    await cts.CancelAsync();
+                    cancelled.SetResult();
+                }
+
+                await cancelled.Task;
+                return null;
             }));
 
         var definitions = new[] { Def("one", cancels: true), Def("two", false), Def("three", false), Def("four", false), Def("five", false) };

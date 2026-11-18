@@ -60,14 +60,16 @@ public class PreflightTests
     [Fact]
     public async Task Preflight_runs_once_before_any_scenario_step()
     {
-        var order = new List<string>();
+        var order = new System.Collections.Concurrent.ConcurrentQueue<string>();
 
         await Run(
-            _ => { order.Add("preflight"); return Task.CompletedTask; },
-            Definition("a", Node(0, "x", (_, _) => { order.Add("a"); return Task.FromResult<object?>(null); })),
-            Definition("b", Node(0, "y", (_, _) => { order.Add("b"); return Task.FromResult<object?>(null); })));
+            _ => { order.Enqueue("preflight"); return Task.CompletedTask; },
+            Definition("a", Node(0, "x", (_, _) => { order.Enqueue("a"); return Task.FromResult<object?>(null); })),
+            Definition("b", Node(0, "y", (_, _) => { order.Enqueue("b"); return Task.FromResult<object?>(null); })));
 
-        Assert.Equal(["preflight", "a", "b"], order);
+        // The two scenarios run side by side, so only preflight's place is fixed.
+        Assert.Equal("preflight", order.First());
+        Assert.Equal(["a", "b"], order.Skip(1).Order());
     }
 
     [Fact]
