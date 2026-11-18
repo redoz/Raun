@@ -126,8 +126,6 @@ public sealed class ScenarioScheduler
         var scenarioWatch = watchdog.Watch(timeoutCts, scenarioTimeout, $"scenario '{definition.DisplayName}'", isScenario: true);
         using var hostRegistration = cancellationToken.Register(() => scenarioWatch.RequestCancellation());
         if (cancellationToken.IsCancellationRequested) scenarioWatch.RequestCancellation();
-        using var timerCts = new CancellationTokenSource();
-        var timerTask = scenarioTimeout is null ? null : Task.Delay(scenarioTimeout.Value, timerCts.Token);
         var scenarioToken = timeoutCts.Token;
         var timedOut = false;
         var launchedAt = new DateTimeOffset[count];
@@ -415,64 +413,10 @@ public sealed class ScenarioScheduler
                 continue;
             }
 
-            Task<NodeOutcome> finishedTask;
-            if (timerTask is not null && !timedOut)
-            {
-                var winner = await Task.WhenAny([.. running.Keys, (Task)timerTask]).ConfigureAwait(false);
-                if (winner == timerTask && (!scenarioWatch.CancellationStarted || scenarioWatch.TimedOut))
-                {
-                    // Snapshot the winners BEFORE cancelling: a step that only finishes because of the
-                    // cancellation about to be requested belongs to the timeout, not to the race it lost
-                    // by a hair. (A canceled step returns a Skipped outcome normally, so "completed
-                    // successfully" cannot tell the two apart after the fact.)
-                    var raced = running.Keys.Where(t => t.IsCompleted).ToHashSet();
-                    scenarioWatch.RequestCancellation(timedOut: true);
-                    if (!scenarioWatch.TimedOut)
-                    {
-                        // Host cancellation may have won between the timer race and this request.
-                        var hostFinished = await Task.WhenAny(running.Keys).ConfigureAwait(false);
-                        var hostIndex = running[hostFinished];
-                        running.Remove(hostFinished);
-                        await ApplyFinishedAsync(hostFinished, hostIndex).ConfigureAwait(false);
-                        continue;
-                    }
-                    timedOut = true;
-
-                    // Drain actual work before reporting failure and allowing cleanup. The independent
-                    // watchdog terminates the host if cancellation does not finish within grace.
-                    foreach (var (task, i) in running.Select(kv => (kv.Key, kv.Value)).ToList())
-                    {
-                        running.Remove(task);
-                        if (raced.Contains(task))
-                        {
-                            await ApplyFinishedAsync(task, i).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            var outcome = await task.ConfigureAwait(false); // retain ownership until actual work stops
-                            if (outcome.StepTimedOut)
-                            {
-                                await ApplyFinishedAsync(task, i).ConfigureAwait(false);
-                            }
-                            else
-                            {
-                                await ApplyTimedOutAsync(i, scenarioTimeout!.Value).ConfigureAwait(false);
-                            }
-                        }
-                    }
-
-                    continue; // phase 1 now sees the cancellation and skips whatever is still pending
-                }
-
-                finishedTask = winner == timerTask
-                    ? await Task.WhenAny(running.Keys).ConfigureAwait(false)
-                    : (Task<NodeOutcome>)winner;
-            }
-            else
-            {
-                finishedTask = await Task.WhenAny(running.Keys).ConfigureAwait(false);
-            }
-
+            // The scenario deadline has one owner, the watchdog: when it passes, the watchdog cancels
+            // the scenario token and every step still running, and each of those returns here marked
+            // as cancelled. A step that finished before that moment is not marked, and keeps its result.
+            var finishedTask = await Task.WhenAny(running.Keys).ConfigureAwait(false);
             var index = running[finishedTask];
             running.Remove(finishedTask);
             await ApplyFinishedAsync(finishedTask, index).ConfigureAwait(false);
@@ -480,7 +424,6 @@ public sealed class ScenarioScheduler
 
         await scenarioWatch.CompleteAsync().ConfigureAwait(false);
         watchdog.Dispose(); // teardown has its own deadlines
-        await timerCts.CancelAsync().ConfigureAwait(false); // the scenario is done; stop the timer
 
         if (teardownIndex >= 0)
         {
