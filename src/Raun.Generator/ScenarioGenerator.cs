@@ -180,7 +180,9 @@ public sealed class ScenarioGenerator : IIncrementalGenerator
         var binding = ScenarioCaseBinding.Bind(ctx.SemanticModel, method, syntax);
         if (binding.Diagnostics.Count > 0)
         {
-            return [];
+            // Reported here, not by the analyzer: a scenario that is not generated must say so even
+            // when analyzers are switched off.
+            return [new ScenarioResult(null, binding.Diagnostics, null, null, 0)];
         }
 
         var lineSpan = syntax.Identifier.GetLocation().GetLineSpan();

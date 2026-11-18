@@ -37,6 +37,9 @@ internal sealed class ScenarioParser
     // happens to share a name is a different key.
     private readonly Dictionary<ILocalSymbol, VarSource> _vars = new(SymbolEqualityComparer.Default);
 
+    /// <summary>Locals declared with a type other than their step's result; see <see cref="CanHold"/>.</summary>
+    private readonly HashSet<ILocalSymbol> _readAsDeclared = new(SymbolEqualityComparer.Default);
+
     // Namespaces that contain the invoked DSL extension members; imported into the generated file
     // so `Given.PatientExists(...)` resolves there too. Kept as symbols: a using directive is built
     // from the namespace chain, never from a display string split back apart.
@@ -1187,6 +1190,13 @@ internal sealed class ScenarioParser
             return false;
         }
 
+        if (!local.UsingKeyword.IsKind(SyntaxKind.None))
+        {
+            Refuse(local, "A using declaration disposes its value when the method returns, but a scenario body is never run as a method, so nothing would dispose it. Register the disposal in the step with Context.OnTeardown");
+            Fail(variables.Select(v => _model.GetDeclaredSymbol(v)).OfType<ILocalSymbol>());
+            return false;
+        }
+
         // `Appointment appointment;` — a declaration with no initializer produces no step. It only
         // introduces the name; the definition arrives from an assignment, typically one per `if` arm,
         // and the definition-map diff turns those into a phi at the closing brace.
@@ -1218,7 +1228,9 @@ internal sealed class ScenarioParser
             case AwaitExpressionSyntax bareAwait:
                 return ParseAwaited(bareAwait.Expression, binding: null);
 
-            case AssignmentExpressionSyntax { Right: AwaitExpressionSyntax await } assignment:
+            // Plain `=` only: `+=` and `??=` read the local first (and `??=` may not run the step
+            // at all), which a binding cannot express. They fall through to the refusal below.
+            case AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression, Right: AwaitExpressionSyntax await } assignment:
                 // An assignment binds locals; one that binds nothing (a field, a property) has nowhere
                 // to put the value, and lowering it as a bare step would drop the write without a word.
                 if (Binding.FromAssignment(assignment.Left, _model) is { } binding)
@@ -1296,6 +1308,11 @@ internal sealed class ScenarioParser
             return false;
         }
 
+        if (binding is { Kind: BindingKind.Single } && !CanHold(binding.Locals[0], call.ResultType, invocation))
+        {
+            return false;
+        }
+
         var step = BuildStep(call, groupId: null, _prevFrontier);
         if (binding is { Kind: BindingKind.Single })
         {
@@ -1303,6 +1320,41 @@ internal sealed class ScenarioParser
         }
 
         Advance([step.Index]);
+        return true;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="local"/> can stand for a step returning <paramref name="produced"/>.
+    /// A step's value travels as the object the step returned, so only a declared type that the
+    /// same object already is will do: the identical type, a base type or interface, <c>object</c>,
+    /// or the nullable form of a value type. A numeric or user-defined conversion (<c>double d =
+    /// await AnInt()</c>) would need code to run at the declaration, and none does. A local accepted
+    /// with a type other than the step's own is read through a cast (<see cref="_readAsDeclared"/>),
+    /// so overload resolution and inference see what the author wrote.
+    /// </summary>
+    private bool CanHold(ILocalSymbol local, ITypeSymbol? produced, SyntaxNode step)
+    {
+        if (produced is null)
+        {
+            return true;
+        }
+
+        var conversion = _model.Compilation.ClassifyConversion(produced, local.Type);
+        if (conversion.IsIdentity)
+        {
+            return true;
+        }
+
+        var sameObject = conversion.IsReference || conversion.IsBoxing
+            || (local.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable
+                && SymbolEqualityComparer.Default.Equals(nullable.TypeArguments[0], produced));
+        if (!sameObject)
+        {
+            Refuse(step, $"Local '{local.Name}' is declared as {local.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)} but the step returns {produced.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)}, and a step's value is not converted on the way to its local. Declare the local with var or with the step's own type");
+            return false;
+        }
+
+        _readAsDeclared.Add(local);
         return true;
     }
 
@@ -1317,6 +1369,12 @@ internal sealed class ScenarioParser
         for (var i = 0; i < tuple.Arguments.Count; i++)
         {
             if (ResolveGroupElement(tuple.Arguments[i].Expression) is not { } call)
+            {
+                ok = false;
+                continue;
+            }
+
+            if (locals is not null && i < locals.Count && !CanHold(locals[i], call.ResultType, tuple.Arguments[i].Expression))
             {
                 ok = false;
                 continue;
@@ -1594,7 +1652,10 @@ internal sealed class ScenarioParser
     private System.Func<ISymbol, ExpressionSyntax?> StepValueFor(LoopElement? loop) => symbol => symbol switch
     {
         ILocalSymbol local when _vars.TryGetValue(local, out var source)
-            => source is FailedOutput ? IdentifierName(local.Name) : Spell(source),
+            => source is FailedOutput ? IdentifierName(local.Name)
+                : _readAsDeclared.Contains(local)
+                    ? ParenthesizedExpression(CastExpression(TypeSyntaxFactory.From(local.Type), ParenthesizedExpression(Spell(source))))
+                    : Spell(source),
         IParameterSymbol parameter when loop is { } element
             && SymbolEqualityComparer.Default.Equals(parameter, element.Variable) => Num(element.Value),
         IParameterSymbol parameter when _case is not null && _case.Arguments.TryGetValue(parameter, out var value) => value,

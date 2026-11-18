@@ -33,8 +33,6 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.AmbiguousResourceRole,
         Descriptors.ResourceRoleWithoutResult,
         Descriptors.InvalidScenarioCase,
-        Descriptors.InvalidScenarioCaseArgument,
-        Descriptors.InvalidScenarioCaseSignature,
         Descriptors.UnhandledException,
         Descriptors.UnboundPlaceholder,
         Descriptors.MissingResourceRole,
@@ -461,8 +459,10 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
     {
         var method = (MethodDeclarationSyntax)context.Node;
         if (context.SemanticModel.GetDeclaredSymbol(method) is not IMethodSymbol symbol) { return; }
+        // A [Scenario] method's case diagnostics are the generator's: it is the one that then does
+        // not generate the scenario. Only cases on a method that is no scenario are reported here.
         var binding = ScenarioCaseBinding.Bind(context.SemanticModel, symbol, method);
-        foreach (var diagnostic in binding.Diagnostics)
+        foreach (var diagnostic in HasAttribute(symbol, "ScenarioAttribute") ? [] : binding.Diagnostics)
         {
             context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[diagnostic.Id],
                 Location.Create(method.SyntaxTree, new Microsoft.CodeAnalysis.Text.TextSpan(diagnostic.SpanStart, diagnostic.SpanLength)),
