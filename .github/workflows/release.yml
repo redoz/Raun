@@ -99,6 +99,16 @@ jobs:
       - name: Tag the release commit
         if: github.event_name == 'workflow_dispatch'
         run: |
+          # A re-run of a release that failed after its tag was pushed finds the tag already here.
+          # That is the same release as long as it is this commit; anything else is a mistake.
+          if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+            if [[ "$(git rev-parse "$TAG^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+              echo "::error::Tag $TAG already exists and does not point at ${GITHUB_SHA::8}."
+              exit 1
+            fi
+            echo "Tag $TAG already points at this commit; continuing the release."
+            exit 0
+          fi
           version="${TAG#v}"
           title="Raun $version"
           if [[ "$version" == *-* ]]; then
@@ -191,10 +201,17 @@ jobs:
           REPORT_URL: ${{ steps.package-report-html.outputs.artifact-url }}
         run: printf '[Package consumption report](%s)\n' "$REPORT_URL" >> "$GITHUB_STEP_SUMMARY"
 
-      # Pushed with the workflow token, which does not trigger this workflow again for the tag.
-      - name: Push the tag
-        if: github.event_name == 'workflow_dispatch'
-        run: git push origin "refs/tags/$TAG"
+      # Everything that can fail without leaving a trace runs before the tag becomes public: the
+      # four packages exist under the release version, and nuget.org accepts the login.
+      - name: Check the packages carry the release version
+        run: |
+          version="${TAG#v}"
+          for package in Raun Raun.Mtp Raun.Coverage Raun.Aspire; do
+            if [[ ! -f "artifacts/$package.$version.nupkg" ]]; then
+              echo "::error::Missing artifacts/$package.$version.nupkg; packed: $(ls artifacts/*.nupkg | tr '\n' ' ')"
+              exit 1
+            fi
+          done
 
       - name: NuGet.org login
         id: nuget_login
@@ -202,12 +219,21 @@ jobs:
         with:
           user: ${{ vars.NUGET_USER }}
 
+      # Pushed with the workflow token, which does not trigger this workflow again for the tag.
+      # Pushing a tag that is already there (a re-run) changes nothing and succeeds.
+      - name: Push the tag
+        if: github.event_name == 'workflow_dispatch'
+        run: git push origin "refs/tags/$TAG"
+
+      # Dependency order, so a failure part way never leaves a package on nuget.org whose
+      # dependencies are not there: Raun, then Raun.Mtp (needs Raun), then the two that need both.
+      # --skip-duplicate makes a re-run pick up where the failed one stopped.
       - name: Push to NuGet.org
         env:
           NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
         run: |
           version="${TAG#v}"
-          for package in Raun Raun.Coverage Raun.Mtp Raun.Aspire; do
+          for package in Raun Raun.Mtp Raun.Coverage Raun.Aspire; do
             dotnet nuget push "artifacts/$package.$version.nupkg" \
               --source "https://api.nuget.org/v3/index.json" \
               --api-key "$NUGET_API_KEY" \
@@ -218,6 +244,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A re-run may find the release already created; then only the packages are refreshed.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/*.nupkg --clobber
+            exit 0
+          fi
           release_flags=()
           if [[ "$TAG" == *-* ]]; then
             release_flags+=(--prerelease)

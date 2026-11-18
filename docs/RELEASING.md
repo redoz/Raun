@@ -104,6 +104,14 @@ both together.
      `Raun.*` scope does not include the bare `Raun` package.
    - In GitHub Actions, set the repository **variable** `NUGET_USER` to the nuget.org account's
      username (not its email address). No persistent NuGet API key is needed.
+
+   If the run fails after the tag was pushed (nuget.org rejected a package, say), fix the cause
+   and use **Re-run failed jobs** on that same run. The publish job accepts a tag that already
+   points at the release commit, pushes the packages nuget.org does not have yet, and creates or
+   completes the GitHub release. Packages go up in dependency order (`Raun`, `Raun.Mtp`,
+   `Raun.Coverage`, `Raun.Aspire`), so a run that stops part way never leaves a package whose
+   dependencies are missing. Do not start a new run instead: it would compute the next version
+   and leave the failed one half published.
 6. Verify on nuget.org that `Raun`, `Raun.Coverage`, `Raun.Mtp`, and `Raun.Aspire` show the tagged version, the
    license (Apache-2.0), and the README.
 
