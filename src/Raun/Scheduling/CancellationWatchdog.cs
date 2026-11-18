@@ -100,6 +100,28 @@ internal sealed class CancellationWatchdog : IDisposable
         }
     }
 
+    /// <summary>How long the reason may take to reach standard error before the host is terminated regardless.</summary>
+    internal static readonly TimeSpan TerminationMessageBudget = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> for at most <paramref name="budget"/>, on a thread of its own.
+    /// Not on the thread pool: the host is being terminated because something does not return, and
+    /// that something is usually sitting on pool threads. Queued behind it, the reason for the
+    /// termination did not always reach standard error in time.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Last words before the process is killed; a failure to say them must not stop the kill.")]
+    private static void Bounded(Action work, TimeSpan budget)
+    {
+        var thread = new Thread(() =>
+        {
+            try { work(); }
+            catch (Exception) { /* termination still happens */ }
+        })
+        { IsBackground = true, Name = "Raun termination" };
+        thread.Start();
+        thread.Join(budget);
+    }
+
     private static void Terminate(string message, Func<string, Task>? beforeTermination)
     {
         // A replaced/blocked stderr must not hold the watchdog hostage. Diagnostics get a small,
@@ -107,15 +129,11 @@ internal sealed class CancellationWatchdog : IDisposable
         // run produced so far; process termination never waits on either beyond its budget.
         try
         {
-            Task.Run(() => Console.Error.WriteLine(message)).Wait(TimeSpan.FromMilliseconds(100));
+            Bounded(() => Console.Error.WriteLine(message), TerminationMessageBudget);
             if (beforeTermination is not null)
             {
-                Task.Run(() => beforeTermination(message)).Wait(TerminationFlushBudget);
+                Bounded(() => beforeTermination(message).GetAwaiter().GetResult(), TerminationFlushBudget);
             }
-        }
-        catch (AggregateException)
-        {
-            // Termination still happens when diagnostic output or the last report write fails.
         }
         finally
         {
