@@ -18,11 +18,16 @@ public sealed record RunStarted(int ScenarioCount, IReadOnlyList<ScenarioDefinit
 /// refusing one); zero and null when it was admitted the moment a slot was free.</summary>
 public sealed record ScenarioStarted(ScenarioDefinition Definition, TimeSpan Waited = default, Type? WaitedFor = null) : RunEvent;
 
-/// <summary>Raised when a step is about to run (or, for a skipped step, just before its finish).</summary>
+/// <summary>Raised when a step is about to run (or, for a step skipped because of what came before
+/// it, just before its finish). Always followed by exactly one <see cref="StepFinished"/> for the
+/// same step, unless the test host is terminated first.</summary>
 public sealed record StepStarted(ScenarioDefinition Definition, StepContext Context) : RunEvent;
 
 /// <summary>Raised when a step reaches a terminal status; the result is self-contained (carries
-/// StartedAt, duration, logs, effects, exception/skip reason).</summary>
+/// StartedAt, duration, logs, effects, exception/skip reason). It may arrive without a
+/// <see cref="StepStarted"/>: for a branch that was not taken, for a merge, and for every step of a
+/// scenario that did not run because preflight did not pass. A sink that pairs the two pairs on the
+/// start and accepts a finish that had none.</summary>
 public sealed record StepFinished(ScenarioDefinition Definition, StepResult Result) : RunEvent;
 
 /// <summary>Raised when a scenario's steps have all reached terminal status.</summary>

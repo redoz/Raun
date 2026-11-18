@@ -868,6 +868,94 @@ public class SchedulerTests
         Assert.Equal(["second done"], results[1].Logs);
     }
 
+    /// <summary>Records starts and finishes in the one order they arrived in.</summary>
+    private sealed class OrderedObserver : IStepObserver
+    {
+        public List<(bool Start, int Node, StepStatus? Status)> Calls { get; } = [];
+
+        public Task OnStepStartingAsync(StepContext context)
+        {
+            lock (Calls) Calls.Add((true, context.Node.Index, null));
+            return Task.CompletedTask;
+        }
+
+        public Task OnStepFinishedAsync(StepResult result)
+        {
+            lock (Calls) Calls.Add((false, result.Node.Index, result.Status));
+            return Task.CompletedTask;
+        }
+    }
+
+    public static TheoryData<string> ObservedShapes => ["passing", "failing", "branching", "cancelled", "timed out", "filtered"];
+
+    [Theory]
+    [MemberData(nameof(ObservedShapes))]
+    public async Task A_start_is_followed_by_exactly_one_finish_and_only_a_finish_may_come_alone(string shape)
+    {
+        // What an observer may rely on (see IStepObserver), over every way a scenario can go.
+        var observer = new OrderedObserver();
+        using var host = new CancellationTokenSource();
+        Func<IStepInputs, ScenarioContext, Task<object?>> hang = async (_, ctx) =>
+        {
+            await Task.Delay(Timeout.Infinite, ctx.CancellationToken);
+            return null;
+        };
+        var teardown = new ScenarioNode
+        {
+            Index = 5, StepId = "teardown", Phase = "Then", OperationName = "Teardown",
+            DisplayNameTemplate = "Teardown", DependsOn = [], Kind = NodeKind.Teardown,
+        };
+        var middle = shape switch
+        {
+            "failing" => Node(1, (_, _) => throw new InvalidOperationException("boom"), [0]),
+            "cancelled" => Node(1, async (i, ctx) => { await host.CancelAsync(); return await hang(i, ctx); }, [0]),
+            "timed out" => Node(1, hang, [0], timeout: TimeSpan.FromMilliseconds(50)),
+            _ => Node(1, Pass(), [0]),
+        };
+        var def = new ScenarioDefinition
+        {
+            ScenarioId = "scn", DisplayName = "scenario", MethodName = "Ns.Scn",
+            Nodes =
+            [
+                Cond(0, value: true),
+                middle,
+                Arm(2, [new Guard(0, 0)], Pass("taken"), 1),
+                Arm(3, [new Guard(0, 1)], Pass("not taken"), 1),
+                MergeNode(4, 2, 3),
+                teardown,
+            ],
+        };
+
+        var results = await WithTimeout(new ScenarioScheduler().RunAsync(
+            def, observer: observer, targets: shape == "filtered" ? new HashSet<int> { 1 } : null, cancellationToken: host.Token));
+
+        var calls = observer.Calls;
+        foreach (var node in def.Nodes.Select(n => n.Index))
+        {
+            var starts = calls.Count(c => c.Start && c.Node == node);
+            var finishes = calls.Count(c => !c.Start && c.Node == node);
+            Assert.True(finishes <= 1, $"{shape}: node {node} finished {finishes} times");
+            Assert.True(starts <= finishes, $"{shape}: node {node} started without finishing");
+            if (starts == 1)
+            {
+                Assert.True(
+                    calls.FindIndex(c => c.Start && c.Node == node) < calls.FindIndex(c => !c.Start && c.Node == node),
+                    $"{shape}: node {node} finished before it started");
+            }
+        }
+
+        // A finish without a start is a branch not taken or a merge, nothing else.
+        var alone = calls.Where(c => !c.Start && !calls.Any(s => s.Start && s.Node == c.Node)).ToList();
+        Assert.All(alone, c => Assert.True(
+            c.Status == StepStatus.NotTaken || def.Nodes[c.Node].Kind == NodeKind.Merge,
+            $"{shape}: node {c.Node} finished {c.Status} without a start"));
+
+        // A step the run did not select raises neither.
+        var silent = results.Where(r => r.SkipReason == ScenarioScheduler.NotSelectedSkipReason).Select(r => r.Node.Index).ToList();
+        Assert.DoesNotContain(calls, c => silent.Contains(c.Node));
+        Assert.Equal(shape == "filtered", silent.Count > 0);
+    }
+
     private sealed class RecordingObserver : IStepObserver
     {
         private readonly object _sync = new();
