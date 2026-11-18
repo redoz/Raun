@@ -3,6 +3,7 @@ using Microsoft.Testing.Platform.Messages;
 using Microsoft.Testing.Platform.TestHost;
 using Raun.Model;
 using Raun.Reporting;
+using Raun.Scheduling;
 using Xunit;
 using Xunit.Sdk;
 
@@ -17,8 +18,11 @@ public class ScenarioMtpReportSinkTests
 {
     private static readonly DateTimeOffset Start = new(2026, 11, 16, 12, 0, 0, TimeSpan.Zero);
 
-    private static ScenarioNode Node(int index, string stepId, string template, bool synthetic = false) => new()
+    private static ScenarioNode Node(
+        int index, string stepId, string template, bool synthetic = false, bool setup = false, bool teardown = false) => new()
     {
+        IsSetup = setup,
+        IsTeardown = teardown,
         Index = index,
         StepId = stepId,
         Phase = "Given",
@@ -220,6 +224,100 @@ public class ScenarioMtpReportSinkTests
             Result(def, 1, StepStatus.Skipped, skipReason: "preflight failed"));
 
         Assert.Equal("preflight failed", State<SkippedTestNodeStateProperty>(node).Explanation);
+    }
+
+    private static ScenarioDefinition WithLifecycle() => Definition(nodes:
+    [
+        Node(0, "setup", "Setup", setup: true),
+        Node(1, "a", "step a"),
+        Node(2, "b", "step b"),
+        Node(3, "teardown", "Teardown", teardown: true),
+    ]);
+
+    [Fact]
+    public async Task A_scenario_cancelled_before_any_step_ran_is_not_passed_by_its_teardown()
+    {
+        var def = WithLifecycle();
+
+        var node = await Finish(def,
+            Result(def, 0, StepStatus.Skipped, skipReason: ScenarioScheduler.CanceledSkipReason),
+            Result(def, 1, StepStatus.Skipped, skipReason: ScenarioScheduler.CanceledSkipReason),
+            Result(def, 2, StepStatus.Skipped, skipReason: ScenarioScheduler.CanceledSkipReason),
+            Result(def, 3, StepStatus.Passed));
+
+        Assert.Equal(ScenarioScheduler.CanceledSkipReason, State<SkippedTestNodeStateProperty>(node).Explanation);
+    }
+
+    [Fact]
+    public async Task A_scenario_cancelled_part_way_is_not_passed_by_the_steps_that_finished()
+    {
+        var def = WithLifecycle();
+
+        var node = await Finish(def,
+            Result(def, 0, StepStatus.Passed),
+            Result(def, 1, StepStatus.Passed),
+            Result(def, 2, StepStatus.Skipped, skipReason: ScenarioScheduler.CanceledSkipReason),
+            Result(def, 3, StepStatus.Passed));
+
+        Assert.Equal(ScenarioScheduler.CanceledSkipReason, State<SkippedTestNodeStateProperty>(node).Explanation);
+    }
+
+    [Fact]
+    public async Task A_failure_before_the_cancellation_still_fails_the_scenario()
+    {
+        var def = WithLifecycle();
+        var assertion = new XunitException("expected 2, got 3");
+
+        var node = await Finish(def,
+            Result(def, 0, StepStatus.Passed),
+            Result(def, 1, StepStatus.Failed, assertion),
+            Result(def, 2, StepStatus.Skipped, skipReason: ScenarioScheduler.CanceledSkipReason),
+            Result(def, 3, StepStatus.Passed));
+
+        Assert.Same(assertion, State<FailedTestNodeStateProperty>(node).Exception);
+    }
+
+    [Fact]
+    public async Task A_scenario_that_ran_out_of_time_between_steps_is_a_timeout_not_a_pass()
+    {
+        var def = WithLifecycle();
+
+        var node = await Finish(def,
+            Result(def, 0, StepStatus.Passed),
+            Result(def, 1, StepStatus.Passed),
+            Result(def, 2, StepStatus.Skipped, skipReason: ScenarioScheduler.TimedOutSkipReason),
+            Result(def, 3, StepStatus.Passed));
+
+        State<TimeoutTestNodeStateProperty>(node);
+    }
+
+    [Fact]
+    public async Task Setup_and_teardown_passing_alone_do_not_pass_the_scenario()
+    {
+        var def = WithLifecycle();
+
+        var node = await Finish(def,
+            Result(def, 0, StepStatus.Passed),
+            Result(def, 1, StepStatus.Skipped, skipReason: "not selected"),
+            Result(def, 2, StepStatus.Skipped, skipReason: "not selected"),
+            Result(def, 3, StepStatus.Passed));
+
+        Assert.Equal("not selected", State<SkippedTestNodeStateProperty>(node).Explanation);
+    }
+
+    [Fact]
+    public async Task A_failing_teardown_fails_the_scenario()
+    {
+        var def = WithLifecycle();
+        var crash = new InvalidOperationException("cleanup failed");
+
+        var node = await Finish(def,
+            Result(def, 0, StepStatus.Passed),
+            Result(def, 1, StepStatus.Passed),
+            Result(def, 2, StepStatus.Passed),
+            Result(def, 3, StepStatus.Failed, crash));
+
+        Assert.Same(crash, State<ErrorTestNodeStateProperty>(node).Exception);
     }
 
     [Fact]

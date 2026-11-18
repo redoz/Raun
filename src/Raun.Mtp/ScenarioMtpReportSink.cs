@@ -4,6 +4,7 @@ using Microsoft.Testing.Platform.Messages;
 using Microsoft.Testing.Platform.TestHost;
 using Raun.Model;
 using Raun.Reporting;
+using Raun.Scheduling;
 
 namespace Raun.Mtp;
 
@@ -70,6 +71,8 @@ internal sealed class ScenarioMtpReportSink : RunEventSink
     {
         IProperty? failure = null;
         var passed = false;
+        var canceled = false;
+        var timedOut = false;
         string? skipReason = null;
 
         foreach (var step in steps)
@@ -77,9 +80,15 @@ internal sealed class ScenarioMtpReportSink : RunEventSink
             switch (step.Status)
             {
                 case StepStatus.Passed:
-                    passed = true;
+                    // Setup and teardown run around the scenario; teardown passes even after a
+                    // cancellation. Only a step of the scenario itself can pass it.
+                    passed |= !(step.Node.IsSetup || step.Node.IsTeardown);
                     break;
                 case StepStatus.Skipped:
+                    canceled |= step.SkipReason == ScenarioScheduler.CanceledSkipReason;
+                    timedOut |= step.SkipReason == ScenarioScheduler.TimedOutSkipReason;
+                    skipReason ??= step.SkipReason;
+                    break;
                 case StepStatus.NotTaken:
                     skipReason ??= step.SkipReason;
                     break;
@@ -95,10 +104,25 @@ internal sealed class ScenarioMtpReportSink : RunEventSink
             }
         }
 
-        return failure
-            ?? (passed
-                ? PassedTestNodeStateProperty.CachedInstance
-                : new SkippedTestNodeStateProperty(skipReason ?? "skipped"));
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        // A scenario stopped short did not pass, whatever finished before the stop.
+        if (timedOut)
+        {
+            return new TimeoutTestNodeStateProperty(ScenarioScheduler.TimedOutSkipReason);
+        }
+
+        if (canceled)
+        {
+            return new SkippedTestNodeStateProperty(ScenarioScheduler.CanceledSkipReason);
+        }
+
+        return passed
+            ? PassedTestNodeStateProperty.CachedInstance
+            : new SkippedTestNodeStateProperty(skipReason ?? "skipped");
     }
 
     private static string Describe(ScenarioDefinition definition, List<StepResult> steps)
