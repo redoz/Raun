@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using Raun.Coverage.Projects;
 using Xunit;
 
@@ -39,6 +40,11 @@ public sealed class RuntimeVariantFixtureTests
 
     private sealed class Fixture(string root) : IDisposable
     {
+        // The loader reads projects in the configuration of the application it runs in, which here
+        // is this test assembly: the fixture has to be built in that one for its output to be found.
+        private static readonly string Configuration =
+            Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Debug";
+
         public static async Task<Fixture> CreateAsync(bool build)
         {
             var root = Path.Combine(Path.GetTempPath(), "raun-runtime-variant-" + Guid.NewGuid().ToString("N"));
@@ -61,7 +67,7 @@ public sealed class RuntimeVariantFixtureTests
                 await DotnetAsync(root, "restore", fixture.Solution);
                 if (build)
                 {
-                    await DotnetAsync(root, "build", Path.Combine(root, "Root", "Root.csproj"), "--no-restore", "-v", "q", "--nologo");
+                    await DotnetAsync(root, "build", Path.Combine(root, "Root", "Root.csproj"), "-c", Configuration, "--no-restore", "-v", "q", "--nologo");
                 }
 
                 return fixture;
@@ -77,7 +83,7 @@ public sealed class RuntimeVariantFixtureTests
 
         public Task<SourceProjectLoadResult> LoadAsync()
             => SourceProjectLoader.LoadAsync(Solution, new CollectorScope(), TestContext.Current.CancellationToken,
-                Path.Combine(root, "Root", "bin", "Debug", "net10.0", "Root.dll"));
+                Path.Combine(root, "Root", "bin", Configuration, "net10.0", "Root.dll"));
 
         public void Dispose()
         {
