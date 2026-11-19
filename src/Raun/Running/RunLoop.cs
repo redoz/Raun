@@ -159,11 +159,8 @@ public sealed class RunLoop
     {
         ArgumentNullException.ThrowIfNull(bus);
 
-        // A RunEventBus already hands out one event at a time; any other sink is given the same.
-        if (bus is not RunEventBus)
-        {
-            bus = new SerializedSink(bus);
-        }
+        // Scenarios publish from several flows at once, and a sink is told it needs no locking.
+        bus = new SerializedSink(bus);
 
         var selected = SelectScenarios(scenarioSource(), selector);
 
@@ -530,8 +527,7 @@ public sealed class RunLoop
         return targets;
     }
 
-    /// <summary>The clock scenario and step deadlines are measured on; a test replaces it.</summary>
-    internal Func<long>? DeadlineClock { get; init; }
+    internal DeadlineClock? DeadlineClock { get; init; }
 
     // The provider comes in per scenario: it is the scenario's DI scope, not the root.
     private async Task<IReadOnlyList<StepResult>> DefaultRunScenario(

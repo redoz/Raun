@@ -5,16 +5,11 @@ using Xunit;
 
 namespace Raun.Test;
 
-/// <summary>Cancellation arrives from another thread, at any point of the scheduler's pass.</summary>
 public class SchedulerCancellationRaceTests
 {
     [Fact]
-    public async Task Cancellation_between_judging_a_step_ready_and_launching_it_skips_the_step()
+    public async Task Cancellation_that_lands_in_the_middle_of_a_scheduling_pass_skips_the_steps_still_waiting()
     {
-        // The scheduler first decides what each waiting step is (to be skipped, or ready), then
-        // launches the ready ones unless the scenario is cancelled. Cancellation landing between the
-        // two leaves a ready step that is neither skipped nor launched, with nothing running. That
-        // is a cancelled scenario, not a defect in its graph.
         using var host = new CancellationTokenSource();
         var dependencies = new CancelWhenRead(host, [0]);
         var definition = new ScenarioDefinition
@@ -46,8 +41,8 @@ public class SchedulerCancellationRaceTests
         Assert.Equal(ScenarioScheduler.CanceledSkipReason, results[1].SkipReason);
     }
 
-    /// <summary>The second step's dependencies: once armed, the next read of them cancels the host.
-    /// The scheduler reads them while judging the step, after it has checked for cancellation.</summary>
+    /// <summary>The second step's dependencies. The scheduler reads them in the middle of a pass;
+    /// once armed, the next read cancels the host.</summary>
     private sealed class CancelWhenRead(CancellationTokenSource host, int[] items) : IReadOnlyList<int>
     {
         private int armed;

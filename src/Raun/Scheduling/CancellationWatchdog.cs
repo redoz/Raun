@@ -13,6 +13,7 @@ internal sealed class CancellationWatchdog : IDisposable
     private readonly Thread thread;
     private readonly Func<long> timestamp;
     private readonly Func<string, Task>? beforeTermination;
+    private readonly Action? afterPass;
     private bool disposed;
     private Operation? scenario;
 
@@ -21,9 +22,12 @@ internal sealed class CancellationWatchdog : IDisposable
 
     // timestamp: the clock, in Stopwatch ticks; a test replaces it.
     // beforeTermination: given the reason, a bounded last chance to write reports before the host is killed.
+    // afterPass: called each time the supervising thread has finished looking at every operation.
     internal CancellationWatchdog(
-        TimeSpan grace, CancellationToken hostToken, Func<long>? timestamp = null, Func<string, Task>? beforeTermination = null)
+        TimeSpan grace, CancellationToken hostToken, Func<long>? timestamp = null, Func<string, Task>? beforeTermination = null,
+        Action? afterPass = null)
     {
+        this.afterPass = afterPass;
         ValidateGrace(grace);
         this.grace = grace;
         this.hostToken = hostToken;
@@ -41,13 +45,19 @@ internal sealed class CancellationWatchdog : IDisposable
         }
     }
 
-    // started: false registers the operation with its clock not yet running. It is cancelled with
-    // the scenario like any other, but its own timeout counts from Operation.Start.
-    internal Operation Watch(CancellationTokenSource source, TimeSpan? timeout, string description, bool isScenario = false, bool started = true)
+    internal Operation Watch(CancellationTokenSource source, TimeSpan? timeout, string description, bool isScenario = false)
+        => Register(source, timeout, description, isScenario, timeoutRunning: true);
+
+    /// <summary>Watches an operation that is cancelled with the scenario from now on, and whose own
+    /// timeout counts from <see cref="Operation.StartTimeout"/>.</summary>
+    internal Operation WatchBeforeItsTimeoutStarts(CancellationTokenSource source, TimeSpan? timeout, string description)
+        => Register(source, timeout, description, isScenario: false, timeoutRunning: false);
+
+    private Operation Register(CancellationTokenSource source, TimeSpan? timeout, string description, bool isScenario, bool timeoutRunning)
     {
         lock (gate)
         {
-            var operation = new Operation(this, source, timeout, description, started);
+            var operation = new Operation(this, source, timeout, description, timeoutRunning);
             operations.Add(operation);
             if (isScenario) scenario = operation;
             else if (scenario?.CancellationStarted == true) operation.RequestCancellation();
@@ -71,25 +81,9 @@ internal sealed class CancellationWatchdog : IDisposable
                 // judged the scenario's deadline, which is at least as old, as not yet reached.
                 var now = timestamp();
 
-                // When a step's deadline and the scenario's have both passed, the one that passed
-                // first owns the timeout, and on a tie the scenario does. This thread can be kept
-                // off the processor for longer than the distance between the two, so which one it
-                // happens to look at first decides nothing: steps whose deadline is the earlier
-                // one time out here, then the scenario, which cancels every step still running.
                 if (scenario is { Completed: false } current)
                 {
-                    if (Overdue(current, now) is { } scenarioOverdue && !hostToken.IsCancellationRequested && !current.CancellationStarted)
-                    {
-                        foreach (var operation in operations)
-                        {
-                            if (operation != current && !operation.Completed && !operation.Source.IsCancellationRequested
-                                && Overdue(operation, now) is { } overdue && overdue > scenarioOverdue)
-                            {
-                                operation.RequestCancellation(timedOut: true);
-                            }
-                        }
-                    }
-
+                    TimeOutStepsWhoseDeadlinePassedBeforeTheScenarios(current, now);
                     Expire(current, now);
                 }
                 foreach (var operation in operations)
@@ -103,15 +97,39 @@ internal sealed class CancellationWatchdog : IDisposable
                         break;
                     }
                 }
-                if (fatal is null) Monitor.Wait(gate, TimeSpan.FromMilliseconds(10));
+                if (fatal is null)
+                {
+                    afterPass?.Invoke();
+                    Monitor.Wait(gate, TimeSpan.FromMilliseconds(10));
+                }
             }
             if (fatal is not null) Terminate(fatal, beforeTermination);
         }
     }
 
-    /// <summary>How long ago the operation's deadline passed; null when it has none or it has not passed.</summary>
+    // When a step's deadline and the scenario's have both passed, the one that passed first owns
+    // the timeout, and on a tie the scenario does. The supervising thread can be kept off the
+    // processor for longer than the distance between the two, so the order it looks in decides
+    // nothing: the deadlines do.
+    private void TimeOutStepsWhoseDeadlinePassedBeforeTheScenarios(Operation scenarioOperation, long now)
+    {
+        if (hostToken.IsCancellationRequested || scenarioOperation.CancellationStarted || Overdue(scenarioOperation, now) is not { } scenarioOverdue)
+        {
+            return;
+        }
+
+        foreach (var operation in operations)
+        {
+            if (operation != scenarioOperation && !operation.Completed && !operation.Source.IsCancellationRequested
+                && Overdue(operation, now) is { } overdue && overdue > scenarioOverdue)
+            {
+                operation.RequestCancellation(timedOut: true);
+            }
+        }
+    }
+
     private static TimeSpan? Overdue(Operation operation, long now)
-        => operation.Timeout is { } timeout && operation.Started is { } started
+        => operation.Timeout is { } timeout && operation.TimeoutStartedAt is { } started
             && Stopwatch.GetElapsedTime(started, now) - timeout is var overdue && overdue >= TimeSpan.Zero
             ? overdue
             : null;
@@ -196,20 +214,18 @@ internal sealed class CancellationWatchdog : IDisposable
         thread.Join();
     }
 
-    internal sealed class Operation(CancellationWatchdog owner, CancellationTokenSource source, TimeSpan? timeout, string description, bool started = true) : IDisposable
+    internal sealed class Operation(CancellationWatchdog owner, CancellationTokenSource source, TimeSpan? timeout, string description, bool timeoutRunning = true) : IDisposable
     {
         internal CancellationTokenSource Source { get; } = source;
         internal TimeSpan? Timeout { get; } = timeout;
         internal string Description { get; } = description;
-        /// <summary>When the operation's timeout began to count; null until <see cref="Start"/>.</summary>
-        internal long? Started { get; private set; } = started ? owner.timestamp() : null;
+        internal long? TimeoutStartedAt { get; private set; } = timeoutRunning ? owner.timestamp() : null;
 
-        /// <summary>Starts the timeout of an operation registered as not yet started.</summary>
-        internal void Start()
+        internal void StartTimeout()
         {
             lock (owner.gate)
             {
-                Started ??= owner.timestamp();
+                TimeoutStartedAt ??= owner.timestamp();
                 Monitor.PulseAll(owner.gate);
             }
         }

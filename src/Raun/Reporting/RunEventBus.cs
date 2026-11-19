@@ -17,8 +17,7 @@ public sealed class RunEventBus : IRunEventSink
     private readonly IReadOnlyList<IRunEventSink> _sinks;
     private readonly Exception?[] _firstError;
     private readonly List<Exception> _failures = [];
-    private readonly object _turns = new();
-    private Task _tail = Task.CompletedTask;
+    private readonly Turns _turns = new();
 
     public RunEventBus(IReadOnlyList<IRunEventSink> sinks)
     {
@@ -47,27 +46,10 @@ public sealed class RunEventBus : IRunEventSink
     }
 
     /// <summary>Delivers one event to every sink, after every earlier publication has finished.</summary>
-    public async ValueTask PublishAsync(RunEvent evt)
+    public ValueTask PublishAsync(RunEvent evt)
     {
         ArgumentNullException.ThrowIfNull(evt);
-
-        var turn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task previous;
-        lock (_turns)
-        {
-            previous = _tail;
-            _tail = turn.Task;
-        }
-
-        await previous.ConfigureAwait(false); // never faults: every turn completes in the finally below
-        try
-        {
-            await DeliverAsync(evt).ConfigureAwait(false);
-        }
-        finally
-        {
-            turn.SetResult();
-        }
+        return new ValueTask(_turns.TakeAsync(() => DeliverAsync(evt)));
     }
 
     private async Task DeliverAsync(RunEvent evt)

@@ -5,15 +5,11 @@ using Xunit;
 
 namespace Raun.Test;
 
-/// <summary>What the run loop promises the sink it is handed, whatever that sink is.</summary>
 public class RunLoopSinkTests
 {
     [Fact]
     public async Task A_sink_handed_straight_to_the_run_loop_sees_one_event_at_a_time()
     {
-        // Four scenarios finish their step at the same moment. A sink is told it needs no locking
-        // of its own; that has to hold for one given to the run loop directly, not only for those
-        // behind a RunEventBus.
         const int Scenarios = 4;
         var entered = 0;
         var together = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -47,17 +43,27 @@ public class RunLoopSinkTests
 
     private sealed class OneAtATime : IRunEventSink
     {
+        private readonly TaskCompletionSource second = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int inside;
-        private volatile bool overlapped;
+        private bool held;
 
-        public bool Overlapped => overlapped;
+        public bool Overlapped => second.Task.IsCompleted;
 
         public int Finished { get; private set; }
 
         public async ValueTask PublishAsync(RunEvent evt)
         {
-            if (Interlocked.Increment(ref inside) > 1) overlapped = true;
-            await Task.Delay(20); // long enough for a second caller to arrive if nothing holds it back
+            if (Interlocked.Increment(ref inside) > 1) second.TrySetResult();
+
+            // The four steps finish together. The first of those events stays inside until a second
+            // caller comes in beside it. If none can, only time can say so: Turns' own tests say it
+            // without a clock; this one says the run loop uses it.
+            if (evt is StepFinished && !held)
+            {
+                held = true;
+                await Task.WhenAny(second.Task, Task.Delay(TimeSpan.FromMilliseconds(100)));
+            }
+
             if (evt is ScenarioFinished) Finished++;
             Interlocked.Decrement(ref inside);
         }

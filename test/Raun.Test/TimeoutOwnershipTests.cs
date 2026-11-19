@@ -41,7 +41,7 @@ public class TimeoutOwnershipTests
             return Task.FromResult<object?>(null);
         });
         var loop = new RunLoop(() => [first, second], services: provider, maxParallelScenarios: 2,
-            cancellationGracePeriod: TimeSpan.FromSeconds(5)) { DeadlineClock = clock.Read };
+            cancellationGracePeriod: TimeSpan.FromSeconds(5)) { DeadlineClock = clock.Seam };
         var run = loop.RunAsync(null, new Sink(), CancellationToken.None).AsTask();
         try
         {
@@ -81,7 +81,7 @@ public class TimeoutOwnershipTests
             stopped.TrySetResult();
             return null;
         }, stepTimeout: TimeSpan.FromMilliseconds(50));
-        var run = new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition);
+        var run = new ScenarioScheduler { DeadlineClock = clock.Seam }.RunAsync(definition);
         try
         {
             await registered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -112,13 +112,13 @@ public class TimeoutOwnershipTests
             await release.Task;
             return null;
         }, scenarioTimeout: TimeSpan.FromMilliseconds(150));
-        var run = new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition, cancellationToken: host.Token);
+        var run = new ScenarioScheduler { DeadlineClock = clock.Seam }.RunAsync(definition, cancellationToken: host.Token);
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await host.CancelAsync();
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            clock.Advance(TimeSpan.FromMilliseconds(250)); // past the scenario's deadline, while the body still holds
+            clock.Advance(TimeSpan.FromMilliseconds(250));
             await clock.SeenByTheWatchdog().WaitAsync(TimeSpan.FromSeconds(5));
         }
         finally { release.TrySetResult(); }
@@ -142,7 +142,7 @@ public class TimeoutOwnershipTests
             await release.Task;
             return null;
         }, stepTimeout: TimeSpan.FromMilliseconds(50));
-        var run = new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition, cancellationToken: host.Token);
+        var run = new ScenarioScheduler { DeadlineClock = clock.Seam }.RunAsync(definition, cancellationToken: host.Token);
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -171,13 +171,13 @@ public class TimeoutOwnershipTests
             await release.Task;
             return null;
         }, scenarioTimeout: TimeSpan.FromMilliseconds(150), stepTimeout: TimeSpan.FromMilliseconds(50));
-        var run = new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition);
+        var run = new ScenarioScheduler { DeadlineClock = clock.Seam }.RunAsync(definition);
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            clock.Advance(TimeSpan.FromMilliseconds(60)); // past the step's deadline only
+            clock.Advance(TimeSpan.FromMilliseconds(60));
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            clock.Advance(TimeSpan.FromMilliseconds(250)); // and now past the scenario's, while the body still holds
+            clock.Advance(TimeSpan.FromMilliseconds(250));
             await clock.SeenByTheWatchdog().WaitAsync(TimeSpan.FromSeconds(5));
         }
         finally { release.TrySetResult(); }
@@ -228,9 +228,6 @@ public class TimeoutOwnershipTests
     [Fact]
     public async Task A_step_deadline_earlier_than_the_scenario_deadline_owns_its_timeout_however_late_both_are_seen()
     {
-        // The supervising thread can be kept off the processor for longer than the distance between
-        // two deadlines, and then sees both passed in one look. Which one passed first is a fact
-        // about the deadlines, not about when the watchdog got to look.
         var clock = new JumpingClock();
         using var root = new CancellationTokenSource();
         using var child = new CancellationTokenSource();
@@ -248,10 +245,34 @@ public class TimeoutOwnershipTests
     }
 
     [Fact]
-    public async Task A_step_timeout_starts_with_the_body_not_with_the_wait_for_a_thread_to_run_it_on()
+    public async Task A_timeout_does_not_count_until_it_is_started()
     {
-        // Ten seconds pass on the deadline clock between the step being launched and its body being
-        // given a thread. The step has 100 ms, and has used none of it.
+        var clock = new ManualClock();
+        using var source = new CancellationTokenSource();
+        using var watchdog = new CancellationWatchdog(TimeSpan.FromSeconds(5), CancellationToken.None, clock.Read, afterPass: clock.Looked);
+        using var operation = watchdog.WatchBeforeItsTimeoutStarts(source, TimeSpan.FromMilliseconds(100), "step");
+        var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = source.Token.Register(() => canceled.TrySetResult());
+
+        clock.Advance(TimeSpan.FromSeconds(10));
+        await clock.SeenByTheWatchdog().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(source.IsCancellationRequested);
+
+        operation.StartTimeout();
+        clock.Advance(TimeSpan.FromMilliseconds(99));
+        await clock.SeenByTheWatchdog().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(source.IsCancellationRequested);
+
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(operation.TimedOut);
+    }
+
+    [Fact]
+    public async Task Time_a_step_spends_before_its_body_is_handed_to_a_thread_is_not_taken_from_its_timeout()
+    {
+        // A note is formatted at the launch, before the body is handed to a thread; this one takes
+        // ten seconds of the deadline clock.
         var clock = new ManualClock();
         var ran = false;
         var definition = Definition("queued", async (_, ctx) =>
@@ -260,35 +281,27 @@ public class TimeoutOwnershipTests
             await clock.SeenByTheWatchdog();
             ctx.CancellationToken.ThrowIfCancellationRequested();
             return null;
-        }, stepTimeout: TimeSpan.FromMilliseconds(100), beforeTheBodyHasAThread: () => clock.Advance(TimeSpan.FromSeconds(10)));
+        }, stepTimeout: TimeSpan.FromMilliseconds(100), whileFormattingANote: () => clock.Advance(TimeSpan.FromSeconds(10)));
 
-        var results = await new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition).WaitAsync(TimeSpan.FromSeconds(5));
+        var results = await new ScenarioScheduler { DeadlineClock = clock.Seam }.RunAsync(definition).WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.True(ran);
         Assert.Null(results[0].Exception);
         Assert.Equal(StepStatus.Passed, results[0].Status);
     }
 
-    /// <summary>A clock that moves only when told to.</summary>
     private sealed class ManualClock
     {
         private readonly object gate = new();
         private long now;
-        private int reads;
+        private int looks;
         private readonly List<(int At, TaskCompletionSource Seen)> waiters = [];
+
+        public DeadlineClock Seam => new(Read, Looked);
 
         public long Read()
         {
-            lock (gate)
-            {
-                reads++;
-                foreach (var (at, seen) in waiters)
-                {
-                    if (reads >= at) seen.TrySetResult();
-                }
-
-                return now;
-            }
+            lock (gate) { return now; }
         }
 
         public void Advance(TimeSpan by)
@@ -296,14 +309,26 @@ public class TimeoutOwnershipTests
             lock (gate) { now += (long)(by.TotalSeconds * System.Diagnostics.Stopwatch.Frequency); }
         }
 
-        /// <summary>Completes once the watchdog has finished a whole look at the clock as it stands
-        /// now: it reads once at the start of each look, so the second read from here ends one.</summary>
+        public void Looked()
+        {
+            lock (gate)
+            {
+                looks++;
+                foreach (var (at, seen) in waiters)
+                {
+                    if (looks >= at) seen.TrySetResult();
+                }
+            }
+        }
+
+        /// <summary>Completes when the watchdog has finished a look it began after this call. The
+        /// look in progress may have read the clock before the call, so it is the one after it.</summary>
         public Task SeenByTheWatchdog()
         {
             lock (gate)
             {
                 var seen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                waiters.Add((reads + 2, seen));
+                waiters.Add((looks + 2, seen));
                 return seen.Task;
             }
         }
@@ -353,7 +378,7 @@ public class TimeoutOwnershipTests
     }
 
     private static ScenarioDefinition Definition(string id, Func<IStepInputs, ScenarioContext, Task<object?>> body,
-        TimeSpan? scenarioTimeout = null, TimeSpan? stepTimeout = null, Action? beforeTheBodyHasAThread = null) => new()
+        TimeSpan? scenarioTimeout = null, TimeSpan? stepTimeout = null, Action? whileFormattingANote = null) => new()
     {
         ScenarioId = id, DisplayName = id, MethodName = id, Namespace = "", TypeName = "", Timeout = scenarioTimeout,
         Uses = [new ContendedResourceUse(typeof(Database), LockMode.Exclusive)],
@@ -363,8 +388,7 @@ public class TimeoutOwnershipTests
             {
                 Index = 0, StepId = id + "-body", Phase = "Given", OperationName = "Body",
                 DisplayNameTemplate = id, DependsOn = [], Timeout = stepTimeout, Invoke = body,
-                // A note is formatted after the step is launched and before its body is handed to a thread.
-                FormatNoteMessages = beforeTheBodyHasAThread is null ? [] : [(_, _) => { beforeTheBodyHasAThread(); return StepMessage.FromText(""); }],
+                FormatNoteMessages = whileFormattingANote is null ? [] : [(_, _) => { whileFormattingANote(); return StepMessage.FromText(""); }],
             },
             new ScenarioNode
             {

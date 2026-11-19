@@ -54,8 +54,7 @@ public sealed class ScenarioScheduler
     }
 
 
-    /// <summary>The clock deadlines are measured on, in <see cref="Stopwatch"/> ticks; a test replaces it.</summary>
-    internal Func<long>? DeadlineClock { get; init; }
+    internal DeadlineClock? DeadlineClock { get; init; }
 
     internal static void ValidateCleanupTimeout(TimeSpan cleanupTimeout)
     {
@@ -125,7 +124,8 @@ public sealed class ScenarioScheduler
             : (TimeSpan?)null;
         var stepContexts = scenarioTimeout is null ? null : new ScenarioContext?[count];
         using var timeoutCts = new CancellationTokenSource();
-        using var watchdog = new CancellationWatchdog(_cancellationGracePeriod, cancellationToken, DeadlineClock, beforeTermination);
+        using var watchdog = new CancellationWatchdog(
+            _cancellationGracePeriod, cancellationToken, DeadlineClock?.Timestamp, beforeTermination, DeadlineClock?.WatchdogLooked);
         var scenarioWatch = watchdog.Watch(timeoutCts, scenarioTimeout, $"scenario '{definition.DisplayName}'", isScenario: true);
         using var hostRegistration = cancellationToken.Register(() => scenarioWatch.RequestCancellation());
         if (cancellationToken.IsCancellationRequested) scenarioWatch.RequestCancellation();
@@ -193,13 +193,18 @@ public sealed class ScenarioScheduler
 
         while (pending.Count > 0 || running.Count > 0)
         {
-            timedOut |= scenarioWatch.TimedOut;
+            // One reading of cancellation for the whole pass. It comes from another thread; read
+            // again further down, it could say "cancelled" to the launch below after saying "not
+            // cancelled" to the skips above, leaving a ready step neither skipped nor launched.
+            // A step launched in the pass cancellation lands in is cancelled before its body runs.
+            var cancelled = scenarioToken.IsCancellationRequested;
+            timedOut |= scenarioWatch.TimedOut; // read after: a timeout is marked before it cancels
             var progressed = false;
 
             // 1. Resolve skips: cancellation, or all dependencies terminal with at least one bad.
             foreach (var i in pending.ToArray())
             {
-                if (scenarioToken.IsCancellationRequested)
+                if (cancelled)
                 {
                     // Capture cancelled-step evidence once, after in-flight producers have drained.
                     if (running.Count > 0) { continue; }
@@ -342,7 +347,7 @@ public sealed class ScenarioScheduler
             }
 
             // 2. Launch ready nodes (all dependencies passed), bounded by capacity.
-            if (!scenarioToken.IsCancellationRequested)
+            if (!cancelled)
             {
                 foreach (var i in pending.ToArray())
                 {
@@ -406,10 +411,7 @@ public sealed class ScenarioScheduler
                     break;
                 }
 
-                // Cancellation comes from another thread and can land after the steps above were
-                // judged ready and before they would have been launched: nothing ran, nothing was
-                // resolved, and the next pass skips them as cancelled.
-                if (!progressed && !scenarioToken.IsCancellationRequested)
+                if (!progressed)
                 {
                     throw new InvalidOperationException(
                         "Scenario scheduler stalled with unresolved steps; this indicates a graph defect.");
@@ -812,8 +814,8 @@ public sealed class ScenarioScheduler
         var stopwatch = Stopwatch.StartNew();
         TimeSpan Elapsed() => simClock?.Advanced ?? stopwatch.Elapsed;
         using var stepCts = new CancellationTokenSource();
-        using var operationWatch = watchdog.Watch(
-            stepCts, node.Timeout, $"step '{node.DisplayNameTemplate}' in scenario '{definition.DisplayName}'", started: false);
+        using var operationWatch = watchdog.WatchBeforeItsTimeoutStarts(
+            stepCts, node.Timeout, $"step '{node.DisplayNameTemplate}' in scenario '{definition.DisplayName}'");
         var displayName = titleMessage.Text;
         var context = new ScenarioContext(
             node.StepId, displayName, services, messageFormatting.ForStep(node.Index), stepTimeProvider, stepCts.Token);
@@ -849,10 +851,8 @@ public sealed class ScenarioScheduler
         // it, and the loop could not see the scenario deadline pass.
         await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
 
-        // The step's timeout counts from here, where the step has a thread to run on. Counted from
-        // the launch, a step waiting for a busy thread pool spent its timeout before its body ran,
-        // and was reported as having exceeded it without ever having started.
-        operationWatch.Start();
+        // Not at the launch: the wait for a thread is not the step's time.
+        operationWatch.StartTimeout();
 
         // Ambient for the duration of this step. Set inside RunNodeAsync (which each step enters on
         // its own async flow) so it is visible to the step body and to anything it awaits, but never
@@ -1058,29 +1058,9 @@ public sealed class ScenarioScheduler
     // preserving IStepObserver's contract without holding any scenario-global execution lock.
     private sealed class SerializedObserver(IStepObserver inner) : IStepObserver
     {
-        private readonly object _gate = new();
-        private Task _last = Task.CompletedTask;
-        public Task OnStepStartingAsync(StepContext context) => DeliverAsync(() => inner.OnStepStartingAsync(context));
-        public Task OnStepFinishedAsync(StepResult result) => DeliverAsync(() => inner.OnStepFinishedAsync(result));
-        private async Task DeliverAsync(Func<Task> deliver)
-        {
-            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            Task previous;
-            lock (_gate)
-            {
-                previous = _last;
-                _last = release.Task;
-            }
-            try
-            {
-                await previous.ConfigureAwait(false);
-                await deliver().ConfigureAwait(false);
-            }
-            finally
-            {
-                release.SetResult();
-            }
-        }
+        private readonly Turns _turns = new();
+        public Task OnStepStartingAsync(StepContext context) => _turns.TakeAsync(() => inner.OnStepStartingAsync(context));
+        public Task OnStepFinishedAsync(StepResult result) => _turns.TakeAsync(() => inner.OnStepFinishedAsync(result));
     }
 
     private sealed class PreparedInputs(IStepInputs producers, object?[] arguments) : IStepInputs
