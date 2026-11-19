@@ -224,6 +224,68 @@ public class TimeoutOwnershipTests
         Assert.True(scenario.TimedOut);
     }
 
+    [Fact]
+    public async Task A_step_timeout_starts_with_the_body_not_with_the_wait_for_a_thread_to_run_it_on()
+    {
+        // Ten seconds pass on the deadline clock between the step being launched and its body being
+        // given a thread. The step has 100 ms, and has used none of it.
+        var clock = new ManualClock();
+        var ran = false;
+        var definition = Definition("queued", async (_, ctx) =>
+        {
+            ran = true;
+            await clock.SeenByTheWatchdog();
+            ctx.CancellationToken.ThrowIfCancellationRequested();
+            return null;
+        }, stepTimeout: TimeSpan.FromMilliseconds(100), beforeTheBodyHasAThread: () => clock.Advance(TimeSpan.FromSeconds(10)));
+
+        var results = await new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(ran);
+        Assert.Null(results[0].Exception);
+        Assert.Equal(StepStatus.Passed, results[0].Status);
+    }
+
+    /// <summary>A clock that moves only when told to.</summary>
+    private sealed class ManualClock
+    {
+        private readonly object gate = new();
+        private long now;
+        private int reads;
+        private readonly List<(int At, TaskCompletionSource Seen)> waiters = [];
+
+        public long Read()
+        {
+            lock (gate)
+            {
+                reads++;
+                foreach (var (at, seen) in waiters)
+                {
+                    if (reads >= at) seen.TrySetResult();
+                }
+
+                return now;
+            }
+        }
+
+        public void Advance(TimeSpan by)
+        {
+            lock (gate) { now += (long)(by.TotalSeconds * System.Diagnostics.Stopwatch.Frequency); }
+        }
+
+        /// <summary>Completes once the watchdog has finished a whole look at the clock as it stands
+        /// now: it reads once at the start of each look, so the second read from here ends one.</summary>
+        public Task SeenByTheWatchdog()
+        {
+            lock (gate)
+            {
+                var seen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                waiters.Add((reads + 2, seen));
+                return seen.Task;
+            }
+        }
+    }
+
     /// <summary>A clock that stands still until told to jump, and then jumps between two reads.</summary>
     private sealed class JumpingClock
     {
@@ -268,7 +330,7 @@ public class TimeoutOwnershipTests
     }
 
     private static ScenarioDefinition Definition(string id, Func<IStepInputs, ScenarioContext, Task<object?>> body,
-        TimeSpan? scenarioTimeout = null, TimeSpan? stepTimeout = null) => new()
+        TimeSpan? scenarioTimeout = null, TimeSpan? stepTimeout = null, Action? beforeTheBodyHasAThread = null) => new()
     {
         ScenarioId = id, DisplayName = id, MethodName = id, Namespace = "", TypeName = "", Timeout = scenarioTimeout,
         Uses = [new ContendedResourceUse(typeof(Database), LockMode.Exclusive)],
@@ -278,6 +340,8 @@ public class TimeoutOwnershipTests
             {
                 Index = 0, StepId = id + "-body", Phase = "Given", OperationName = "Body",
                 DisplayNameTemplate = id, DependsOn = [], Timeout = stepTimeout, Invoke = body,
+                // A note is formatted after the step is launched and before its body is handed to a thread.
+                FormatNoteMessages = beforeTheBodyHasAThread is null ? [] : [(_, _) => { beforeTheBodyHasAThread(); return StepMessage.FromText(""); }],
             },
             new ScenarioNode
             {

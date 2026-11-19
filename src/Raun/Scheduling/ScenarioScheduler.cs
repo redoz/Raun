@@ -54,6 +54,9 @@ public sealed class ScenarioScheduler
     }
 
 
+    /// <summary>The clock deadlines are measured on, in <see cref="Stopwatch"/> ticks; a test replaces it.</summary>
+    internal Func<long>? DeadlineClock { get; init; }
+
     internal static void ValidateCleanupTimeout(TimeSpan cleanupTimeout)
     {
         if (cleanupTimeout <= TimeSpan.Zero || cleanupTimeout.TotalMilliseconds > int.MaxValue)
@@ -122,7 +125,7 @@ public sealed class ScenarioScheduler
             : (TimeSpan?)null;
         var stepContexts = scenarioTimeout is null ? null : new ScenarioContext?[count];
         using var timeoutCts = new CancellationTokenSource();
-        using var watchdog = new CancellationWatchdog(_cancellationGracePeriod, cancellationToken, beforeTermination: beforeTermination);
+        using var watchdog = new CancellationWatchdog(_cancellationGracePeriod, cancellationToken, DeadlineClock, beforeTermination);
         var scenarioWatch = watchdog.Watch(timeoutCts, scenarioTimeout, $"scenario '{definition.DisplayName}'", isScenario: true);
         using var hostRegistration = cancellationToken.Register(() => scenarioWatch.RequestCancellation());
         if (cancellationToken.IsCancellationRequested) scenarioWatch.RequestCancellation();
@@ -806,7 +809,8 @@ public sealed class ScenarioScheduler
         var stopwatch = Stopwatch.StartNew();
         TimeSpan Elapsed() => simClock?.Advanced ?? stopwatch.Elapsed;
         using var stepCts = new CancellationTokenSource();
-        using var operationWatch = watchdog.Watch(stepCts, node.Timeout, $"step '{node.DisplayNameTemplate}' in scenario '{definition.DisplayName}'");
+        using var operationWatch = watchdog.Watch(
+            stepCts, node.Timeout, $"step '{node.DisplayNameTemplate}' in scenario '{definition.DisplayName}'", started: false);
         var displayName = titleMessage.Text;
         var context = new ScenarioContext(
             node.StepId, displayName, services, messageFormatting.ForStep(node.Index), stepTimeProvider, stepCts.Token);
@@ -841,6 +845,11 @@ public sealed class ScenarioScheduler
         // before awaiting (or never awaits) would hold the loop: its siblings could not start beside
         // it, and the loop could not see the scenario deadline pass.
         await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+
+        // The step's timeout counts from here, where the step has a thread to run on. Counted from
+        // the launch, a step waiting for a busy thread pool spent its timeout before its body ran,
+        // and was reported as having exceeded it without ever having started.
+        operationWatch.Start();
 
         // Ambient for the duration of this step. Set inside RunNodeAsync (which each step enters on
         // its own async flow) so it is visible to the step body and to anything it awaits, but never

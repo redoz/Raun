@@ -524,6 +524,9 @@ public sealed class RunLoop
         return targets;
     }
 
+    /// <summary>The clock scenario and step deadlines are measured on; a test replaces it.</summary>
+    internal Func<long>? DeadlineClock { get; init; }
+
     // The provider comes in per scenario: it is the scenario's DI scope, not the root.
     private async Task<IReadOnlyList<StepResult>> DefaultRunScenario(
         ScenarioDefinition definition,
@@ -531,7 +534,7 @@ public sealed class RunLoop
         IServiceProvider? scenarioServices,
         IReadOnlySet<int>? targets,
         CancellationToken cancellationToken)
-        => await new ScenarioScheduler(maxParallelism: maxParallelSteps, simulatedTime: simulateTime, cancellationGracePeriod: cancellationGracePeriod, cleanupTimeout: cleanupTimeout).RunAsync(
+        => await new ScenarioScheduler(maxParallelism: maxParallelSteps, simulatedTime: simulateTime, cancellationGracePeriod: cancellationGracePeriod, cleanupTimeout: cleanupTimeout) { DeadlineClock = DeadlineClock }.RunAsync(
             definition,
             services: scenarioServices,
             observer: observer,

@@ -41,11 +41,13 @@ internal sealed class CancellationWatchdog : IDisposable
         }
     }
 
-    internal Operation Watch(CancellationTokenSource source, TimeSpan? timeout, string description, bool isScenario = false)
+    // started: false registers the operation with its clock not yet running. It is cancelled with
+    // the scenario like any other, but its own timeout counts from Operation.Start.
+    internal Operation Watch(CancellationTokenSource source, TimeSpan? timeout, string description, bool isScenario = false, bool started = true)
     {
         lock (gate)
         {
-            var operation = new Operation(this, source, timeout, description);
+            var operation = new Operation(this, source, timeout, description, started);
             operations.Add(operation);
             if (isScenario) scenario = operation;
             else if (scenario?.CancellationStarted == true) operation.RequestCancellation();
@@ -109,7 +111,8 @@ internal sealed class CancellationWatchdog : IDisposable
 
     /// <summary>How long ago the operation's deadline passed; null when it has none or it has not passed.</summary>
     private static TimeSpan? Overdue(Operation operation, long now)
-        => operation.Timeout is { } timeout && Stopwatch.GetElapsedTime(operation.Started, now) - timeout is var overdue && overdue >= TimeSpan.Zero
+        => operation.Timeout is { } timeout && operation.Started is { } started
+            && Stopwatch.GetElapsedTime(started, now) - timeout is var overdue && overdue >= TimeSpan.Zero
             ? overdue
             : null;
 
@@ -193,12 +196,24 @@ internal sealed class CancellationWatchdog : IDisposable
         thread.Join();
     }
 
-    internal sealed class Operation(CancellationWatchdog owner, CancellationTokenSource source, TimeSpan? timeout, string description) : IDisposable
+    internal sealed class Operation(CancellationWatchdog owner, CancellationTokenSource source, TimeSpan? timeout, string description, bool started = true) : IDisposable
     {
         internal CancellationTokenSource Source { get; } = source;
         internal TimeSpan? Timeout { get; } = timeout;
         internal string Description { get; } = description;
-        internal long Started { get; } = owner.timestamp();
+        /// <summary>When the operation's timeout began to count; null until <see cref="Start"/>.</summary>
+        internal long? Started { get; private set; } = started ? owner.timestamp() : null;
+
+        /// <summary>Starts the timeout of an operation registered as not yet started.</summary>
+        internal void Start()
+        {
+            lock (owner.gate)
+            {
+                Started ??= owner.timestamp();
+                Monitor.PulseAll(owner.gate);
+            }
+        }
+
         internal long CanceledAt { get; private set; }
         private volatile bool cancellationStarted;
         internal bool CancellationStarted => cancellationStarted;
