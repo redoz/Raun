@@ -16,6 +16,8 @@ public class TimeoutOwnershipTests
     public async Task Scope_and_exclusive_admission_wait_for_the_timed_out_body(bool scenarioTimeout)
     {
         using var provider = new ServiceCollection().AddScoped(_ => new Scoped()).BuildServiceProvider();
+        var clock = new ManualClock();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var successor = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -26,6 +28,7 @@ public class TimeoutOwnershipTests
             captured = ctx.Services!.GetRequiredService<Scoped>();
             using var registration = ctx.CancellationToken.Register(() => canceled.TrySetResult());
             ctx.OnTeardown(Cleanup.Required, () => { Assert.False(captured.Disposed); cleaned = true; return Task.CompletedTask; });
+            entered.TrySetResult();
             await release.Task;
             Assert.False(captured.Disposed);
             return null;
@@ -38,10 +41,12 @@ public class TimeoutOwnershipTests
             return Task.FromResult<object?>(null);
         });
         var loop = new RunLoop(() => [first, second], services: provider, maxParallelScenarios: 2,
-            cancellationGracePeriod: TimeSpan.FromSeconds(5));
+            cancellationGracePeriod: TimeSpan.FromSeconds(5)) { DeadlineClock = clock.Read };
         var run = loop.RunAsync(null, new Sink(), CancellationToken.None).AsTask();
         try
         {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            clock.Advance(TimeSpan.FromMilliseconds(200));
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await Task.WhenAny(successor.Task, Task.Delay(100));
             Assert.False(captured!.Disposed);
@@ -56,6 +61,8 @@ public class TimeoutOwnershipTests
     [Fact]
     public async Task Cancellation_callbacks_keep_ownership_after_the_body_returns()
     {
+        var clock = new ManualClock();
+        var registered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -69,13 +76,16 @@ public class TimeoutOwnershipTests
                 release.Task.GetAwaiter().GetResult();
             });
             ctx.OnTeardown(Cleanup.Required, () => { cleaned = true; return Task.CompletedTask; });
+            registered.TrySetResult();
             await entered.Task;
             stopped.TrySetResult();
             return null;
         }, stepTimeout: TimeSpan.FromMilliseconds(50));
-        var run = new ScenarioScheduler().RunAsync(definition);
+        var run = new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition);
         try
         {
+            await registered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            clock.Advance(TimeSpan.FromMilliseconds(100));
             await stopped.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.False(cleaned);
             Assert.False(run.IsCompleted);
@@ -91,6 +101,7 @@ public class TimeoutOwnershipTests
     public async Task Host_cancellation_wins_over_a_later_scenario_deadline()
     {
         using var host = new CancellationTokenSource();
+        var clock = new ManualClock();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -101,13 +112,14 @@ public class TimeoutOwnershipTests
             await release.Task;
             return null;
         }, scenarioTimeout: TimeSpan.FromMilliseconds(150));
-        var run = new ScenarioScheduler().RunAsync(definition, cancellationToken: host.Token);
+        var run = new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition, cancellationToken: host.Token);
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await host.CancelAsync();
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Delay(250);
+            clock.Advance(TimeSpan.FromMilliseconds(250)); // past the scenario's deadline, while the body still holds
+            await clock.SeenByTheWatchdog().WaitAsync(TimeSpan.FromSeconds(5));
         }
         finally { release.TrySetResult(); }
         var results = await run.WaitAsync(TimeSpan.FromSeconds(5));
@@ -119,20 +131,25 @@ public class TimeoutOwnershipTests
     public async Task Step_timeout_wins_over_later_host_cancellation()
     {
         using var host = new CancellationTokenSource();
+        var clock = new ManualClock();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var definition = Definition("step-first", async (_, ctx) =>
         {
             using var registration = ctx.CancellationToken.Register(() => canceled.TrySetResult());
+            entered.TrySetResult();
             await release.Task;
             return null;
         }, stepTimeout: TimeSpan.FromMilliseconds(50));
-        var run = new ScenarioScheduler().RunAsync(definition, cancellationToken: host.Token);
+        var run = new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition, cancellationToken: host.Token);
         try
         {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            clock.Advance(TimeSpan.FromMilliseconds(60));
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await host.CancelAsync();
-            await Task.Delay(30);
+            await clock.SeenByTheWatchdog().WaitAsync(TimeSpan.FromSeconds(5));
         }
         finally { release.TrySetResult(); }
         var results = await run.WaitAsync(TimeSpan.FromSeconds(5));
@@ -143,19 +160,25 @@ public class TimeoutOwnershipTests
     [Fact]
     public async Task Step_timeout_wins_over_a_later_scenario_timeout()
     {
+        var clock = new ManualClock();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var definition = Definition("step-before-scenario", async (_, ctx) =>
         {
             using var registration = ctx.CancellationToken.Register(() => canceled.TrySetResult());
+            entered.TrySetResult();
             await release.Task;
             return null;
         }, scenarioTimeout: TimeSpan.FromMilliseconds(150), stepTimeout: TimeSpan.FromMilliseconds(50));
-        var run = new ScenarioScheduler().RunAsync(definition);
+        var run = new ScenarioScheduler { DeadlineClock = clock.Read }.RunAsync(definition);
         try
         {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            clock.Advance(TimeSpan.FromMilliseconds(60)); // past the step's deadline only
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Delay(250);
+            clock.Advance(TimeSpan.FromMilliseconds(250)); // and now past the scenario's, while the body still holds
+            await clock.SeenByTheWatchdog().WaitAsync(TimeSpan.FromSeconds(5));
         }
         finally { release.TrySetResult(); }
         var results = await run.WaitAsync(TimeSpan.FromSeconds(5));
