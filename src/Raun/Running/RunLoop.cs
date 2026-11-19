@@ -159,6 +159,12 @@ public sealed class RunLoop
     {
         ArgumentNullException.ThrowIfNull(bus);
 
+        // A RunEventBus already hands out one event at a time; any other sink is given the same.
+        if (bus is not RunEventBus)
+        {
+            bus = new SerializedSink(bus);
+        }
+
         var selected = SelectScenarios(scenarioSource(), selector);
 
         // A filter that selects nothing runs nothing, preflight included: bringing the environment
