@@ -202,6 +202,28 @@ public class TimeoutOwnershipTests
         Assert.False(operation.TimedOut, "the scenario deadline had passed too, and the scenario owns the timeout");
     }
 
+    [Fact]
+    public async Task A_step_deadline_earlier_than_the_scenario_deadline_owns_its_timeout_however_late_both_are_seen()
+    {
+        // The supervising thread can be kept off the processor for longer than the distance between
+        // two deadlines, and then sees both passed in one look. Which one passed first is a fact
+        // about the deadlines, not about when the watchdog got to look.
+        var clock = new JumpingClock();
+        using var root = new CancellationTokenSource();
+        using var child = new CancellationTokenSource();
+        using var watchdog = new CancellationWatchdog(TimeSpan.FromSeconds(5), CancellationToken.None, clock.Read);
+        using var scenario = watchdog.Watch(root, TimeSpan.FromMilliseconds(150), "scenario", isScenario: true);
+        using var operation = watchdog.Watch(child, TimeSpan.FromMilliseconds(50), "child");
+        var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = child.Token.Register(() => canceled.TrySetResult());
+
+        clock.JumpAfterNextRead(before: TimeSpan.FromMilliseconds(10), after: TimeSpan.FromMilliseconds(500));
+
+        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(operation.TimedOut, "the step's deadline passed 100 ms before the scenario's");
+        Assert.True(scenario.TimedOut);
+    }
+
     /// <summary>A clock that stands still until told to jump, and then jumps between two reads.</summary>
     private sealed class JumpingClock
     {

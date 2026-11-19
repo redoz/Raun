@@ -69,10 +69,27 @@ internal sealed class CancellationWatchdog : IDisposable
                 // judged the scenario's deadline, which is at least as old, as not yet reached.
                 var now = timestamp();
 
-                // The scenario goes first, wherever it sits in the list: when its deadline and a
-                // step's have both passed, the scenario owns the timeout and the step is cancelled
-                // by it.
-                if (scenario is { Completed: false } current) Expire(current, now);
+                // When a step's deadline and the scenario's have both passed, the one that passed
+                // first owns the timeout, and on a tie the scenario does. This thread can be kept
+                // off the processor for longer than the distance between the two, so which one it
+                // happens to look at first decides nothing: steps whose deadline is the earlier
+                // one time out here, then the scenario, which cancels every step still running.
+                if (scenario is { Completed: false } current)
+                {
+                    if (Overdue(current, now) is { } scenarioOverdue && !hostToken.IsCancellationRequested && !current.CancellationStarted)
+                    {
+                        foreach (var operation in operations)
+                        {
+                            if (operation != current && !operation.Completed && !operation.Source.IsCancellationRequested
+                                && Overdue(operation, now) is { } overdue && overdue > scenarioOverdue)
+                            {
+                                operation.RequestCancellation(timedOut: true);
+                            }
+                        }
+                    }
+
+                    Expire(current, now);
+                }
                 foreach (var operation in operations)
                 {
                     if (operation.Completed) continue;
@@ -90,11 +107,16 @@ internal sealed class CancellationWatchdog : IDisposable
         }
     }
 
+    /// <summary>How long ago the operation's deadline passed; null when it has none or it has not passed.</summary>
+    private static TimeSpan? Overdue(Operation operation, long now)
+        => operation.Timeout is { } timeout && Stopwatch.GetElapsedTime(operation.Started, now) - timeout is var overdue && overdue >= TimeSpan.Zero
+            ? overdue
+            : null;
+
     private void Expire(Operation operation, long now)
     {
         var cancelScenario = hostToken.IsCancellationRequested || scenario?.CancellationStarted == true;
-        if (cancelScenario || operation.Source.IsCancellationRequested ||
-            (operation.Timeout is { } timeout && Stopwatch.GetElapsedTime(operation.Started, now) >= timeout))
+        if (cancelScenario || operation.Source.IsCancellationRequested || Overdue(operation, now) is not null)
         {
             operation.RequestCancellation(timedOut: !cancelScenario && !operation.Source.IsCancellationRequested);
         }
