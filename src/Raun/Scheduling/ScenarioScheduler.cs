@@ -406,7 +406,10 @@ public sealed class ScenarioScheduler
                     break;
                 }
 
-                if (!progressed)
+                // Cancellation comes from another thread and can land after the steps above were
+                // judged ready and before they would have been launched: nothing ran, nothing was
+                // resolved, and the next pass skips them as cancelled.
+                if (!progressed && !scenarioToken.IsCancellationRequested)
                 {
                     throw new InvalidOperationException(
                         "Scenario scheduler stalled with unresolved steps; this indicates a graph defect.");
