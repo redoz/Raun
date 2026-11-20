@@ -1999,11 +1999,13 @@ internal sealed class ScenarioParser
             .WithInitializer(InitializerExpression(SyntaxKind.ArrayInitializerExpression, SeparatedList(captured)))));
         var prepareArguments = expressions.Count == 0 ? null : SimpleLambdaExpression(Parameter(Identifier("__inputs")))
             .WithModifiers(TokenList(Token(SyntaxKind.StaticKeyword))).WithBlock(Block(declarations));
+        var callerInfo = CallerInfoArguments(invocation);
         var invokeCall = BuildCall(
             invocation,
             member.WithExpression(call.Receiver),
             lowering.TypeArguments?.Node,
-            lowered);
+            lowered,
+            callerInfo);
         var resourceClaims = BuildResourceClaims(written, method, resultType is not null, lowered);
         AddUses(method.GetAttributes());
 
@@ -2015,7 +2017,7 @@ internal sealed class ScenarioParser
         {
             // With no input metadata consumers the original call already evaluates once. Keep
             // that path, including by-reference locations and values that cannot be boxed.
-            invokeCall = BuildCall(invocation, member.WithExpression(call.Receiver), lowering.TypeArguments?.Node, expressions);
+            invokeCall = BuildCall(invocation, member.WithExpression(call.Receiver), lowering.TypeArguments?.Node, expressions, callerInfo);
             prepareArguments = null;
         }
 
@@ -2055,7 +2057,7 @@ internal sealed class ScenarioParser
                         .WithInitializer(EqualsValueClause(value))))));
                 localArguments.Add(expressions[a].WithExpression(name));
             }
-            invokeCall = BuildCall(invocation, member.WithExpression(call.Receiver), lowering.TypeArguments?.Node, localArguments);
+            invokeCall = BuildCall(invocation, member.WithExpression(call.Receiver), lowering.TypeArguments?.Node, localArguments, callerInfo);
             resourceClaims = BuildResourceClaims(written, method, resultType is not null, localArguments);
             (template, inlineTitle, completedTitleExpr) = DisplayNameBuilder.Build(_model, method, written, localArguments, expressions);
             prepareArguments = null;
@@ -2168,6 +2170,66 @@ internal sealed class ScenarioParser
             .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(Num(index)))));
 
     /// <summary>
+    /// The caller-info arguments the C# compiler fills in at the authored call, spelled out. The
+    /// generated file makes the call from another method and with lowered arguments, so left to the
+    /// compiler a <c>[CallerMemberName]</c> would name the generated method and a
+    /// <c>[CallerArgumentExpression]</c> would quote <c>__inputs.Get&lt;T&gt;(1)</c>. Line and file
+    /// are not here: the <c>#line</c> span around the call already gives the authored ones.
+    /// </summary>
+    private List<ArgumentSyntax> CallerInfoArguments(InvocationExpressionSyntax invocation)
+    {
+        var supplied = new List<ArgumentSyntax>();
+        if (_model.GetOperation(invocation) is not Microsoft.CodeAnalysis.Operations.IInvocationOperation operation)
+        {
+            return supplied;
+        }
+
+        foreach (var argument in operation.Arguments)
+        {
+            if (argument.ArgumentKind != Microsoft.CodeAnalysis.Operations.ArgumentKind.DefaultValue
+                || argument.Parameter is not { } parameter)
+            {
+                continue;
+            }
+
+            // The compiler's own precedence: line, then file, then member, then argument expression.
+            var attributes = parameter.GetAttributes()
+                .Where(a => a.AttributeClass?.ContainingNamespace?.ToDisplayString() == "System.Runtime.CompilerServices")
+                .ToList();
+            bool Has(string name) => attributes.Any(a => a.AttributeClass!.Name == name);
+            if (Has("CallerLineNumberAttribute") || Has("CallerFilePathAttribute"))
+            {
+                continue;
+            }
+
+            string? value = null;
+            if (Has("CallerMemberNameAttribute"))
+            {
+                value = _method.Name;
+            }
+            else if (attributes.FirstOrDefault(a => a.AttributeClass!.Name == "CallerArgumentExpressionAttribute") is { } quoting
+                && quoting.ConstructorArguments.Length == 1
+                && quoting.ConstructorArguments[0].Value is string target
+                && operation.Arguments.FirstOrDefault(a => a.Parameter?.Name == target) is
+                    { ArgumentKind: Microsoft.CodeAnalysis.Operations.ArgumentKind.Explicit, Syntax: ArgumentSyntax quoted })
+            {
+                value = quoted.Expression.ToString();
+            }
+
+            if (value is not null)
+            {
+                var name = SyntaxFacts.GetKeywordKind(parameter.Name) == SyntaxKind.None
+                    ? Identifier(parameter.Name)
+                    : VerbatimIdentifier(TriviaList(), parameter.Name, parameter.Name, TriviaList());
+                supplied.Add(Argument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(value)))
+                    .WithNameColon(NameColon(IdentifierName(name))));
+            }
+        }
+
+        return supplied;
+    }
+
+    /// <summary>
     /// The step invocation as the generated file will call it: the method on the scenario's instance of
     /// its step class, with its type and value arguments lowered. Outer trivia is dropped — the call
     /// is re-hosted inside a lambda, and the emitter formats the whole file.
@@ -2176,9 +2238,10 @@ internal sealed class ScenarioParser
         InvocationExpressionSyntax invocation,
         MemberAccessExpressionSyntax member,
         TypeArgumentListSyntax? typeArguments,
-        List<ArgumentSyntax> arguments)
+        List<ArgumentSyntax> arguments,
+        List<ArgumentSyntax> callerInfo)
     {
-        var emitted = arguments;
+        var emitted = arguments.Concat(callerInfo);
 
         var callee = member.Name is GenericNameSyntax generic && typeArguments is not null
             ? member.WithName(generic.WithTypeArgumentList(typeArguments))

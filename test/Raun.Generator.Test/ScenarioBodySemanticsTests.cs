@@ -106,6 +106,11 @@ public class ScenarioBodySemanticsTests
     [InlineData("var d = await Given.ADog(); await Given.Record(d is IAnimal); await Given.Record(d?.GetType().Name);")]
     [InlineData("var a = await Given.Add(1, 2); var b = await Given.Add(a, await Given.Three()); await Given.Record(b);")]
     [InlineData("await Given.Record(await Given.Three());")]
+    [InlineData("var a = await Given.Three(); await Given.Equal(a + 1, 4);")]
+    [InlineData("var a = await Given.Three(); await Given.Equal(expected: 3, actual: a);")]
+    [InlineData("var a = await Given.Three(); await Given.Equal(a, 3, \"said by hand\");")]
+    [InlineData("await Given.Equal( 1 +  2 , 3);")]
+    [InlineData("await Given.Named(1);")]
     public async Task What_the_generator_accepts_runs_what_CSharp_runs(string body)
     {
         var result = GeneratorHarness.Run(OracleSource(body));
@@ -157,6 +162,15 @@ public class ScenarioBodySemanticsTests
             public Task Record(object? value) { Oracle.Add($"Record({value?.GetType().Name}:{value})"); return Task.CompletedTask; }
             public Task Check(IAnimal animal) { Oracle.Add($"Check(IAnimal {animal.GetType().Name})"); return Task.CompletedTask; }
             public Task Check(Dog dog) { Oracle.Add($"Check(Dog)"); return Task.CompletedTask; }
+            public Task Equal(int actual, int expected,
+                [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(actual))] string? written = null,
+                [System.Runtime.CompilerServices.CallerMemberName] string? member = null)
+            { Oracle.Add($"Equal({actual}, {expected}, '{written}', in {member})"); return Task.CompletedTask; }
+            public Task Named(int value,
+                [System.Runtime.CompilerServices.CallerMemberName] string @in = "",
+                [System.Runtime.CompilerServices.CallerArgumentExpression("missing")] string? nothing = null,
+                [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(value))] string? written = null)
+            { Oracle.Add($"Named({value}, in {@in}, '{nothing}', '{written}')"); return Task.CompletedTask; }
         }
         public sealed class Stories : Scenarios<NoWorld>
         {
