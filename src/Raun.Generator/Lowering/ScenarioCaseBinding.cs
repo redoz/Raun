@@ -118,7 +118,10 @@ internal static class ScenarioCaseBinding
                     target = NullableType(target);
                 }
 
-                values.Add(parameter, ParenthesizedExpression(CastExpression(target, ParenthesizedExpression(value))));
+                ExpressionSyntax typed = ParenthesizedExpression(CastExpression(target, ParenthesizedExpression(value)));
+                // The scenario reads a parameter, not the constant its case supplies. Null stays as
+                // it is: it has no value to keep apart from the constant.
+                values.Add(parameter, constant.Value is null ? typed : Literals.AsVariable(target, typed));
             }
 
             if (values.Count == method.Parameters.Length)

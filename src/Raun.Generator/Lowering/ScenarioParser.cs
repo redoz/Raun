@@ -1373,6 +1373,11 @@ internal sealed class ScenarioParser
         return true;
     }
 
+    /// <summary><see cref="CanHold"/> for the one local of an array group, whose value is an array of
+    /// what each element returns.</summary>
+    private bool CanHoldGroup(ILocalSymbol local, ITypeSymbol? element, SyntaxNode group)
+        => element is null || CanHold(local, _model.Compilation.CreateArrayTypeSymbol(element), group);
+
     private bool ParseTuple(TupleExpressionSyntax tuple, Binding? binding)
     {
         var groupId = "g" + _nextIndex;
@@ -1380,6 +1385,14 @@ internal sealed class ScenarioParser
         var accesses = new List<IReadOnlyList<ParallelAccess>>();
         var locals = binding?.Locals;
         var ok = true;
+
+        if (binding is { Kind: BindingKind.Single })
+        {
+            // One local would hold the tuple itself, and no step produces that: each element is a
+            // step with a value of its own.
+            Refuse(tuple, $"A tuple group's results are bound by deconstructing them, one local per step; '{binding.Locals[0].Name}' would hold the tuple itself. Write var (a, b) = await (...)");
+            return false;
+        }
 
         for (var i = 0; i < tuple.Arguments.Count; i++)
         {
@@ -1428,6 +1441,7 @@ internal sealed class ScenarioParser
         var frontier = new List<int>();
         var accesses = new List<IReadOnlyList<ParallelAccess>>();
         TypeSyntax elementType = PredefinedType(Token(SyntaxKind.ObjectKeyword));
+        ITypeSymbol? produced = null;
         var ok = true;
 
         foreach (var element in initializer.Expressions)
@@ -1441,10 +1455,12 @@ internal sealed class ScenarioParser
             var step = BuildStep(call, groupId, _prevFrontier);
             accesses.Add(call.Accesses());
             elementType = step.ResultType;
+            produced = call.ResultType;
             frontier.Add(step.Index);
         }
 
         ok &= CheckParallelConflicts(accesses);
+        ok = ok && (binding is null || CanHoldGroup(binding.Locals[0], produced, awaited));
 
         if (binding is not null && ok)
         {
@@ -1494,6 +1510,7 @@ internal sealed class ScenarioParser
         // Every element is a copy of the same call, so a mutating role on an outer step output
         // conflicts with itself as soon as there are two of them.
         var ok = count < 2 || CheckParallelConflicts([first.Accesses(), first.Accesses()]);
+        ok = ok && (binding is null || CanHoldGroup(binding.Locals[0], first.ResultType, toArray));
 
         var groupId = "g" + _nextIndex;
         var frontier = new List<int>();
@@ -1661,6 +1678,10 @@ internal sealed class ScenarioParser
             : null;
     }
 
+    /// <summary>Marks a loop variable's value where it stands in for the variable, so a skipped
+    /// step's title can still show it: the value is known without running anything.</summary>
+    private static readonly SyntaxAnnotation LoopValue = new("raun:loop-value");
+
     /// <summary>How a scenario-level symbol that carries a step's value is spelled in lowered code — a
     /// step-output local, or <paramref name="loop"/>'s variable — and null for anything else. Step
     /// arguments and patterns share it, so they read step outputs the same way.</summary>
@@ -1672,7 +1693,8 @@ internal sealed class ScenarioParser
                     ? ParenthesizedExpression(CastExpression(TypeSyntaxFactory.From(local.Type), ParenthesizedExpression(Spell(source))))
                     : Spell(source),
         IParameterSymbol parameter when loop is { } element
-            && SymbolEqualityComparer.Default.Equals(parameter, element.Variable) => Num(element.Value),
+            && SymbolEqualityComparer.Default.Equals(parameter, element.Variable)
+            => Literals.AsVariable(PredefinedType(Token(SyntaxKind.IntKeyword)), Num(element.Value)).WithAdditionalAnnotations(LoopValue),
         IParameterSymbol parameter when _case is not null && _case.Arguments.TryGetValue(parameter, out var value) => value,
         _ => null,
     };
@@ -1986,7 +2008,8 @@ internal sealed class ScenarioParser
             var safeFallback = !inferred && !_model.GetConversion(written[a].Expression).IsUserDefined
                 && (_model.GetConstantValue(written[a].Expression).HasValue
                     || written[a].Expression is IdentifierNameSyntax && lowering.Arguments[a].Reads.Count > 0
-                    || expressions[a].Expression is LiteralExpressionSyntax);
+                    || expressions[a].Expression is LiteralExpressionSyntax
+                    || expressions[a].Expression.HasAnnotation(LoopValue));
             var titleRead = safeFallback ? read.WithArgumentList(read.ArgumentList.AddArguments(
                 Argument(ParenthesizedLambdaExpression().WithExpressionBody(expressions[a].Expression)),
                 Argument(LiteralExpression(SyntaxKind.TrueLiteralExpression)))) : read;

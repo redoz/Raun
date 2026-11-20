@@ -111,9 +111,42 @@ public class ScenarioBodySemanticsTests
     [InlineData("var a = await Given.Three(); await Given.Equal(a, 3, \"said by hand\");")]
     [InlineData("await Given.Equal( 1 +  2 , 3);")]
     [InlineData("await Given.Named(1);")]
-    public async Task What_the_generator_accepts_runs_what_CSharp_runs(string body)
+    [InlineData("await Enumerable.Range(0, 3).Select(i => Given.Take(i)).ToArray();")]
+    [InlineData("await Enumerable.Range(0, 2).Select(i => Given.Add(i, i == 0 ? 1 : 100 / i)).ToArray();")]
+    [InlineData("IEnumerable<int> xs = await new[] { Given.Three(), Given.Four() }; await Given.Count(xs);")]
+    [InlineData("var xs = await new[] { Given.Three(), Given.Four() }; await Given.Count(xs);")]
+    [InlineData("object pair = await (Given.ADog(), Given.ACat()); await Given.Record(pair);")]
+    [InlineData("var pair = await (Given.Three(), Given.Four()); await Given.Record(pair.Item1);")]
+    public Task What_the_generator_accepts_runs_what_CSharp_runs(string body)
+        => AssertRunsWhatCSharpRuns(OracleSource(body));
+
+    [Theory]
+    [InlineData("int count", "1", "await Given.Take(count);")]
+    [InlineData("int count", "0", "await Given.Add(count, count == 0 ? 1 : 100 / count);")]
+    [InlineData("int count", "1", "await Given.Record(count is 1);")]
+    [InlineData("string name", "\"a\"", "await Given.Record(name + \"b\");")]
+    public Task A_case_parameter_stays_the_variable_the_scenario_declared(string parameter, string value, string body)
+        => AssertRunsWhatCSharpRuns(
+            OracleSource(body)
+                .Replace("public async Task Story()", $"public async Task Story({parameter})", StringComparison.Ordinal)
+                .Replace("[Scenario] ", $"[Scenario, ScenarioCase(\"one\", {value})] ", StringComparison.Ordinal),
+            value == "\"a\"" ? "a" : int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
+
+    [Theory]
+    [InlineData("object pair = await (Given.ADog(), Given.ACat()); await Given.Record(pair);")]
+    [InlineData("var pair = await (Given.Three(), Given.Four()); await Given.Record(pair.Item1);")]
+    public void A_tuple_group_bound_to_one_local_is_refused(string body)
     {
         var result = GeneratorHarness.Run(OracleSource(body));
+
+        var refused = Assert.Single(result.GeneratorDiagnostics, d => d.Id == "RAUN017");
+        Assert.Contains("deconstruct", refused.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        Assert.DoesNotContain("Story", result.GeneratedSource, StringComparison.Ordinal);
+    }
+
+    private static async Task AssertRunsWhatCSharpRuns(string source, params object[] arguments)
+    {
+        var result = GeneratorHarness.Run(source);
         Assert.True(
             result.EmitDiagnostics.IsEmpty,
             "the body is not valid C#, or the generated code does not compile: " + string.Join("; ", result.EmitDiagnostics));
@@ -127,7 +160,7 @@ public class ScenarioBodySemanticsTests
         var trace = (List<string>)result.Assembly!.GetType("Oracle")!.GetField("Calls")!.GetValue(null)!;
 
         var plain = result.Assembly.GetType("Plain")!;
-        await (Task)plain.GetMethod("Story")!.Invoke(Activator.CreateInstance(plain), null)!;
+        await (Task)plain.GetMethod("Story")!.Invoke(Activator.CreateInstance(plain), arguments)!;
         var expected = trace.ToList();
         trace.Clear();
 
@@ -140,6 +173,7 @@ public class ScenarioBodySemanticsTests
     private static string OracleSource(string body) => $$"""
         using System;
         using System.Collections.Generic;
+        using System.Linq;
         using System.Threading.Tasks;
         using Raun;
         public static class Oracle
@@ -162,6 +196,10 @@ public class ScenarioBodySemanticsTests
             public Task Record(object? value) { Oracle.Add($"Record({value?.GetType().Name}:{value})"); return Task.CompletedTask; }
             public Task Check(IAnimal animal) { Oracle.Add($"Check(IAnimal {animal.GetType().Name})"); return Task.CompletedTask; }
             public Task Check(Dog dog) { Oracle.Add($"Check(Dog)"); return Task.CompletedTask; }
+            public Task Take(short n) { Oracle.Add($"Take(short {n})"); return Task.CompletedTask; }
+            public Task Take(long n) { Oracle.Add($"Take(long {n})"); return Task.CompletedTask; }
+            public Task Count(int[] xs) { Oracle.Add($"Count(array {xs.Length})"); return Task.CompletedTask; }
+            public Task Count(IEnumerable<int> xs) { Oracle.Add($"Count(sequence)"); return Task.CompletedTask; }
             public Task Equal(int actual, int expected,
                 [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(actual))] string? written = null,
                 [System.Runtime.CompilerServices.CallerMemberName] string? member = null)

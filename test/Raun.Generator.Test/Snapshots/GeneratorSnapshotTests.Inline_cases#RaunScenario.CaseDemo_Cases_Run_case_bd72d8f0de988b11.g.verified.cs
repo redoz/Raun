@@ -55,7 +55,7 @@ namespace Raun.Generated
                 },
                 PrepareArguments = static __inputs =>
                 {
-                    string __arg0 = ((string)(((string)("Alice"))));
+                    string __arg0 = ((string)(object)(((string)(((string)("Alice"))))));
 #line hidden
                     return new object? []
                     {

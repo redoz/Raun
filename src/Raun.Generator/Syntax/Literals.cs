@@ -19,6 +19,37 @@ internal static class Literals
             ? LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(value))
             : PrefixUnaryExpression(SyntaxKind.UnaryMinusExpression, Magnitude(-(long)value));
 
+    /// <summary>
+    /// <paramref name="value"/> as the scenario's variable of <paramref name="type"/> would read:
+    /// <c>((type)(object)(value))</c>. The scenario wrote a parameter or a loop variable, and the
+    /// generated code holds its value as a literal. A literal is a constant expression and a variable
+    /// is not, which the compiler acts on: a constant <c>int</c> converts to <c>short</c> and picks
+    /// another overload, <c>100 / 0</c> is an error where <c>100 / count</c> is not, and
+    /// <c>count is 1</c> is refused as always true. Passing through <c>object</c> is the one spelling
+    /// that keeps the value and its type and is never a constant.
+    /// </summary>
+    public static ExpressionSyntax AsVariable(TypeSyntax type, ExpressionSyntax value)
+        => ParenthesizedExpression(CastExpression(
+            type,
+            CastExpression(PredefinedType(Token(SyntaxKind.ObjectKeyword)), ParenthesizedExpression(value))));
+
+    /// <summary>The value inside <see cref="AsVariable"/>'s spelling, for a reader that wants the
+    /// known value and not the variable; null for any other expression.</summary>
+    public static ExpressionSyntax? ValueOfVariable(ExpressionSyntax expression)
+        => expression is ParenthesizedExpressionSyntax
+        {
+            Expression: CastExpressionSyntax
+            {
+                Expression: CastExpressionSyntax
+                {
+                    Type: PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.ObjectKeyword },
+                    Expression: ParenthesizedExpressionSyntax value,
+                },
+            },
+        }
+            ? value.Expression
+            : null;
+
     /// <summary>The absolute value of a negative int, as the token under a unary minus. It is taken
     /// as a <see cref="long"/> because negating <see cref="int.MinValue"/> as an int overflows back
     /// to itself (printing <c>--2147483648</c>), and its text is spelled here because

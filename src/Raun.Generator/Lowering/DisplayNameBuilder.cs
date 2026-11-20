@@ -283,6 +283,9 @@ internal static class DisplayNameBuilder
                 text = literal.Token.Value is string s ? s : System.Convert.ToString(literal.Token.Value, System.Globalization.CultureInfo.InvariantCulture);
                 return text is not null;
 
+            case ParenthesizedExpressionSyntax when Literals.ValueOfVariable(expression) is { } known:
+                return TryFoldLiterals(known, out text);
+
             case ParenthesizedExpressionSyntax parenthesized:
                 return TryFoldLiterals(parenthesized.Expression, out text);
 
