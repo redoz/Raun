@@ -64,9 +64,21 @@ public sealed class HtmlReportSink : RunEventSink
         return default;
     }
 
+    protected override ValueTask OnStepStartedAsync(StepStarted e)
+    {
+        _builder.OnStepStarted(e.Definition, e.Context, _timeProvider.GetUtcNow());
+        return default;
+    }
+
     protected override ValueTask OnStepFinishedAsync(StepFinished e)
     {
         _builder.OnStepFinished(e.Definition, e.Result);
+        return default;
+    }
+
+    protected override ValueTask OnScenarioFinishedAsync(ScenarioFinished e)
+    {
+        _builder.OnScenarioFinished(e.Definition);
         return default;
     }
 
@@ -74,7 +86,8 @@ public sealed class HtmlReportSink : RunEventSink
     {
         lock (_gate)
         {
-            _model = _builder.Build(_timeProvider.GetUtcNow().UtcDateTime.ToString("O")) with { Aborted = e.AbortReason };
+            var now = _timeProvider.GetUtcNow();
+            _model = _builder.Build(now.UtcDateTime.ToString("O"), e.AbortReason is null ? null : now) with { Aborted = e.AbortReason };
             return new ValueTask(QueueWrite(CancellationToken.None));
         }
     }

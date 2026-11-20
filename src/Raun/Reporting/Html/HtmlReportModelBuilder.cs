@@ -48,6 +48,10 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
         acc.WaitedFor = waitedFor;
     }
 
+    /// <summary>Notes a step as running, so a run that ends without its result can still show it.</summary>
+    public void OnStepStarted(ScenarioDefinition definition, Scheduling.StepContext context, DateTimeOffset at)
+        => Find(definition.ScenarioId)?.StepStarted(context, at);
+
     public void OnStepFinished(ScenarioDefinition definition, StepResult result)
     {
         var acc = Find(definition.ScenarioId)
@@ -56,8 +60,28 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
         acc.Add(result);
     }
 
-    public HtmlReportModel Build(string generatedAtUtc)
+    public void OnScenarioFinished(ScenarioDefinition definition)
     {
+        if (Find(definition.ScenarioId) is { } acc)
+        {
+            acc.Finished = true;
+        }
+    }
+
+    /// <param name="generatedAtUtc">When the report is written.</param>
+    /// <param name="abortedAt">Set when the run is ending because the host is being terminated: the
+    /// instant it gave up. Steps still running then get the failure they have no result for, and a
+    /// scenario that had not finished is not reported as passed.</param>
+    public HtmlReportModel Build(string generatedAtUtc, DateTimeOffset? abortedAt = null)
+    {
+        if (abortedAt is { } at)
+        {
+            foreach (var scenario in _scenarios)
+            {
+                scenario.CutShort(at);
+            }
+        }
+
         // A scenario the run never launched (cancellation mid-run, a faulted sibling, a mis-declared
         // token halting further admission) has nothing to report — it never had a Status, and
         // without this filter Build() below would default it to "passed" with zero steps.
@@ -131,7 +155,48 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
             ? Timed.Max(r => Ms(r.StartedAt - Start) + Ms(r.Duration))
             : 0;
 
-        public void Add(StepResult result) => _results.Add(result);
+        /// <summary>Set when the scenario's last result is in.</summary>
+        public bool Finished { get; set; }
+
+        /// <summary>True once the run was terminated with this scenario unfinished.</summary>
+        private bool _cutShort;
+
+        private readonly Dictionary<int, (Scheduling.StepContext Context, DateTimeOffset At)> _running = [];
+
+        public void StepStarted(Scheduling.StepContext context, DateTimeOffset at) => _running[context.Node.Index] = (context, at);
+
+        public void Add(StepResult result)
+        {
+            _running.Remove(result.Node.Index);
+            _results.Add(result);
+        }
+
+        /// <summary>The run was terminated at <paramref name="at"/>. A step still running never
+        /// reports, so it is given the failure it is; the scenario, unfinished, cannot have passed.</summary>
+        public void CutShort(DateTimeOffset at)
+        {
+            if (!Started || Finished)
+            {
+                return;
+            }
+
+            _cutShort = true;
+            foreach (var (context, startedAt) in _running.Values.OrderBy(running => running.Context.Node.Index))
+            {
+                _results.Add(new StepResult
+                {
+                    Node = context.Node,
+                    TitleMessage = StepMessage.FromText(context.DisplayName),
+                    Status = StepStatus.Failed,
+                    StartedAt = startedAt,
+                    Duration = at - startedAt,
+                    Exception = new InvalidOperationException(
+                        $"Step '{context.DisplayName}' did not finish: it was still running when the test host was terminated."),
+                });
+            }
+
+            _running.Clear();
+        }
 
         public ReportScenario Build(int scenarioIndex, HtmlReportSourceOptions? sourceOptions)
         {
@@ -291,6 +356,8 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
 
             var status = ScenarioOutcome.Of(ordered).Status switch
             {
+                // Stopped between two steps: what ran passed, the scenario did not get to.
+                ScenarioStatus.Passed when _cutShort => "skipped",
                 ScenarioStatus.Passed => "passed",
                 ScenarioStatus.Failed or ScenarioStatus.TimedOut => "failed",
                 _ => "skipped",

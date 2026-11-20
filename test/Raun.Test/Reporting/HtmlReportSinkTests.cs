@@ -112,6 +112,53 @@ public sealed class HtmlReportSinkTests : IDisposable
     }
 
     [Fact]
+    public async Task A_report_written_as_the_host_is_terminated_shows_nothing_cut_short_as_passed()
+    {
+        var path = Path.Combine(_dir, "aborted.html");
+        var sink = new HtmlReportSink(path, new TestTimeProviderUtc(T0));
+        ScenarioDefinition Scenario(string id) => new()
+        {
+            ScenarioId = id, DisplayName = id, MethodName = "Ns." + id, Namespace = "", TypeName = "Ns",
+            Nodes = [Node(0, id + "-a", "Given", "first"), Node(1, id + "-b", "When", "second")],
+        };
+        var hung = Scenario("hung");
+        var betweenSteps = Scenario("between");
+        var done = Scenario("done");
+
+        await sink.PublishAsync(new RunStarted(3));
+        foreach (var scenario in new[] { hung, betweenSteps, done })
+        {
+            await sink.PublishAsync(new ScenarioStarted(scenario));
+            await sink.PublishAsync(new StepStarted(scenario, new() { Node = scenario.Nodes[0], DisplayName = "first" }));
+            await sink.PublishAsync(new StepFinished(scenario, Passed(scenario.Nodes[0])));
+        }
+        await sink.PublishAsync(new StepStarted(hung, new() { Node = hung.Nodes[1], DisplayName = "second, as formatted" }));
+        await sink.PublishAsync(new StepStarted(done, new() { Node = done.Nodes[1], DisplayName = "second" }));
+        await sink.PublishAsync(new StepFinished(done, Passed(done.Nodes[1])));
+        await sink.PublishAsync(new ScenarioFinished(done, [Passed(done.Nodes[0]), Passed(done.Nodes[1])]));
+
+        await sink.PublishAsync(new RunFinished { AbortReason = "step 'second' did not stop" });
+
+        var html = await File.ReadAllTextAsync(path);
+        const string marker = "<script id=\"model\" type=\"application/json\">";
+        var start = html.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+        using var model = JsonDocument.Parse(html[start..html.IndexOf("</script>", start, StringComparison.Ordinal)]);
+        var scenarios = model.RootElement.GetProperty("scenarios").EnumerateArray()
+            .ToDictionary(s => s.GetProperty("scenarioId").GetString()!);
+
+        // The step that was running has no result: it is shown as the failure it is.
+        Assert.Equal("failed", scenarios["hung"].GetProperty("status").GetString());
+        var unfinished = scenarios["hung"].GetProperty("steps").EnumerateArray().Single(s => s.GetProperty("index").GetInt32() == 1);
+        Assert.Equal("failed", unfinished.GetProperty("status").GetString());
+        Assert.Equal("second, as formatted", unfinished.GetProperty("displayName").GetString());
+        Assert.Contains("did not finish", unfinished.GetProperty("exception").GetString(), StringComparison.Ordinal);
+        // Stopped between two steps: what ran passed, the scenario did not.
+        Assert.Equal("skipped", scenarios["between"].GetProperty("status").GetString());
+        Assert.Equal("passed", scenarios["done"].GetProperty("status").GetString());
+        Assert.Equal(1, model.RootElement.GetProperty("summary").GetProperty("passed").GetInt32());
+    }
+
+    [Fact]
     public async Task Report_omits_graph_fonts_and_links_no_external_assets()
     {
         var path = Path.Combine(_dir, "raun-report.html");
