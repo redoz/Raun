@@ -465,6 +465,35 @@ public class SchedulerTests
     }
 
     [Fact]
+    public async Task An_observer_that_throws_does_not_cost_the_scenario_its_teardown()
+    {
+        // A reporter fails once (a full disk, a serialisation error). What the scenario set up still
+        // has to be cleaned up, every start still gets its finish, and the failure is not lost.
+        var cleanedUp = false;
+        var observer = new RecordingObserver { ThrowOnFinishOf = 0 };
+        var def = Def(
+            Node(0, (_, ctx) =>
+            {
+                ctx.OnTeardown(Cleanup.Required, () => { cleanedUp = true; return Task.CompletedTask; });
+                return Task.FromResult<object?>(null);
+            }),
+            Node(1, Pass(), [0]),
+            new ScenarioNode
+            {
+                Index = 2, StepId = "step-2", Phase = "Then", OperationName = "Teardown", DisplayNameTemplate = "Teardown",
+                DependsOn = [], Kind = NodeKind.Teardown, Invoke = (_, _) => Task.FromResult<object?>(null),
+            });
+
+        var thrown = await Assert.ThrowsAsync<IOException>(
+            () => WithTimeout(new ScenarioScheduler().RunAsync(def, observer: observer)));
+
+        Assert.Equal("disk full", thrown.Message);
+        Assert.True(cleanedUp, "the cleanup the first step registered never ran");
+        Assert.Equal([0, 1, 2], observer.Started.Select(s => s.Node.Index).Order());
+        Assert.Equal([1, 2], observer.Finished.Select(r => r.Node.Index).Order());
+    }
+
+    [Fact]
     public async Task Run_validates_the_graph()
     {
         var def = Def(Node(0, Pass(), [1]), Node(1, Pass(), [0]));
@@ -983,8 +1012,16 @@ public class SchedulerTests
             return Task.CompletedTask;
         }
 
+        /// <summary>The node whose finish this observer fails to take, if any.</summary>
+        public int? ThrowOnFinishOf { get; init; }
+
         public Task OnStepFinishedAsync(StepResult result)
         {
+            if (result.Node.Index == ThrowOnFinishOf)
+            {
+                throw new IOException("disk full");
+            }
+
             lock (_sync) Finished.Add(result);
             return Task.CompletedTask;
         }

@@ -99,7 +99,8 @@ public sealed class ScenarioScheduler
         var beforeTermination = observer is IHostTerminationObserver last
             ? last.OnHostTerminatingAsync
             : (Func<string, Task>?)null;
-        observer = observer is null ? null : new SerializedObserver(observer);
+        var serialized = observer is null ? null : new SerializedObserver(observer);
+        observer = serialized;
 
         var nodes = definition.Nodes;
         var count = nodes.Count;
@@ -456,6 +457,7 @@ public sealed class ScenarioScheduler
             }
         }
 
+        serialized?.ThrowIfFailed();
         return results.Select(r => r!).ToList();
 
         // Teardown is not a node of the graph: it runs here, after the scheduling loop, and its
@@ -1058,11 +1060,47 @@ public sealed class ScenarioScheduler
 
     // Prepared nodes can yield during starting callbacks. Serialize starts and finishes together,
     // preserving IStepObserver's contract without holding any scenario-global execution lock.
+    //
+    // An observer reports the scenario; it is not part of it. A callback that throws is kept here and
+    // thrown once the scenario has ended, teardown included: thrown where it happens, it would leave
+    // through the scheduler's loop with steps still running and every registered cleanup unrun.
     private sealed class SerializedObserver(IStepObserver inner) : IStepObserver
     {
         private readonly Turns _turns = new();
-        public Task OnStepStartingAsync(StepContext context) => _turns.TakeAsync(() => inner.OnStepStartingAsync(context));
-        public Task OnStepFinishedAsync(StepResult result) => _turns.TakeAsync(() => inner.OnStepFinishedAsync(result));
+        private readonly System.Collections.Concurrent.ConcurrentQueue<Exception> _failures = new();
+
+        public Task OnStepStartingAsync(StepContext context) => Tell(() => inner.OnStepStartingAsync(context));
+
+        public Task OnStepFinishedAsync(StepResult result) => Tell(() => inner.OnStepFinishedAsync(result));
+
+        /// <summary>Throws what the observer threw during the scenario, if it did.</summary>
+        public void ThrowIfFailed()
+        {
+            var failures = _failures.ToArray();
+            if (failures.Length == 1)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(failures[0]);
+            }
+
+            if (failures.Length > 1)
+            {
+                throw new AggregateException("The step observer threw during the scenario.", failures);
+            }
+        }
+
+        private async Task Tell(Func<Task> callback)
+        {
+            try
+            {
+                await _turns.TakeAsync(callback).ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // whatever it threw is thrown again, after the scenario
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                _failures.Enqueue(ex);
+            }
+        }
     }
 
     private sealed class PreparedInputs(IStepInputs producers, object?[] arguments) : IStepInputs

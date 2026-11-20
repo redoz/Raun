@@ -27,6 +27,11 @@ namespace Raun.Scheduling;
 /// the end of the process: a step that does not stop within the cancellation grace gets the test
 /// host terminated.
 /// </para>
+/// <para>
+/// An exception from a callback does not stop the scenario. The scenario runs to its end, teardown
+/// included, the remaining callbacks are still raised, and <see cref="ScenarioScheduler.RunAsync"/>
+/// then throws what the callback threw.
+/// </para>
 /// </remarks>
 public interface IStepObserver
 {
