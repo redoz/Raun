@@ -616,6 +616,7 @@ public sealed class ScenarioScheduler
                 Links = context?.Resources.Links ?? [],
                 TraceId = context?.Activity?.TraceId.ToString(),
                 SpanId = context?.Activity?.SpanId.ToString(),
+                TimedOut = true,
                 Exception = new TimeoutException(
                     $"Scenario '{definition.DisplayName}' exceeded its timeout of {timeout} while running step '{name}'."),
             };
@@ -971,6 +972,7 @@ public sealed class ScenarioScheduler
                     StartedAt = startedAt,
                     Duration = Elapsed(),
                     Exception = exception,
+                    TimedOut = statusValue == StepStatus.Failed && operationWatch.TimedOut,
                     SkipReason = skipReason,
                     NoteMessages = context.NoteMessages,
                     LogEntries = context.LogEntries,

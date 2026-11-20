@@ -13,7 +13,8 @@ public enum StepFailureKind
     Timeout,
 }
 
-/// <summary>Decides a failed step's <see cref="StepFailureKind"/> from what it threw.</summary>
+/// <summary>Tells an assertion from an error by what a failed step threw. A timeout is not decided
+/// here: see <see cref="StepResult.TimedOut"/>.</summary>
 internal static class StepFailure
 {
     /// <summary>
@@ -34,7 +35,6 @@ internal static class StepFailure
     public static StepFailureKind Classify(Exception? exception) => exception switch
     {
         null => StepFailureKind.Error,
-        TimeoutException => StepFailureKind.Timeout,
         _ when IsAssertion(exception) => StepFailureKind.Assertion,
         _ => StepFailureKind.Error,
     };

@@ -114,6 +114,8 @@ public class ScenarioTimeoutTests
 
         Assert.Equal(StepStatus.Failed, results[0].Status);
         Assert.IsType<TimeoutException>(results[0].Exception);
+        Assert.Equal(StepFailureKind.Timeout, results[0].FailureKind);
+        Assert.Equal(ScenarioStatus.TimedOut, ScenarioOutcome.Of(results).Status);
     }
 
     [Fact]

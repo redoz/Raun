@@ -430,6 +430,21 @@ public class SchedulerTests
 
         Assert.Equal(StepStatus.Failed, results[0].Status);
         Assert.IsType<TimeoutException>(results[0].Exception);
+        Assert.Equal(StepFailureKind.Timeout, results[0].FailureKind);
+    }
+
+    [Fact]
+    public async Task A_timeout_exception_a_step_throws_itself_is_an_error_and_does_not_outrank_a_failure()
+    {
+        // No timeout is set anywhere: the step waited on something of its own and gave up.
+        var def = Def(
+            Node(0, (_, _) => throw new InvalidOperationException("wrong answer")),
+            Node(1, (_, _) => throw new TimeoutException("the probe did not answer")));
+
+        var results = await WithTimeout(new ScenarioScheduler().RunAsync(def));
+
+        Assert.Equal(StepFailureKind.Error, results[1].FailureKind);
+        Assert.Equal(ScenarioStatus.Failed, ScenarioOutcome.Of(results).Status);
     }
 
     [Fact]

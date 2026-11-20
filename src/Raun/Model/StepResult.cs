@@ -42,7 +42,15 @@ public sealed class StepResult
     /// <see cref="StepStatus.Failed"/>: an assertion that did not hold, a timeout, or an error (any
     /// other exception, or none). Null for a step that did not fail. Decided here so every host and
     /// report draws the line in the same place.</summary>
-    public StepFailureKind? FailureKind => Status == StepStatus.Failed ? StepFailure.Classify(Exception) : null;
+    public StepFailureKind? FailureKind => Status != StepStatus.Failed ? null
+        : TimedOut ? StepFailureKind.Timeout
+        : StepFailure.Classify(Exception);
+
+    /// <summary>True when the step failed because its own timeout, or the scenario's while this step
+    /// held it, ran out. Whoever enforced the timeout says so here: the type of
+    /// <see cref="Exception"/> does not, because a step may throw a <see cref="TimeoutException"/>
+    /// of its own for a wait that has nothing to do with either.</summary>
+    public bool TimedOut { get; init; }
 
     /// <summary>Why the step was skipped, e.g. <c>"dependency failed: creating an appointment"</c>.</summary>
     public string? SkipReason { get; init; }

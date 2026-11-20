@@ -33,8 +33,9 @@ public class ScenarioOutcomeTests
         Invoke = (_, _) => Task.FromResult<object?>(null),
     };
 
-    private static StepResult Step(int index, StepStatus status, string? skipReason = null, Exception? exception = null) => new()
+    private static StepResult Step(int index, StepStatus status, string? skipReason = null, Exception? exception = null, bool timedOut = false) => new()
     {
+        TimedOut = timedOut,
         Node = Nodes[index],
         TitleMessage = StepMessage.FromText(Nodes[index].DisplayNameTemplate),
         Status = status,
@@ -72,13 +73,25 @@ public class ScenarioOutcomeTests
     [Fact]
     public void A_step_that_timed_out_decides_even_after_an_earlier_failure()
     {
-        var late = Step(2, StepStatus.Failed, exception: new TimeoutException("too slow"));
+        var late = Step(2, StepStatus.Failed, exception: new TimeoutException("too slow"), timedOut: true);
 
         var outcome = ScenarioOutcome.Of(
             [Passed(0), Step(1, StepStatus.Failed, exception: new InvalidOperationException("x")), late, Passed(4)]);
 
         Assert.Equal(ScenarioStatus.TimedOut, outcome.Status);
         Assert.Same(late, outcome.Decisive);
+    }
+
+    [Fact]
+    public void A_timeout_exception_a_step_threw_itself_is_a_failure_like_any_other()
+    {
+        var first = Step(1, StepStatus.Failed, exception: new InvalidOperationException("x"));
+
+        var outcome = ScenarioOutcome.Of(
+            [Passed(0), first, Step(2, StepStatus.Failed, exception: new TimeoutException("the probe did not answer")), Passed(4)]);
+
+        Assert.Equal(ScenarioStatus.Failed, outcome.Status);
+        Assert.Same(first, outcome.Decisive);
     }
 
     [Fact]

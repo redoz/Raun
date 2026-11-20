@@ -305,10 +305,11 @@ public class MtpReportSinkTests
             Status = StepStatus.Failed,
             StartedAt = TestInstant,
             Exception = ex,
+            TimedOut = true,
         }));
 
         var node = Assert.Single(bus.Nodes);
-        var timeout = Assert.Single(node.Properties.OfType<TimeoutTestNodeStateProperty>());
+        var timeout =Assert.Single(node.Properties.OfType<TimeoutTestNodeStateProperty>());
         Assert.Same(ex, timeout.Exception);
         Assert.Empty(node.Properties.OfType<FailedTestNodeStateProperty>());
     }

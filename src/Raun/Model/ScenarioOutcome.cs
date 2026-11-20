@@ -78,7 +78,7 @@ public sealed record ScenarioOutcome(ScenarioStatus Status, StepResult? Decisive
                 case StepStatus.NotTaken:
                     skipReason ??= step.SkipReason;
                     break;
-                case StepStatus.Failed when step.Exception is TimeoutException:
+                case StepStatus.Failed when step.TimedOut:
                     timeout ??= step;
                     break;
                 default:

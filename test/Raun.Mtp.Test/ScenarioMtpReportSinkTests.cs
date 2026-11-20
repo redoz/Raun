@@ -46,8 +46,10 @@ public class ScenarioMtpReportSinkTests
         Exception? exception = null,
         string? skipReason = null,
         string[]? logs = null,
-        DateTimeOffset? startedAt = null) => new()
+        DateTimeOffset? startedAt = null,
+        bool timedOut = false) => new()
         {
+            TimedOut = timedOut,
             Node = definition.Nodes[index],
             TitleMessage = StepMessage.FromText(definition.Nodes[index].DisplayNameTemplate),
             Status = status,
@@ -183,7 +185,7 @@ public class ScenarioMtpReportSinkTests
 
         var node = await Finish(def,
             Result(def, 0, StepStatus.Failed, new XunitException("x")),
-            Result(def, 1, StepStatus.Failed, timeout));
+            Result(def, 1, StepStatus.Failed, timeout, timedOut: true));
 
         Assert.Same(timeout, State<TimeoutTestNodeStateProperty>(node).Exception);
     }

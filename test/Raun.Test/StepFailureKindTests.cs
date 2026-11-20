@@ -53,7 +53,13 @@ public class StepFailureKindTests
 
     [Fact]
     public void A_timeout_is_a_timeout()
-        => Assert.Equal(StepFailureKind.Timeout, Result(StepStatus.Failed, new TimeoutException()).FailureKind);
+        => Assert.Equal(
+            StepFailureKind.Timeout,
+            new StepResult { Node = Node, Status = StepStatus.Failed, StartedAt = default, TimedOut = true, Exception = new TimeoutException() }.FailureKind);
+
+    [Fact]
+    public void A_timeout_exception_the_step_threw_itself_is_an_error()
+        => Assert.Equal(StepFailureKind.Error, Result(StepStatus.Failed, new TimeoutException()).FailureKind);
 
     [Fact]
     public void Any_other_exception_is_an_error()
