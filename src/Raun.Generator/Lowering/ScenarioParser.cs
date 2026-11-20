@@ -40,6 +40,13 @@ internal sealed class ScenarioParser
     /// <summary>Locals declared with a type other than their step's result; see <see cref="CanHold"/>.</summary>
     private readonly HashSet<ILocalSymbol> _readAsDeclared = new(SymbolEqualityComparer.Default);
 
+    /// <summary>
+    /// Node -> the union case types its value may be, for a node whose value stands for a local of a
+    /// union type without being that union: a step returning one of the union's cases, and every
+    /// merge or pass-through such a step reaches. See <see cref="CanHold"/>.
+    /// </summary>
+    private readonly Dictionary<int, IReadOnlyList<ITypeSymbol>> _unionCases = [];
+
     // Namespaces that contain the invoked DSL extension members; imported into the generated file
     // so `Given.PatientExists(...)` resolves there too. Kept as symbols: a using directive is built
     // from the namespace chain, never from a display string split back apart.
@@ -1132,6 +1139,15 @@ internal sealed class ScenarioParser
 
         var phase = _steps.First(s => s.Index == sources[0]).Phase;
         var index = _nextIndex++;
+        var cases = sources
+            .SelectMany(source => _unionCases.TryGetValue(source, out var held) ? held : [])
+            .Distinct<ITypeSymbol>(SymbolEqualityComparer.Default)
+            .ToList();
+        if (cases.Count > 0)
+        {
+            _unionCases[index] = cases;
+        }
+
         _steps.Add(new ParsedStep
         {
             Index = index,
@@ -1170,6 +1186,11 @@ internal sealed class ScenarioParser
     {
         var producer = _steps.First(s => s.Index == parentDef);
         var index = _nextIndex++;
+        if (_unionCases.TryGetValue(parentDef, out var cases))
+        {
+            _unionCases[index] = cases;
+        }
+
         var guards = new List<ParsedGuard>(_guards) { new(conditionIndex, arm) };
         _steps.Add(new ParsedStep
         {
@@ -1317,7 +1338,8 @@ internal sealed class ScenarioParser
             return false;
         }
 
-        if (binding is { Kind: BindingKind.Single } && !CanHold(binding.Locals[0], call.ResultType, invocation))
+        ITypeSymbol? unionCase = null;
+        if (binding is { Kind: BindingKind.Single } && !CanHold(binding.Locals[0], call.ResultType, invocation, out unionCase))
         {
             return false;
         }
@@ -1325,7 +1347,7 @@ internal sealed class ScenarioParser
         var step = BuildStep(call, groupId: null, _prevFrontier);
         if (binding is { Kind: BindingKind.Single })
         {
-            _vars[binding.Locals[0]] = new StepOutput(step.Index);
+            Bind(binding.Locals[0], step.Index, unionCase);
         }
 
         Advance([step.Index]);
@@ -1341,8 +1363,15 @@ internal sealed class ScenarioParser
     /// with a type other than the step's own is read through a cast (<see cref="_readAsDeclared"/>),
     /// so overload resolution and inference see what the author wrote.
     /// </summary>
-    private bool CanHold(ILocalSymbol local, ITypeSymbol? produced, SyntaxNode step)
+    /// <remarks>
+    /// A local of a union type also holds a step returning one of the union's cases. The value still
+    /// travels as the object the step returned, and the union is made where the local is read: that
+    /// conversion only wraps the value, so making it late is not observable. The case the step's type
+    /// converts through comes back in <paramref name="unionCase"/>, for <see cref="Bind"/>.
+    /// </remarks>
+    private bool CanHold(ILocalSymbol local, ITypeSymbol? produced, SyntaxNode step, out ITypeSymbol? unionCase)
     {
+        unionCase = null;
         if (produced is null)
         {
             return true;
@@ -1357,6 +1386,12 @@ internal sealed class ScenarioParser
         var sameObject = conversion.IsReference || conversion.IsBoxing
             || (local.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable
                 && SymbolEqualityComparer.Default.Equals(nullable.TypeArguments[0], produced));
+        if (!sameObject && UnionCase(conversion, local.Type) is { } through)
+        {
+            unionCase = through;
+            sameObject = true;
+        }
+
         if (!sameObject)
         {
             Refuse(step, $"Local '{local.Name}' is declared as {local.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)} but the step returns {produced.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)}, and a step's value is not converted on the way to its local. Declare the local with var or with the step's own type");
@@ -1370,7 +1405,32 @@ internal sealed class ScenarioParser
     /// <summary><see cref="CanHold"/> for the one local of an array group, whose value is an array of
     /// what each element returns.</summary>
     private bool CanHoldGroup(ILocalSymbol local, ITypeSymbol? element, SyntaxNode group)
-        => element is null || CanHold(local, _model.Compilation.CreateArrayTypeSymbol(element), group);
+        => element is null || CanHold(local, _model.Compilation.CreateArrayTypeSymbol(element), group, out _);
+
+    /// <summary>
+    /// The case type <paramref name="conversion"/> goes through when it is a union conversion to
+    /// <paramref name="target"/>, else null. Recognized by its shape, because the Roslyn this
+    /// generator builds against predates <c>Conversion.IsUnion</c>: an implicit conversion that is
+    /// no user-defined operator and is carried out by a one-parameter constructor of a type
+    /// implementing <c>System.Runtime.CompilerServices.IUnion</c>.
+    /// </summary>
+    private static ITypeSymbol? UnionCase(Conversion conversion, ITypeSymbol target)
+        => conversion is { Exists: true, IsImplicit: true, IsUserDefined: false, MethodSymbol: { MethodKind: MethodKind.Constructor, Parameters.Length: 1 } constructor }
+            && SymbolEqualityComparer.Default.Equals(constructor.ContainingType, target)
+            && target.AllInterfaces.Any(i => i is { Name: "IUnion", ContainingNamespace: { Name: "CompilerServices", ContainingNamespace: { Name: "Runtime", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } } })
+                ? constructor.Parameters[0].Type
+                : null;
+
+    /// <summary>Makes <paramref name="local"/> stand for the step at <paramref name="index"/>,
+    /// which returns <paramref name="unionCase"/> when the local is a union it is a case of.</summary>
+    private void Bind(ILocalSymbol local, int index, ITypeSymbol? unionCase)
+    {
+        _vars[local] = new StepOutput(index);
+        if (unionCase is not null)
+        {
+            _unionCases[index] = [unionCase];
+        }
+    }
 
     private bool ParseTuple(TupleExpressionSyntax tuple, Binding? binding)
     {
@@ -1396,7 +1456,8 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            if (locals is not null && i < locals.Count && !CanHold(locals[i], call.ResultType, tuple.Arguments[i].Expression))
+            ITypeSymbol? unionCase = null;
+            if (locals is not null && i < locals.Count && !CanHold(locals[i], call.ResultType, tuple.Arguments[i].Expression, out unionCase))
             {
                 ok = false;
                 continue;
@@ -1406,7 +1467,7 @@ internal sealed class ScenarioParser
             accesses.Add(call.Accesses());
             if (locals is not null && i < locals.Count)
             {
-                _vars[locals[i]] = new StepOutput(step.Index);
+                Bind(locals[i], step.Index, unionCase);
             }
 
             frontier.Add(step.Index);
@@ -2190,6 +2251,8 @@ internal sealed class ScenarioParser
     /// </summary>
     private ExpressionSyntax Spell(VarSource source) => source switch
     {
+        StepOutput step when _steps.First(s => s.Index == step.Index) is { MergeSources.Count: > 0 } merge
+            && _unionCases.TryGetValue(step.Index, out var cases) => UnionOfMerged(merge, cases),
         StepOutput step => InputsGet(_steps.First(s => s.Index == step.Index).ResultType, step.Index),
         CaseVariable variable => variable.Count == 1
             ? InputsGet(variable.Type, variable.Index)
@@ -2198,6 +2261,46 @@ internal sealed class ScenarioParser
                 IdentifierName("Item" + (variable.Element + 1).ToString(System.Globalization.CultureInfo.InvariantCulture))),
         _ => throw new System.InvalidOperationException("a failed output is never spelled"),
     };
+
+    /// <summary>
+    /// A merged local of a union type, when an arm gave it a step returning one of the union's
+    /// cases. Which arm ran is known only at run time, so the value's own type picks the conversion:
+    /// <c>(__inputs.Get&lt;object&gt;(i) switch { A __case => (U)__case, …, _ => __inputs.Get&lt;U&gt;(i) })</c>.
+    /// The last arm is an arm that gave it the union itself. A case type comes before any it derives
+    /// from, so no arm hides a later one.
+    /// </summary>
+    private static ParenthesizedExpressionSyntax UnionOfMerged(ParsedStep merge, IReadOnlyList<ITypeSymbol> cases)
+    {
+        var ordered = new List<ITypeSymbol>();
+        foreach (var type in cases)
+        {
+            var before = ordered.FindIndex(placed => DerivesFrom(type, placed));
+            ordered.Insert(before < 0 ? ordered.Count : before, type);
+        }
+
+        var value = IdentifierName("__case");
+        var arms = ordered
+            .Select(type => SwitchExpressionArm(
+                DeclarationPattern(TypeSyntaxFactory.From(type), SingleVariableDesignation(value.Identifier)),
+                CastExpression(merge.ResultType, value)))
+            .Append(SwitchExpressionArm(DiscardPattern(), InputsGet(merge.ResultType, merge.Index)));
+        return ParenthesizedExpression(
+            SwitchExpression(InputsGet(PredefinedType(Token(SyntaxKind.ObjectKeyword)), merge.Index))
+                .WithArms(SeparatedList(arms)));
+    }
+
+    private static bool DerivesFrom(ITypeSymbol type, ITypeSymbol other)
+    {
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current, other))
+            {
+                return true;
+            }
+        }
+
+        return type.AllInterfaces.Contains(other, SymbolEqualityComparer.Default);
+    }
 
     /// <summary><c>__inputs.Get&lt;type&gt;(index)</c>.</summary>
     private static InvocationExpressionSyntax InputsGet(TypeSyntax type, int index)
