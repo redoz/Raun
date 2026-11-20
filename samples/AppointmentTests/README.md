@@ -2,7 +2,7 @@
 
 Start here to see how Raun tests fit together. The clinic runs in memory, so this sample needs no server or database.
 
-From the repository root, with .NET SDK 10.0.300 or later:
+From the repository root, with .NET SDK 10.0.400 or later:
 
 ```bash
 dotnet run --project samples/AppointmentTests -- --report-html --results-directory "$PWD/out"

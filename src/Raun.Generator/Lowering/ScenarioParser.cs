@@ -1409,15 +1409,17 @@ internal sealed class ScenarioParser
 
     /// <summary>
     /// The case type <paramref name="conversion"/> goes through when it is a union conversion to
-    /// <paramref name="target"/>, else null. Recognized by its shape, because the Roslyn this
-    /// generator builds against predates <c>Conversion.IsUnion</c>: an implicit conversion that is
-    /// no user-defined operator and is carried out by a one-parameter constructor of a type
-    /// implementing <c>System.Runtime.CompilerServices.IUnion</c>.
+    /// <paramref name="target"/> itself, else null: the parameter of the union's constructor the
+    /// conversion is carried out by. <c>Conversion.IsUnion</c> is marked experimental
+    /// (RSEXPERIMENTAL006) in Roslyn 5.9, the one this generator builds against; it shipped
+    /// unchanged and without the mark from 5.11 on, so the member a consumer's newer compiler
+    /// resolves is the same one.
     /// </summary>
     private static ITypeSymbol? UnionCase(Conversion conversion, ITypeSymbol target)
-        => conversion is { Exists: true, IsImplicit: true, IsUserDefined: false, MethodSymbol: { MethodKind: MethodKind.Constructor, Parameters.Length: 1 } constructor }
+#pragma warning disable RSEXPERIMENTAL006 // Stable from Roslyn 5.11; see the summary.
+        => conversion is { IsUnion: true, IsImplicit: true, MethodSymbol: { MethodKind: MethodKind.Constructor, Parameters.Length: 1 } constructor }
+#pragma warning restore RSEXPERIMENTAL006
             && SymbolEqualityComparer.Default.Equals(constructor.ContainingType, target)
-            && target.AllInterfaces.Any(i => i is { Name: "IUnion", ContainingNamespace: { Name: "CompilerServices", ContainingNamespace: { Name: "Runtime", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } } })
                 ? constructor.Parameters[0].Type
                 : null;
 

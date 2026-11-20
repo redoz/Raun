@@ -4,7 +4,7 @@ This sample starts an ASP.NET API with Aspire, then checks it through HTTP.
 It uses one project resource and needs no container runtime. Start with
 [AppointmentTests](../AppointmentTests/README.md) for the basic authoring examples.
 
-From the repository root, with .NET SDK 10.0.300 or later:
+From the repository root, with .NET SDK 10.0.400 or later:
 
 ```bash
 dotnet run --project samples/AspireAppointments/AspireAppointments.Tests -- --report-html --results-directory "$PWD/out"

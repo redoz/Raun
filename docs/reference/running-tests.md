@@ -4,7 +4,7 @@
 
 ## Install and run
 
-Use **.NET SDK 10.0.300 or later**. Create a console project and add Raun:
+Use **.NET SDK 10.0.400 or later**. Create a console project and add Raun:
 
 ```bash
 dotnet new console -n MyScenarios

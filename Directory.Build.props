@@ -68,7 +68,7 @@
 
   <!-- The Roslyn baseline the primary generator builds against (major.minor). -->
   <PropertyGroup>
-    <RaunRoslynVersion Condition="'$(RaunRoslynVersion)' == ''">5.3</RaunRoslynVersion>
+    <RaunRoslynVersion Condition="'$(RaunRoslynVersion)' == ''">5.9</RaunRoslynVersion>
   </PropertyGroup>
 
   <!-- A variant project ('<Base>.Roslyn<NN>') derives everything from its name. -->

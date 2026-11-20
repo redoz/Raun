@@ -143,15 +143,15 @@ both together.
 
 ## Consumer baseline
 
-The generator is packed in `Raun` under `analyzers/dotnet/roslyn5.3/cs`, and reaches a consumer of
+The generator is packed in `Raun` under `analyzers/dotnet/roslyn5.9/cs`, and reaches a consumer of
 `Raun.Mtp` or `Raun.Aspire` transitively because those packages depend on `Raun` with
 `PrivateAssets="none"` (pack would otherwise write the dependency with `exclude="Build,Analyzers"`).
-A consumer whose compiler is older than Roslyn 5.3 would get no generator and no diagnostics,
+A consumer whose compiler is older than Roslyn 5.9 would get no generator and no diagnostics,
 silently — a build that succeeds and runs zero tests. `buildTransitive/Raun.props` therefore fails
 such a build up front with `RAUN018`, comparing `$(NETCoreSdkVersion)` against
-`$(RaunMinimumSdkVersion)` (10.0.300); `RaunSkipSdkCheck=true` is the escape hatch, and
+`$(RaunMinimumSdkVersion)` (10.0.400); `RaunSkipSdkCheck=true` is the escape hatch, and
 `test/Raun.Mtp.Test/SdkFloorTests.cs` drives the shipped props file over a range of versions.
-Supported baseline today: the .NET 10 SDK 10.0.300 or later. Adding an older baseline means a
+Supported baseline today: the .NET 10 SDK 10.0.400 or later. Adding an older baseline means a
 `Raun.Generator.RoslynNN` variant project (see `Directory.Build.props`), not a version bump.
 
 Three things state the baseline and move together: `RaunRoslynVersion` in `Directory.Build.props`
@@ -177,7 +177,7 @@ of those packages and minor or major updates of Roslyn.
 
 The package-consumption scenarios enforce all of this: they read each packed analyzer's Roslyn
 reference against its folder name, check the `net10.0` dependency groups, and build their
-consumers with the lowest supported SDK installed (CI installs 10.0.300 for it), not the SDK
+consumers with the lowest supported SDK installed (CI installs 10.0.400 for it), not the SDK
 `global.json` pins.
 
 The libraries ship `lib/net10.0` and `lib/net11.0` (`RaunTargetFrameworks` in

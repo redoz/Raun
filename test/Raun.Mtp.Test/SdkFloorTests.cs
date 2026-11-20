@@ -6,8 +6,8 @@ namespace Raun.Mtp.Test;
 
 /// <summary>
 /// The SDK floor a package consumer hits. The generator is packed under
-/// <c>analyzers/dotnet/roslyn5.3/cs</c> and the DSL needs C# 14, so a compiler older than the .NET 10
-/// SDK 10.0.300 loads no generator, emits no diagnostics, and produces a project that builds green
+/// <c>analyzers/dotnet/roslyn5.9/cs</c> and the DSL needs C# 14, so a compiler older than the .NET 10
+/// SDK 10.0.400 loads no generator, emits no diagnostics, and produces a project that builds green
 /// with zero scenarios — the worst possible failure mode. <c>buildTransitive/Raun.props</c> turns that
 /// into a build error, and these tests drive that file the way a consumer's build would: MSBuild
 /// evaluates the shipped props and runs the check target, with the SDK version supplied as a property.
@@ -20,18 +20,19 @@ public class SdkFloorTests
     [InlineData("9.0.100")]
     [InlineData("10.0.100")]
     [InlineData("10.0.203")]
+    [InlineData("10.0.301")]
     public async Task An_sdk_below_the_floor_fails_the_build(string sdkVersion)
     {
         var result = await CheckAsync(sdkVersion);
 
         Assert.True(result.ExitCode != 0, $"SDK {sdkVersion} was accepted.{Environment.NewLine}{result.Output}");
         Assert.Contains("RAUN018", result.Output, StringComparison.Ordinal);
-        Assert.Contains("10.0.300", result.Output, StringComparison.Ordinal);
+        Assert.Contains("10.0.400", result.Output, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("10.0.300")]
-    [InlineData("10.0.301")]
+    [InlineData("10.0.400")]
+    [InlineData("10.0.401")]
     [InlineData("11.0.100")]
     public async Task An_sdk_at_or_above_the_floor_builds(string sdkVersion)
     {

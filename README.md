@@ -38,7 +38,7 @@ public async Task Booking()
 
 The snippets on this page are excerpts from runnable samples, rather than a complete project.
 See the [scenario class](samples/AppointmentTests/Scenarios.cs) and [step definitions and suite](samples/AppointmentTests/AppointmentDsl.cs).
-Run the sample from this repository with **.NET SDK 10.0.300 or later**:
+Run the sample from this repository with **.NET SDK 10.0.400 or later**:
 
 ```bash
 dotnet run --project samples/AppointmentTests -- --report-html --results-directory "$PWD/out"
