@@ -18,7 +18,7 @@ namespace Raun.Generated
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register(1, "Demo.ArrayScenarios.Import", Scenario_Demo_ArrayScenarios_Import);
+            global::Raun.ScenarioRegistry.Register(2, "Demo.ArrayScenarios.Import", Scenario_Demo_ArrayScenarios_Import);
         }
     }
 }

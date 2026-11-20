@@ -18,7 +18,7 @@ namespace Raun.Generated
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register(1, "ReturnTitles.Stories.Story", Scenario_ReturnTitles_Stories_Story);
+            global::Raun.ScenarioRegistry.Register(2, "ReturnTitles.Stories.Story", Scenario_ReturnTitles_Stories_Story);
         }
     }
 }

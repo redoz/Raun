@@ -248,6 +248,7 @@ internal sealed class HtmlReportModelBuilder(HtmlReportSourceOptions? sourceOpti
                     IsLifecycle = r.Node.IsSetup || r.Node.IsTeardown,
                     IsBranchBinding = r.Node.Kind == NodeKind.Case,
                     IsValueMerge = r.Node.Kind == NodeKind.Merge,
+                    IsGroupArray = r.Node.Kind == NodeKind.Array,
                     Phase = r.Node.Phase,
                     DisplayName = r.DisplayName,
                     TitleMessage = Message(r.TitleMessage),

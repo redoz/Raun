@@ -1,8 +1,9 @@
-contract 1
+contract 2
 global::Raun.ContendedResourceUse
 global::Raun.LockMode.Exclusive
 global::Raun.LockMode.Shared
 global::Raun.Model.Guard
+global::Raun.Model.NodeKind.Array
 global::Raun.Model.NodeKind.Case
 global::Raun.Model.NodeKind.Merge
 global::Raun.Model.NodeKind.Setup

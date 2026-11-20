@@ -359,5 +359,18 @@ function render(name,data){const file=path.join(out,name+'.html');fs.writeFileSy
  const selected=page.locator('.flow-toggle[aria-expanded="true"]');assert.equal(await branchText(selected),'Waitlisted','The real waitlist scenario has one readable outcome heading');
  for(const binding of waitlisted.steps.filter(s=>s.isBranchBinding && s.status!=='failed'))assert.equal(await page.locator('[data-step="'+binding.stepId+'"]').isVisible(),false,'Real compiler case bindings do not duplicate business headings');
  await page.screenshot({path:path.join(out,'waitlisted-dark.png'),fullPage:true});
+
+ const imported=model.scenarios.find(s=>s.displayName==='bulk user import');
+ await page.goto(render('real-array-group',imported));
+ if((await page.locator('.card').getAttribute('class')).includes('collapsed'))await page.locator('.card-head .tw').click();
+ await page.locator('.card').evaluate(async n=>{if(n.scenarioAnimation)await n.scenarioAnimation.finished;});
+ const groupArray=imported.steps.find(s=>s.isGroupArray);
+ assert.ok(groupArray,'A real array group bound to a local carries its array node');
+ assert.equal(await page.locator('[data-step="'+groupArray.stepId+'"]').isVisible(),false,'The array of an array group does not add a visible row');
+ const arrayReader=imported.steps.find(s=>s.dependsOn.includes(groupArray.index));
+ assert.deepEqual(
+  await page.locator('[data-step="'+arrayReader.stepId+'"] .predecessor-link').evaluateAll(links=>links.map(link=>Number(link.dataset.from))),
+  [...arrayReader.dependsOn.filter(from=>from!==groupArray.index),...groupArray.dependsOn],
+  'A step that reads the array names the steps of the group as its prerequisites');
  assert.deepEqual(errors,[]);console.log('PASS scenario flow: shared timing, parallel overlap, join, nested if/switch, untaken disclosure, named predecessors, navigation, mobile and real sample.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

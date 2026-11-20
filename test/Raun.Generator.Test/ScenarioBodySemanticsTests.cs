@@ -115,6 +115,11 @@ public class ScenarioBodySemanticsTests
     [InlineData("await Enumerable.Range(0, 2).Select(i => Given.Add(i, i == 0 ? 1 : 100 / i)).ToArray();")]
     [InlineData("IEnumerable<int> xs = await new[] { Given.Three(), Given.Four() }; await Given.Count(xs);")]
     [InlineData("var xs = await new[] { Given.Three(), Given.Four() }; await Given.Count(xs);")]
+    [InlineData("var xs = await new[] { Given.Three(), Given.Four() }; await Given.Bump(xs); await Given.First(xs);")]
+    [InlineData("var xs = await Enumerable.Range(0, 2).Select(i => Given.Add(i, 1)).ToArray(); await Given.Bump(xs); await Given.First(xs);")]
+    [InlineData("int[] xs; if (await Given.Flag(true)) { xs = await new[] { Given.Three(), Given.Four() }; } else { xs = await new[] { Given.Four() }; } await Given.Bump(xs); await Given.First(xs);")]
+    [InlineData("int[] xs; if (await Given.Flag(false)) { xs = await new[] { Given.Three(), Given.Four() }; } else { xs = await new[] { Given.Four() }; } await Given.Bump(xs); await Given.First(xs);")]
+    [InlineData("var xs = await new[] { Given.Three() }; var ys = xs; await Given.Bump(xs); await Given.First(ys);")]
     [InlineData("object pair = await (Given.ADog(), Given.ACat()); await Given.Record(pair);")]
     [InlineData("var pair = await (Given.Three(), Given.Four()); await Given.Record(pair.Item1);")]
     public Task What_the_generator_accepts_runs_what_CSharp_runs(string body)
@@ -200,6 +205,8 @@ public class ScenarioBodySemanticsTests
             public Task Take(long n) { Oracle.Add($"Take(long {n})"); return Task.CompletedTask; }
             public Task Count(int[] xs) { Oracle.Add($"Count(array {xs.Length})"); return Task.CompletedTask; }
             public Task Count(IEnumerable<int> xs) { Oracle.Add($"Count(sequence)"); return Task.CompletedTask; }
+            public Task Bump(int[] xs) { Oracle.Add($"Bump({xs[0]})"); xs[0] += 10; return Task.CompletedTask; }
+            public Task First(int[] xs) { Oracle.Add($"First({xs[0]})"); return Task.CompletedTask; }
             public Task Equal(int actual, int expected,
                 [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(actual))] string? written = null,
                 [System.Runtime.CompilerServices.CallerMemberName] string? member = null)

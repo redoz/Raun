@@ -314,9 +314,10 @@ public class SwitchBranchLoweringTests
     }
 
     [Fact]
-    public async Task A_local_holding_an_array_group_in_each_arm_is_refused_as_an_array_group()
+    public void A_local_holding_an_array_group_in_each_arm_merges_like_any_other_value()
     {
-        var diagnostics = await GeneratorHarness.DiagnoseAsync(OneScenario("""
+        // Each arm's array is one node's value, so the local merges across the arms as a step's would.
+        var result = GeneratorHarness.Run(OneScenario("""
             Accepted[] parts;
             if (await When.Recheck())
                 parts = await new[] { When.Accept("A"), When.Accept("B") };
@@ -324,10 +325,12 @@ public class SwitchBranchLoweringTests
                 parts = await new[] { When.Accept("C"), When.Accept("D") };
             await Then.Shipped(parts[0].Shipment);
             """));
+        result.AssertCompiles();
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("RAUN017", diagnostic.Id);
-        Assert.Contains("'parts' holds an array group", diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        var nodes = result.Definitions().Single().Nodes;
+        var arrays = nodes.Where(n => n.Kind == NodeKind.Array).Select(n => n.Index).ToList();
+        Assert.Equal(2, arrays.Count);
+        Assert.Equal(arrays, nodes.Single(n => n.Kind == NodeKind.Merge).MergeSources);
     }
 
     [Fact]

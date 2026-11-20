@@ -38,7 +38,7 @@ internal static class ScenarioEmitter
     /// the runtime that loads the code can tell what it was generated for. Raise both together
     /// whenever code generated before a change could no longer run correctly after it.
     /// </summary>
-    public const int ContractVersion = 1;
+    public const int ContractVersion = 2;
 
     /// <summary>One scenario's file: its builder method, under the usings its own source file carried.</summary>
     public static string EmitScenario(ParsedScenario scenario, bool hasResourceMappings = false)
@@ -341,6 +341,7 @@ internal static class ScenarioEmitter
         var kind = step.IsSetup ? "Setup"
             : step.IsTeardown ? "Teardown"
             : step.CaseBinding is not null ? "Case"
+            : step.ArrayValue is not null ? "Array"
             : step.MergeSources.Count > 0 ? "Merge"
             : null;
         if (kind is not null)
@@ -370,8 +371,10 @@ internal static class ScenarioEmitter
         // A merge and the teardown node are never invoked: they get no body.
         if (kind is not ("Merge" or "Teardown"))
         {
+            // An array node's body is the array itself: built here once, read by every step after.
             members.Add(Set("Invoke", step.CaseBinding is { } binding
                 ? CaseInvokeLambda(binding)
+                : step.ArrayValue is { } array ? InvokeLambda().WithExpressionBody(TaskFromResult(array))
                 : BuildInvokeLambda(step)));
         }
 

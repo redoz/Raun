@@ -15,7 +15,7 @@ public static class ScenarioRegistry
     /// registration, and a registration that states another number is refused. It is raised whenever
     /// code generated before a change could no longer run correctly after it.
     /// </summary>
-    public const int ContractVersion = 1;
+    public const int ContractVersion = 2;
 
     private static readonly ScenarioCatalog Catalog = new();
 

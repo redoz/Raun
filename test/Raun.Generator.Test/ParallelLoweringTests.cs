@@ -36,22 +36,26 @@ public class ParallelLoweringTests
     }
 
     [Fact]
-    public void Array_elements_become_siblings_and_consumer_rebuilds_array()
+    public void Array_elements_become_siblings_and_one_node_holds_their_array()
     {
         var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.ArrayScenario);
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(6, def.Nodes.Count);
+        Assert.Equal(7, def.Nodes.Count);
         Assert.Equal([0], def.Nodes[1].DependsOn);                 // UserExists alice
         Assert.Equal([0], def.Nodes[2].DependsOn);                 // UserExists bob
         Assert.Equal(def.Nodes[1].GroupId, def.Nodes[2].GroupId);
-        Assert.Equal([0, 1, 2], def.Nodes[3].DependsOn);          // ImportUsers consumes the array
-        Assert.Equal([0, 1, 2, 3], def.Nodes[4].DependsOn);       // ImportShouldContainUsers (import + array)
+        Assert.Equal(NodeKind.Array, def.Nodes[3].Kind);           // the array the local holds
+        Assert.True(def.Nodes[3].IsSynthetic);
+        Assert.Null(def.Nodes[3].GroupId);
+        Assert.Equal([1, 2], def.Nodes[3].DependsOn);
+        Assert.Equal([0, 3], def.Nodes[4].DependsOn);              // ImportUsers reads the array
+        Assert.Equal([0, 3, 4], def.Nodes[5].DependsOn);           // ImportShouldContainUsers (import + array)
     }
 
     [Fact]
-    public async Task Array_scenario_runs_and_rebuilds_the_array()
+    public async Task Array_scenario_runs_on_the_array_built_from_both_siblings()
     {
         var result = GeneratorHarness.Run(SampleSources.Dsl + SampleSources.ArrayScenario);
         result.AssertCompiles();
@@ -59,7 +63,7 @@ public class ParallelLoweringTests
         var results = await result.Definitions().Single().RunAsync();
 
         // ImportUsers asserts users.Length == 2 implicitly by returning Import(Count); all pass means
-        // the array was reconstructed from both sibling outputs.
+        // the array held both sibling outputs.
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
     }
 
@@ -70,11 +74,13 @@ public class ParallelLoweringTests
         result.AssertCompiles();
         var def = result.Definitions().Single();
 
-        Assert.Equal(7, def.Nodes.Count);                      // 3 UserExists + ImportUsers + assertion
+        Assert.Equal(8, def.Nodes.Count);                      // 3 UserExists + their array + ImportUsers + assertion
         Assert.Equal([0], def.Nodes[1].DependsOn);
         Assert.Equal([0], def.Nodes[2].DependsOn);
         Assert.Equal([0], def.Nodes[3].DependsOn);
-        Assert.Equal([0, 1, 2, 3], def.Nodes[4].DependsOn);
+        Assert.Equal(NodeKind.Array, def.Nodes[4].Kind);
+        Assert.Equal([1, 2, 3], def.Nodes[4].DependsOn);
+        Assert.Equal([0, 4], def.Nodes[5].DependsOn);
         Assert.Equal(def.Nodes[1].GroupId, def.Nodes[3].GroupId);
     }
 
@@ -86,7 +92,7 @@ public class ParallelLoweringTests
 
         var results = await result.Definitions().Single().RunAsync();
 
-        Assert.Equal(7, results.Count);
+        Assert.Equal(8, results.Count);
         Assert.All(results, r => Assert.Equal(StepStatus.Passed, r.Status));
     }
 

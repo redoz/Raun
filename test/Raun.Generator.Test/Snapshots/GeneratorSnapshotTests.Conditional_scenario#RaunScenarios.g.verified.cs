@@ -18,7 +18,7 @@ namespace Raun.Generated
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register(1, "CondDemo.IfElseScenarios.Routing", Scenario_CondDemo_IfElseScenarios_Routing);
+            global::Raun.ScenarioRegistry.Register(2, "CondDemo.IfElseScenarios.Routing", Scenario_CondDemo_IfElseScenarios_Routing);
         }
     }
 }

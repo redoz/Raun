@@ -30,4 +30,9 @@ public enum NodeKind
     /// arm that ran (<see cref="ScenarioNode.MergeSources"/>); with a single source it passes the
     /// value of an untaken branch through. Never invoked.</summary>
     Merge,
+
+    /// <summary>Plumbing: gathers the results of an array group into the one array its local holds,
+    /// once, so every step that reads the local reads the same array. Runs, but is not a step anyone
+    /// wrote.</summary>
+    Array,
 }

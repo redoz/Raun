@@ -18,7 +18,7 @@ namespace Raun.Generated
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register(1, "Clinic.CancellationScenarios.CustomerCancels", Scenario_Clinic_CancellationScenarios_CustomerCancels);
+            global::Raun.ScenarioRegistry.Register(2, "Clinic.CancellationScenarios.CustomerCancels", Scenario_Clinic_CancellationScenarios_CustomerCancels);
         }
     }
 }

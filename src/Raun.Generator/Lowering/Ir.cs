@@ -271,6 +271,7 @@ internal sealed record ParsedStep
     private readonly Syn<TypeSyntax> _resultType = new(PredefinedType(Token(SyntaxKind.ObjectKeyword)));
     private readonly Syn<InvocationExpressionSyntax> _invokeCall;
     private readonly Syn<ExpressionSyntax> _prepareArguments;
+    private readonly Syn<ExpressionSyntax> _arrayValue;
     private readonly Syn<ExpressionSyntax> _inlineTitle;
     private readonly EquatableArray<Syn<StatementSyntax>> _inlineArguments;
     private readonly Syn<ExpressionSyntax> _titleExpression;
@@ -379,7 +380,7 @@ internal sealed record ParsedStep
         init => _waitsFor = Equatable.Of(value);
     }
 
-    /// <summary>True for generator plumbing (merge/pass-through) rather than a business step.</summary>
+    /// <summary>True for generator plumbing (merge/pass-through, case, array) rather than a business step.</summary>
     public bool IsSynthetic { get; init; }
 
     /// <summary>True for the scenario's single teardown node — discovered and numbered like an
@@ -395,6 +396,14 @@ internal sealed record ParsedStep
     /// <summary>For a case node: re-runs one arm's pattern on the condition's recorded value and
     /// returns the pattern's variables. Null for every other node.</summary>
     public ParsedCaseBinding? CaseBinding { get; init; }
+
+    /// <summary>For an array node: the array of an array group's results, <c>new T[] {
+    /// __inputs.Get&lt;T&gt;(1), … }</c>, which the node builds once. Null for every other node.</summary>
+    public ExpressionSyntax? ArrayValue
+    {
+        get => _arrayValue.Node;
+        init => _arrayValue = value;
+    }
 }
 
 /// <summary>

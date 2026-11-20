@@ -14,7 +14,7 @@ namespace Raun.Generated
     {
         public static global::Raun.Model.ScenarioDefinition Scenario_Demo_ArrayScenarios_Import()
         {
-            var nodes = new global::Raun.Model.ScenarioNode[6];
+            var nodes = new global::Raun.Model.ScenarioNode[7];
             nodes[0] = new global::Raun.Model.ScenarioNode
             {
                 Index = 0,
@@ -104,6 +104,25 @@ namespace Raun.Generated
             nodes[3] = new global::Raun.Model.ScenarioNode
             {
                 Index = 3,
+                StepId = "39cdf1506c62f6ef",
+                Phase = "Given",
+                OperationName = "Array",
+                DisplayNameTemplate = "«array users»",
+                SourceFile = null,
+                SourceLine = 0,
+                GroupId = null,
+                Timeout = null,
+                DependsOn = new int[]
+                {
+                    1,
+                    2
+                },
+                Kind = global::Raun.Model.NodeKind.Array,
+                Invoke = static (__inputs, __ctx) => global::System.Threading.Tasks.Task.FromResult<object?>(new global::Demo.User[] { __inputs.Get<global::Demo.User>(1), __inputs.Get<global::Demo.User>(2) })
+            };
+            nodes[4] = new global::Raun.Model.ScenarioNode
+            {
+                Index = 4,
                 StepId = "e3d315bf20316dec",
                 Phase = "When",
                 OperationName = "ImportUsers",
@@ -115,19 +134,18 @@ namespace Raun.Generated
                 DependsOn = new int[]
                 {
                     0,
-                    1,
-                    2
+                    3
                 },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentWhen>().ImportUsers(new global::Demo.User[] { __inputs.Get<global::Demo.User>(1), __inputs.Get<global::Demo.User>(2) });
+                    var __r = await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentWhen>().ImportUsers(__inputs.Get<global::Demo.User[]>(3));
 #line hidden
                     return (object? )__r;
                 }
             };
-            nodes[4] = new global::Raun.Model.ScenarioNode
+            nodes[5] = new global::Raun.Model.ScenarioNode
             {
-                Index = 4,
+                Index = 5,
                 StepId = "e54e734040605c4a",
                 Phase = "Then",
                 OperationName = "ImportShouldContainUsers",
@@ -139,20 +157,19 @@ namespace Raun.Generated
                 DependsOn = new int[]
                 {
                     0,
-                    1,
-                    2,
-                    3
+                    3,
+                    4
                 },
                 Invoke = static async (__inputs, __ctx) =>
                 {
-                    await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentThen>().ImportShouldContainUsers(__inputs.Get<global::Demo.Import>(3), new global::Demo.User[] { __inputs.Get<global::Demo.User>(1), __inputs.Get<global::Demo.User>(2) });
+                    await __inputs.Get<global::Raun.ScenarioScope<global::Raun.NoWorld>>(0).Steps<global::Demo.AppointmentThen>().ImportShouldContainUsers(__inputs.Get<global::Demo.Import>(4), __inputs.Get<global::Demo.User[]>(3));
 #line hidden
                     return (object? )null;
                 }
             };
-            nodes[5] = new global::Raun.Model.ScenarioNode
+            nodes[6] = new global::Raun.Model.ScenarioNode
             {
-                Index = 5,
+                Index = 6,
                 StepId = "afa7e3343e6dbe45",
                 Phase = "Then",
                 OperationName = "Teardown",

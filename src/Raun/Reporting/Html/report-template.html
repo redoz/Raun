@@ -2207,7 +2207,7 @@
     // Timing describes observed execution. Guard paths describe source control flow.
     // Timing bars help only when more than one visible step ran.
     function scenarioShowsTiming(sc){
-      return sc.steps.filter(step=>!step.isLifecycle && !((step.isBranchBinding || step.isValueMerge) && step.status!=='failed')).length>1;
+      return sc.steps.filter(step=>!step.isLifecycle && !((step.isBranchBinding || step.isValueMerge || step.isGroupArray) && step.status!=='failed')).length>1;
     }
     function bindScenarioFlow(drill,sc){
       const list=drill.querySelector('.step-list'),byIndex=new Map(sc.steps.map(step=>[step.index,step]));
@@ -2227,7 +2227,7 @@
       const stack=[],branches=[];
       for(const step of sc.steps){
         const row=rows.get(step.stepId),guards=(step.guards || []).filter(guard=>byIndex.has(guard.conditionIndex));
-        row.hidden=Boolean((step.isBranchBinding || step.isValueMerge) && step.status!=='failed');
+        row.hidden=Boolean((step.isBranchBinding || step.isValueMerge || step.isGroupArray) && step.status!=='failed');
         row.style.setProperty('--step-flow-depth',guards.length);
         let common=0;
         while(common<stack.length && common<guards.length && stack[common].condition===guards[common].conditionIndex && stack[common].arm===guards[common].arm)common++;
@@ -2273,7 +2273,10 @@
         const visit=index=>{
           if(seen.has(index))return;seen.add(index);
           const predecessor=byIndex.get(index);if(!predecessor)return;
-          if(predecessor.isValueMerge && predecessor.status!=='failed'){
+          if(predecessor.isGroupArray && predecessor.status!=='failed'){
+            // The array stands for the group: its prerequisites are the group's steps.
+            for(const element of predecessor.dependsOn || [])visit(element);
+          }else if(predecessor.isValueMerge && predecessor.status!=='failed'){
             for(const source of predecessor.dependsOn || []){
               const candidate=byIndex.get(source);
               if(candidate && candidate.status!=='not-taken' && !(candidate.status==='skipped' && candidate.skipReason?.startsWith('not taken:')))visit(source);

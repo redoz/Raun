@@ -89,7 +89,7 @@ internal sealed class ScenarioParser
         _case = caseBinding;
     }
 
-    /// <summary>What a step-output local holds. Three distinct shapes, so nothing can read a step
+    /// <summary>What a step-output local holds. Distinct shapes, so nothing can read a step
     /// index off a local that has none.</summary>
     private abstract record VarSource
     {
@@ -97,16 +97,11 @@ internal sealed class ScenarioParser
         public abstract IEnumerable<int> Producers { get; }
     }
 
-    /// <summary>One step's result.</summary>
+    /// <summary>One node's result: a step's, a merge's, or the array of an array group
+    /// (<see cref="AddArrayNode"/>).</summary>
     private sealed record StepOutput(int Index) : VarSource
     {
         public override IEnumerable<int> Producers => [Index];
-    }
-
-    /// <summary>An array group's results, one step per element.</summary>
-    private sealed record GroupOutput(int[] Indices, TypeSyntax ElementType) : VarSource
-    {
-        public override IEnumerable<int> Producers => Indices;
     }
 
     /// <summary>A pattern variable: element <paramref name="Element"/> of a case node's result
@@ -1021,7 +1016,6 @@ internal sealed class ScenarioParser
                 Refuse(branch, unmergeable switch
                 {
                     CaseVariable => "'" + local.Name + "' is one of several variables bound by one pattern, which cannot be merged across the arms of a branch; bind it with a pattern of its own",
-                    GroupOutput => "'" + local.Name + "' holds an array group, which cannot be merged across the arms of a branch; bind each arm's group to its own local",
                     _ => "'" + local.Name + "' has no single step's result to merge in every arm of the branch; produce it with one step in each arm",
                 });
                 _vars[local] = FailedOutput.Instance;
@@ -1158,8 +1152,8 @@ internal sealed class ScenarioParser
     }
 
     /// <summary>The node whose result IS the local's value — a step's output, or the case node of a
-    /// pattern that binds this one variable — or null when no single node's result is (an array group,
-    /// one of several pattern variables, a missing definition).</summary>
+    /// pattern that binds this one variable — or null when no single node's result is (one of several
+    /// pattern variables, a missing definition).</summary>
     private static int? ValueNode(VarSource? source) => source switch
     {
         StepOutput step => step.Index,
@@ -1461,19 +1455,59 @@ internal sealed class ScenarioParser
 
         ok &= CheckParallelConflicts(accesses);
         ok = ok && (binding is null || CanHoldGroup(binding.Locals[0], produced, awaited));
-
-        if (binding is not null && ok)
-        {
-            _vars[binding.Locals[0]] = new GroupOutput(frontier.ToArray(), elementType);
-        }
-
-        // An empty group ran nothing, so the step after it still follows the step before it.
-        if (frontier.Count > 0)
-        {
-            Advance(frontier);
-        }
-
+        CloseArrayGroup(ok ? binding : null, frontier, elementType);
         return ok;
+    }
+
+    /// <summary>Closes an array group's statement. Bound to a local, the statement ends when its
+    /// array exists, so the next statement follows the array node; unbound, it follows the group's
+    /// steps — and an empty group ran nothing, so the step after it still follows the step before it.</summary>
+    private void CloseArrayGroup(Binding? binding, List<int> elements, TypeSyntax elementType)
+    {
+        if (binding is not null)
+        {
+            Advance([AddArrayNode(binding.Locals[0], elements, elementType)]);
+        }
+        else if (elements.Count > 0)
+        {
+            Advance(elements);
+        }
+    }
+
+    /// <summary>
+    /// Adds the hidden array node of an array group bound to a local: it depends on the group's steps
+    /// and builds <c>new T[] { … }</c> over their results. The array is created once, where the
+    /// scenario awaits the group, as in C#; every step that reads the local reads that one array, so
+    /// what one step does to it the next one sees. Returns the node's index.
+    /// </summary>
+    private int AddArrayNode(ILocalSymbol local, List<int> elements, TypeSyntax elementType)
+    {
+        var arrayType = ArrayType(elementType).WithRankSpecifiers(SingletonList(
+            ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(OmittedArraySizeExpression()))));
+
+        // An empty group has no step to follow, so its array takes the statement's own place in order.
+        var deps = elements.Count > 0 ? elements : _prevFrontier;
+        var index = _nextIndex++;
+        _steps.Add(new ParsedStep
+        {
+            Index = index,
+            StepId = GenStableId.ForStep(_scenarioId, "array:" + local.Name + ":" + index),
+            Phase = (elements.Count > 0 ? _steps.First(s => s.Index == elements[0]) : _steps.LastOrDefault())?.Phase ?? "Given",
+            OperationName = "Array",
+            HasResult = true,
+            ResultType = arrayType,
+            DisplayNameTemplate = "«array " + local.Name + "»",
+            IsSynthetic = true,
+            Guards = [.. _guards],
+            DependsOn = [.. deps],
+            WaitsFor = elements.Count > 0 ? [] : [.. _pendingWaits.Where(w => !deps.Contains(w))],
+            ArrayValue = ArrayCreationExpression(arrayType).WithInitializer(InitializerExpression(
+                SyntaxKind.ArrayInitializerExpression,
+                SeparatedList<ExpressionSyntax>(elements.Select(i => InputsGet(elementType, i))))),
+        });
+
+        _vars[local] = new StepOutput(index);
+        return index;
     }
 
     private bool ParseLinqArray(InvocationExpressionSyntax toArray, Binding? binding)
@@ -1525,17 +1559,7 @@ internal sealed class ScenarioParser
             frontier.Add(step.Index);
         }
 
-        if (binding is not null && ok)
-        {
-            _vars[binding.Locals[0]] = new GroupOutput(frontier.ToArray(), elementType);
-        }
-
-        // An empty group ran nothing, so the step after it still follows the step before it.
-        if (frontier.Count > 0)
-        {
-            Advance(frontier);
-        }
-
+        CloseArrayGroup(ok ? binding : null, frontier, elementType);
         return ok;
     }
 
@@ -2160,20 +2184,13 @@ internal sealed class ScenarioParser
     };
 
     /// <summary>
-    /// How a step-output local is read inside an emitted step: a scalar is
-    /// <c>__inputs.Get&lt;T&gt;(i)</c>, an array-bound group a <c>new T[] { … }</c> over its elements'
-    /// gets, a pattern variable its case node's result (or one element of it).
+    /// How a step-output local is read inside an emitted step: a node's result is
+    /// <c>__inputs.Get&lt;T&gt;(i)</c> (an array group's local reads its array node), a pattern
+    /// variable its case node's result (or one element of it).
     /// </summary>
     private ExpressionSyntax Spell(VarSource source) => source switch
     {
         StepOutput step => InputsGet(_steps.First(s => s.Index == step.Index).ResultType, step.Index),
-        GroupOutput group => ArrayCreationExpression(
-                ArrayType(group.ElementType).WithRankSpecifiers(SingletonList(
-                    ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
-                        OmittedArraySizeExpression())))))
-            .WithInitializer(InitializerExpression(
-                SyntaxKind.ArrayInitializerExpression,
-                SeparatedList<ExpressionSyntax>(group.Indices.Select(i => InputsGet(group.ElementType, i))))),
         CaseVariable variable => variable.Count == 1
             ? InputsGet(variable.Type, variable.Index)
             : MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,

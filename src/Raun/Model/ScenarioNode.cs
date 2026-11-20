@@ -61,10 +61,10 @@ public sealed class ScenarioNode
     /// <summary>What this node is. Everything that treats one kind of node differently reads this.</summary>
     public NodeKind Kind { get; init; }
 
-    /// <summary>True for generator plumbing (<see cref="NodeKind.Case"/> and
-    /// <see cref="NodeKind.Merge"/>) that is not a business step: excluded from MTP discovery and
-    /// step numbering, retained in the HTML report model.</summary>
-    public bool IsSynthetic => Kind is NodeKind.Case or NodeKind.Merge;
+    /// <summary>True for generator plumbing (<see cref="NodeKind.Case"/>,
+    /// <see cref="NodeKind.Merge"/> and <see cref="NodeKind.Array"/>) that is not a business step:
+    /// excluded from MTP discovery and step numbering, retained in the HTML report model.</summary>
+    public bool IsSynthetic => Kind is NodeKind.Case or NodeKind.Merge or NodeKind.Array;
 
     /// <summary>
     /// True for the scenario's single generator-emitted teardown node. The INVERSE of
@@ -99,7 +99,7 @@ public sealed class ScenarioNode
     /// Runs the underlying DSL operation. Reads its arguments from <see cref="IStepInputs"/>,
     /// returns the (boxed) output, or null for a non-result <c>Task</c>/<c>ValueTask</c>. Required
     /// for the kinds that run (<see cref="NodeKind.Step"/>, <see cref="NodeKind.Setup"/>,
-    /// <see cref="NodeKind.Case"/>); a <see cref="NodeKind.Merge"/> and the
+    /// <see cref="NodeKind.Case"/>, <see cref="NodeKind.Array"/>); a <see cref="NodeKind.Merge"/> and the
     /// <see cref="NodeKind.Teardown"/> node are never invoked and leave it null.
     /// </summary>
     public Func<IStepInputs, ScenarioContext, Task<object?>>? Invoke { get; init; }

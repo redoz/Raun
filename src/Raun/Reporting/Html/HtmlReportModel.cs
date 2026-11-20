@@ -66,6 +66,8 @@ internal sealed record ReportStep
     public bool IsBranchBinding { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
     public bool IsValueMerge { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsGroupArray { get; init; }
     public required string Phase { get; init; }
     public required string DisplayName { get; init; }
     public ReportMessage? TitleMessage { get; init; }

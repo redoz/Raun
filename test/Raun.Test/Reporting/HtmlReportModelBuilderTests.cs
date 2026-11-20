@@ -93,6 +93,27 @@ public class HtmlReportModelBuilderTests
         Assert.False(visible.RootElement.TryGetProperty("IsBranchBinding", out _));
     }
 
+    [Fact]
+    public void Report_marks_only_the_array_of_an_array_group_as_plumbing()
+    {
+        var element = Node(0, "element", "Given", "a user exists");
+        var array = new ScenarioNode
+        {
+            Index = 1, StepId = "array", Phase = "Given", OperationName = "Array",
+            DisplayNameTemplate = "array users", Kind = NodeKind.Array, DependsOn = [0],
+            Invoke = (_, _) => Task.FromResult<object?>(Array.Empty<object>()),
+        };
+        var definition = Def(element, array);
+        var builder = new HtmlReportModelBuilder();
+        builder.OnScenarioStarted(definition);
+        foreach (var node in definition.Nodes) { builder.OnStepFinished(definition, Result(node, T0, 1)); }
+        var steps = Assert.Single(builder.Build("array").Scenarios).Steps;
+        using var visible = JsonDocument.Parse(JsonSerializer.Serialize(steps[0]));
+        Assert.False(visible.RootElement.TryGetProperty("IsGroupArray", out _));
+        using var hidden = JsonDocument.Parse(JsonSerializer.Serialize(steps[1]));
+        Assert.True(hidden.RootElement.GetProperty("IsGroupArray").GetBoolean());
+    }
+
     [Theory]
     [InlineData("Merge")]
     [InlineData("Unchanged")]

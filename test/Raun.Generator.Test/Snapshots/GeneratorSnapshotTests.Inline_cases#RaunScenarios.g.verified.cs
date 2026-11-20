@@ -19,8 +19,8 @@ namespace Raun.Generated
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         internal static void Initialize()
         {
-            global::Raun.ScenarioRegistry.Register(1, "CaseDemo.Cases.Run/case/0000000000/reader", Scenario_CaseDemo_Cases_Run_case_bd72d8f0de988b11);
-            global::Raun.ScenarioRegistry.Register(1, "CaseDemo.Cases.Run/case/0000000001/anonymous", Scenario_CaseDemo_Cases_Run_case_d041dd8f624eef73);
+            global::Raun.ScenarioRegistry.Register(2, "CaseDemo.Cases.Run/case/0000000000/reader", Scenario_CaseDemo_Cases_Run_case_bd72d8f0de988b11);
+            global::Raun.ScenarioRegistry.Register(2, "CaseDemo.Cases.Run/case/0000000001/anonymous", Scenario_CaseDemo_Cases_Run_case_d041dd8f624eef73);
         }
     }
 }
