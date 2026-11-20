@@ -32,6 +32,12 @@ namespace Raun.Scheduling;
 /// included, the remaining callbacks are still raised, and <see cref="ScenarioScheduler.RunAsync"/>
 /// then throws what the callback threw.
 /// </para>
+/// <para>
+/// A fault of the scheduler itself keeps the same promise. Steps still running are asked to stop and
+/// finish as they end; every step left unresolved is finished as <see cref="StepStatus.Skipped"/>
+/// (after a start, if it had none); teardown runs; and <see cref="ScenarioScheduler.RunAsync"/> then
+/// throws the fault.
+/// </para>
 /// </remarks>
 public interface IStepObserver
 {

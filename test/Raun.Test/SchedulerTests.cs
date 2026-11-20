@@ -494,6 +494,51 @@ public class SchedulerTests
     }
 
     [Fact]
+    public async Task A_fault_of_the_scheduler_itself_does_not_cost_the_scenario_its_teardown()
+    {
+        // The scheduler's own bookkeeping throws part-way (here its clock, read between a skipped
+        // step's start and its finish). What ran still has to be cleaned up, every start still gets
+        // its finish, and the fault is what RunAsync throws.
+        var cleanedUp = false;
+        var clock = new FaultingClock();
+        var observer = new RecordingObserver { OnStarting = node => clock.Broken = node == 2 };
+        var def = Def(
+            Node(0, (_, ctx) =>
+            {
+                ctx.OnTeardown(Cleanup.Required, () => { cleanedUp = true; return Task.CompletedTask; });
+                return Task.FromResult<object?>(null);
+            }),
+            Node(1, (_, _) => throw new InvalidOperationException("step failed"), [0]),
+            Node(2, Pass(), [1]),
+            Node(3, Pass(), [2]),
+            new ScenarioNode
+            {
+                Index = 4, StepId = "step-4", Phase = "Then", OperationName = "Teardown", DisplayNameTemplate = "Teardown",
+                DependsOn = [], Kind = NodeKind.Teardown, Invoke = (_, _) => Task.FromResult<object?>(null),
+            });
+
+        var thrown = await Assert.ThrowsAsync<NotSupportedException>(
+            () => WithTimeout(new ScenarioScheduler(timeProvider: clock).RunAsync(def, observer: observer)));
+
+        Assert.Equal("clock broke", thrown.Message);
+        Assert.True(cleanedUp, "the cleanup the first step registered never ran");
+        Assert.Equal([0, 1, 2, 3, 4], observer.Started.Select(s => s.Node.Index).Order());
+        Assert.Equal([0, 1, 2, 3, 4], observer.Finished.Select(r => r.Node.Index).Order());
+        Assert.Equal(
+            [StepStatus.Skipped, StepStatus.Skipped],
+            observer.Finished.Where(r => r.Node.Index is 2 or 3).Select(r => r.Status));
+    }
+
+    /// <summary>A clock that throws while <see cref="Broken"/> is set.</summary>
+    private sealed class FaultingClock : TimeProvider
+    {
+        public bool Broken { get; set; }
+
+        public override DateTimeOffset GetUtcNow()
+            => Broken ? throw new NotSupportedException("clock broke") : base.GetUtcNow();
+    }
+
+    [Fact]
     public async Task Run_validates_the_graph()
     {
         var def = Def(Node(0, Pass(), [1]), Node(1, Pass(), [0]));
@@ -1006,8 +1051,12 @@ public class SchedulerTests
         public List<(ScenarioNode Node, string Name)> Started { get; } = [];
         public List<StepResult> Finished { get; } = [];
 
+        /// <summary>Called with the index of each node as its start arrives.</summary>
+        public Action<int>? OnStarting { get; init; }
+
         public Task OnStepStartingAsync(StepContext context)
         {
+            OnStarting?.Invoke(context.Node.Index);
             lock (_sync) Started.Add((context.Node, context.DisplayName));
             return Task.CompletedTask;
         }

@@ -74,6 +74,9 @@ public sealed class ScenarioScheduler
     /// from <see cref="CanceledSkipReason"/> because a timeout is the suite's own fault, not the host's.</summary>
     public const string TimedOutSkipReason = "scenario timed out";
 
+    /// <summary>Skip reason prefix recorded on steps left unresolved when the scheduler itself failed.</summary>
+    private const string SchedulerFaultSkipReason = "scheduler failed";
+
     /// <param name="definition">The scenario graph to run.</param>
     /// <param name="services">Per-scenario service provider surfaced as <c>ctx.Services</c>.</param>
     /// <param name="observer">Receives step lifecycle callbacks; nothing is raised for steps a filter left out.</param>
@@ -192,242 +195,20 @@ public sealed class ScenarioScheduler
         var simStartOffset = _simulatedTime ? new TimeSpan[count] : null;
         var simFinishOffset = _simulatedTime ? new TimeSpan[count] : null;
 
-        while (pending.Count > 0 || running.Count > 0)
+        // A fault of the scheduler itself, as opposed to a step's: kept, like an observer's, and thrown
+        // once the scenario has ended. Thrown where it happens it would leave with steps still
+        // running, starts without their finish and every registered cleanup unrun.
+        var faults = new List<Exception>();
+        try
         {
-            // One reading of cancellation for the whole pass. It comes from another thread; read
-            // again further down, it could say "cancelled" to the launch below after saying "not
-            // cancelled" to the skips above, leaving a ready step neither skipped nor launched.
-            // A step launched in the pass cancellation lands in is cancelled before its body runs.
-            var cancelled = scenarioToken.IsCancellationRequested;
-            timedOut |= scenarioWatch.TimedOut; // read after: a timeout is marked before it cancels
-            var progressed = false;
-
-            // 1. Resolve skips: cancellation, or all dependencies terminal with at least one bad.
-            foreach (var i in pending.ToArray())
-            {
-                if (cancelled)
-                {
-                    // Capture cancelled-step evidence once, after in-flight producers have drained.
-                    if (running.Count > 0) { continue; }
-                    await ApplyTerminalAsync(
-                        i, StepStatus.Skipped, timedOut ? TimedOutSkipReason : CanceledSkipReason).ConfigureAwait(false);
-                    progressed = true;
-                    continue;
-                }
-
-                var node = nodes[i];
-
-                var anyUnresolved = false;
-                List<string>? failed = null;
-                List<string>? skipped = null;
-                List<string>? notTaken = null;
-
-                foreach (var dep in node.DependsOn)
-                {
-                    switch (status[dep])
-                    {
-                        case StepStatus.Pending:
-                        case StepStatus.Running:
-                            anyUnresolved = true;
-                            break;
-                        case StepStatus.Failed:
-                            (failed ??= []).Add(nodes[dep].OperationName);
-                            break;
-                        case StepStatus.Skipped:
-                            (skipped ??= []).Add(nodes[dep].OperationName);
-                            break;
-                        case StepStatus.NotTaken:
-                            (notTaken ??= []).Add(nodes[dep].OperationName);
-                            break;
-                        case StepStatus.Passed:
-                            break;
-                        default:
-                            throw new UnreachableException($"Unhandled step status {status[dep]}.");
-                    }
-                }
-
-                // 1a. Waits-for: ordering only (see ScenarioNode.WaitsFor).
-                foreach (var wait in node.WaitsFor)
-                {
-                    switch (status[wait])
-                    {
-                        case StepStatus.Pending:
-                        case StepStatus.Running:
-                            anyUnresolved = true;
-                            break;
-                        case StepStatus.Failed:
-                            (failed ??= []).Add(nodes[wait].OperationName);
-                            break;
-                        case StepStatus.Skipped:
-                            (skipped ??= []).Add(nodes[wait].OperationName);
-                            break;
-                        case StepStatus.Passed:
-                        case StepStatus.NotTaken:
-                            break;
-                        default:
-                            throw new UnreachableException($"Unhandled step status {status[wait]}.");
-                    }
-                }
-
-                // 1b. Guards. These apply to EVERY node, merge and pass-through nodes included — a
-                // pass-through is guarded on the arm it stands in for, so resolving its sources
-                // without first checking its guard would let the parent value through on both sides. A resolved-false guard is a decision (NotTaken); a guard whose condition
-                // failed/was skipped/was itself not taken is a cascade (Skipped) — no branch was chosen.
-                var guardNotTaken = (string?)null;
-                foreach (var guard in node.Guards)
-                {
-                    switch (status[guard.ConditionIndex])
-                    {
-                        case StepStatus.Pending:
-                        case StepStatus.Running:
-                            anyUnresolved = true;
-                            break;
-                        case StepStatus.Passed:
-                            if (selectedArm[guard.ConditionIndex] != guard.Arm)
-                            {
-                                guardNotTaken ??= NotTakenReason(nodes[guard.ConditionIndex], selectedArm[guard.ConditionIndex]);
-                            }
-
-                            break;
-                        case StepStatus.NotTaken:
-                            // The condition itself sat in a branch that was not chosen, so it never
-                            // ran. Still a decision, not a failure — cascading to Skipped here would
-                            // report an untaken nested branch as though something had gone wrong.
-                            (notTaken ??= []).Add(nodes[guard.ConditionIndex].OperationName);
-                            break;
-                        case StepStatus.Failed:
-                        case StepStatus.Skipped:
-                            (skipped ??= []).Add(nodes[guard.ConditionIndex].OperationName);
-                            break;
-                        default:
-                            throw new UnreachableException($"Unhandled step status {status[guard.ConditionIndex]}.");
-                    }
-                }
-
-                if (anyUnresolved)
-                {
-                    continue;
-                }
-
-                if (failed is not null || skipped is not null)
-                {
-                    await ApplyTerminalAsync(i, StepStatus.Skipped, BuildSkipReason(failed, skipped)).ConfigureAwait(false);
-                    progressed = true;
-                }
-                else if (guardNotTaken is not null)
-                {
-                    await ApplyTerminalAsync(i, StepStatus.NotTaken, guardNotTaken).ConfigureAwait(false);
-                    progressed = true;
-                }
-                else if (notTaken is not null)
-                {
-                    await ApplyTerminalAsync(
-                        i, StepStatus.NotTaken, $"not taken: {string.Join(", ", notTaken)}").ConfigureAwait(false);
-                    progressed = true;
-                }
-                else if (node.MergeSources.Count > 0)
-                {
-                    // Guards hold; now the any-of over mutually exclusive sources.
-                    if (TryResolveMerge(node, out var mergeStatus, out var mergeReason, out var mergeOutput))
-                    {
-                        if (mergeStatus == StepStatus.Passed)
-                        {
-                            pending.Remove(i);
-                            outputs[i] = mergeOutput;
-                            status[i] = StepStatus.Passed;
-                            await ApplyMergePassAsync(i).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            await ApplyTerminalAsync(i, mergeStatus, mergeReason!).ConfigureAwait(false);
-                        }
-
-                        progressed = true;
-                    }
-                }
-            }
-
-            // 2. Launch ready nodes (all dependencies passed), bounded by capacity.
-            if (!cancelled)
-            {
-                foreach (var i in pending.ToArray())
-                {
-                    if (running.Count >= capacity)
-                    {
-                        break;
-                    }
-
-                    var node = nodes[i];
-                    if (node.MergeSources.Count > 0)
-                    {
-                        continue; // resolved in phase 1, never invoked
-                    }
-
-                    if (node.DependsOn.All(d => status[d] == StepStatus.Passed)
-                        && node.WaitsFor.All(w => status[w] is StepStatus.Passed or StepStatus.NotTaken)
-                        && node.Guards.All(g => status[g.ConditionIndex] == StepStatus.Passed
-                            && selectedArm[g.ConditionIndex] == g.Arm))
-                    {
-                        pending.Remove(i);
-                        status[i] = StepStatus.Running;
-                        var titleMessage = node.PrepareArguments is null
-                            ? StepNotes.FormatTitle(node, messageFormatting, inputs)
-                            : StepMessage.FromText(node.DisplayNameTemplate);
-                        titleMessages[i] = titleMessage;
-                        var displayName = titleMessage.Text;
-                        if (observer is not null && node.PrepareArguments is null)
-                        {
-                            await observer.OnStepStartingAsync(
-                                new StepContext { Node = node, DisplayName = displayName })
-                                .ConfigureAwait(false);
-                        }
-
-                        var startOffset = TimeSpan.Zero;
-                        if (_simulatedTime)
-                        {
-                            startOffset = StartOffset(node, simFinishOffset!);
-                            simStartOffset![i] = startOffset;
-                        }
-
-                        if (scenarioTimeout is not null)
-                        {
-                            launchedAt[i] = _timeProvider.GetUtcNow(); // only read the clock when a timeout can need it
-                        }
-
-                        // Every launched operation drains before watchdog disposal, including exceptional exits.
-#pragma warning disable CA2025 // The watchdog also retains ownership in Dispose until registered operations finish.
-                        running[RunNodeAsync(
-                            definition, node, inputs, services, titleMessage, messageFormatting, scenarioStart, startOffset, teardownLog, ledger, scenarioStartRef, stepContexts, observer, titleMessages, watchdog, scenarioToken)] = i;
-#pragma warning restore CA2025
-                        progressed = true;
-                    }
-                }
-            }
-
-            // 3. Wait for a running step, or guard against a stuck schedule.
-            if (running.Count == 0)
-            {
-                if (pending.Count == 0)
-                {
-                    break;
-                }
-
-                if (!progressed)
-                {
-                    throw new InvalidOperationException(
-                        "Scenario scheduler stalled with unresolved steps; this indicates a graph defect.");
-                }
-
-                continue;
-            }
-
-            // The scenario deadline has one owner, the watchdog: when it passes, the watchdog cancels
-            // the scenario token and every step still running, and each of those returns here marked
-            // as cancelled. A step that finished before that moment is not marked, and keeps its result.
-            var finishedTask = await Task.WhenAny(running.Keys).ConfigureAwait(false);
-            var index = running[finishedTask];
-            running.Remove(finishedTask);
-            await ApplyFinishedAsync(finishedTask, index).ConfigureAwait(false);
+            await ScheduleAsync().ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // whatever it was is thrown again, after the scenario
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            faults.Add(ex);
+            await AbandonAsync(ex).ConfigureAwait(false);
         }
 
         await scenarioWatch.CompleteAsync().ConfigureAwait(false);
@@ -435,7 +216,31 @@ public sealed class ScenarioScheduler
 
         if (teardownIndex >= 0)
         {
-            await RunTeardownAsync(teardownIndex).ConfigureAwait(false);
+            try
+            {
+                await RunTeardownAsync(teardownIndex).ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // joins the fault that came before it
+            catch (Exception ex) when (faults.Count > 0)
+#pragma warning restore CA1031
+            {
+                faults.Add(ex);
+            }
+        }
+
+        if (serialized is not null)
+        {
+            faults.AddRange(serialized.Failures);
+        }
+
+        if (faults.Count == 1)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(faults[0]);
+        }
+
+        if (faults.Count > 1)
+        {
+            throw new AggregateException("The scenario did not run to its end cleanly.", faults);
         }
 
         // Filtered steps may reference values produced by selected predecessors.
@@ -457,8 +262,303 @@ public sealed class ScenarioScheduler
             }
         }
 
-        serialized?.ThrowIfFailed();
         return results.Select(r => r!).ToList();
+
+        // Ends a scenario the scheduler can no longer schedule: what is running is asked to stop and
+        // waited for, and every node left without a result is skipped, so each start an observer was
+        // given has its finish before teardown.
+        async Task AbandonAsync(Exception fault)
+        {
+            scenarioWatch.RequestCancellation();
+            while (running.Count > 0)
+            {
+                var finishedTask = await Task.WhenAny(running.Keys).ConfigureAwait(false);
+                var index = running[finishedTask];
+                running.Remove(finishedTask);
+                try
+                {
+                    await ApplyFinishedAsync(finishedTask, index).ConfigureAwait(false);
+                }
+#pragma warning disable CA1031 // the step is skipped below, and the first fault is the one reported
+                catch (Exception)
+#pragma warning restore CA1031
+                {
+                }
+            }
+
+            for (var i = 0; i < count; i++)
+            {
+                if (i == teardownIndex || results[i] is not null)
+                {
+                    continue;
+                }
+
+                pending.Remove(i);
+                status[i] = StepStatus.Skipped;
+                var node = nodes[i];
+                var titleMessage = titleMessages[i] ?? StepMessage.FromText(node.DisplayNameTemplate);
+                var result = new StepResult
+                {
+                    Node = node,
+                    TitleMessage = titleMessage,
+                    Status = StepStatus.Skipped,
+                    StartedAt = null, // the clock may be what failed
+                    SkipReason = $"{SchedulerFaultSkipReason}: {fault.Message}",
+                };
+                results[i] = result;
+                if (serialized is not null)
+                {
+                    if (!serialized.IsOpen(i))
+                    {
+                        await serialized.OnStepStartingAsync(
+                            new StepContext { Node = node, DisplayName = titleMessage.Text }).ConfigureAwait(false);
+                    }
+
+                    await serialized.OnStepFinishedAsync(result).ConfigureAwait(false);
+                }
+            }
+        }
+
+        async Task ScheduleAsync()
+        {
+            while (pending.Count > 0 || running.Count > 0)
+            {
+                // One reading of cancellation for the whole pass. It comes from another thread; read
+                // again further down, it could say "cancelled" to the launch below after saying "not
+                // cancelled" to the skips above, leaving a ready step neither skipped nor launched.
+                // A step launched in the pass cancellation lands in is cancelled before its body runs.
+                var cancelled = scenarioToken.IsCancellationRequested;
+                timedOut |= scenarioWatch.TimedOut; // read after: a timeout is marked before it cancels
+                var progressed = false;
+
+                // 1. Resolve skips: cancellation, or all dependencies terminal with at least one bad.
+                foreach (var i in pending.ToArray())
+                {
+                    if (cancelled)
+                    {
+                        // Capture cancelled-step evidence once, after in-flight producers have drained.
+                        if (running.Count > 0) { continue; }
+                        await ApplyTerminalAsync(
+                            i, StepStatus.Skipped, timedOut ? TimedOutSkipReason : CanceledSkipReason).ConfigureAwait(false);
+                        progressed = true;
+                        continue;
+                    }
+
+                    var node = nodes[i];
+
+                    var anyUnresolved = false;
+                    List<string>? failed = null;
+                    List<string>? skipped = null;
+                    List<string>? notTaken = null;
+
+                    foreach (var dep in node.DependsOn)
+                    {
+                        switch (status[dep])
+                        {
+                            case StepStatus.Pending:
+                            case StepStatus.Running:
+                                anyUnresolved = true;
+                                break;
+                            case StepStatus.Failed:
+                                (failed ??= []).Add(nodes[dep].OperationName);
+                                break;
+                            case StepStatus.Skipped:
+                                (skipped ??= []).Add(nodes[dep].OperationName);
+                                break;
+                            case StepStatus.NotTaken:
+                                (notTaken ??= []).Add(nodes[dep].OperationName);
+                                break;
+                            case StepStatus.Passed:
+                                break;
+                            default:
+                                throw new UnreachableException($"Unhandled step status {status[dep]}.");
+                        }
+                    }
+
+                    // 1a. Waits-for: ordering only (see ScenarioNode.WaitsFor).
+                    foreach (var wait in node.WaitsFor)
+                    {
+                        switch (status[wait])
+                        {
+                            case StepStatus.Pending:
+                            case StepStatus.Running:
+                                anyUnresolved = true;
+                                break;
+                            case StepStatus.Failed:
+                                (failed ??= []).Add(nodes[wait].OperationName);
+                                break;
+                            case StepStatus.Skipped:
+                                (skipped ??= []).Add(nodes[wait].OperationName);
+                                break;
+                            case StepStatus.Passed:
+                            case StepStatus.NotTaken:
+                                break;
+                            default:
+                                throw new UnreachableException($"Unhandled step status {status[wait]}.");
+                        }
+                    }
+
+                    // 1b. Guards. These apply to EVERY node, merge and pass-through nodes included — a
+                    // pass-through is guarded on the arm it stands in for, so resolving its sources
+                    // without first checking its guard would let the parent value through on both sides. A resolved-false guard is a decision (NotTaken); a guard whose condition
+                    // failed/was skipped/was itself not taken is a cascade (Skipped) — no branch was chosen.
+                    var guardNotTaken = (string?)null;
+                    foreach (var guard in node.Guards)
+                    {
+                        switch (status[guard.ConditionIndex])
+                        {
+                            case StepStatus.Pending:
+                            case StepStatus.Running:
+                                anyUnresolved = true;
+                                break;
+                            case StepStatus.Passed:
+                                if (selectedArm[guard.ConditionIndex] != guard.Arm)
+                                {
+                                    guardNotTaken ??= NotTakenReason(nodes[guard.ConditionIndex], selectedArm[guard.ConditionIndex]);
+                                }
+
+                                break;
+                            case StepStatus.NotTaken:
+                                // The condition itself sat in a branch that was not chosen, so it never
+                                // ran. Still a decision, not a failure — cascading to Skipped here would
+                                // report an untaken nested branch as though something had gone wrong.
+                                (notTaken ??= []).Add(nodes[guard.ConditionIndex].OperationName);
+                                break;
+                            case StepStatus.Failed:
+                            case StepStatus.Skipped:
+                                (skipped ??= []).Add(nodes[guard.ConditionIndex].OperationName);
+                                break;
+                            default:
+                                throw new UnreachableException($"Unhandled step status {status[guard.ConditionIndex]}.");
+                        }
+                    }
+
+                    if (anyUnresolved)
+                    {
+                        continue;
+                    }
+
+                    if (failed is not null || skipped is not null)
+                    {
+                        await ApplyTerminalAsync(i, StepStatus.Skipped, BuildSkipReason(failed, skipped)).ConfigureAwait(false);
+                        progressed = true;
+                    }
+                    else if (guardNotTaken is not null)
+                    {
+                        await ApplyTerminalAsync(i, StepStatus.NotTaken, guardNotTaken).ConfigureAwait(false);
+                        progressed = true;
+                    }
+                    else if (notTaken is not null)
+                    {
+                        await ApplyTerminalAsync(
+                            i, StepStatus.NotTaken, $"not taken: {string.Join(", ", notTaken)}").ConfigureAwait(false);
+                        progressed = true;
+                    }
+                    else if (node.MergeSources.Count > 0)
+                    {
+                        // Guards hold; now the any-of over mutually exclusive sources.
+                        if (TryResolveMerge(node, out var mergeStatus, out var mergeReason, out var mergeOutput))
+                        {
+                            if (mergeStatus == StepStatus.Passed)
+                            {
+                                pending.Remove(i);
+                                outputs[i] = mergeOutput;
+                                status[i] = StepStatus.Passed;
+                                await ApplyMergePassAsync(i).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                await ApplyTerminalAsync(i, mergeStatus, mergeReason!).ConfigureAwait(false);
+                            }
+
+                            progressed = true;
+                        }
+                    }
+                }
+
+                // 2. Launch ready nodes (all dependencies passed), bounded by capacity.
+                if (!cancelled)
+                {
+                    foreach (var i in pending.ToArray())
+                    {
+                        if (running.Count >= capacity)
+                        {
+                            break;
+                        }
+
+                        var node = nodes[i];
+                        if (node.MergeSources.Count > 0)
+                        {
+                            continue; // resolved in phase 1, never invoked
+                        }
+
+                        if (node.DependsOn.All(d => status[d] == StepStatus.Passed)
+                            && node.WaitsFor.All(w => status[w] is StepStatus.Passed or StepStatus.NotTaken)
+                            && node.Guards.All(g => status[g.ConditionIndex] == StepStatus.Passed
+                                && selectedArm[g.ConditionIndex] == g.Arm))
+                        {
+                            pending.Remove(i);
+                            status[i] = StepStatus.Running;
+                            var titleMessage = node.PrepareArguments is null
+                                ? StepNotes.FormatTitle(node, messageFormatting, inputs)
+                                : StepMessage.FromText(node.DisplayNameTemplate);
+                            titleMessages[i] = titleMessage;
+                            var displayName = titleMessage.Text;
+                            if (observer is not null && node.PrepareArguments is null)
+                            {
+                                await observer.OnStepStartingAsync(
+                                    new StepContext { Node = node, DisplayName = displayName })
+                                    .ConfigureAwait(false);
+                            }
+
+                            var startOffset = TimeSpan.Zero;
+                            if (_simulatedTime)
+                            {
+                                startOffset = StartOffset(node, simFinishOffset!);
+                                simStartOffset![i] = startOffset;
+                            }
+
+                            if (scenarioTimeout is not null)
+                            {
+                                launchedAt[i] = _timeProvider.GetUtcNow(); // only read the clock when a timeout can need it
+                            }
+
+                            // Every launched operation drains before watchdog disposal, including exceptional exits.
+#pragma warning disable CA2025 // The watchdog also retains ownership in Dispose until registered operations finish.
+                            running[RunNodeAsync(
+                                definition, node, inputs, services, titleMessage, messageFormatting, scenarioStart, startOffset, teardownLog, ledger, scenarioStartRef, stepContexts, observer, titleMessages, watchdog, scenarioToken)] = i;
+#pragma warning restore CA2025
+                            progressed = true;
+                        }
+                    }
+                }
+
+                // 3. Wait for a running step, or guard against a stuck schedule.
+                if (running.Count == 0)
+                {
+                    if (pending.Count == 0)
+                    {
+                        break;
+                    }
+
+                    if (!progressed)
+                    {
+                        throw new InvalidOperationException(
+                            "Scenario scheduler stalled with unresolved steps; this indicates a graph defect.");
+                    }
+
+                    continue;
+                }
+
+                // The scenario deadline has one owner, the watchdog: when it passes, the watchdog cancels
+                // the scenario token and every step still running, and each of those returns here marked
+                // as cancelled. A step that finished before that moment is not marked, and keeps its result.
+                var finishedTask = await Task.WhenAny(running.Keys).ConfigureAwait(false);
+                var index = running[finishedTask];
+                running.Remove(finishedTask);
+                await ApplyFinishedAsync(finishedTask, index).ConfigureAwait(false);
+            }
+        }
 
         // Teardown is not a node of the graph: it runs here, after the scheduling loop, and its
         // cleanups are run by TeardownRunner. This is only the scheduler's side of it: where it
@@ -1068,25 +1168,25 @@ public sealed class ScenarioScheduler
     {
         private readonly Turns _turns = new();
         private readonly System.Collections.Concurrent.ConcurrentQueue<Exception> _failures = new();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<int, bool> _open = new();
 
-        public Task OnStepStartingAsync(StepContext context) => Tell(() => inner.OnStepStartingAsync(context));
-
-        public Task OnStepFinishedAsync(StepResult result) => Tell(() => inner.OnStepFinishedAsync(result));
-
-        /// <summary>Throws what the observer threw during the scenario, if it did.</summary>
-        public void ThrowIfFailed()
+        public Task OnStepStartingAsync(StepContext context)
         {
-            var failures = _failures.ToArray();
-            if (failures.Length == 1)
-            {
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(failures[0]);
-            }
-
-            if (failures.Length > 1)
-            {
-                throw new AggregateException("The step observer threw during the scenario.", failures);
-            }
+            _open[context.Node.Index] = true;
+            return Tell(() => inner.OnStepStartingAsync(context));
         }
+
+        public Task OnStepFinishedAsync(StepResult result)
+        {
+            _open.TryRemove(result.Node.Index, out _);
+            return Tell(() => inner.OnStepFinishedAsync(result));
+        }
+
+        /// <summary>Whether the node was given a start that has not had its finish yet.</summary>
+        public bool IsOpen(int node) => _open.ContainsKey(node);
+
+        /// <summary>What the observer threw during the scenario, if it did.</summary>
+        public IReadOnlyCollection<Exception> Failures => _failures.ToArray();
 
         private async Task Tell(Func<Task> callback)
         {
