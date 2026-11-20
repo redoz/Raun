@@ -286,6 +286,10 @@ internal sealed class ScenarioParser
             TeardownPolicy = AttributeReader.TeardownPolicy(_method),
             DeclaringType = TypeSyntaxFactory.From(_method.ContainingType),
             MethodName = _method.Name,
+            // typeof cannot name dynamic; at run time the parameter is object.
+            MethodParameterTypes = _method.Parameters
+                .Select(p => TypeSyntaxFactory.From(p.Type is IDynamicTypeSymbol ? _model.Compilation.ObjectType : p.Type))
+                .ToList(),
             SourceFile = Location(_syntax.Identifier, out var line),
             SourceLine = line,
             TypeSourceFile = Location(_syntax.Ancestors().OfType<TypeDeclarationSyntax>().First().Identifier, out var typeLine),

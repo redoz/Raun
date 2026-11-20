@@ -136,7 +136,7 @@ namespace Raun.Generated
                 Timeout = null,
                 TeardownPolicy = (global::Raun.Run)0,
                 Nodes = nodes,
-                Method = typeof(global::ReturnTitles.Stories).GetMethod("Story", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly)
+                Method = typeof(global::ReturnTitles.Stories).GetMethod("Story", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly, null, global::System.Type.EmptyTypes, null)
             };
         }
     }

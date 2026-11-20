@@ -218,6 +218,16 @@ internal sealed record ParsedScenario
     /// <summary>The <c>[Scenario]</c> method's simple name.</summary>
     public string MethodName { get; init; } = "";
 
+    private readonly EquatableArray<Syn<TypeSyntax>> _methodParameterTypes;
+
+    /// <summary>The <c>[Scenario]</c> method's parameter types in order, as <c>typeof</c> can spell
+    /// them. With the name they pick out the one method, whatever else the class calls the same.</summary>
+    public IReadOnlyList<TypeSyntax> MethodParameterTypes
+    {
+        get => new SynList<TypeSyntax>(_methodParameterTypes);
+        init => _methodParameterTypes = SynList<TypeSyntax>.Wrap(value);
+    }
+
     /// <summary>Every [Uses&lt;T&gt;] the scenario is subject to, one per type (Exclusive wins),
     /// sorted by <see cref="ParsedUse.SortKey"/> so emission is deterministic. Empty ⇒ no initializer.</summary>
     public IReadOnlyList<ParsedUse> Uses

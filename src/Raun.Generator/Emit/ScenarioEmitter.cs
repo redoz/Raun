@@ -224,9 +224,14 @@ internal static class ScenarioEmitter
         }
 
         // A world reads per-scenario settings from the scenario method's attributes:
-        // typeof(C).GetMethod("M", Instance | Static | Public | NonPublic | DeclaredOnly).
+        // typeof(C).GetMethod("M", Instance | Static | Public | NonPublic | DeclaredOnly, null, types, null).
+        // The parameter types are named because the class may hold other methods called M.
         if (scenario.DeclaringType is { } declaringType)
         {
+            var systemType = Names.Global("System", "Type");
+            ExpressionSyntax parameterTypes = scenario.MethodParameterTypes.Count == 0
+                ? MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, systemType, IdentifierName("EmptyTypes"))
+                : ArrayOf(systemType, scenario.MethodParameterTypes.Select(type => (ExpressionSyntax)TypeOfExpression(type)));
             var flags = MethodLookupFlags
                 .Select(flag => (ExpressionSyntax)MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
@@ -242,6 +247,9 @@ internal static class ScenarioEmitter
                 {
                     Argument(Lit(scenario.MethodName)),
                     Argument(flags),
+                    Argument(LiteralExpression(SyntaxKind.NullLiteralExpression)),
+                    Argument(parameterTypes),
+                    Argument(LiteralExpression(SyntaxKind.NullLiteralExpression)),
                 })))));
         }
 
