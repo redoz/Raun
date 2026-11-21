@@ -1,4 +1,5 @@
 using Raun;
+using Xunit;
 
 namespace Raun.PackageTests;
 
@@ -13,15 +14,18 @@ public sealed class PackageScenarios : Scenarios
     public PackageThen Then => Steps<PackageThen>();
 
     [Scenario("built packages work for consumers", Timeout = 900000)]
-    [ScenarioCase("generated entry point", "GeneratedEntryPoint")]
-    [ScenarioCase("Appointment sample", "AppointmentTests")]
-    [ScenarioCase("Aspire sample", "AspireAppointments")]
+    [ScenarioCase("generated entry point, oldest SDK", "GeneratedEntryPoint", "oldest")]
+    [ScenarioCase("Appointment sample, oldest SDK", "AppointmentTests", "oldest")]
+    [ScenarioCase("Aspire sample, oldest SDK", "AspireAppointments", "oldest")]
+    [ScenarioCase("generated entry point, newest SDK", "GeneratedEntryPoint", "newest")]
+    [ScenarioCase("Appointment sample, newest SDK", "AppointmentTests", "newest")]
+    [ScenarioCase("Aspire sample, newest SDK", "AspireAppointments", "newest")]
     [Uses<SdkSlots>]
     [Teardown(Run.OnSuccess)]
-    public async Task ConsumePackages(string sample)
+    public async Task ConsumePackages(string sample, string baseline)
     {
         var feed = await Given.BuiltPackages().Note("All four packages must exist at the same version.");
-        var consumer = await Given.IsolatedConsumer(feed, sample)
+        var consumer = await Given.IsolatedConsumer(feed, sample, baseline)
             .Note($"Only {feed} supplies Raun packages; a fresh cache prevents an older build masking a broken package.");
         await When.Restoring(consumer);
         await When.Building(consumer);
@@ -53,12 +57,12 @@ public sealed class PackageGiven : Given
     [return: Read]
     public Task<PackageFeed> BuiltPackages() => Task.FromResult(PackageConsumer.FindFeed());
 
-    [StepName("Given {sample} consumes {feed} in isolation")]
+    [StepName("Given {sample} consumes {feed} in isolation on the {baseline} supported SDK")]
     [return: Isolated]
-    public Task<PackageConsumer> IsolatedConsumer([Isolated.Feed] PackageFeed feed, string sample)
+    public Task<PackageConsumer> IsolatedConsumer([Isolated.Feed] PackageFeed feed, string sample, string baseline)
     {
-        var consumer = PackageConsumer.Prepare(feed, sample, Context);
-        Context.Log($"Created {consumer} from {feed} in {consumer.Root}, built with the .NET SDK {PackageConsumer.ConsumerSdk.Value}");
+        var consumer = PackageConsumer.Prepare(feed, sample, PackageConsumer.BaselineFor(baseline), Context);
+        Context.Log($"Created {consumer} from {feed} in {consumer.Root}, built with the .NET SDK {consumer.Baseline.Sdk} for {consumer.Baseline.Framework}");
         return Task.FromResult(consumer);
     }
 
@@ -104,6 +108,8 @@ public sealed class PackageThen : Then
         var html = File.ReadAllText(report.File);
         Context.AddAttachment("consumer-report.html", html);
         var count = PackageConsumer.VerifyReport(html);
+        if (report.Consumer.StartsWith("Generated entry point", StringComparison.Ordinal))
+            Assert.Equal(PackageConsumer.GeneratedAppScenarios(report.Consumer), count);
         Context.Log($"{report} contains {count} passing scenarios.");
         return Task.CompletedTask;
     }

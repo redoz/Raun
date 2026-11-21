@@ -12,16 +12,18 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
 {
     private static readonly HashSet<string> PackageIds = ["Raun", "Raun.Mtp", "Raun.Aspire", "Raun.Coverage"];
 
-    private PackageConsumer(string root, string project, string version)
+    private PackageConsumer(string root, string project, string version, ConsumerBaseline baseline)
     {
         Root = root;
         Project = project;
         Version = version;
+        Baseline = baseline;
     }
 
     public string Root { get; }
     public string Project { get; }
     public string Version { get; }
+    public ConsumerBaseline Baseline { get; }
     public string ReportDirectory => Path.Combine(Root, "report");
 
     public string Name => Path.GetFileNameWithoutExtension(Project) switch
@@ -30,7 +32,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         "AppointmentTests" => "Appointment sample",
         "AspireAppointments.Tests" => "Aspire sample",
         var name => name,
-    };
+    } + $" ({Baseline.Framework})";
     public static Raun.ResourceKey KeyFor(PackageConsumer consumer) => consumer.Root;
     public static string LabelFor(PackageConsumer consumer) => consumer.Name;
 
@@ -42,9 +44,34 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         return repo.FullName;
     }
 
-    /// <summary>The SDK consumers are built with: the lowest installed one that Raun supports
-    /// (<c>RaunMinimumSdkVersion</c> in the shipped props). CI installs exactly the floor.</summary>
-    public static Lazy<string> ConsumerSdk { get; } = new(() =>
+    /// <summary>The target the samples are written for, and the lowest one Raun ships.</summary>
+    private const string LowestFramework = "net10.0";
+
+    /// <summary>
+    /// The two ends of what Raun supports. <c>oldest</c> is the lowest installed supported SDK
+    /// building the lowest target (CI installs exactly the floor): who meets an analyzer its
+    /// compiler cannot load. <c>newest</c> is the highest installed SDK building its own target:
+    /// who gets the newest assets of each package, and the only one who can write a C# 15 union.
+    /// </summary>
+    public static ConsumerBaseline BaselineFor(string end)
+    {
+        var sdks = SupportedSdks.Value;
+        switch (end)
+        {
+            case "oldest":
+                return new ConsumerBaseline(sdks[0].Text, LowestFramework);
+            case "newest":
+                var newest = sdks[^1];
+                Assert.True(newest.Version.Major > 10, $"The newest installed .NET SDK is {newest.Text}; the newest consumer needs one past .NET 10.");
+                return new ConsumerBaseline(newest.Text, $"net{newest.Version.Major}.0");
+            default:
+                throw new ArgumentOutOfRangeException(nameof(end), end, "Expected 'oldest' or 'newest'.");
+        }
+    }
+
+    /// <summary>The installed release SDKs that Raun supports (<c>RaunMinimumSdkVersion</c> in the
+    /// shipped props and up), lowest first.</summary>
+    private static Lazy<IReadOnlyList<(string Text, Version Version)>> SupportedSdks { get; } = new(() =>
     {
         var props = XDocument.Load(Path.Combine(FindRepository(), "src", "Raun", "buildTransitive", "Raun.props"));
         var floor = System.Version.Parse(props.Descendants().Single(e => e.Name.LocalName == "RaunMinimumSdkVersion").Value);
@@ -59,7 +86,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             .ToList();
         process.WaitForExit();
         Assert.True(installed.Count > 0, $"No installed .NET SDK is at or above Raun's floor {floor}.");
-        return installed[0].Text;
+        return installed;
     });
 
     public static PackageFeed FindFeed()
@@ -68,14 +95,14 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         return new PackageFeed(feed, ReadPackageVersion(feed));
     }
 
-    public static PackageConsumer Prepare(PackageFeed feed, string sample, Raun.ScenarioContext context)
+    public static PackageConsumer Prepare(PackageFeed feed, string sample, ConsumerBaseline baseline, Raun.ScenarioContext context)
     {
         var version = feed.Version;
         var root = Directory.CreateTempSubdirectory("raun-package-consumption-").FullName;
         var relative = sample == "AspireAppointments"
             ? "AspireAppointments/AspireAppointments.Tests/AspireAppointments.Tests.csproj"
             : $"{sample}/{sample}.csproj";
-        var consumer = new PackageConsumer(root, Path.Combine(root, relative), version);
+        var consumer = new PackageConsumer(root, Path.Combine(root, relative), version, baseline);
         context.OnTeardown(async teardown =>
         {
             // Only remove the exact temporary directory created above; keep failures for inspection.
@@ -85,11 +112,11 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             await teardown.Resources.Delete(consumer);
             teardown.Log($"Removed {consumer} and its temporary package cache.");
         });
-        Configure(root, FindRepository(), feed.Directory);
+        Configure(root, feed.Directory, baseline);
         if (sample == "GeneratedEntryPoint")
-            WriteGeneratedApp(root, version);
+            WriteGeneratedApp(root, version, baseline);
         else
-            CopySample(root, FindRepository(), sample, version);
+            CopySample(root, FindRepository(), sample, version, baseline);
         new XDocument(new XElement("Solution", Directory.EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories)
             .Select(project => new XElement("Project", new XAttribute("Path", Path.GetRelativePath(root, project).Replace('\\', '/'))))))
             .Save(Path.Combine(root, "Consumer.slnx"));
@@ -112,25 +139,27 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         return Assert.Single(versions.Values.Distinct(StringComparer.Ordinal));
     }
 
-    private static void Configure(string root, string repo, string feed)
+    private static void Configure(string root, string feed, ConsumerBaseline baseline)
     {
         // These files stop directory searches before they can import repository build settings.
-        File.WriteAllText(Path.Combine(root, "Directory.Build.props"), """
+        // NU1510 on a newer target: the samples are written for the lowest one, and reference
+        // packages that a newer framework already supplies. Redundant there, not wrong.
+        File.WriteAllText(Path.Combine(root, "Directory.Build.props"), $"""
             <Project><PropertyGroup>
               <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
               <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+              <NoWarn>$(NoWarn){(baseline.Framework == LowestFramework ? "" : ";NU1510")}</NoWarn>
             </PropertyGroup></Project>
             """);
         File.WriteAllText(Path.Combine(root, "Directory.Build.targets"), "<Project />");
         File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project />");
-        // Not the repository's global.json: that pins the newest SDK, and a consumer on the oldest
-        // supported one is who meets an analyzer its compiler cannot load.
+        // Not the repository's global.json: each consumer is built with exactly its baseline's SDK.
         File.WriteAllText(Path.Combine(root, "global.json"),
             new System.Text.Json.Nodes.JsonObject
             {
                 ["sdk"] = new System.Text.Json.Nodes.JsonObject
                 {
-                    ["version"] = ConsumerSdk.Value,
+                    ["version"] = baseline.Sdk,
                     ["rollForward"] = "disable",
                 },
             }.ToJsonString());
@@ -146,7 +175,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             .Save(Path.Combine(root, "nuget.config"));
     }
 
-    private static void CopySample(string root, string repo, string sample, string version)
+    private static void CopySample(string root, string repo, string sample, string version, ConsumerBaseline baseline)
     {
         var source = Path.Combine(repo, "samples", sample);
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
@@ -167,18 +196,30 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             var lockFile = OperatingSystem.IsLinux() && File.Exists(linuxLock)
                 ? linuxLock : Path.Combine(originalDirectory, "packages.lock.json");
             using var dependencies = JsonDocument.Parse(File.ReadAllText(lockFile));
-            var resolved = dependencies.RootElement.GetProperty("dependencies").GetProperty("net10.0");
+            var resolved = dependencies.RootElement.GetProperty("dependencies").GetProperty(LowestFramework);
             var document = XDocument.Load(project);
             foreach (var item in document.Root!.Elements().SelectMany(g => g.Elements()).ToArray())
             {
                 switch (item.Name.LocalName)
                 {
+                    case "TargetFramework":
+                        // The samples are written for the lowest target; the other baseline builds
+                        // the same sources for its own.
+                        Assert.Equal(LowestFramework, item.Value);
+                        item.Value = baseline.Framework;
+                        break;
                     case "CompilerVisibleProperty" or "EnableMSTestRunner" or "TestingPlatformDotnetTestSupport"
                         or "GenerateProgramFile" or "GenerateTestingPlatformEntryPoint":
                         item.Remove();
                         break;
                     case "PackageReference":
-                        item.SetAttributeValue("Version", $"[{resolved.GetProperty(item.Attribute("Include")!.Value).GetProperty("resolved").GetString()}]");
+                        var id = item.Attribute("Include")!.Value;
+                        // Microsoft.Extensions packages version with the runtime, and the rest of a
+                        // newer target's graph asks for that runtime's: a consumer there references
+                        // its own major, where the lock file's 10.x would be a downgrade (NU1605).
+                        item.SetAttributeValue("Version", baseline.Framework != LowestFramework && id.StartsWith("Microsoft.Extensions.", StringComparison.Ordinal)
+                            ? $"{baseline.Framework["net".Length..]}.0"
+                            : $"[{resolved.GetProperty(id).GetProperty("resolved").GetString()}]");
                         break;
                     case "ProjectReference":
                         var target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(project)!, item.Attribute("Include")!.Value.Replace('\\', '/')));
@@ -198,12 +239,12 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         }
     }
 
-    private static void WriteGeneratedApp(string root, string version)
+    private static void WriteGeneratedApp(string root, string version, ConsumerBaseline baseline)
     {
         var directory = Directory.CreateDirectory(Path.Combine(root, "GeneratedEntryPoint")).FullName;
         File.WriteAllText(Path.Combine(directory, "GeneratedEntryPoint.csproj"), $$"""
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+              <PropertyGroup><TargetFramework>{{baseline.Framework}}</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
               <ItemGroup><PackageReference Include="Raun.Mtp" Version="[{{version}}]" /></ItemGroup>
             </Project>
             """);
@@ -219,7 +260,106 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
                 public Task Passes() => Task.CompletedTask;
             }
             """);
+        if (baseline.Framework != LowestFramework)
+            File.WriteAllText(Path.Combine(directory, "UnionScenarios.cs"), UnionScenarios);
     }
+
+    /// <summary>
+    /// What only the newest consumer can write: C# 15 unions as step results. Each scenario asserts
+    /// in its own steps, so a union that arrives holding the wrong case fails the consumer's run.
+    /// The generator's own tests cover the rules; this is the same lowering inside the compiler a
+    /// union user really has.
+    /// </summary>
+    private const string UnionScenarios = """
+        using Raun;
+
+        public sealed record Accepted(string Shipment);
+        public sealed record Rejected(string Reason);
+        public readonly record struct Pending(int Minutes);
+
+        public union Outcome(Accepted, Rejected, Pending);
+
+        public sealed class UnionScenarios : Scenarios
+        {
+            public UnionWhen When => Steps<UnionWhen>();
+            public UnionThen Then => Steps<UnionThen>();
+
+            [Scenario("a step returning a union is switched on")]
+            [ScenarioCase("accepted", "ok", "Accepted:S1")]
+            [ScenarioCase("rejected", "no", "Rejected:stock")]
+            [ScenarioCase("pending", "later", "Pending:60")]
+            public async Task SwitchesOnAUnion(string id, string expected)
+            {
+                switch (await When.Submitting(id))
+                {
+                    case Accepted accepted:
+                        await Then.Is(accepted, expected);
+                        break;
+                    case Rejected rejected:
+                        await Then.Is(rejected, expected);
+                        break;
+                    case Pending pending:
+                        await Then.Is(pending, expected);
+                        break;
+                }
+            }
+
+            [Scenario("a union local holds the case either branch returned")]
+            [ScenarioCase("accepted", true, "Accepted:A1")]
+            [ScenarioCase("rejected", false, "Rejected:stock")]
+            public async Task MergesCasesIntoAUnion(bool accept, string expected)
+            {
+                Outcome outcome;
+                if (await When.Deciding(accept))
+                {
+                    outcome = await When.Accepting("A1");
+                }
+                else
+                {
+                    outcome = await When.Rejecting("stock");
+                }
+                await Then.Is(outcome, expected);
+            }
+
+            [Scenario("a union local holds the case one step returned")]
+            public async Task HoldsOneCase()
+            {
+                Outcome outcome = await When.Waiting(5);
+                await Then.Is(outcome, "Pending:5");
+            }
+        }
+
+        public sealed class UnionWhen : When
+        {
+            public Task<Outcome> Submitting(string id) => Task.FromResult<Outcome>(id switch
+            {
+                "ok" => new Accepted("S1"),
+                "no" => new Rejected("stock"),
+                _ => new Pending(60),
+            });
+
+            public Task<bool> Deciding(bool accept) => Task.FromResult(accept);
+            public Task<Accepted> Accepting(string shipment) => Task.FromResult(new Accepted(shipment));
+            public Task<Rejected> Rejecting(string reason) => Task.FromResult(new Rejected(reason));
+            public Task<Pending> Waiting(int minutes) => Task.FromResult(new Pending(minutes));
+        }
+
+        public sealed class UnionThen : Then
+        {
+            public Task Is(Outcome outcome, string expected)
+            {
+                var actual = outcome switch
+                {
+                    Accepted accepted => "Accepted:" + accepted.Shipment,
+                    Rejected rejected => "Rejected:" + rejected.Reason,
+                    Pending pending => "Pending:" + pending.Minutes,
+                };
+                return actual == expected
+                    ? Task.CompletedTask
+                    : throw new InvalidOperationException($"Expected {expected} but the union holds {actual}.");
+            }
+        }
+        """;
 
     public async Task DotnetAsync(ScenarioContext context, params string[] arguments)
     {
@@ -321,6 +461,12 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             Assert.Equal("package", library.Value.GetProperty("type").GetString());
         }
     }
+
+    /// <summary>How many scenarios the generated app reports: its one plain scenario, and on a
+    /// target that has unions the six cases of <see cref="UnionScenarios"/>. A union scenario the
+    /// generator silently produced nothing for would otherwise pass as "all passed".</summary>
+    public static int GeneratedAppScenarios(string consumer)
+        => consumer.EndsWith($"({LowestFramework})", StringComparison.Ordinal) ? 1 : 7;
 
     public static int VerifyReport(string html)
     {

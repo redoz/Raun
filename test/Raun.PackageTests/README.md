@@ -10,14 +10,23 @@ dotnet run --project test/Raun.PackageTests/Raun.PackageTests.csproj -c Release 
 Set `RAUN_PACKAGE_FEED` to use a different local feed. It must contain exactly one
 version of each package, with all four versions matching.
 
-The three cases build and run the Appointment sample, the Aspire sample, and a small
+The cases build and run the Appointment sample, the Aspire sample, and a small
 app with a generated entry point. Each consumer lives outside the repository, uses
 exact package versions and a fresh cache, and gets Raun packages only from the local
 feed. External dependencies use the versions in the samples' lock files.
 
-Consumers are built with the lowest installed .NET SDK that Raun supports, not the SDK the
-repository pins: a generator the oldest supported compiler cannot load builds fine on the newest.
-A fourth scenario reads the packages themselves: every analyzer must reference a Roslyn no newer
+Every consumer is built twice, at the two ends of what Raun supports:
+
+- **oldest**: the lowest installed .NET SDK that Raun supports, targeting `net10.0`. A generator
+  the oldest supported compiler cannot load builds fine on the newest, so this is not the SDK the
+  repository pins.
+- **newest**: the highest installed .NET SDK, targeting its own framework (`net11.0`). This
+  consumer gets each package's newest assets, and its generated app adds scenarios that use C# 15
+  unions as step results: the one place the generator lowers a union inside the compiler a union
+  user really has. The samples are written for `net10.0`; here their `Microsoft.Extensions`
+  references move to the target's major, as a consumer on that target would have them.
+
+A further scenario reads the packages themselves: every analyzer must reference a Roslyn no newer
 than its `roslynX.Y` folder names, and the `net10.0` dependency groups must stay on 10.x.
 
 The suite uses project references to bootstrap itself; only its child projects use
@@ -32,7 +41,7 @@ The suite exercises features where they describe real work:
 
 | Feature | Use in this suite |
 | --- | --- |
-| Inline cases | Both samples and the generated-entry-point app |
+| Inline cases | Both samples and the generated-entry-point app, each on the oldest and the newest SDK |
 | Resources, labels, and references | Feed → consumer → report in the matrix |
 | Custom resource actions | Restored and Built describe workspace changes |
 | Notes and resource-aware logs | Explain isolation and link output to consumers |

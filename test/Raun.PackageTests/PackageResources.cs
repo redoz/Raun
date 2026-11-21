@@ -33,3 +33,6 @@ public sealed class Reported : CreatedAttribute
     /// <summary>Read the consumer that produced the report.</summary>
     public sealed class ConsumerAttribute : ResourceLinkAttribute<PackageConsumer, ReadAttribute>;
 }
+
+/// <summary>The SDK a consumer is built with and the framework it targets.</summary>
+public sealed record ConsumerBaseline(string Sdk, string Framework);

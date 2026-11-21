@@ -178,7 +178,9 @@ of those packages and minor or major updates of Roslyn.
 The package-consumption scenarios enforce all of this: they read each packed analyzer's Roslyn
 reference against its folder name, check the `net10.0` dependency groups, and build their
 consumers with the lowest supported SDK installed (CI installs 10.0.400 for it), not the SDK
-`global.json` pins.
+`global.json` pins. They build every consumer a second time with the newest SDK installed,
+targeting `net11.0`, so the `lib/net11.0` assets and C# 15 unions as step results are met by a
+real consumer too.
 
 The libraries ship `lib/net10.0` and `lib/net11.0` (`RaunTargetFrameworks` in
 `Directory.Build.props`), and the tests run on both. The repository builds with the .NET 11 SDK
