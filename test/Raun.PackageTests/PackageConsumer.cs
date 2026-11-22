@@ -188,11 +188,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         foreach (var project in Directory.EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories))
         {
             var original = Path.Combine(repo, "samples", Path.GetRelativePath(root, project));
-            var originalDirectory = Path.GetDirectoryName(original)!;
-            var linuxLock = Path.Combine(originalDirectory, "packages.linux-x64.lock.json");
-            var lockFile = OperatingSystem.IsLinux() && File.Exists(linuxLock)
-                ? linuxLock : Path.Combine(originalDirectory, "packages.lock.json");
-            using var dependencies = JsonDocument.Parse(File.ReadAllText(lockFile));
+            using var dependencies = JsonDocument.Parse(File.ReadAllText(Path.Combine(Path.GetDirectoryName(original)!, "packages.lock.json")));
             var resolved = dependencies.RootElement.GetProperty("dependencies").GetProperty(LowestFramework);
             var document = XDocument.Load(project);
             foreach (var item in document.Root!.Elements().SelectMany(g => g.Elements()).ToArray())

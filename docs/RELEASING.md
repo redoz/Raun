@@ -29,14 +29,9 @@ dotnet restore Raun.slnx                 # rewrites every lock file that moved
 dotnet restore Raun.slnx --locked-mode   # what CI does; fails if a lock file is stale
 ```
 
-The Aspire AppHost SDK injects host-specific Dashboard and Orchestration packages, so one lock file
-cannot describe every host: the AppHost and its referencing test project use `packages.lock.json` on
-`win-x64` and `packages.<RID>.lock.json` elsewhere (the Linux CI runner reads
-`packages.linux-x64.lock.json`). `RaunRefreshRidLockFiles` in `Directory.Build.targets` restores
-once more for each RID the host is not — `RaunLockedRuntimeIdentifiers`, where a new platform's RID
-goes when it needs a committed lock file — so all of them stay correct whichever machine ran the
-restore. It is skipped when no project file or package version has changed since those files were
-written, so a no-op build pays about 0.2s for it.
+One lock file per project describes every host. Aspire's Dashboard and Orchestration are not in
+them: since Aspire 17 they come from the Aspire CLI bundle, which the AppHost's build installs into
+the user's Aspire home (`~/.aspire`) when it is missing, and no longer from per-platform packages.
 
 Locked mode is deliberately excluded from `RestoreForceEvaluate`: re-evaluating is exactly what must
 not happen there, and CI still fails on a stale lock rather than quietly rewriting it.

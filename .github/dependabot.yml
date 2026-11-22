@@ -1,8 +1,8 @@
 # Dependency updates, grouped so a week's bumps arrive as one reviewable PR per ecosystem rather
 # than one per package. NuGet versions are centrally managed (Directory.Packages.props) and pinned
 # by packages.lock.json. Dependabot edits the lock files itself but never runs a real restore, so it
-# misses the per-RID lock files (packages.linux-x64.lock.json) and some transitive project entries;
-# the dependabot-locks workflow regenerates every lock file on its PRs before CI's --locked-mode.
+# misses some transitive project entries; the dependabot-locks workflow regenerates every lock file
+# on its PRs before CI's --locked-mode.
 version: 2
 updates:
   - package-ecosystem: nuget

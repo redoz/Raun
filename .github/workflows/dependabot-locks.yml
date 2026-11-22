@@ -1,10 +1,9 @@
 name: Dependabot lock files
 
 # Dependabot rewrites packages.lock.json files by hand instead of running a restore, so it misses
-# the per-RID lock files and some transitive project entries, and CI's --locked-mode restore fails.
-# On a Dependabot PR this runs a real restore (which, via Directory.Build.targets, rewrites every
-# committed RID's lock file), pushes the result to the PR branch, and runs CI once on the final
-# commit through workflow_dispatch.
+# some transitive project entries, and CI's --locked-mode restore fails. On a Dependabot PR this
+# runs a real restore (which rewrites every lock file that moved), pushes the result to the PR
+# branch, and runs CI once on the final commit through workflow_dispatch.
 on:
   pull_request:
     branches: [main]
