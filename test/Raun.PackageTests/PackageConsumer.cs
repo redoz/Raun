@@ -427,6 +427,16 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         var coverage = model.RootElement.GetProperty("coverage");
         Assert.True(coverage.GetProperty("status").GetString() == "available", coverage.GetRawText());
         Assert.NotEmpty(coverage.GetProperty("types").EnumerateArray());
+
+        // The API runs in a process of its own and nothing references its project: the AppHost adds
+        // it by path. Its source is in the report only because the run named it, and its branches
+        // are covered only because the collector followed that process.
+        var api = coverage.GetProperty("types").EnumerateArray()
+            .Where(type => type.GetProperty("assembly").GetString() == "AspireAppointments.Api").ToArray();
+        Assert.True(api.Length > 0, "The report holds no source of the API the AppHost runs. Diagnostics: " + coverage.GetProperty("diagnostics").GetRawText());
+        Assert.True(api.SelectMany(type => type.GetProperty("categories").EnumerateArray())
+                .Sum(category => category.GetProperty("counts").GetProperty("covered").GetInt32() + category.GetProperty("counts").GetProperty("partial").GetInt32()) > 0,
+            "The API's source is in the report but none of it was seen running. Diagnostics: " + coverage.GetProperty("diagnostics").GetRawText());
         Assert.Contains(coverage.GetProperty("categories").EnumerateArray(), category =>
         {
             var counts = category.GetProperty("counts");

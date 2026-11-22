@@ -10,6 +10,10 @@ namespace Raun.Coverage.Projects;
 
 internal sealed record SourceProject(Project Project, Compilation Compilation, string OutputPath, bool IsVerified = true)
 {
+    /// <summary>Named by the run as a project it hosts (<see cref="Raun.Mtp.CoverageSourceProjects"/>):
+    /// its code runs in a process of its own, so only the collector can say whether it was reached.</summary>
+    public bool IsHosted { get; init; }
+
     public string Name => Project.Name;
 }
 
@@ -26,15 +30,16 @@ internal sealed class SourceProjectLoadResult(
 internal static class SourceProjectLoader
 {
     public static Task<SourceProjectLoadResult> LoadAsync(string solutionPath, CollectorScope scope, CancellationToken cancellationToken,
-        string? entryAssemblyPath = null, string? invocationDirectory = null)
+        string? entryAssemblyPath = null, string? invocationDirectory = null, IReadOnlyCollection<string>? hostedProjects = null)
     {
         WorkspaceSdk.EnsureRegistered(Path.GetDirectoryName(solutionPath)!);
-        return LoadWorkspaceAsync(solutionPath, scope, entryAssemblyPath ?? Assembly.GetEntryAssembly()?.Location, invocationDirectory, cancellationToken);
+        return LoadWorkspaceAsync(solutionPath, scope, entryAssemblyPath ?? Assembly.GetEntryAssembly()?.Location, invocationDirectory, hostedProjects ?? [], cancellationToken);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static async Task<SourceProjectLoadResult> LoadWorkspaceAsync(
-        string solutionPath, CollectorScope scope, string? entryAssemblyPath, string? invocationDirectory, CancellationToken cancellationToken)
+        string solutionPath, CollectorScope scope, string? entryAssemblyPath, string? invocationDirectory,
+        IReadOnlyCollection<string> hostedProjects, CancellationToken cancellationToken)
     {
         var configuration = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Debug";
         var workspace = MSBuildWorkspace.Create(new Dictionary<string, string> { ["Configuration"] = configuration });
@@ -50,6 +55,26 @@ internal static class SourceProjectLoader
             var visited = new Dictionary<string, Project>(comparer);
             var runtimeDirectory = string.IsNullOrEmpty(entryAssemblyPath) ? null : Path.GetDirectoryName(Path.GetFullPath(entryAssemblyPath));
             pending.Enqueue(root);
+
+            // What the run hosts is in scope because the run says so. No reference has to lead to it,
+            // and it need not be in the solution: an AppHost can start a project by its path alone.
+            var hosted = new HashSet<string>(comparer);
+            foreach (var hostedPath in hostedProjects.Select(Path.GetFullPath).Distinct(comparer))
+            {
+                if (!File.Exists(hostedPath))
+                {
+                    diagnostics.Add(Path.GetFileName(hostedPath) + ": hosted by the run, but its project file was not found at " + hostedPath);
+                    continue;
+                }
+                var variants = workspace.CurrentSolution.Projects.Where(item => item.FilePath is not null
+                    && comparer.Equals(Path.GetFullPath(item.FilePath), hostedPath)).ToArray();
+                var hostedProject = variants.Length > 0 ? variants[0]
+                    : await workspace.OpenProjectAsync(hostedPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (variants.Length > 1) { diagnostics.Add(hostedProject.Name + ": chosen among " + variants.Length + " compiled variants of " + Path.GetFileName(hostedPath)); }
+                hosted.Add(hostedPath);
+                pending.Enqueue(hostedProject);
+                diagnostics.Add(Path.GetFileNameWithoutExtension(hostedPath) + ": hosted by the run; in scope with its runtime dependencies");
+            }
             while (pending.TryDequeue(out var project))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -105,7 +130,7 @@ internal static class SourceProjectLoader
                     continue;
                 }
                 var hasErrors = compilation.GetDiagnostics(cancellationToken).Any(d => d.Severity == DiagnosticSeverity.Error);
-                projects.Add(new SourceProject(project, compilation, outputPath, !hasErrors));
+                projects.Add(new SourceProject(project, compilation, outputPath, !hasErrors) { IsHosted = hosted.Contains(path) });
                 if (hasErrors)
                 {
                     diagnostics.Add(project.Name + ": compilation has errors; all outcomes remain unverified");
@@ -225,8 +250,7 @@ internal static class SourceProjectLoader
         }
         var references = json.RootElement.GetProperty("Items").GetProperty("ProjectReference")
             .EnumerateArray().Where(item => !string.Equals(Metadata(item, "OutputItemType"), "Analyzer", StringComparison.OrdinalIgnoreCase)
-                && (!string.Equals(Metadata(item, "ReferenceOutputAssembly"), "false", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(Metadata(item, "IsAspireProjectResource"), "true", StringComparison.OrdinalIgnoreCase)))
+                && !string.Equals(Metadata(item, "ReferenceOutputAssembly"), "false", StringComparison.OrdinalIgnoreCase))
             .Select(item => Path.GetFullPath(Metadata(item, "FullPath") ?? Path.Combine(Path.GetDirectoryName(projectPath)!, item.GetProperty("Identity").GetString()!))).ToArray();
         return new ProjectProperties(string.Equals(properties.GetProperty("IsTestProject").GetString(), "true", StringComparison.OrdinalIgnoreCase)
             || string.Equals(properties.GetProperty("IsTestingPlatformApplication").GetString(), "true", StringComparison.OrdinalIgnoreCase),

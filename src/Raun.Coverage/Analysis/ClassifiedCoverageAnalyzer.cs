@@ -23,6 +23,18 @@ public static class ClassifiedCoverageAnalyzer
     public static async Task<ReportCoverage> AnalyzeAsync(
         string xmlPath, string invocationDirectory, CollectorScope scope,
         IReadOnlyList<Func<IBranchClassificationMiddleware>> middlewareFactories, CancellationToken cancellationToken = default)
+        => (await AnalyzeWithWarningsAsync(xmlPath, invocationDirectory, scope, middlewareFactories, [], cancellationToken).ConfigureAwait(false)).Report;
+
+    /// <summary>
+    /// <see cref="AnalyzeAsync"/> for a run that hosts projects of its own
+    /// (<paramref name="hostedProjects"/>, project file paths). Returns, beside the report, what the
+    /// person running the tests should be told: a hosted project the collector reported nothing
+    /// from has no coverage at all, which a report full of other numbers does not make obvious.
+    /// </summary>
+    internal static async Task<CoverageAnalysis> AnalyzeWithWarningsAsync(
+        string xmlPath, string invocationDirectory, CollectorScope scope,
+        IReadOnlyList<Func<IBranchClassificationMiddleware>> middlewareFactories, IReadOnlyCollection<string> hostedProjects,
+        CancellationToken cancellationToken = default)
     {
         using var stream = File.OpenRead(xmlPath);
         var observations = string.Equals(Path.GetExtension(xmlPath), ".json", StringComparison.OrdinalIgnoreCase)
@@ -30,9 +42,18 @@ public static class ClassifiedCoverageAnalyzer
         var solution = SolutionLocator.Resolve(invocationDirectory) ?? ResolveSourceHints(observations);
         if (solution is null)
         {
-            return new ReportCoverage { Status = "unavailable", Diagnostics = ["No source solution was found."] };
+            return new CoverageAnalysis(new ReportCoverage { Status = "unavailable", Diagnostics = ["No source solution was found."] }, []);
         }
-        using var loaded = await SourceProjectLoader.LoadAsync(solution, scope, cancellationToken, invocationDirectory: invocationDirectory).ConfigureAwait(false);
+        using var loaded = await SourceProjectLoader.LoadAsync(solution, scope, cancellationToken, invocationDirectory: invocationDirectory, hostedProjects: hostedProjects).ConfigureAwait(false);
+
+        // A hosted project runs in a process of its own, so the collector is the only witness to
+        // it. One the collector reported nothing from has no coverage at all; say so, whichever
+        // collector it was and whether or not its source stays in the inventory below.
+        var warnings = loaded.Projects
+            .Where(project => project.IsHosted && !observations.Modules.Any(module => string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal)))
+            .Select(project => project.Name + ": hosted by the run, but no coverage was collected from its process; every outcome in it is unknown."
+                + " The collector has to follow child processes and include this assembly.")
+            .ToList();
         var pipeline = BranchClassificationPipeline.Create(middlewareFactories);
         var diagnostics = loaded.Diagnostics.ToList();
         var facts = new List<AnalyzedBranch>();
@@ -53,7 +74,10 @@ public static class ClassifiedCoverageAnalyzer
         {
             if (!observations.Modules.Any(module => string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal)))
             {
-                diagnostics.Add(project.Name + ": no execution evidence; source branches remain in inventory with unknown outcomes");
+                if (!project.IsHosted)
+                {
+                    diagnostics.Add(project.Name + ": no execution evidence; source branches remain in inventory with unknown outcomes");
+                }
             }
             var matchingModules = observations.Modules.Where(module => ModuleIdentity.Matches(project.OutputPath, module)
                 && string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal)).ToArray();
@@ -77,8 +101,13 @@ public static class ClassifiedCoverageAnalyzer
             .Select(group => new ReportCoverageType(group.Key.Assembly, group.Key.Type, Summarize(group),
                 group.GroupBy(branch => branch.Member.Signature).OrderBy(method => method.Key, StringComparer.Ordinal)
                     .Select(method => new ReportCoverageMethod(method.Key, Summarize(method)) { Sources = CoverageSourceBuilder.Build(method.Where(fact => fact.Source is not null).Select(fact => (fact.Source!, fact.Category, fact.Status)), method.First().Observations) }).ToArray()) { Namespace = group.First().Member.Namespace }).ToArray();
-        return new ReportCoverage { Status = "available", BranchPaths = SummarizeBranchPaths(observations), Categories = Summarize(facts), Types = types, Diagnostics = diagnostics.Distinct(StringComparer.Ordinal).ToArray() };
+        return new CoverageAnalysis(
+            new ReportCoverage { Status = "available", BranchPaths = SummarizeBranchPaths(observations), Categories = Summarize(facts), Types = types, Diagnostics = warnings.Concat(diagnostics).Distinct(StringComparer.Ordinal).ToArray() },
+            warnings);
     }
+
+    /// <summary>A report and the lines of it worth saying out loud when the run ends.</summary>
+    internal sealed record CoverageAnalysis(ReportCoverage Report, IReadOnlyList<string> Warnings);
 
     internal static ReportCoverageBranchPaths? SummarizeBranchPaths(CoverageObservations observations)
     {

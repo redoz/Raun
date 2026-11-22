@@ -33,14 +33,14 @@ public sealed class SourceProjectTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Includes_aspire_child_applications_but_not_analyzers_or_unrelated_projects(bool useSourceContext)
+    public async Task Includes_the_application_an_AppHost_runs_but_not_analyzers_or_unrelated_projects(bool useSourceContext)
     {
         var root = CoverageEnvironmentProbeTests.FindRoot();
         var source = Path.Combine(root, "samples", "AspireAppointments", "AspireAppointments.Tests");
         using var loaded = await SourceProjectLoader.LoadAsync(Path.Combine(root, "Raun.slnx"), new CollectorScope(),
             TestContext.Current.CancellationToken,
             useSourceContext ? "ExternalConsumer.dll" : Path.Combine(source, "bin", "Debug", "net10.0", "AspireAppointments.Tests.dll"),
-            useSourceContext ? source : root);
+            useSourceContext ? source : root, hostedProjects: [SampleApi(root)]);
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.Api");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.AppHost");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Mtp");
@@ -55,12 +55,18 @@ public sealed class SourceProjectTests
         var root = CoverageEnvironmentProbeTests.FindRoot();
         using var loaded = await SourceProjectLoader.LoadAsync(Path.Combine(root, "Raun.slnx"),
             new CollectorScope { ModuleExcludes = [@"Raun\.Aspire\.dll$"] }, TestContext.Current.CancellationToken,
-            Path.Combine(root, "samples", "AspireAppointments", "AspireAppointments.Tests", "bin", "Debug", "net10.0", "AspireAppointments.Tests.dll"));
+            Path.Combine(root, "samples", "AspireAppointments", "AspireAppointments.Tests", "bin", "Debug", "net10.0", "AspireAppointments.Tests.dll"),
+            hostedProjects: [SampleApi(root)]);
         Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Aspire");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Mtp");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.Api");
     }
+
+    /// <summary>The API the sample's AppHost starts by path. No project references it; the run names
+    /// it, as <c>Raun.Aspire</c> does from the application's resources.</summary>
+    private static string SampleApi(string root)
+        => Path.Combine(root, "samples", "AspireAppointments", "AspireAppointments.Api", "AspireAppointments.Api.csproj");
 
     [Fact]
     public async Task Missing_root_does_not_fall_back_to_the_entire_solution()

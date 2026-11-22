@@ -1,12 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Testing.Platform.Extensions;
 using Microsoft.Testing.Platform.Extensions.Messages;
+using Microsoft.Testing.Platform.Extensions.OutputDevice;
 
 namespace Raun.Mtp.Coverage;
 
 // Inline consumption guarantees enrichment completes before session-finishing publication returns.
 #pragma warning disable TPEXP // IBlockingDataConsumer is required to prevent analysis outliving host disposal.
-internal sealed class CoverageArtifactConsumer(CoverageSessionCoordinator coordinator, bool enabled) : IDataConsumer, IBlockingDataConsumer
+internal sealed class CoverageArtifactConsumer(CoverageSessionCoordinator coordinator, bool enabled) : IDataConsumer, IBlockingDataConsumer, IOutputDeviceDataProducer
 #pragma warning restore TPEXP
 {
     public string Uid => "raun.mtp.classifiedcoverage";

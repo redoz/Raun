@@ -13,13 +13,4 @@
     <PackageReference Include="Aspire.Hosting.Dotnet" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- AddDotnetProject takes the API by path and needs no reference. This one is for Raun.Coverage:
-         it follows project references from the test project to find the source it reports on, and
-         IsAspireProjectResource marks a project the AppHost runs but does not link. -->
-    <ProjectReference Include="..\AspireAppointments.Api\AspireAppointments.Api.csproj"
-                      IsAspireProjectResource="true"
-                      ReferenceOutputAssembly="false" />
-  </ItemGroup>
-
 </Project>

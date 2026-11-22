@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Testing.Platform.Extensions.Messages;
+using Microsoft.Testing.Platform.Extensions.OutputDevice;
 using Microsoft.Testing.Platform.Extensions.TestHostControllers;
 using Microsoft.Testing.Platform.Services;
 using Raun.Reporting.Coverage;
@@ -13,7 +14,7 @@ namespace Raun.Mtp.Coverage;
 internal sealed class CoverletReportEnricher(
     Func<IReadOnlyList<CoverageReportReference>> reports,
     string? reportPath,
-    Func<FileInfo, CancellationToken, Task<ReportCoverage>> analyze) : ITestHostProcessLifetimeHandler
+    Func<FileInfo, CancellationToken, Task<ReportCoverage>> analyze) : ITestHostProcessLifetimeHandler, IOutputDeviceDataProducer
 {
     private DateTime? _previousReportWrite;
     public string Uid => "raun.mtp.coverletreport";

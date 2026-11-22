@@ -141,6 +141,15 @@ register `builder.UseClassifiedCoverage()` in `RaunTestApplication.RunAsync`'s `
 Middleware registration also enables the integration. The middleware API retains its source namespace
 and ships in `Raun.Coverage`.
 
+The source in the report is the test project and what it references, plus the projects the run hosts:
+code that runs because of the tests but in a process of its own. `Raun.Aspire` names every .NET project
+the AppHost runs, read from the application itself, so it does not matter how the AppHost adds them
+(`AddDotnetProject` by path needs no project reference). For a process you start yourself, name its
+project in `configure`: `builder.GetCoverageSourceProjects().Add(pathToCsproj)`.
+A hosted project the collector reported nothing from is a warning, printed when the run ends and listed
+in the report: its numbers are all "can't tell", and the usual cause is a collector that does not follow
+child processes or does not include that assembly.
+
 Register a compatible collector for the report's Coverage view.
 Use `--report-html --coverage --coverage-output-format xml`, or `--report-html --coverlet --coverlet-output-format json`.
 On Linux and macOS, the Microsoft collector instruments assemblies in place by default. The test host controller
