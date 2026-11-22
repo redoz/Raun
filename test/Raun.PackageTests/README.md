@@ -23,8 +23,8 @@ Every consumer is built twice, at the two ends of what Raun supports:
 - **newest**: the highest installed .NET SDK, targeting its own framework (`net11.0`). This
   consumer gets each package's newest assets, and its generated app adds scenarios that use C# 15
   unions as step results: the one place the generator lowers a union inside the compiler a union
-  user really has. The samples are written for `net10.0`; here their `Microsoft.Extensions`
-  references move to the target's major, as a consumer on that target would have them.
+  user really has. The samples are written for `net10.0`; here the same sources and package
+  versions are built for the newer target.
 
 A further scenario reads the packages themselves: every analyzer must reference a Roslyn no newer
 than its `roslynX.Y` folder names, and the `net10.0` dependency groups must stay on 10.x.

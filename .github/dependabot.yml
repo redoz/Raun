@@ -29,9 +29,6 @@ updates:
       # .NET 10 consumer pinning transitive packages. Lift when net10.0 is dropped.
       - dependency-name: Microsoft.Extensions.*
         update-types: ['version-update:semver-major']
-      # A security pin for a transitive dependency of StreamJsonRpc, which is built against 2.x.
-      - dependency-name: MessagePack
-        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /

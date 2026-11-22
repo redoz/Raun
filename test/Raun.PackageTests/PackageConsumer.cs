@@ -142,13 +142,10 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
     private static void Configure(string root, string feed, ConsumerBaseline baseline)
     {
         // These files stop directory searches before they can import repository build settings.
-        // NU1510 on a newer target: the samples are written for the lowest one, and reference
-        // packages that a newer framework already supplies. Redundant there, not wrong.
-        File.WriteAllText(Path.Combine(root, "Directory.Build.props"), $"""
+        File.WriteAllText(Path.Combine(root, "Directory.Build.props"), """
             <Project><PropertyGroup>
               <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
               <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-              <NoWarn>$(NoWarn){(baseline.Framework == LowestFramework ? "" : ";NU1510")}</NoWarn>
             </PropertyGroup></Project>
             """);
         File.WriteAllText(Path.Combine(root, "Directory.Build.targets"), "<Project />");
@@ -213,13 +210,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
                         item.Remove();
                         break;
                     case "PackageReference":
-                        var id = item.Attribute("Include")!.Value;
-                        // Microsoft.Extensions packages version with the runtime, and the rest of a
-                        // newer target's graph asks for that runtime's: a consumer there references
-                        // its own major, where the lock file's 10.x would be a downgrade (NU1605).
-                        item.SetAttributeValue("Version", baseline.Framework != LowestFramework && id.StartsWith("Microsoft.Extensions.", StringComparison.Ordinal)
-                            ? $"{baseline.Framework["net".Length..]}.0"
-                            : $"[{resolved.GetProperty(id).GetProperty("resolved").GetString()}]");
+                        item.SetAttributeValue("Version", $"[{resolved.GetProperty(item.Attribute("Include")!.Value).GetProperty("resolved").GetString()}]");
                         break;
                     case "ProjectReference":
                         var target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(project)!, item.Attribute("Include")!.Value.Replace('\\', '/')));

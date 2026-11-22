@@ -1,23 +1,25 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.6.5">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <IsAspireHost>true</IsAspireHost>
     <UserSecretsId>raun-aspire-appointments</UserSecretsId>
     <NoWarn>$(NoWarn);CA1852;CA2007;ASPIRE010</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Retain Aspire compatibility while taking the patched transitive version. -->
-    <PackageReference Include="MessagePack" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Aspire.Hosting.AppHost" />
+    <PackageReference Include="Aspire.Hosting.Dotnet" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AspireAppointments.Api\AspireAppointments.Api.csproj" />
+    <!-- AddDotnetProject takes the API by path and needs no reference. This one is for Raun.Coverage:
+         it follows project references from the test project to find the source it reports on, and
+         IsAspireProjectResource marks a project the AppHost runs but does not link. -->
+    <ProjectReference Include="..\AspireAppointments.Api\AspireAppointments.Api.csproj"
+                      IsAspireProjectResource="true"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

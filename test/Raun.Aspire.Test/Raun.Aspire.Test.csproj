@@ -16,7 +16,6 @@
   <!-- Unit-level coverage only: everything here runs WITHOUT a container runtime. Actually standing
        up an AppHost is the Aspire sample's job, which is the integration test for this package. -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3.mtp-v2" />
     <PackageReference Include="xunit.runner.visualstudio" />

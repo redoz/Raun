@@ -4,7 +4,7 @@
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var api = builder.AddProject<Projects.AspireAppointments_Api>("api")
+var api = builder.AddDotnetProject("api", "../AspireAppointments.Api/AspireAppointments.Api.csproj")
     // Declared here rather than in a launchSettings.json profile: one fewer file, and the sample's
     // topology is visible in one place. Aspire injects ASPNETCORE_URLS for the allocated port.
     .WithHttpEndpoint()
