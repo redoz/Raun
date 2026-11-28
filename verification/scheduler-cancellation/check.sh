@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Model-checks SchedulerCancellation.tla with TLC, one rule at a time, and says which hold.
-# Exit 0: every rule holds. 1: a rule breaks (its path is printed). 2: TLC is missing or errored.
+# Exits 0 when every rule holds, 1 when a rule breaks and prints its path, and 2 when TLC is missing or errored.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 jar="${TLA2TOOLS:-$HOME/.cache/tlaplus/tla2tools-1.7.4.jar}"
 if [ ! -f "$jar" ]; then
   echo "No TLC at $jar." >&2
-  echo "Get tla2tools.jar v1.7.4 (sha256 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88)" >&2
+  echo "Get tla2tools.jar v1.7.4, sha256 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88," >&2
   echo "from https://github.com/tlaplus/tlaplus/releases/tag/v1.7.4 and put it there, or set TLA2TOOLS." >&2
   exit 2
 fi

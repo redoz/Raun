@@ -4,13 +4,13 @@
 (* the scheduler turns the decision into the step's result.                *)
 (*                                                                         *)
 (* One scenario, one running step with its own timeout, a scenario         *)
-(* timeout, and a host (test platform) that may cancel the run.            *)
+(* timeout, and a test platform that may cancel the run.                  *)
 (*                                                                         *)
 (*   src/Raun/Scheduling/CancellationWatchdog.cs                           *)
 (*     Supervise, TimeOutStepsWhoseDeadlinePassedBeforeTheScenarios,       *)
 (*     Expire, Operation.RequestCancellation, Operation.CompleteAsync      *)
 (*   src/Raun/Scheduling/ScenarioScheduler.cs                              *)
-(*     RunAsync (hostRegistration), RunNodeAsync, ApplyFinishedAsync       *)
+(*     RunAsync and its hostRegistration, RunNodeAsync, ApplyFinishedAsync *)
 (*                                                                         *)
 (* One action = one span the code runs under the watchdog's gate, or one   *)
 (* read/write of a volatile flag outside it. The host token is the only    *)
@@ -22,18 +22,18 @@
 VARIABLES
     hostFlag,      \* the host CancellationToken has been cancelled
     hostCallback,  \* "none" | "pending" | "ran": cancellationToken.Register(() => scenarioWatch.RequestCancellation())
-    scen,          \* scenario Operation. started = CancellationStarted, and timeoutCts (scenarioToken) is cancelled
-    step,          \* step Operation. started = CancellationStarted, and stepCts (ctx.CancellationToken) is cancelled
-    scenPassed,    \* the scenario deadline has passed (real time)
-    stepPassed,    \* the step deadline has passed (real time)
+    scen,          \* scenario Operation. started = CancellationStarted, and timeoutCts, the scenarioToken, is cancelled
+    step,          \* step Operation. started = CancellationStarted, and stepCts, the ctx.CancellationToken, is cancelled
+    scenPassed,    \* the scenario deadline has passed, in real time
+    stepPassed,    \* the step deadline has passed, in real time
     order,         \* which deadline passed first: "none" | "step" | "scenario" | "tie"
     wd,            \* the watchdog's pass; anything but "idle" means it holds the gate
-    snap,          \* the pass's one reading of the clock and of the host token (now, runCancelled)
+    snap,          \* the pass's one reading of the clock and of the host token, now and runCancelled
     body,          \* where RunNodeAsync is with the step
     returned,      \* the step body returned instead of throwing
     outcome,       \* NodeOutcome.Result.Status as RunNodeAsync built it
-    outCanceled,   \* NodeOutcome.Canceled (operationWatch.CancellationStarted)
-    outTimedOut,   \* NodeOutcome.StepTimedOut (operationWatch.TimedOut)
+    outCanceled,   \* NodeOutcome.Canceled, from operationWatch.CancellationStarted
+    outTimedOut,   \* NodeOutcome.StepTimedOut, from operationWatch.TimedOut
     reported       \* the step's result once ApplyFinishedAsync has applied it
 
 vars == <<hostFlag, hostCallback, scen, step, scenPassed, stepPassed, order, wd, snap,

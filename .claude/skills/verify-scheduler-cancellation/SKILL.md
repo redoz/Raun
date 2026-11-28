@@ -1,6 +1,6 @@
 ---
 name: verify-scheduler-cancellation
-description: Model-check how Raun's scheduler decides why a running step stopped (run cancelled, scenario timeout, step timeout). Use when a change touches src/Raun/Scheduling/CancellationWatchdog.cs or the cancellation/timeout parts of ScenarioScheduler.RunNodeAsync, ApplyFinishedAsync or RunAsync's host registration, or when a cancellation or timeout test flakes.
+description: Model-check how Raun's scheduler decides why a running step stopped, whether the run was cancelled, the scenario timed out or the step timed out. Use when a change touches src/Raun/Scheduling/CancellationWatchdog.cs or the cancellation/timeout parts of ScenarioScheduler.RunNodeAsync, ApplyFinishedAsync or RunAsync's host registration, or when a cancellation or timeout test flakes.
 ---
 
 # Verify scheduler cancellation
@@ -25,7 +25,7 @@ The model covers this code. If your diff changes any of it, run the check.
 | `CancellationWatchdog.Expire` on the scenario, then on each other operation | `ExpireScenario`, `ExpireStep` |
 | `Operation.RequestCancellation`, including the scenario's cascade | `CancelStep`, `CancelScenario` |
 | `Operation.CompleteAsync`, its two locks | `CompleteMarks`, `CompleteFinishes` |
-| `ScenarioScheduler.RunAsync`: `hostRegistration` (`cancellationToken.Register(() => scenarioWatch.RequestCancellation())`) | `HostCancels`, `HostCallbackRuns` |
+| `ScenarioScheduler.RunAsync`: `hostRegistration`, which is `cancellationToken.Register(() => scenarioWatch.RequestCancellation())` | `HostCancels`, `HostCallbackRuns` |
 | `ScenarioScheduler.RunNodeAsync`: `operationWatch.CompleteAsync` in the inner `finally`, the checks after the body returns, and the `catch (OperationCanceledException) when (...)` filter | `BodyReturns`, `BodyThrowsOnCancel`, `Classify` |
 | `ScenarioScheduler.ApplyFinishedAsync`: `scenarioWatch.TimedOut && outcome.Canceled && !outcome.StepTimedOut` | `Apply` |
 
@@ -33,7 +33,7 @@ The model covers this code. If your diff changes any of it, run the check.
 
 ## Run it
 
-You need Java 11 or later, and TLC (`tla2tools.jar` v1.7.4) at `~/.cache/tlaplus/tla2tools-1.7.4.jar`, or set `TLA2TOOLS` to point at it. If TLC is missing, the script prints where to get it and the sha256 to check. Downloading TLC is the user's call, so ask before you fetch it.
+You need Java 11 or later and TLC. TLC is `tla2tools.jar` v1.7.4, at `~/.cache/tlaplus/tla2tools-1.7.4.jar` or at the path in `TLA2TOOLS`. If TLC is missing, the script prints where to get it and the sha256 to check. Downloading TLC is the user's call, so ask before you fetch it.
 
 ```sh
 bash verification/scheduler-cancellation/check.sh
@@ -41,7 +41,7 @@ bash verification/scheduler-cancellation/check.sh
 
 The script takes about 2 seconds. It checks each rule on its own and prints `HOLDS`, `BREAKS` with the shortest path as a list of model actions, or `ERROR`. It exits 0 when every rule holds, 1 when a rule breaks, and 2 when TLC is missing or errored.
 
-Read each result with the `/statechart` skill. Run it on `SchedulerCancellation.tla` with `SchedulerCancellation.cfg` and the view `verification/scheduler-cancellation/view.ts`. It tells each broken rule as its shortest path in plain words, and when every rule holds, it draws how a step moves between states. As of 3738035a, `/statechart` does not run on Windows: its script spawns `/bin/sh`. On Windows, read the action list that `check.sh` prints against the table above.
+Read each result with the `/statechart` skill. Run it on `SchedulerCancellation.tla` with `SchedulerCancellation.cfg` and the view `verification/scheduler-cancellation/view.ts`. It tells each broken rule as its shortest path in plain words, and when every rule holds, it draws how a step moves between states. As of 3738035a, `/statechart` does not run on Windows, because its script spawns `/bin/sh`. On Windows, read the action list that `check.sh` prints against the table above.
 
 ## Expected result at the sync commit
 
@@ -50,13 +50,13 @@ HOLDS  NeverFailedForCancellation (4153 distinct states found)
 HOLDS  TimeoutHasOneOwner (4153 distinct states found)
 ```
 
-`NeverFailedForCancellation` broke on the code before the sync commit, and the CI flake in `StepClassTests.A_cancelled_scenario_still_disposes_its_world` (`Assert.Null() Failure ... TaskCanceledException ... at Clinic.AppointmentActions.Hangs`) was that break:
+`NeverFailedForCancellation` broke on the code before the sync commit. The CI flake in `StepClassTests.A_cancelled_scenario_still_disposes_its_world` was that break. CI printed `Assert.Null() Failure ... TaskCanceledException ... at Clinic.AppointmentActions.Hangs`. The path:
 
 1. The watchdog starts a pass and checks the scenario. The host token is not cancelled yet, so the scenario stays live.
 2. The test platform cancels the run. `CancellationTokenSource` sets the token's flag without taking the watchdog's `gate`.
 3. In the same pass, `Expire` on the step reads the host token again and finds it cancelled. It cancels the step's token, with `timedOut: false`, and leaves the scenario token live.
 4. The step body throws `TaskCanceledException`. `CompleteAsync` runs, and then the catch filter `scenarioToken.IsCancellationRequested && !operationWatch.TimedOut` is false.
-5. The step is reported **Failed** with the cancellation exception. The host callback or the next pass cancels the scenario, but too late.
+5. The step is reported Failed with the cancellation exception. The host callback or the next pass cancels the scenario after the step has already decided its result.
 
 The fix reads the host token once per pass, as `runCancelled` next to `now`, and passes it to `TimeOutStepsWhoseDeadlinePassedBeforeTheScenarios` and to `Expire`. In the model, `PassStarts` records it as `snap.host`. `TimeoutOwnershipTests.A_run_cancelled_while_the_watchdog_looks_never_stops_a_step_before_its_scenario` replays this path in the real watchdog, so it fails on every run when the fix is undone.
 
@@ -64,8 +64,8 @@ The fix reads the host token once per pass, as `runCancelled` next to `now`, and
 
 When a rule breaks, walk the printed path against the code in the table.
 
-- **Real bug:** each action on the path is something the code can do in that order. Check especially that each span the model treats as one action runs under `gate` in the code, or is a single flag read. Report it in the code's words, as in the numbered list above. Do not weaken a rule or the model so that it passes, and do not change product code unless the user asks.
-- **Modeling error:** some action on the path does something the code cannot do. For example, it does two things the code does in separate lock spans, it reads a value that the code reads at another time, or it misses a guard that the code has. Fix the model so that it matches the code. Then show that the fixed model still breaks on the broken variants under "Able to fail".
+- **Real bug.** Each action on the path is something the code can do in that order. Check that each span the model treats as one action runs under `gate` in the code, or is a single flag read. Report it in the code's words, as in the numbered list above. Do not weaken a rule or the model so that it passes, and do not change product code unless the user asks.
+- **Modeling error.** Some action on the path does something the code cannot do. For example, it does two things the code does in separate lock spans, it reads a value that the code reads at another time, or it misses a guard that the code has. Fix the model so that it matches the code. Then show that the fixed model still breaks on the broken variants under "Able to fail".
 
 ## When you change the covered code on purpose
 
@@ -82,8 +82,8 @@ After a change to the model, repeat one of these breaks in a scratch copy, so th
 
 ## What it does not cover
 
-- One scenario and one running step. Sibling steps, `RunAsync`'s scheduling loop, and the teardown runner (`TeardownRunner`) are not modeled.
+- One scenario and one running step. The model leaves out sibling steps, the scheduling loop in `RunAsync`, and `TeardownRunner`.
 - The cancellation grace, and the host termination when a body does not stop within it.
-- Steps whose timeout has not started yet (`WatchBeforeItsTimeoutStarts` before `StartTimeout`). The model starts the step with its timeout running.
-- Thread-pool starvation. It decides which interleaving happens and how late. It does not add interleavings. So the rules hold under load exactly when they hold here. A test that waits too briefly for a deadline is a test problem, which this model cannot see.
-- Simulated time (`DeadlineClock`, `SimulatedClock`).
+- A step registered with `WatchBeforeItsTimeoutStarts` whose `StartTimeout` has not run yet. The model starts the step with its timeout running.
+- Thread-pool starvation. Starvation changes which interleaving happens and how late it happens, but it adds no interleaving. So the rules hold under load when they hold here. A test that waits too short a time for a deadline has a test bug, and this model cannot see it.
+- Simulated time, which is `DeadlineClock` and `SimulatedClock`.
