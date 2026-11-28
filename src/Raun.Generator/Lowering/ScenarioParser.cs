@@ -2009,7 +2009,7 @@ internal sealed class ScenarioParser
         if (method.DeclaringSyntaxReferences.Length == 0)
         {
             foreach (var issue in RelationshipReader.Read(method, _model.Compilation).Issues)
-            { Report(Descriptors.ById[issue.Id], invocation, issue.Id == "RAUN010" ? issue.Reason : issue.Subject.Name, issue.Id == "RAUN010" ? method.Name : issue.Reason); }
+            { Report(Descriptors.ById[issue.Id], invocation, issue.Subject.Name, issue.Reason); }
             foreach (var problem in ResourceRoleMetadata.Validate(method, _model.Compilation))
             { Report(Descriptors.ById[problem.Id], invocation, problem.Subject.Name, problem.Reason); }
         }
@@ -2395,8 +2395,7 @@ internal sealed class ScenarioParser
                 : null;
 
         // A producer's lineage target: Subject.Return is the step's own value; a parameter name is
-        // that parameter's argument. Null when the name resolves to no supplied argument (the analyzer
-        // reports it as RAUN010).
+        // that parameter's argument. Null when the name resolves to no supplied argument.
         ExpressionSyntax? TargetFor(string name)
         {
             if (name == AttributeReader.ReturnSubject)

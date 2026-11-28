@@ -15,7 +15,7 @@ namespace Raun.Generator.Analysis;
 
 /// <summary>
 /// The rules that are not about lowering a scenario body: <c>[StepName]</c> placeholders (RAUN008),
-/// resource roles and lineage on steps (RAUN009/010), a cleanup's context (RAUN014), contended
+/// resource roles on steps (RAUN009), a cleanup's context (RAUN014), contended
 /// resources (RAUN015/016), and mutable state on step classes (RAUN022). What a <c>[Scenario]</c> body
 /// may contain is the parser's to judge alone — it reports through the generator — so no second walker
 /// can disagree with it.
@@ -37,7 +37,6 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         Descriptors.UnboundPlaceholder,
         Descriptors.MissingResourceRole,
         Descriptors.InvalidResourceKeyParameter,
-        Descriptors.InvalidLineageSubject,
         Descriptors.StepContextInCleanup,
         Descriptors.ContendedResourceKind,
         Descriptors.InertContendedResourceUse,
@@ -476,7 +475,7 @@ public sealed class ScenarioAnalyzer : DiagnosticAnalyzer
         foreach (var issue in RelationshipReader.Read(symbol, context.Compilation).Issues)
         {
             context.ReportDiagnostic(Diagnostic.Create(Descriptors.ById[issue.Id], issue.Location ?? issue.Subject.Locations.FirstOrDefault(), issue.Properties,
-                issue.Id == "RAUN010" ? issue.Reason : issue.Subject.Name, issue.Id == "RAUN010" ? symbol.Name : issue.Reason));
+                issue.Subject.Name, issue.Reason));
         }
         if (HasAttribute(symbol, "StepNameAttribute") || symbol.Parameters.Any(parameter => AttributeReader.ResourceKeyType(parameter) is not null)
             || symbol.Parameters.Any(parameter => AttributeReader.ParameterRole(parameter) is not null)

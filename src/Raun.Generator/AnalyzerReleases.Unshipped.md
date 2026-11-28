@@ -15,7 +15,6 @@ RAUN006 | Raun.Usage | Error | Parallel group element must be a step call
 RAUN007 | Raun.Usage | Error | Scenario step argument is not lowerable
 RAUN008 | Raun.Usage | Warning | Display-name placeholder does not bind
 RAUN009 | Raun.Usage | Error | Resource access must be declared
-RAUN010 | Raun.Usage | Error | Lineage subject must name a step subject
 RAUN011 | Raun.Usage | Error | Scenario condition must be an awaited step call
 RAUN013 | Raun.Usage | Error | Parallel steps conflict on one resource
 RAUN014 | Raun.Usage | Error | Cleanup uses the registering step's context

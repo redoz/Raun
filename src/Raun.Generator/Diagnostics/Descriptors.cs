@@ -93,14 +93,6 @@ internal static class Descriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor InvalidLineageSubject = new(
-        "RAUN010",
-        "Links target must name a step input",
-        "'{0}' is not a valid lineage target for step '{1}' — References/Consumes must name a parameter (via nameof) or the step's own return (Subject.Return)",
-        Category,
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
     public static readonly DiagnosticDescriptor InvalidCondition = new(
         "RAUN011",
         "Scenario condition must be an awaited step call",
@@ -262,7 +254,7 @@ internal static class Descriptors
         InvalidTag, MissingResourceLink, InvalidResourceDefinition, InvalidRelationshipProperty, InvalidResourceRelationship, InvalidScenarioCase, InvalidScenarioCaseArgument, InvalidScenarioCaseSignature, InvalidResourceAction, AmbiguousResourceRole, ResourceRoleWithoutResult, InvalidResourceAlternate, ConflictingResourceAlternate, UnhandledException, MustBeAsyncTask, UnsupportedStatement, UnsupportedControlFlow, NotADslCall,
         InvalidReturnType, InvalidGroupElement, InvalidArgument, UnboundPlaceholder, MissingResourceRole,
         UnfollowableStepReceiver, ScenarioClassShape, WorldMismatch, MutableStepClassState, NoMatchingStepTitle, InvalidResourceKeyParameter,
-        InvalidLineageSubject, InvalidCondition, ConflictingParallelAccess,
+        InvalidCondition, ConflictingParallelAccess,
         StepContextInCleanup, ContendedResourceKind, InertContendedResourceUse, ScenarioNotGenerated,
     }.ToDictionary(d => d.Id);
 }
