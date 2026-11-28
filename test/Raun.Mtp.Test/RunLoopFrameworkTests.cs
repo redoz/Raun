@@ -15,6 +15,13 @@ namespace Raun.Mtp.Test;
 /// flag and the consumer's service provider travel from the framework to the step context. The
 /// loop's own behaviour is covered in <c>Raun.Test</c>.
 /// </summary>
+/// <remarks>
+/// Its unfiltered runs execute every scenario in the process-wide <see cref="ScenarioRegistry"/>,
+/// those other test classes register too. Run beside them, they ran a scenario another test had
+/// just asserted never runs.
+/// </remarks>
+[Collection(nameof(RunLoopFrameworkTests))]
+[CollectionDefinition(nameof(RunLoopFrameworkTests), DisableParallelization = true)]
 public class RunLoopFrameworkTests
 {
     private static ScenarioNode Node(
