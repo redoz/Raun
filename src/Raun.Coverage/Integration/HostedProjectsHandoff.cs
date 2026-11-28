@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Testing.Platform.Extensions;
 using Microsoft.Testing.Platform.Extensions.TestHostControllers;
 
@@ -7,8 +6,7 @@ namespace Raun.Mtp.Coverage;
 /// <summary>
 /// Carries the run's hosted source projects from the test host to the process that started it.
 /// The host is where the run learns them (an AppHost is built in preflight); Coverlet's report is
-/// analysed in the controller, after the host has exited. The controller names a file in the
-/// host's environment, the host leaves the list there as it ends, and the controller takes it.
+/// analysed in the controller, after the host has exited.
 /// </summary>
 internal sealed class HostedProjectsHandoff : ITestHostEnvironmentVariableProvider
 {
@@ -31,25 +29,23 @@ internal sealed class HostedProjectsHandoff : ITestHostEnvironmentVariableProvid
     public Task<ValidationResult> ValidateTestHostEnvironmentVariablesAsync(IReadOnlyEnvironmentVariables environmentVariables)
         => ValidationResult.ValidTask;
 
-    /// <summary>In the test host: leaves the list where the controller asked for it. Nothing to do
-    /// when no controller asked, or when the run hosted nothing.</summary>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Coverage scope is best effort and must not change the outcome of a finished run.")]
-    public static void Leave(IReadOnlyList<string> projects)
+    public static string? FileNamedByController
+        => Environment.GetEnvironmentVariable(Variable) is { Length: > 0 } file ? file : null;
+
+    public static void Leave(string file, IReadOnlyList<string> projects)
     {
-        if (Environment.GetEnvironmentVariable(Variable) is not { Length: > 0 } file || projects.Count == 0)
+        if (projects.Count == 0)
         {
             return;
         }
 
         try { File.WriteAllLines(file, projects); }
-        catch (Exception error) { Raun.Diagnostics.DebugTrace.Write("coverage-handoff-failure", error.ToString()); }
+        catch (IOException error) { NotHandedOver(error); }
+        catch (UnauthorizedAccessException error) { NotHandedOver(error); }
     }
 
-    /// <summary>In the controller: the list the host left, removed once read. Empty when the host
-    /// left none.</summary>
     public IReadOnlyList<string> Take() => Take(_file);
 
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Coverage scope is best effort and must not change the outcome of a finished run.")]
     internal static IReadOnlyList<string> Take(string file)
     {
         try
@@ -63,10 +59,13 @@ internal sealed class HostedProjectsHandoff : ITestHostEnvironmentVariableProvid
             File.Delete(file);
             return projects;
         }
-        catch (Exception error)
-        {
-            Raun.Diagnostics.DebugTrace.Write("coverage-handoff-failure", error.ToString());
-            return [];
-        }
+        catch (IOException error) { return NotHandedOver(error); }
+        catch (UnauthorizedAccessException error) { return NotHandedOver(error); }
+    }
+
+    private static IReadOnlyList<string> NotHandedOver(Exception error)
+    {
+        Raun.Diagnostics.DebugTrace.Write("coverage-handoff-failure", error.ToString());
+        return [];
     }
 }

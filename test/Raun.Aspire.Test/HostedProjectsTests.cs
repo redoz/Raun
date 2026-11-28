@@ -4,10 +4,6 @@ using Xunit;
 
 namespace Raun.Aspire.Test;
 
-/// <summary>
-/// Which source projects an Aspire application runs, read from its resource model: that is what
-/// coverage is told to look at. Starting a real AppHost is the Aspire sample's job.
-/// </summary>
 public class HostedProjectsTests
 {
     private sealed class Service(string name) : Resource(name);

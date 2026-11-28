@@ -25,15 +25,9 @@ public static class ClassifiedCoverageAnalyzer
         IReadOnlyList<Func<IBranchClassificationMiddleware>> middlewareFactories, CancellationToken cancellationToken = default)
         => (await AnalyzeWithWarningsAsync(xmlPath, invocationDirectory, scope, middlewareFactories, [], cancellationToken).ConfigureAwait(false)).Report;
 
-    /// <summary>
-    /// <see cref="AnalyzeAsync"/> for a run that hosts projects of its own
-    /// (<paramref name="hostedProjects"/>, project file paths). Returns, beside the report, what the
-    /// person running the tests should be told: a hosted project the collector reported nothing
-    /// from has no coverage at all, which a report full of other numbers does not make obvious.
-    /// </summary>
     internal static async Task<CoverageAnalysis> AnalyzeWithWarningsAsync(
         string xmlPath, string invocationDirectory, CollectorScope scope,
-        IReadOnlyList<Func<IBranchClassificationMiddleware>> middlewareFactories, IReadOnlyCollection<string> hostedProjects,
+        IReadOnlyList<Func<IBranchClassificationMiddleware>> middlewareFactories, IReadOnlyCollection<string> hostedProjectFiles,
         CancellationToken cancellationToken = default)
     {
         using var stream = File.OpenRead(xmlPath);
@@ -44,13 +38,12 @@ public static class ClassifiedCoverageAnalyzer
         {
             return new CoverageAnalysis(new ReportCoverage { Status = "unavailable", Diagnostics = ["No source solution was found."] }, []);
         }
-        using var loaded = await SourceProjectLoader.LoadAsync(solution, scope, cancellationToken, invocationDirectory: invocationDirectory, hostedProjects: hostedProjects).ConfigureAwait(false);
+        using var loaded = await SourceProjectLoader.LoadAsync(solution, scope, cancellationToken, invocationDirectory: invocationDirectory, hostedProjectFiles: hostedProjectFiles).ConfigureAwait(false);
 
-        // A hosted project runs in a process of its own, so the collector is the only witness to
-        // it. One the collector reported nothing from has no coverage at all; say so, whichever
-        // collector it was and whether or not its source stays in the inventory below.
+        bool Observed(SourceProject project) => observations.Modules.Any(module =>
+            string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal));
         var warnings = loaded.Projects
-            .Where(project => project.IsHosted && !observations.Modules.Any(module => string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal)))
+            .Where(project => project.IsHosted && !Observed(project))
             .Select(project => project.Name + ": hosted by the run, but no coverage was collected from its process; every outcome in it is unknown."
                 + " The collector has to follow child processes and include this assembly.")
             .ToList();
@@ -60,7 +53,7 @@ public static class ClassifiedCoverageAnalyzer
         var sourceVerification = new CoverageSourceVerification();
         if (observations.Modules.Any(module => module.IsCoverlet))
         {
-            var reportedModules = loaded.Projects.Count(project => observations.Modules.Any(module => string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal)));
+            var reportedModules = loaded.Projects.Count(project => Observed(project));
             diagnostics.Add($"Coverlet reported {reportedModules} of {loaded.Projects.Count} eligible source modules; absent modules omitted.");
             diagnostics.Add("Coverlet JSON has no report build identity. Source ranges use the current linked PDB; positive line hits shared by several statements remain partial.");
             observations = new CoverageObservations(observations.Modules.Select(module =>
@@ -70,9 +63,9 @@ public static class ClassifiedCoverageAnalyzer
             }).ToArray());
         }
         foreach (var project in loaded.Projects.Where(project => !observations.Modules.Any(module => module.IsCoverlet)
-            || observations.Modules.Any(module => string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal))))
+            || Observed(project)))
         {
-            if (!observations.Modules.Any(module => string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal)))
+            if (!Observed(project))
             {
                 if (!project.IsHosted)
                 {
@@ -82,7 +75,7 @@ public static class ClassifiedCoverageAnalyzer
             var matchingModules = observations.Modules.Where(module => ModuleIdentity.Matches(project.OutputPath, module)
                 && string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal)).ToArray();
             var verifiedObservations = new CoverageObservations(matchingModules);
-            if (matchingModules.Length == 0 && observations.Modules.Any(module => string.Equals(Path.GetFileNameWithoutExtension(module.Name), project.Compilation.AssemblyName, StringComparison.Ordinal)))
+            if (matchingModules.Length == 0 && Observed(project))
             {
                 diagnostics.Add(project.Name + ": build/PDB identity does not match; outcomes remain unverified");
             }
@@ -106,7 +99,6 @@ public static class ClassifiedCoverageAnalyzer
             warnings);
     }
 
-    /// <summary>A report and the lines of it worth saying out loud when the run ends.</summary>
     internal sealed record CoverageAnalysis(ReportCoverage Report, IReadOnlyList<string> Warnings);
 
     internal static ReportCoverageBranchPaths? SummarizeBranchPaths(CoverageObservations observations)

@@ -11,7 +11,7 @@ public sealed record PackageFeed(string Directory, string Version) : IResource<P
 }
 
 [DisplayName("Report")]
-public sealed record ConsumerReport(string File, string Consumer) : IResource<ConsumerReport>
+public sealed record ConsumerReport(string File, string Consumer, int? ExpectedScenarios) : IResource<ConsumerReport>
 {
     public static ResourceKey KeyFor(ConsumerReport report) => report.File;
     public static string LabelFor(ConsumerReport report) => $"{report.Consumer} report";
@@ -34,5 +34,10 @@ public sealed class Reported : CreatedAttribute
     public sealed class ConsumerAttribute : ResourceLinkAttribute<PackageConsumer, ReadAttribute>;
 }
 
-/// <summary>The SDK a consumer is built with and the framework it targets.</summary>
 public sealed record ConsumerBaseline(string Sdk, string Framework);
+
+public enum SupportedSdk
+{
+    Oldest,
+    Newest,
+}

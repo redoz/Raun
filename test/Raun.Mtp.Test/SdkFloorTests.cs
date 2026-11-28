@@ -4,14 +4,6 @@ using Xunit;
 
 namespace Raun.Mtp.Test;
 
-/// <summary>
-/// The SDK floor a package consumer hits. The generator is packed under
-/// <c>analyzers/dotnet/roslyn5.9/cs</c> and the DSL needs C# 14, so a compiler older than the .NET 10
-/// SDK 10.0.400 loads no generator, emits no diagnostics, and produces a project that builds green
-/// with zero scenarios — the worst possible failure mode. <c>buildTransitive/Raun.props</c> turns that
-/// into a build error, and these tests drive that file the way a consumer's build would: MSBuild
-/// evaluates the shipped props and runs the check target, with the SDK version supplied as a property.
-/// </summary>
 public class SdkFloorTests
 {
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(2);

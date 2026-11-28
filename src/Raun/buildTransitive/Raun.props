@@ -17,11 +17,9 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <!-- The SDK a Raun consumer needs. The generator is packed under analyzers/dotnet/roslyn5.9/cs
+    <!-- The generator is packed under analyzers/dotnet/roslyn5.9/cs
          and the DSL is written with C# 14 extension blocks, so an older compiler loads no generator
-         at all: no scenarios, no diagnostics, a green run of zero tests. That is far worse than a
-         build error, hence the check below. Raise this only together with the Roslyn baseline in
-         Directory.Build.props. -->
+         at all: no scenarios, no diagnostics, a green run of zero tests. -->
     <RaunMinimumSdkVersion>10.0.400</RaunMinimumSdkVersion>
   </PropertyGroup>
 

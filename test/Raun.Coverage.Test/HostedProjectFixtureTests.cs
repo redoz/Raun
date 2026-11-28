@@ -4,11 +4,6 @@ using Xunit;
 
 namespace Raun.Coverage.Test;
 
-/// <summary>
-/// Source that runs as part of the test run but in another process, and that nothing in the test
-/// project's references leads to: an API an Aspire AppHost starts by path. The run names such
-/// projects; the reference graph cannot.
-/// </summary>
 public sealed class HostedProjectFixtureTests
 {
     [Fact]
@@ -17,7 +12,7 @@ public sealed class HostedProjectFixtureTests
         using var fixture = await Fixture.CreateAsync();
 
         using var loaded = await SourceProjectLoader.LoadAsync(fixture.Solution, new CollectorScope(), TestContext.Current.CancellationToken,
-            fixture.EntryAssembly, hostedProjects: [fixture.Project("Service")]);
+            fixture.EntryAssembly, hostedProjectFiles: [fixture.Project("Service")]);
 
         Assert.Equal(["Linked", "Service", "ServiceLib"], Names(loaded));
         Assert.Equal(["Service"], loaded.Projects.Where(project => project.IsHosted).Select(project => project.Name));
@@ -29,8 +24,6 @@ public sealed class HostedProjectFixtureTests
     {
         using var fixture = await Fixture.CreateAsync();
 
-        // Root references Service the way an AppHost used to reference what it starts: built, not
-        // linked. That says nothing about what runs, so it is not followed.
         using var loaded = await SourceProjectLoader.LoadAsync(fixture.Solution, new CollectorScope(), TestContext.Current.CancellationToken,
             fixture.EntryAssembly);
 
@@ -50,7 +43,6 @@ public sealed class HostedProjectFixtureTests
         var warning = Assert.Single(analysis.Warnings);
         Assert.Contains("Service", warning, StringComparison.Ordinal);
         Assert.Contains("no coverage", warning, StringComparison.OrdinalIgnoreCase);
-        // The warning is in the report too, where the numbers it qualifies are read.
         Assert.Contains(warning, analysis.Report.Diagnostics);
         Assert.Contains(analysis.Report.Diagnostics, line => line.StartsWith("Linked: no execution evidence", StringComparison.Ordinal));
         Assert.DoesNotContain(analysis.Warnings, line => line.Contains("Linked", StringComparison.Ordinal));
@@ -59,10 +51,6 @@ public sealed class HostedProjectFixtureTests
     private static IEnumerable<string> Names(SourceProjectLoadResult loaded)
         => loaded.Projects.Select(project => Path.GetFileNameWithoutExtension(project.Project.FilePath)!).Order(StringComparer.Ordinal);
 
-    /// <summary>
-    /// Root (the test application) links Linked and references Service without linking it. Service
-    /// references ServiceLib and is not in the solution, as a project added by path need not be.
-    /// </summary>
     private sealed class Fixture(string root) : IDisposable
     {
         public string Root { get; } = root;

@@ -44,8 +44,6 @@ public static class RaunAspire
         // container runtime — which is what disposing a built-but-unstarted application does.
         var holder = new ApplicationHolder();
 
-        // The application's list of hosted source projects, there once the test application is
-        // configured. Preflight fills it from the AppHost it builds.
         Mtp.CoverageSourceProjects? hosted = null;
 
         try
@@ -67,7 +65,8 @@ public static class RaunAspire
                         hosted = builder.GetCoverageSourceProjects();
                     },
                     services: provider,
-                    preflight: ctx => StartAsync<TAppHost>(holder, options, hosted, ctx),
+                    preflight: ctx => StartAsync<TAppHost>(holder, options,
+                        hosted ?? throw new InvalidOperationException("Preflight ran before the test application was configured."), ctx),
                     sessionPreflight: options.SessionPreflightCallback,
                     maxParallelScenarios: options.MaxParallelScenarios,
                     maxParallelSteps: options.MaxParallelSteps,
@@ -96,7 +95,7 @@ public static class RaunAspire
     /// <see cref="AspireRunOptions.StartupTimeout"/> rather than one timeout per resource.
     /// </summary>
     private static async Task StartAsync<TAppHost>(
-        ApplicationHolder holder, AspireRunOptions options, Mtp.CoverageSourceProjects? hosted, ScenarioContext ctx)
+        ApplicationHolder holder, AspireRunOptions options, Mtp.CoverageSourceProjects hosted, ScenarioContext ctx)
         where TAppHost : class
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
@@ -124,13 +123,10 @@ public static class RaunAspire
             app = await builder.BuildAsync(timeout.Token).ConfigureAwait(false);
             holder.Application = app;
 
-            if (hosted is not null)
+            foreach (var (resource, project) in HostedProjects.Of(app.Services.GetRequiredService<DistributedApplicationModel>()))
             {
-                foreach (var (resource, project) in HostedProjects.Of(app.Services.GetRequiredService<DistributedApplicationModel>()))
-                {
-                    hosted.Add(project);
-                    ctx.Log($"{resource} runs {project}");
-                }
+                hosted.Add(project);
+                ctx.Log($"{resource} runs {project}");
             }
 
             ctx.Log("starting AppHost");

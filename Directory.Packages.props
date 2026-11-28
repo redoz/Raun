@@ -32,8 +32,6 @@
 
     <!-- Aspire integration (Raun.Aspire + the Aspire sample). -->
     <PackageVersion Include="Aspire.Hosting.Testing" Version="17.0.0" />
-    <!-- The sample AppHost: a plain Microsoft.NET.Sdk project since Aspire 17 (Aspire.AppHost.Sdk is
-         obsolete, ASPIRE012). All Aspire packages move together. -->
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="17.0.0" />
     <PackageVersion Include="Aspire.Hosting.Dotnet" Version="17.0.0" />
     <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.15" />

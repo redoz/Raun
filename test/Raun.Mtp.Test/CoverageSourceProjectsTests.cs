@@ -3,10 +3,6 @@ using Xunit;
 
 namespace Raun.Mtp.Test;
 
-/// <summary>
-/// The list through which whoever starts a process tells coverage what source it runs. The two
-/// never meet except through the application's builder.
-/// </summary>
 public class CoverageSourceProjectsTests
 {
     [Fact]

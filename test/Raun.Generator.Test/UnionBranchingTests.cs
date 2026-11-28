@@ -1,3 +1,4 @@
+// A union's runtime types (System.Runtime.CompilerServices.IUnion) exist from .NET 11 on.
 #if NET11_0_OR_GREATER
 using System.Collections.Concurrent;
 using Raun.Model;
@@ -5,11 +6,6 @@ using Xunit;
 
 namespace Raun.Generator.Test;
 
-/// <summary>
-/// Branching on a step whose result is a C# 15 <c>union</c>. The oracle is plain C#: every step
-/// records its call into a static trace, and the expected trace is what C# would run. A union's
-/// runtime types exist from .NET 11 on, so these compile on that target only.
-/// </summary>
 public class UnionBranchingTests
 {
     private const string Dsl =
@@ -135,8 +131,6 @@ public class UnionBranchingTests
         return new UnionRun(results, [.. calls]);
     }
 
-    /// <summary>Exactly these calls in this order, nothing failed or skipped, and as many business
-    /// steps passed as calls were made: every other one is a branch not taken.</summary>
     private static void AssertRan(UnionRun run, params string[] expectedCalls)
     {
         Assert.True(expectedCalls.SequenceEqual(run.Calls),

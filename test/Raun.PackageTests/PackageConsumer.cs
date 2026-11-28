@@ -44,33 +44,28 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         return repo.FullName;
     }
 
-    /// <summary>The target the samples are written for, and the lowest one Raun ships.</summary>
     private const string LowestFramework = "net10.0";
 
-    /// <summary>
-    /// The two ends of what Raun supports. <c>oldest</c> is the lowest installed supported SDK
-    /// building the lowest target (CI installs exactly the floor): who meets an analyzer its
-    /// compiler cannot load. <c>newest</c> is the highest installed SDK building its own target:
-    /// who gets the newest assets of each package, and the only one who can write a C# 15 union.
-    /// </summary>
-    public static ConsumerBaseline BaselineFor(string end)
+    public static ConsumerBaseline BaselineFor(SupportedSdk sdk)
     {
         var sdks = SupportedSdks.Value;
-        switch (end)
+        switch (sdk)
         {
-            case "oldest":
+            case SupportedSdk.Oldest:
                 return new ConsumerBaseline(sdks[0].Text, LowestFramework);
-            case "newest":
+            case SupportedSdk.Newest:
                 var newest = sdks[^1];
                 Assert.True(newest.Version.Major > 10, $"The newest installed .NET SDK is {newest.Text}; the newest consumer needs one past .NET 10.");
                 return new ConsumerBaseline(newest.Text, $"net{newest.Version.Major}.0");
             default:
-                throw new ArgumentOutOfRangeException(nameof(end), end, "Expected 'oldest' or 'newest'.");
+                throw new ArgumentOutOfRangeException(nameof(sdk), sdk, null);
         }
     }
 
-    /// <summary>The installed release SDKs that Raun supports (<c>RaunMinimumSdkVersion</c> in the
-    /// shipped props and up), lowest first.</summary>
+    private bool HasUnionScenarios => IsGeneratedApp && Baseline.Framework != LowestFramework;
+    private bool IsGeneratedApp => Path.GetFileNameWithoutExtension(Project) == "GeneratedEntryPoint";
+    private int? ExpectedScenarios => IsGeneratedApp ? 1 + (HasUnionScenarios ? UnionScenarioCases : 0) : null;
+
     private static Lazy<IReadOnlyList<(string Text, Version Version)>> SupportedSdks { get; } = new(() =>
     {
         var props = XDocument.Load(Path.Combine(FindRepository(), "src", "Raun", "buildTransitive", "Raun.props"));
@@ -150,7 +145,6 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             """);
         File.WriteAllText(Path.Combine(root, "Directory.Build.targets"), "<Project />");
         File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project />");
-        // Not the repository's global.json: each consumer is built with exactly its baseline's SDK.
         File.WriteAllText(Path.Combine(root, "global.json"),
             new System.Text.Json.Nodes.JsonObject
             {
@@ -196,8 +190,6 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
                 switch (item.Name.LocalName)
                 {
                     case "TargetFramework":
-                        // The samples are written for the lowest target; the other baseline builds
-                        // the same sources for its own.
                         Assert.Equal(LowestFramework, item.Value);
                         item.Value = baseline.Framework;
                         break;
@@ -251,12 +243,8 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             File.WriteAllText(Path.Combine(directory, "UnionScenarios.cs"), UnionScenarios);
     }
 
-    /// <summary>
-    /// What only the newest consumer can write: C# 15 unions as step results. Each scenario asserts
-    /// in its own steps, so a union that arrives holding the wrong case fails the consumer's run.
-    /// The generator's own tests cover the rules; this is the same lowering inside the compiler a
-    /// union user really has.
-    /// </summary>
+    private const int UnionScenarioCases = 6;
+
     private const string UnionScenarios = """
         using Raun;
 
@@ -405,7 +393,7 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             arguments.AddRange(["--coverage", "--coverage-output-format", "xml"]);
         }
         await DotnetAsync(context, [.. arguments]);
-        var report = new ConsumerReport(Assert.Single(Directory.GetFiles(ReportDirectory, "*.html")), Name);
+        var report = new ConsumerReport(Assert.Single(Directory.GetFiles(ReportDirectory, "*.html")), Name, ExpectedScenarios);
         context.OnTeardown(async teardown =>
         {
             File.Delete(report.File);
@@ -424,9 +412,6 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
         Assert.True(coverage.GetProperty("status").GetString() == "available", coverage.GetRawText());
         Assert.NotEmpty(coverage.GetProperty("types").EnumerateArray());
 
-        // The API runs in a process of its own and nothing references its project: the AppHost adds
-        // it by path. Its source is in the report only because the run named it, and its branches
-        // are covered only because the collector followed that process.
         var api = coverage.GetProperty("types").EnumerateArray()
             .Where(type => type.GetProperty("assembly").GetString() == "AspireAppointments.Api").ToArray();
         Assert.True(api.Length > 0, "The report holds no source of the API the AppHost runs. Diagnostics: " + coverage.GetProperty("diagnostics").GetRawText());
@@ -458,12 +443,6 @@ public sealed partial class PackageConsumer : Raun.IResource<PackageConsumer>
             Assert.Equal("package", library.Value.GetProperty("type").GetString());
         }
     }
-
-    /// <summary>How many scenarios the generated app reports: its one plain scenario, and on a
-    /// target that has unions the six cases of <see cref="UnionScenarios"/>. A union scenario the
-    /// generator silently produced nothing for would otherwise pass as "all passed".</summary>
-    public static int GeneratedAppScenarios(string consumer)
-        => consumer.EndsWith($"({LowestFramework})", StringComparison.Ordinal) ? 1 : 7;
 
     public static int VerifyReport(string html)
     {

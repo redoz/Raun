@@ -40,7 +40,7 @@ public sealed class SourceProjectTests
         using var loaded = await SourceProjectLoader.LoadAsync(Path.Combine(root, "Raun.slnx"), new CollectorScope(),
             TestContext.Current.CancellationToken,
             useSourceContext ? "ExternalConsumer.dll" : Path.Combine(source, "bin", "Debug", "net10.0", "AspireAppointments.Tests.dll"),
-            useSourceContext ? source : root, hostedProjects: [SampleApi(root)]);
+            useSourceContext ? source : root, hostedProjectFiles: [SampleApi(root)]);
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.Api");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.AppHost");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Mtp");
@@ -56,15 +56,13 @@ public sealed class SourceProjectTests
         using var loaded = await SourceProjectLoader.LoadAsync(Path.Combine(root, "Raun.slnx"),
             new CollectorScope { ModuleExcludes = [@"Raun\.Aspire\.dll$"] }, TestContext.Current.CancellationToken,
             Path.Combine(root, "samples", "AspireAppointments", "AspireAppointments.Tests", "bin", "Debug", "net10.0", "AspireAppointments.Tests.dll"),
-            hostedProjects: [SampleApi(root)]);
+            hostedProjectFiles: [SampleApi(root)]);
         Assert.DoesNotContain(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Aspire");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun.Mtp");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "Raun");
         Assert.Contains(loaded.Projects, p => p.Compilation.AssemblyName == "AspireAppointments.Api");
     }
 
-    /// <summary>The API the sample's AppHost starts by path. No project references it; the run names
-    /// it, as <c>Raun.Aspire</c> does from the application's resources.</summary>
     private static string SampleApi(string root)
         => Path.Combine(root, "samples", "AspireAppointments", "AspireAppointments.Api", "AspireAppointments.Api.csproj");
 

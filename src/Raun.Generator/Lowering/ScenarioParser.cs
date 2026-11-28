@@ -40,12 +40,7 @@ internal sealed class ScenarioParser
     /// <summary>Locals declared with a type other than their step's result; see <see cref="CanHold"/>.</summary>
     private readonly HashSet<ILocalSymbol> _readAsDeclared = new(SymbolEqualityComparer.Default);
 
-    /// <summary>
-    /// Node -> the union case types its value may be, for a node whose value stands for a local of a
-    /// union type without being that union: a step returning one of the union's cases, and every
-    /// merge or pass-through such a step reaches. See <see cref="CanHold"/>.
-    /// </summary>
-    private readonly Dictionary<int, IReadOnlyList<ITypeSymbol>> _unionCases = [];
+    private readonly Dictionary<int, IReadOnlyList<ITypeSymbol>> _unionCasesByNode = [];
 
     // Namespaces that contain the invoked DSL extension members; imported into the generated file
     // so `Given.PatientExists(...)` resolves there too. Kept as symbols: a using directive is built
@@ -1140,12 +1135,12 @@ internal sealed class ScenarioParser
         var phase = _steps.First(s => s.Index == sources[0]).Phase;
         var index = _nextIndex++;
         var cases = sources
-            .SelectMany(source => _unionCases.TryGetValue(source, out var held) ? held : [])
+            .SelectMany(source => _unionCasesByNode.TryGetValue(source, out var held) ? held : [])
             .Distinct<ITypeSymbol>(SymbolEqualityComparer.Default)
             .ToList();
         if (cases.Count > 0)
         {
-            _unionCases[index] = cases;
+            _unionCasesByNode[index] = cases;
         }
 
         _steps.Add(new ParsedStep
@@ -1186,9 +1181,9 @@ internal sealed class ScenarioParser
     {
         var producer = _steps.First(s => s.Index == parentDef);
         var index = _nextIndex++;
-        if (_unionCases.TryGetValue(parentDef, out var cases))
+        if (_unionCasesByNode.TryGetValue(parentDef, out var cases))
         {
-            _unionCases[index] = cases;
+            _unionCasesByNode[index] = cases;
         }
 
         var guards = new List<ParsedGuard>(_guards) { new(conditionIndex, arm) };
@@ -1338,8 +1333,7 @@ internal sealed class ScenarioParser
             return false;
         }
 
-        ITypeSymbol? unionCase = null;
-        if (binding is { Kind: BindingKind.Single } && !CanHold(binding.Locals[0], call.ResultType, invocation, out unionCase))
+        if (binding is { Kind: BindingKind.Single } && !CanHold(binding.Locals[0], call.ResultType, invocation))
         {
             return false;
         }
@@ -1347,7 +1341,7 @@ internal sealed class ScenarioParser
         var step = BuildStep(call, groupId: null, _prevFrontier);
         if (binding is { Kind: BindingKind.Single })
         {
-            Bind(binding.Locals[0], step.Index, unionCase);
+            Bind(binding.Locals[0], step.Index, call.ResultType);
         }
 
         Advance([step.Index]);
@@ -1363,15 +1357,8 @@ internal sealed class ScenarioParser
     /// with a type other than the step's own is read through a cast (<see cref="_readAsDeclared"/>),
     /// so overload resolution and inference see what the author wrote.
     /// </summary>
-    /// <remarks>
-    /// A local of a union type also holds a step returning one of the union's cases. The value still
-    /// travels as the object the step returned, and the union is made where the local is read: that
-    /// conversion only wraps the value, so making it late is not observable. The case the step's type
-    /// converts through comes back in <paramref name="unionCase"/>, for <see cref="Bind"/>.
-    /// </remarks>
-    private bool CanHold(ILocalSymbol local, ITypeSymbol? produced, SyntaxNode step, out ITypeSymbol? unionCase)
+    private bool CanHold(ILocalSymbol local, ITypeSymbol? produced, SyntaxNode step)
     {
-        unionCase = null;
         if (produced is null)
         {
             return true;
@@ -1385,13 +1372,8 @@ internal sealed class ScenarioParser
 
         var sameObject = conversion.IsReference || conversion.IsBoxing
             || (local.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable
-                && SymbolEqualityComparer.Default.Equals(nullable.TypeArguments[0], produced));
-        if (!sameObject && UnionCase(conversion, local.Type) is { } through)
-        {
-            unionCase = through;
-            sameObject = true;
-        }
-
+                && SymbolEqualityComparer.Default.Equals(nullable.TypeArguments[0], produced))
+            || UnionCaseHeld(local, produced) is not null;
         if (!sameObject)
         {
             Refuse(step, $"Local '{local.Name}' is declared as {local.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)} but the step returns {produced.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)}, and a step's value is not converted on the way to its local. Declare the local with var or with the step's own type");
@@ -1405,32 +1387,28 @@ internal sealed class ScenarioParser
     /// <summary><see cref="CanHold"/> for the one local of an array group, whose value is an array of
     /// what each element returns.</summary>
     private bool CanHoldGroup(ILocalSymbol local, ITypeSymbol? element, SyntaxNode group)
-        => element is null || CanHold(local, _model.Compilation.CreateArrayTypeSymbol(element), group, out _);
+        => element is null || CanHold(local, _model.Compilation.CreateArrayTypeSymbol(element), group);
 
     /// <summary>
-    /// The case type <paramref name="conversion"/> goes through when it is a union conversion to
-    /// <paramref name="target"/> itself, else null: the parameter of the union's constructor the
-    /// conversion is carried out by. <c>Conversion.IsUnion</c> is marked experimental
+    /// <c>Conversion.IsUnion</c> is marked experimental
     /// (RSEXPERIMENTAL006) in Roslyn 5.9, the one this generator builds against; it shipped
     /// unchanged and without the mark from 5.11 on, so the member a consumer's newer compiler
     /// resolves is the same one.
     /// </summary>
-    private static ITypeSymbol? UnionCase(Conversion conversion, ITypeSymbol target)
+    private ITypeSymbol? UnionCaseHeld(ILocalSymbol unionLocal, ITypeSymbol produced)
 #pragma warning disable RSEXPERIMENTAL006 // Stable from Roslyn 5.11; see the summary.
-        => conversion is { IsUnion: true, IsImplicit: true, MethodSymbol: { MethodKind: MethodKind.Constructor, Parameters.Length: 1 } constructor }
+        => _model.Compilation.ClassifyConversion(produced, unionLocal.Type) is { IsUnion: true, IsImplicit: true, MethodSymbol: { MethodKind: MethodKind.Constructor, Parameters.Length: 1 } constructor }
 #pragma warning restore RSEXPERIMENTAL006
-            && SymbolEqualityComparer.Default.Equals(constructor.ContainingType, target)
+            && SymbolEqualityComparer.Default.Equals(constructor.ContainingType, unionLocal.Type)
                 ? constructor.Parameters[0].Type
                 : null;
 
-    /// <summary>Makes <paramref name="local"/> stand for the step at <paramref name="index"/>,
-    /// which returns <paramref name="unionCase"/> when the local is a union it is a case of.</summary>
-    private void Bind(ILocalSymbol local, int index, ITypeSymbol? unionCase)
+    private void Bind(ILocalSymbol local, int index, ITypeSymbol? produced)
     {
         _vars[local] = new StepOutput(index);
-        if (unionCase is not null)
+        if (produced is not null && UnionCaseHeld(local, produced) is { } unionCase)
         {
-            _unionCases[index] = [unionCase];
+            _unionCasesByNode[index] = [unionCase];
         }
     }
 
@@ -1458,8 +1436,7 @@ internal sealed class ScenarioParser
                 continue;
             }
 
-            ITypeSymbol? unionCase = null;
-            if (locals is not null && i < locals.Count && !CanHold(locals[i], call.ResultType, tuple.Arguments[i].Expression, out unionCase))
+            if (locals is not null && i < locals.Count && !CanHold(locals[i], call.ResultType, tuple.Arguments[i].Expression))
             {
                 ok = false;
                 continue;
@@ -1469,7 +1446,7 @@ internal sealed class ScenarioParser
             accesses.Add(call.Accesses());
             if (locals is not null && i < locals.Count)
             {
-                Bind(locals[i], step.Index, unionCase);
+                Bind(locals[i], step.Index, call.ResultType);
             }
 
             frontier.Add(step.Index);
@@ -2254,7 +2231,7 @@ internal sealed class ScenarioParser
     private ExpressionSyntax Spell(VarSource source) => source switch
     {
         StepOutput step when _steps.First(s => s.Index == step.Index) is { MergeSources.Count: > 0 } merge
-            && _unionCases.TryGetValue(step.Index, out var cases) => UnionOfMerged(merge, cases),
+            && _unionCasesByNode.TryGetValue(step.Index, out var cases) => UnionOfMerged(merge, cases),
         StepOutput step => InputsGet(_steps.First(s => s.Index == step.Index).ResultType, step.Index),
         CaseVariable variable => variable.Count == 1
             ? InputsGet(variable.Type, variable.Index)
@@ -2264,24 +2241,10 @@ internal sealed class ScenarioParser
         _ => throw new System.InvalidOperationException("a failed output is never spelled"),
     };
 
-    /// <summary>
-    /// A merged local of a union type, when an arm gave it a step returning one of the union's
-    /// cases. Which arm ran is known only at run time, so the value's own type picks the conversion:
-    /// <c>(__inputs.Get&lt;object&gt;(i) switch { A __case => (U)__case, …, _ => __inputs.Get&lt;U&gt;(i) })</c>.
-    /// The last arm is an arm that gave it the union itself. A case type comes before any it derives
-    /// from, so no arm hides a later one.
-    /// </summary>
     private static ParenthesizedExpressionSyntax UnionOfMerged(ParsedStep merge, IReadOnlyList<ITypeSymbol> cases)
     {
-        var ordered = new List<ITypeSymbol>();
-        foreach (var type in cases)
-        {
-            var before = ordered.FindIndex(placed => DerivesFrom(type, placed));
-            ordered.Insert(before < 0 ? ordered.Count : before, type);
-        }
-
         var value = IdentifierName("__case");
-        var arms = ordered
+        var arms = MostDerivedFirst(cases)
             .Select(type => SwitchExpressionArm(
                 DeclarationPattern(TypeSyntaxFactory.From(type), SingleVariableDesignation(value.Identifier)),
                 CastExpression(merge.ResultType, value)))
@@ -2289,6 +2252,18 @@ internal sealed class ScenarioParser
         return ParenthesizedExpression(
             SwitchExpression(InputsGet(PredefinedType(Token(SyntaxKind.ObjectKeyword)), merge.Index))
                 .WithArms(SeparatedList(arms)));
+    }
+
+    private static List<ITypeSymbol> MostDerivedFirst(IReadOnlyList<ITypeSymbol> types)
+    {
+        var ordered = new List<ITypeSymbol>();
+        foreach (var type in types)
+        {
+            var before = ordered.FindIndex(placed => DerivesFrom(type, placed));
+            ordered.Insert(before < 0 ? ordered.Count : before, type);
+        }
+
+        return ordered;
     }
 
     private static bool DerivesFrom(ITypeSymbol type, ITypeSymbol other)
