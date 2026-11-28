@@ -245,6 +245,55 @@ public class TimeoutOwnershipTests
     }
 
     [Fact]
+    public async Task A_run_cancelled_while_the_watchdog_looks_never_stops_a_step_before_its_scenario()
+    {
+        // The host token is not the watchdog's to lock: it can be cancelled while a pass is part-way
+        // through the operations. Here that happens as the pass times out one step, before it looks
+        // at the next. A step stopped for the run while its scenario's token is still live reports
+        // the cancellation as its own failure.
+        using var host = new CancellationTokenSource();
+        var armed = false;
+        var readsThisPass = 0;
+        (bool Step, bool Scenario)? afterHostCancel = null;
+        using var scenarioSource = new CancellationTokenSource();
+        using var timedOutSource = new CancellationTokenSource();
+        using var stepSource = new CancellationTokenSource();
+        var seen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        long Read()
+        {
+            if (Thread.CurrentThread.Name == "Raun cancellation watchdog" && Volatile.Read(ref armed) && ++readsThisPass == 2)
+            {
+                host.Cancel(); // the pass's second reading of the clock: the first step's cancellation
+            }
+
+            return 0;
+        }
+
+        void Looked()
+        {
+            readsThisPass = 0;
+            if (host.IsCancellationRequested && afterHostCancel is null)
+            {
+                afterHostCancel = (stepSource.IsCancellationRequested, scenarioSource.IsCancellationRequested);
+                seen.TrySetResult();
+            }
+        }
+
+        using var watchdog = new CancellationWatchdog(TimeSpan.FromSeconds(5), host.Token, Read, afterPass: Looked);
+        using var scenario = watchdog.Watch(scenarioSource, null, "scenario", isScenario: true);
+        using var timedOut = watchdog.WatchBeforeItsTimeoutStarts(timedOutSource, TimeSpan.Zero, "timed-out step");
+        using var step = watchdog.Watch(stepSource, null, "step");
+
+        Volatile.Write(ref armed, true);
+        timedOut.StartTimeout();
+        await seen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(afterHostCancel!.Value.Step && !afterHostCancel.Value.Scenario,
+            "the step was cancelled for the run while its scenario's token was still live");
+    }
+
+    [Fact]
     public async Task A_timeout_does_not_count_until_it_is_started()
     {
         var clock = new ManualClock();

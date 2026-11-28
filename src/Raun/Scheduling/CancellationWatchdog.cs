@@ -81,15 +81,21 @@ internal sealed class CancellationWatchdog : IDisposable
                 // judged the scenario's deadline, which is at least as old, as not yet reached.
                 var now = timestamp();
 
+                // One reading of the host token too. It is cancelled without this gate; read per
+                // operation, a cancellation that landed after the scenario was looked at stopped a
+                // step while the scenario's token was still live, and the step reported the run's
+                // cancellation as its own failure.
+                var runCancelled = hostToken.IsCancellationRequested;
+
                 if (scenario is { Completed: false } current)
                 {
-                    TimeOutStepsWhoseDeadlinePassedBeforeTheScenarios(current, now);
-                    Expire(current, now);
+                    TimeOutStepsWhoseDeadlinePassedBeforeTheScenarios(current, now, runCancelled);
+                    Expire(current, now, runCancelled);
                 }
                 foreach (var operation in operations)
                 {
                     if (operation.Completed) continue;
-                    if (operation != scenario) Expire(operation, now);
+                    if (operation != scenario) Expire(operation, now, runCancelled);
                     if (operation == scenario && !operations.Any(other => other != scenario && !other.Completed)) continue;
                     if (operation.CancellationStarted && Stopwatch.GetElapsedTime(operation.CanceledAt, now) >= grace)
                     {
@@ -111,9 +117,9 @@ internal sealed class CancellationWatchdog : IDisposable
     // the timeout, and on a tie the scenario does. The supervising thread can be kept off the
     // processor for longer than the distance between the two, so the order it looks in decides
     // nothing: the deadlines do.
-    private void TimeOutStepsWhoseDeadlinePassedBeforeTheScenarios(Operation scenarioOperation, long now)
+    private void TimeOutStepsWhoseDeadlinePassedBeforeTheScenarios(Operation scenarioOperation, long now, bool runCancelled)
     {
-        if (hostToken.IsCancellationRequested || scenarioOperation.CancellationStarted || Overdue(scenarioOperation, now) is not { } scenarioOverdue)
+        if (runCancelled || scenarioOperation.CancellationStarted || Overdue(scenarioOperation, now) is not { } scenarioOverdue)
         {
             return;
         }
@@ -134,9 +140,9 @@ internal sealed class CancellationWatchdog : IDisposable
             ? overdue
             : null;
 
-    private void Expire(Operation operation, long now)
+    private void Expire(Operation operation, long now, bool runCancelled)
     {
-        var cancelScenario = hostToken.IsCancellationRequested || scenario?.CancellationStarted == true;
+        var cancelScenario = runCancelled || scenario?.CancellationStarted == true;
         if (cancelScenario || operation.Source.IsCancellationRequested || Overdue(operation, now) is not null)
         {
             operation.RequestCancellation(timedOut: !cancelScenario && !operation.Source.IsCancellationRequested);
