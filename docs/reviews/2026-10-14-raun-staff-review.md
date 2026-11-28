@@ -223,7 +223,6 @@ The staff reviewer cleared this follow-up. Final verification: 1,348 passed, 5 s
 
 Released in [v0.3.0-beta.20](https://github.com/redoz/Raun/releases/tag/v0.3.0-beta.20).
 Design: [Timeout ownership and process termination](../superpowers/specs/2026-10-14-timeout-ownership-design.md).
-Implementation plan: [Timeout ownership](../superpowers/plans/2026-10-14-timeout-ownership.md).
 
 Raun now requests cancellation and retains actual invocation and cancellation-callback ownership for
 60 seconds by default. Cleanup, scope disposal, and contended-resource admission wait until work stops.
@@ -338,7 +337,6 @@ Finding 6 was the remaining original finding at beta.23; its optional leaf packa
 Released in [v0.3.0-beta.24](https://github.com/redoz/Raun/releases/tag/v0.3.0-beta.24).
 Implementation commit: `7cad733`.
 Design: [Optional coverage leaf](../superpowers/specs/2026-10-14-optional-coverage-leaf-design.md).
-Plan: [Optional coverage leaf](../superpowers/plans/2026-10-14-optional-coverage-leaf.md).
 
 Raun.Coverage is now an optional leaf depending on Raun.Mtp and Raun. Neither MTP nor Aspire depends
 on coverage. Existing collector delivery, source configuration, session coordination, custom middleware,

@@ -2,7 +2,6 @@
 
 **Date:** 2026-06-05
 **Status:** Approved design shape (Patrik, "full send"). Ready for implementation plan.
-**Supersedes the run-time fork in:** `docs/superpowers/handoffs/2026-06-05-mtp-step-discovery-handoff.md` (read it for the full evidence trail and source citations).
 
 ---
 

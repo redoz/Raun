@@ -2,7 +2,6 @@
 
 Date: 2026-10-18
 Status: Written design for review. Not implemented.
-Companion project: [Resource authoring code fixes](2026-10-18-resource-code-fixes-project.md).
 
 ## Intent
 

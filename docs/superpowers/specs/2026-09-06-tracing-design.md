@@ -2,7 +2,7 @@
 
 - **Date:** 2026-09-06
 - **Status:** Built (core, run loop, MTP output, HTML report). Aspire sample wiring in the same day.
-- **Supersedes:** `2026-09-04-otel-step-correlation-design.md` (shelved). That design tried to
+- **Supersedes:** an earlier OTLP step-correlation design, shelved on 2026-09-04. That design tried to
   *receive* the system under test's telemetry and stitch it back into steps — a collector problem
   (batching, late arrival, held publication). This one makes Raun a *producer*: the SUT joins Raun's
   traces through ordinary W3C propagation, and the stitching happens wherever telemetry already lands.

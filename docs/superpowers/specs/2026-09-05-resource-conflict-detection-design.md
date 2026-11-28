@@ -2,7 +2,7 @@
 
 - **Date:** 2026-09-05
 - **Status:** Approved (Patrik, 2026-09-05). Supersedes the "C2 — real locking & scheduling" phase
-  of `2026-06-06-resourcing-system-design.md`.
+  of the original resourcing design.
 - **Origin:** `2026-09-04-c2-resource-scheduling-findings.md` — the analysis that showed half the
   declared claims are unlockable by construction.
 - **Scope:** `src/Raun.Generator` (one analyzer rule, claim emission order), `src/Raun`

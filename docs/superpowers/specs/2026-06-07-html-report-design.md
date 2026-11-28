@@ -5,8 +5,7 @@
 - **Scope:** `src/Raun` (new `Reporting` event bus; scheduler timestamps; `StepResult`),
   `src/Raun.Mtp` (run-loop emission; reporter refactor; new HTML report sink + option provider),
   `test/Raun.Test`, `test/Raun.Mtp.Test`, `samples/AppointmentTests` (showcase).
-- **Lineage:** Realizes section **B** of `docs/superpowers/plans/2026-06-06-roadmap-aspire-report-resources.md`.
-  Builds on the resourcing **C1** effects already shipped (`ResourceEffect`, `ScenarioContext.Resources`).
+- **Lineage:** Builds on the resourcing **C1** effects already shipped (`ResourceEffect`, `ScenarioContext.Resources`).
 
 ## 1. Intent
 

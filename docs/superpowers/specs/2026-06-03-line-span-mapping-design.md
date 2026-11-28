@@ -2,7 +2,7 @@
 
 **Status:** Designed, approved. Not implemented.
 **Date:** 2026-06-03
-**Supersedes:** the *mechanism* in `docs/superpowers/handoffs/2026-06-03-line-directives-handoff.md`. That handoff mapped each step to a bare **line** (`#line N "file"`); this design upgrades to the C# 10 **span** directive (`#line (sl,sc)-(el,ec) charOffset "file"`) for column-accurate mapping. The handoff's repo conventions, edit-site map, and snapshot procedure remain valid reference material.
+**Supersedes:** an earlier approach that mapped each step to a bare **line** (`#line N "file"`). This design upgrades to the C# 10 **span** directive (`#line (sl,sc)-(el,ec) charOffset "file"`) for column-accurate mapping.
 **Execute with:** superpowers:subagent-driven-development (sequential; main workdir; no worktrees — matches how this repo is run).
 
 ---

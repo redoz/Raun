@@ -1,7 +1,7 @@
 # Concurrent scenarios and contended resources — Design
 
 - **Date:** 2026-09-06
-- **Status:** Built 2026-09-06 (plan: docs/superpowers/plans/2026-09-06-concurrent-scenarios.md).
+- **Status:** Built 2026-09-06.
 - **Supersedes:** the "Tier 3 — deferred: type-level admission across scenarios" section of
   `2026-09-05-resource-conflict-detection-design.md`. Admission is now *declared* by the suite, not
   derived from lifecycle roles. Lifecycle roles (`[Created]`, `[Edited]`, `[Read]`, …), the
