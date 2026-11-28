@@ -1,6 +1,6 @@
 # Appointment tests
 
-Start here to see how Raun tests fit together. The clinic runs in memory, so this sample needs no server or database.
+Start here to see how the parts of a Raun suite fit together. The clinic runs in memory, so this sample needs no server or database.
 
 From the repository root, with .NET SDK 10.0.400 or later:
 
@@ -8,9 +8,9 @@ From the repository root, with .NET SDK 10.0.400 or later:
 dotnet run --project samples/AppointmentTests -- --report-html --results-directory "$PWD/out"
 ```
 
-Open `out/AppointmentTests_net10.0.html` (the report is named after the test assembly and its target framework). Expand a scenario to see its steps and resource matrix.
-Expand a step for its logs; use attachment buttons to inspect saved text.
-The sample supplies elapsed times without waiting, so the report includes useful timing examples.
+Open `out/AppointmentTests_net10.0.html`. The report is named after the test assembly and its target framework. Expand a scenario to see its steps and resource matrix.
+Expand a step for its logs, and use the attachment buttons to inspect saved text.
+The sample supplies elapsed times without waiting, so the report shows timing data.
 Scenarios run concurrently. A branch that is not taken appears as skipped.
 
 ## Read the examples in order
@@ -43,7 +43,7 @@ Scenarios run concurrently. A branch that is not taken appears as skipped.
 | Runner extensions | [Program](Program.cs): register the TRX report provider |
 | Classified coverage | [Program](Program.cs) and [testconfig.json](testconfig.json): collect coverage on every run and limit it to this sample's own code, which fills the report's Coverage view |
 
-These are executable examples. Assertions check the results; they do not just produce a report.
+These examples run. Their assertions check the results, so a wrong result fails the run.
 The authorization handler is local. For real HTTP requests, AppHost startup, tracing, shared access,
 and coverage of a separate application, continue with [AspireAppointments](../AspireAppointments/README.md).
 
@@ -61,8 +61,8 @@ Run scenarios one at a time and write HTML and TRX reports:
 dotnet run --project samples/AppointmentTests -- --max-parallel-scenarios 1 --report-html --report-trx --results-directory "$PWD/out"
 ```
 
-The sample sets time limits but does not deliberately exceed them or leave work running after cancellation.
-Those failure paths are checked in the [runtime tests](../../test/Raun.Test) and [host tests](../../test/Raun.Mtp.Test).
+The sample sets time limits but does not exceed them on purpose or leave work running after cancellation.
+The [runtime tests](../../test/Raun.Test) and [host tests](../../test/Raun.Mtp.Test) check those failure paths.
 
 For exact rules, see [writing scenarios](../../docs/reference/scenario-authoring.md),
 [resources](../../docs/reference/resources.md), and [running tests](../../docs/reference/running-tests.md).

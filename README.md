@@ -36,9 +36,9 @@ public async Task Booking()
 }
 ```
 
-The snippets on this page are excerpts from runnable samples, rather than a complete project.
+The snippets on this page are excerpts from runnable samples, not a complete project.
 See the [scenario class](samples/AppointmentTests/Scenarios.cs) and [step definitions and suite](samples/AppointmentTests/AppointmentDsl.cs).
-Run the sample from this repository with **.NET SDK 10.0.400 or later**:
+Run the sample from this repository with .NET SDK 10.0.400 or later:
 
 ```bash
 dotnet run --project samples/AppointmentTests -- --report-html --results-directory "$PWD/out"
@@ -167,8 +167,8 @@ public Task<Appointment> CreateAppointment(
 ```
 
 This [booking step](samples/AppointmentTests/AppointmentDsl.cs) reads a patient, reserves a slot,
-and creates an appointment linked to both. The four effects are **Create, Read, Update, Delete**:
-Read allows shared access; the other three require exclusive access. `[Seed]` records a Create
+and creates an appointment linked to both. The four effects are Create, Read, Update, and Delete.
+Read allows shared access, and the other three require exclusive access. `[Seed]` records a Create
 with the label Seed for data inserted behind the scenes. Use `[Created]` for creation through the system.
 The step code performs the real operation; attributes record what it does.
 
@@ -186,11 +186,11 @@ A custom action inherits its base effect's conflict rules. Its name defaults to 
 Alternate representations can share an identity through `IResourceAlternate<T>` on the resource owner,
 or `Identify<Patient>().With<PatientRow>(row => row.Id)` in custom-host configuration.
 Use `[ResourceKey<Patient>] string patientId` for a key-only input; it also works with a packaged role.
-Later steps can reuse readable labels from preceding dependencies without borrowing their object snapshots.
+Later steps can reuse readable labels from preceding dependencies without reusing their object snapshots.
 The [registry sample](samples/AppointmentTests/RegistryBookingScenarios.cs) and
 [tracking sample](samples/AppointmentTests/ResourceTrackingScenarios.cs) show these features together.
-Scenario-wide external-system access remains independent: `[Uses<T>(LockMode.Exclusive)]` holds its
-admission token through setup, execution, teardown, and scope disposal.
+Scenario-wide external-system access is separate from resource tracking. `[Uses<T>(LockMode.Exclusive)]`
+holds its admission token through setup, execution, teardown, and scope disposal.
 
 ## Tag scenarios and run a subset
 
@@ -212,8 +212,8 @@ which filters by them. See [tags](docs/reference/scenario-authoring.md#tags).
 ## Read the report when something fails
 
 Use the HTML report to inspect a failure or share a run. It includes step results, a resource matrix, and errors. Gantt bars behind the step titles show when steps ran and
-which overlapped. Nested `if` / `switch` branches keep their source labels; untaken branches are folded
-and can be expanded. Select a step duration to inspect named prerequisites or jump to an earlier step. Add `.Note(...)` to explain why a step matters. Use logs for values and events observed during it:
+which overlapped. Nested `if` / `switch` branches keep their source labels. The report folds untaken branches,
+and you can expand them. Select a step duration to inspect named prerequisites or jump to an earlier step. Add `.Note(...)` to explain why a step matters. Use logs for values and events observed during it:
 
 ```csharp
 Context.Log($"{endpoint}: {(int)status} {status}");
@@ -224,7 +224,7 @@ Use `Context.AddAttachment` for a response body or other text you want to inspec
 [logging and attachments](docs/reference/scenario-authoring.md#notes-logs-and-attachments) and
 [report options](docs/reference/running-tests.md#reports-and-test-selection).
 
-Resource lanes that do not fit open in an overlay aligned with the scenario. Type and method names reveal in italics on hover or focus; add `--report-source-base-url` to link them to source. See [source navigation](docs/reference/running-tests.md#source-navigation).
+Resource lanes that do not fit open in an overlay aligned with the scenario. The report shows type and method names in italics on hover or focus. Add `--report-source-base-url` to link them to source. See [source navigation](docs/reference/running-tests.md#source-navigation).
 
 ## Bring up real infrastructure and share its capacity
 
@@ -235,7 +235,7 @@ its [entry point](samples/AspireAppointments/AspireAppointments.Tests/Program.cs
 
 Use capacity limits when concurrent scenarios could interfere with shared infrastructure.
 The [schedule resource](samples/AspireAppointments/AspireAppointments.Tests/Scenarios.cs)
-allows concurrent bookings while clearing requests exclusive access:
+allows concurrent bookings, and the scenario that clears the schedule takes exclusive access:
 
 ```csharp
 [SharedResource]
@@ -244,7 +244,7 @@ public sealed class Schedule : IContendedResource;
 [Uses<Schedule>(LockMode.Exclusive)]
 ```
 
-Use shared access when scenarios can safely use the service together, exclusive access when a scenario
+Use shared access when scenarios can use the service together without interfering, exclusive access when a scenario
 needs it to itself, and a pool when only a fixed number may use it at once. Raun waits before Setup
 and holds capacity through teardown. See [shared capacity](docs/reference/running-tests.md#concurrent-scenarios-and-shared-capacity).
 
@@ -262,7 +262,7 @@ dotnet run -- --report-html --coverage --coverage-output-format xml
 ```
 
 See the sample's [collector setup](samples/AspireAppointments/AspireAppointments.Tests/Program.cs)
-and [coverage commands](samples/AspireAppointments/README.md#coverage-and-traces). Coverlet is also supported.
+and [coverage commands](samples/AspireAppointments/README.md#coverage-and-traces). Raun also supports Coverlet.
 
 Browse the [sample guide](samples/AppointmentTests/README.md) and [design notes](docs/superpowers/specs).
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

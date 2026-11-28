@@ -11,38 +11,38 @@ Set `RAUN_PACKAGE_FEED` to use a different local feed. It must contain exactly o
 version of each package, with all four versions matching.
 
 The cases build and run the Appointment sample, the Aspire sample, and a small
-app with a generated entry point. Each consumer lives outside the repository, uses
+app with a generated entry point. Each consumer sits outside the repository, uses
 exact package versions and a fresh cache, and gets Raun packages only from the local
 feed. External dependencies use the versions in the samples' lock files.
 
-Every consumer is built twice, at the two ends of what Raun supports:
+The suite builds every consumer twice, once at each end of the SDK range that Raun supports:
 
-- **oldest**: the lowest installed .NET SDK that Raun supports, targeting `net10.0`. A generator
-  the oldest supported compiler cannot load builds fine on the newest, so this is not the SDK the
-  repository pins.
-- **newest**: the highest installed .NET SDK, targeting its own framework (`net11.0`). This
-  consumer gets each package's newest assets, and its generated app adds scenarios that use C# 15
-  unions as step results: the one place the generator lowers a union inside the compiler a union
-  user really has. The samples are written for `net10.0`; here the same sources and package
-  versions are built for the newer target.
+- **oldest**: the lowest installed .NET SDK that Raun supports, targeting `net10.0`. This is not the
+  SDK the repository pins. A generator that the oldest supported compiler cannot load still builds
+  on the newest SDK, so only the oldest SDK shows that failure.
+- **newest**: the highest installed .NET SDK, targeting its own framework, `net11.0`. This
+  consumer gets each package's newest assets. Its generated app adds scenarios that use C# 15
+  unions as step results. It is the one place where the generator lowers a union inside the same
+  compiler that a union user has. The samples are written for `net10.0`, and here the same sources
+  and package versions are built for the newer target.
 
-A further scenario reads the packages themselves: every analyzer must reference a Roslyn no newer
-than its `roslynX.Y` folder names, and the `net10.0` dependency groups must stay on 10.x.
+A further scenario reads the packages themselves. Every analyzer must reference a Roslyn version no
+newer than its `roslynX.Y` folder names, and the `net10.0` dependency groups must stay on 10.x.
 
-The suite uses project references to bootstrap itself; only its child projects use
+The suite itself builds from project references. Only its child projects use
 the packages. It stays outside `Raun.slnx` because the packages must exist before it
-runs. CI and release run it after packing and before publishing.
+runs. The CI and release workflows run it after packing and before publishing.
 
 The report includes child-process output and consumer reports as attachments.
 Successful runs delete their consumer reports and temporary directories during Teardown.
 Failed runs keep them for inspection; their paths appear in the Given step's log.
 
-The suite exercises features where they describe real work:
+The suite uses these features where they describe real work:
 
 | Feature | Use in this suite |
 | --- | --- |
 | Inline cases | Both samples and the generated-entry-point app, each on the oldest and the newest SDK |
-| Resources, labels, and references | Feed → consumer → report in the matrix |
+| Resources, labels, and references | Links from the feed to the consumer and from the consumer to the report, in the matrix |
 | Custom resource actions | Restored and Built describe workspace changes |
 | Notes and resource-aware logs | Explain isolation and link output to consumers |
 | Branches | Aspire collects coverage; the other consumers use their normal runner |

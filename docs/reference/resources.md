@@ -25,7 +25,7 @@ public sealed record Appointment(Patient Patient, Slot Slot) : IResource<Appoint
 }
 ```
 
-Keys contain strings (`ResourceKey` wraps a string); the patient example keeps its stable ID separate from its display name.
+A key holds a string, because `ResourceKey` wraps a string. The patient example keeps its stable ID separate from its display name.
 
 `LabelFor` is optional. Labels never change resource identity. Explicit `Label<T>` selectors take
 priority, followed by an alternate's label contract and the source type's own `LabelFor`.
@@ -43,7 +43,7 @@ Object references keep their resource link and captured JSON when serialization 
 Key-only references keep the identity and link, with no object snapshot. Hover over an object reference
 to inspect or copy its snapshot.
 Labels and snapshots are captured at the reference; later changes do not rewrite them.
-Use synthetic test data: Raun does not redact reports or artifacts.
+Use synthetic test data. Raun does not redact reports or artifacts.
 
 ## Alternate resource representations
 
@@ -66,7 +66,7 @@ public sealed record Patient(string Id, string Name) :
 }
 ```
 
-All three resolve to **Patient + key**. Their resource roles share conflict detection, lineage, and
+All three resolve to one identity, made of the Patient kind and the key. Their resource roles share conflict detection, lineage, and
 report links. `[Read, ResourceKey<Patient>] string patientId` and `Context.Resources.Read<PatientRow>(key)`
 refer to that same identity. Keys returned by each extractor must agree; key-only references already
 contain the canonical key and cannot transform it without an object. Distinct resource kinds can
@@ -120,7 +120,7 @@ It remains available through `Context.Resources`, alongside `Label<T>`.
 
 Configure groups and mapped extractors before the first successful identity resolution; they then
 freeze so stored claims and references stay consistent. Reapplying identical defaults is harmless.
-Typed groups merge, named kinds win over typed kinds, and distinct named groups cannot merge.
+Typed groups merge, named kinds take precedence over typed kinds, and distinct named groups cannot merge.
 Named kinds use ordinal, case-sensitive names. `ResourceIdentity.Kind` covers both forms;
 its `Type` property is null for named kinds.
 
@@ -174,8 +174,9 @@ public sealed class Booked : CreatedAttribute
 public Task<Appointment> Book([Booked.Patient] Patient patient, [Booked.Slot] Slot slot2) { ... }
 ```
 
-This records Read on the patient, Reserve/Update on the slot, and Booked/Create on the returned
-appointment. It also records two links: booking → Patient → patient and booking → Slot → slot.
+This records Read on the patient, Reserve as an Update on the slot, and Booked as a Create on the returned
+appointment. It also records two links. One goes from the booking to the patient with the role Patient.
+The other goes from the booking to the slot with the role Slot.
 A link is an independent `ResourceLink` with `Source`, `Role`, and `Target`; it adds no access claim
 or resource effect. Two roles can connect the same identities. Exact duplicate links are recorded once.
 
@@ -194,7 +195,7 @@ public Task<Appointment> Book(
     [Reserved, Link<Booked>("Slot")] Slot slot2) { ... }
 ```
 
-A raw link always requires a separate input action. If the step applies the same owning action more
+A raw link requires a separate input action. If the step applies the same owning action more
 than once, set `Source = nameof(ownerParameter)` or `Source = Subject.Return` on the raw link.
 Raun reports missing, duplicate, ambiguous, or incompatible bindings at compile time. A failed return
 creates no return-owned link. Self-links are rejected after canonical identity resolution.
@@ -239,12 +240,12 @@ See the [registry sample](../../samples/AppointmentTests/RegistryBookingScenario
 A label from `Label<T>`, an alternate representation's `LabelFor`, or `IResource<T>.LabelFor`
 is remembered for that canonical resource identity during the scenario. Later key-only references
 reuse it in titles, notes, logs, and resource effects. A blank label or a selector that throws
-cannot erase a good name. Different representations of the same identity share that name;
+does not replace a remembered name. Different representations of the same identity share that name;
 different resource kinds and scenario cases keep separate names.
-`:id` still shows the key; key-only references never borrow a previous object's snapshot.
+`:id` still shows the key; key-only references never use a previous object's snapshot.
 
-A step can see its own earlier observations and its graph predecessors. A causally newer name wins.
-When independent predecessor branches meet, the later node in scenario order wins, regardless of
-completion order. Unrelated parallel steps and separate scenario runs do not share observations.
-Cleanup sees the drained scenario's names. Captured titles, logs, and snapshots stay frozen.
+A step can see its own earlier observations and its graph predecessors. A causally newer name takes precedence.
+When independent predecessor branches join, the name from the later node in scenario order takes precedence,
+regardless of completion order. Unrelated parallel steps and separate scenario runs do not share observations.
+Cleanup sees the drained scenario's names. Captured titles, logs, and snapshots do not change.
 

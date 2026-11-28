@@ -1,8 +1,9 @@
 # Raun samples
 
-Start with **GettingStarted**: one booking, ordinary C# steps, resource effects, and assertions.
-There is no Program.cs; Raun generates the MTP host. Project references require a few MSBuild
-settings that package consumers get from Raun.Mtp automatically.
+Start with GettingStarted. It has one booking, ordinary C# steps, resource effects, and assertions.
+There is no Program.cs, because Raun generates the Microsoft Testing Platform host. A sample that
+references Raun by project reference needs a few MSBuild settings. Package consumers get those
+settings from Raun.Mtp.
 
 ```sh
 dotnet run --project samples/GettingStarted -- --report-html
@@ -12,8 +13,9 @@ dotnet tool restore
 (cd samples/MutationTesting && dotnet stryker -f stryker-config.json -O ../../artifacts/stryker/scenario)
 ```
 
-AppointmentTests uses a custom Main to simulate durations and register TRX. AspireAppointments
-uses one to start a real AppHost, configure clients and services, and wire coverage and tracing.
+AppointmentTests uses a custom Main to simulate durations and register the TRX report provider.
+AspireAppointments uses a custom Main to start a real AppHost, configure clients and services, and
+set up coverage and tracing.
 The projects are also included in `dotnet test Raun.slnx`.
 
 | Capability | Example |
@@ -31,8 +33,8 @@ The projects are also included in `dotnet test Raun.slnx`.
 | Coverage leaf and optional trace export | [Aspire host](AspireAppointments/AspireAppointments.Tests/Program.cs); coverage collection/export requires the documented options/environment |
 | Mutation testing: one test per scenario under Stryker.NET, a sentinel mutant | [MutationTesting](MutationTesting/README.md) |
 
-The registry journey represents a realistic service boundary. Its external row has PatientId and
-FullName; its domain patient has Id and Name. Both map to Patient + pat-42. Approval changes
+The registry journey models a service boundary. Its external row has PatientId and
+FullName; its domain patient has Id and Name. Both map to the Patient resource with key pat-42. Approval changes
 registry state, booking requires that approval, and the final step reads back the stored booking.
 The booking API takes only the patient ID. Typed relationship metadata still links it to the same
 patient, and earlier evidence supplies Jane's readable name. The report browser checks verify the
@@ -40,17 +42,18 @@ identity, both original representation snapshots, the relationships, and the abs
 on the key-only reference and audit.
 
 The report checks also verify both optional-title choices, formatted members, and the absence of
-booking effects/relationships on waitlisted and refused outcomes. They run against actual sample
-output in CI; they do not infer coverage from an attribute merely being present in source.
+booking effects/relationships on waitlisted and refused outcomes. CI runs them against real sample
+output. They do not count an attribute that is present in source as coverage.
 
 ## Configuration and failure examples
 
-Runtime cancellation, failing timeouts, forced process termination and cleanup failure policies
-belong in dedicated runtime tests, rather than intentionally breaking these happy-path suites.
+Dedicated runtime tests cover runtime cancellation, failing timeouts, forced process termination
+and cleanup failure policies. These samples are happy-path suites and do not fail on purpose.
 The business cancellation scenarios cancel appointments; they do not cancel the test runner.
-Configured deadlines in the lifecycle examples normally do not expire.
+The deadlines configured in the lifecycle examples do not expire in a normal run.
 
-Concurrency caps and filtering are useful run settings, not extra domain steps:
+Concurrency caps and filtering are run settings, not domain steps. These commands limit concurrency,
+run one scenario, and write a TRX report:
 
 ```sh
 dotnet run --project samples/GettingStarted -- --max-parallel-scenarios 1 --max-parallel-steps 2
@@ -58,10 +61,10 @@ dotnet run --project samples/AppointmentTests -- --treenode-filter "/*/*/*/custo
 dotnet run --project samples/AppointmentTests -- --report-trx
 ```
 
-Fluent identity mappings, named kinds, explicit label selectors, pool capacity, and alternate
-relationship syntax are documented in the [main README](../README.md). The registry uses the
-interface-first mapping path; a second mapping configuration for the same example would obscure
-that default. Provider overloads and diagnostic errors are covered by dedicated tests. These
-samples demonstrate user journeys, not every possible API permutation.
+The [main README](../README.md) documents fluent identity mappings, named kinds, explicit label
+selectors, pool capacity, and alternate relationship syntax. The registry uses the interface-first
+mapping, which is the default. A second mapping configuration for the same example would hide that
+default. Dedicated tests cover provider overloads and diagnostic errors. The samples show user
+journeys and do not cover every API combination.
 
-The report keeps crowded resource lanes in a compact activity column. Click a symbol to inspect the full lanes in a scrollable popover. Hover over or focus a heading to reveal its italic type or method name. To try source navigation, add `--report-source-base-url "https://github.com/redoz/Raun/blob/main/"` to an example command above; the headings then link to the corresponding source lines.
+The report keeps crowded resource lanes in a compact activity column. Click a symbol to inspect the full lanes in a scrollable popover. Hover over or focus a heading to show its italic type or method name. To try source navigation, add `--report-source-base-url "https://github.com/redoz/Raun/blob/main/"` to an example command above. The headings then link to the matching source lines.

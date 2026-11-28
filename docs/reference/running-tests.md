@@ -4,7 +4,7 @@
 
 ## Install and run
 
-Use **.NET SDK 10.0.400 or later**. Create a console project and add Raun:
+Use .NET SDK 10.0.400 or later. Create a console project and add Raun:
 
 ```bash
 dotnet new console -n MyScenarios
@@ -32,12 +32,12 @@ For `dotnet test`, select MTP in the solution's `global.json`:
 
 Scenarios run concurrently, up to the processor count by default. Each gets its own DI scope and trace.
 Scenario scopes are disposed asynchronously after teardown, including async-only scoped services.
-Resource admission waits for disposal to finish. Disposal failures surface as framework errors after
+Resource admission waits for disposal to finish. Raun reports disposal failures as framework errors after
 already-running scenarios drain; they do not change an already-reported teardown result.
 Use isolated test data. Start an existing suite with `--max-parallel-scenarios 1`.
-Clamp independent steps with `--max-parallel-steps 8`. This limit applies **per scenario**, not to the
+Limit concurrent independent steps with `--max-parallel-steps 8`. This limit applies per scenario, not to the
 whole run; four active scenarios with eight steps each can run up to 32 steps concurrently.
-`0` (default) leaves steps unbounded; `1` runs one step at a time within each scenario. Dependencies
+`0`, the default, leaves steps unbounded; `1` runs one step at a time within each scenario. Dependencies
 and resource-conflict rules still apply. Work started inside a step is outside this scheduler limit.
 Set the code default with `RaunTestApplication.RunAsync(args, maxParallelSteps: 8)`,
 `RunLoop(..., maxParallelSteps: 8)`, or `AspireRunOptions.MaxParallelSteps`. The CLI value overrides it.
@@ -58,7 +58,7 @@ The report shows time spent waiting.
 
 ## Reports and test selection
 
-`--report-html` writes a self-contained report into the results directory, named after the test assembly and its target framework (`Clinic.Tests_net10.0.html`), so several projects or frameworks can share one results directory; `--report-html-filename` sets another name. The run lists the report among its artifacts, and says so on the console when it could not be written. Its Scenarios view shows step results, timing, a resource matrix, logs, attachments, and errors.
+`--report-html` writes a self-contained report into the results directory. The file is named after the test assembly and its target framework, for example `Clinic.Tests_net10.0.html`, so several projects or frameworks can share one results directory. `--report-html-filename` sets another name. The run lists the report among its artifacts. If the report could not be written, the console says so. Its Scenarios view shows step results, timing, a resource matrix, logs, attachments, and errors.
 Select a resource reference to highlight its uses; click outside the matrix or press Esc to clear the selection.
 The IDE reports each step as a test. Selecting a step runs its dependencies, branch conditions, merge sources, and cleanup, but no later steps.
 
@@ -72,10 +72,10 @@ dotnet run -- --max-parallel-scenarios 4 --maximum-failed-tests 1
 
 [Tags](scenario-authoring.md#tags) are filter properties on every step of their scenario. A key with
 several values matches when any value does; `[key!=value]` matches only when none does. Combine with
-`&` and `|`, and use `*` wildcards in values. Matching ignores case. Use `!=` to exclude: the
+`&` and `|`, and use `*` wildcards in values. Matching ignores case. Use `!=` to exclude. The
 platform's `!(...)` does not negate reliably. In the HTML report, select tags in the bar above the
-scenarios or on a scenario's chips to show scenarios with any of them. The selection is kept in the
-URL (`?tag=area:users&tag=area:lifecycle`), so a filtered report can be reloaded or shared. A tag every
+scenarios or on a scenario's chips to show scenarios with any of them. The report keeps the selection in the
+URL, as in `?tag=area:users&tag=area:lifecycle`, so you can reload or share a filtered report. A tag every
 scenario carries is offered in the bar but left off the chips.
 
 Paths are `/{assembly}/{namespace}/{class}/{scenario}/{step}`.
@@ -85,14 +85,14 @@ IDEs use `--filter-uid`. MTP does not accept `--filter` or `--nologo` here.
 `--maximum-failed-tests` stops new scenarios; running scenarios finish.
 
 Expanded scenarios include a small dependency pixel matrix next to the status marks. Each column
-represents a step in narrative order. A hollow square marks the current step; colored cells name its
+represents a step in narrative order. A hollow square marks the current step; colored cells mark its
 dependencies. Diamonds mark branch conditions, hollow dependency cells mark alternative merge inputs,
-and short bars mark ordering constraints. Untaken paths stay present but muted. Hover or focus a cell
-to name the connection and highlight its two steps. Wide matrices scroll sideways with all rows aligned.
+and short bars mark ordering constraints. Untaken paths remain visible in muted colors. Hover or focus a cell
+to show the name of the connection and highlight its two steps. Wide matrices scroll sideways with all rows aligned.
 
 ### Source navigation
 
-Resource lanes collapse to a compact activity column when they do not fit. Click its symbol to open a wider resource-lane overlay. It matches the expanded scenario’s height, keeps each lane aligned with its step, and moves with the report’s vertical scroll. Scroll horizontally or use the arrow controls to see more lanes. Escape or a click outside closes it. Type and method names appear in italics when you hover over or focus a group or scenario heading.
+Resource lanes collapse to a compact activity column when they do not fit. Click its symbol to open a wider resource-lane overlay. It matches the expanded scenario's height, keeps each lane aligned with its step, and moves with the report's vertical scroll. Scroll horizontally or use the arrow controls to see more lanes. Escape or a click outside closes it. Type and method names appear in italics when you hover over or focus a group or scenario heading.
 
 To link those names to source, pass a file-view base URL that includes your branch or commit:
 
@@ -119,8 +119,8 @@ return await RaunTestApplication.RunAsync(args,
 ```
 
 Preflight runs once and reports as a test node. Failure skips all scenarios.
-A host that serves several test sessions (an IDE, or Stryker.NET running one session per mutant) still starts it only once:
-later sessions reuse a successful start and retry a failed one.
+A host that serves several test sessions, such as an IDE or Stryker.NET running one session per mutant, still starts it only once.
+Later sessions reuse a successful start and retry a failed one.
 `sessionPreflight` is optional. It is for cheap resets, such as clearing a database, and runs at the start of every session
 after `preflight`, in the same node. A failure skips only that session's scenarios.
 See [Mutation testing with Stryker.NET](#mutation-testing-with-strykernet) for how scenarios are reported there.
@@ -134,20 +134,20 @@ The report shows coverage for logical branches and for all branches.
 Every branch has one outcome: covered, partly covered, not covered, or can't tell. With Microsoft coverage XML, an argument check counts as covered once a test triggers it. With Coverlet, it needs both the passing and the rejecting path. Microsoft coverage XML can show whether expressions such as `??` and `?:` ran, but not which path they took.
 
 Classified coverage is optional. Add a `Raun.Coverage` package reference alongside a compatible collector.
-`Raun.Mtp` and `Raun.Aspire` do not depend on coverage or its Roslyn/MSBuild analysis assets.
+`Raun.Mtp` and `Raun.Aspire` do not depend on coverage or its Roslyn and MSBuild analysis assets.
 Generated entry points enable the integration when the leaf package is referenced. For a custom `Main`,
-register `builder.UseClassifiedCoverage()` in `RaunTestApplication.RunAsync`'s `configure` callback
-(or Aspire's `ConfigureTestApplication`), using namespace `Raun.Mtp`.
+register `builder.UseClassifiedCoverage()` in `RaunTestApplication.RunAsync`'s `configure` callback,
+or in Aspire's `ConfigureTestApplication`, using namespace `Raun.Mtp`.
 Middleware registration also enables the integration. The middleware API retains its source namespace
 and ships in `Raun.Coverage`.
 
-The source in the report is the test project and what it references, plus the projects the run hosts:
-code that runs because of the tests but in a process of its own. `Raun.Aspire` names every .NET project
-the AppHost runs, read from the application itself, so it does not matter how the AppHost adds them
-(`AddDotnetProject` by path needs no project reference). For a process you start yourself, name its
+The source in the report is the test project and what it references, plus the projects the run hosts.
+A hosted project runs because of the tests, but in a process of its own. `Raun.Aspire` names every .NET project
+the AppHost runs, read from the application itself, so it does not matter how the AppHost adds them.
+`AddDotnetProject` by path needs no project reference. For a process you start yourself, name its
 project in `configure`: `builder.GetCoverageSourceProjects().Add(pathToCsproj)`.
 A hosted project the collector reported nothing from is a warning, printed when the run ends and listed
-in the report: its numbers are all "can't tell", and the usual cause is a collector that does not follow
+in the report. Its numbers are all "can't tell". The usual cause is a collector that does not follow
 child processes or does not include that assembly.
 
 Register a compatible collector for the report's Coverage view.

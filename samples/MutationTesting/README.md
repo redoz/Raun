@@ -5,9 +5,9 @@ Stryker.NET mutates the library and runs the scenarios against every mutant.
 Stryker's Microsoft.Testing.Platform runner is a preview feature of Stryker.NET.
 
 Under Stryker, Raun reports one test per scenario instead of one per step. Stryker runs every test on its own
-to learn which code it covers, and running one step means running the steps before it, so per-step tests
-would re-run the earlier steps over and over. Raun detects Stryker through the `STRYKER_MUTANT_FILE` environment variable;
-`RAUN_TEST_GRANULARITY=step|scenario` overrides that.
+to learn which code it covers. Running one step means running the steps before it, so per-step tests
+would run the earlier steps again for every later step. Raun detects Stryker through the `STRYKER_MUTANT_FILE`
+environment variable. Set `RAUN_TEST_GRANULARITY=step|scenario` to override the detection.
 
 The sample runs Stryker twice. Restore the pinned tool once from the repository root, then run from this directory:
 
@@ -23,12 +23,16 @@ Then, from the repository root, check the reports:
 node test/Stryker/check-report.cjs artifacts/stryker/scenario/reports/mutation-report.json artifacts/stryker/step/reports/mutation-report.json
 ```
 
-The check requires that the first run lists scenario tests, that the second lists step tests for the same
-scenarios, that both runs agree on every mutant, and that every mutant outside the sentinel line is killed,
-timed out, failed to compile or was ignored by Stryker, with at least one of them killed.
+The check requires that:
+
+- the first run lists scenario tests
+- the second run lists step tests for the same scenarios
+- both runs agree on every mutant
+- every mutant outside the sentinel line is killed, timed out, failed to compile or was ignored by Stryker
+- at least one mutant is killed
 
 ## The sentinel
 
-The one line in `Booking/BookingRules.cs` marked `// stryker-sentinel` is called by a step but never asserted on,
+A step calls the one line in `Booking/BookingRules.cs` marked `// stryker-sentinel`, but no assertion checks it,
 so its mutant must survive. A broken test host would fail every test and "kill" every mutant, which looks like a
-perfect score. A surviving sentinel shows the tests ran and judged the code.
+perfect score. A surviving sentinel shows that the tests ran and that their assertions checked the code.

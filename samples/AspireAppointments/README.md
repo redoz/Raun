@@ -37,6 +37,6 @@ dotnet run --project samples/AspireAppointments/AspireAppointments.Tests -- --re
 
 Raun.Coverage classifies the recorded branches. The report shows both logical-branch coverage and total branch coverage.
 To export traces, set `OTEL_EXPORTER_OTLP_ENDPOINT` to your collector before running the sample.
-The test process and API then export spans to that collector. Without the variable, neither enables export.
+The test process and the API then export spans to that collector. Without the variable, neither process exports spans.
 
 See [running tests](../../docs/reference/running-tests.md) for runner options and provider setup.

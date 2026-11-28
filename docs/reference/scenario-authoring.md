@@ -13,13 +13,13 @@ Use any assertion library. Put retries and polling inside steps.
 World-independent steps can also run in a suite with a world. A step that declares a world type must
 match the suite's world. Existing generic forms using `NoWorld` remain supported.
 
-Scenario bodies are processed at build time; do not call them directly. The analyzer reports unsupported syntax.
+The source generator processes scenario bodies at build time, so do not call them directly. The analyzer reports unsupported syntax.
 See the [scenario](../../samples/AppointmentTests/Scenarios.cs) and [step definitions](../../samples/AppointmentTests/AppointmentDsl.cs).
 
 ## A complete starter example
 
 After the [installation steps](running-tests.md#install-and-run), save this as PatientScenarios.cs.
-This small example shows the class wiring. Replace the local name step with calls to your application.
+This example shows how the classes connect. Replace the local name step with calls to your application.
 
 ```csharp
 using Raun;
@@ -77,19 +77,19 @@ public async Task EndpointAccess(string endpoint, EndpointRole role, HttpStatusC
 ```
 
 Each row appears as a separate scenario, such as `endpoint access [reader]`, with its own world,
-DI scope, Setup and teardown. Steps can be discovered, filtered and reported independently. See the
+DI scope, Setup and teardown. You can discover, filter and report its steps on their own. See the
 runnable [authorization example](../../samples/AppointmentTests/AuthorizationScenarios.cs), which also checks
 forbidden access to an admin endpoint with a local handler.
 
 Case parameters are read-only inside step argument expressions.
 
-Use positional primitive/string constants, enum values (including flags), and null for nullable
+Use positional primitive/string constants, enum values, flags enums included, and null for nullable
 parameters. Arguments follow C# implicit conversion rules. Arrays, `typeof` values, member-data
 providers and DI-created argument values are not supported. Case methods cannot be generic,
 overloaded, or use optional, `params` or by-reference parameters.
 
 Case names must be nonblank and unique within the method; they are case-sensitive. Keep those names
-stable: scenario and step IDs use the method identity and case name. Editing values or reordering rows
+stable. Scenario and step IDs use the method identity and case name. Editing values or reordering rows
 preserves their IDs; renaming a case changes them. Rows appear in source order. Parameterized scenarios
 require at least one row; parameterless scenarios continue to use `[Scenario]` alone.
 
@@ -100,7 +100,7 @@ case, including Setup and teardown:
 dotnet run --project samples/AppointmentTests -- --treenode-filter '/*/*/*/endpoint access \[reader\]/*'
 ```
 
-IDE step-UID selection also isolates an individual case.
+Selecting a step UID in the IDE also runs a single case.
 
 ## Step titles
 
@@ -132,13 +132,12 @@ public Task Create(string name, string? time = null) => Task.CompletedTask;
 
 In the example, `Create("Jane")` selects the shorter title;
 `Create("Jane", time: "09:00")` selects the title that also mentions the time.
-Explicitly supplied null values count as supplied arguments for title selection.
+A null value passed explicitly counts as a supplied argument for title selection.
 
 See the [title examples](../../samples/AppointmentTests/ResourceTrackingScenarios.cs) for a runnable example.
 
 Use `Steps<T>()` properties inside step classes to group methods, such as `Given.Patients.Exists(...)`.
 For a custom phase, derive from `Phase` or `Phase<TWorld>` and add `[PhaseName("Eventually")]`.
-Scenario bodies are generator input; do not call them directly. Compiler diagnostics reject unsupported syntax.
 
 ## Parallel groups, arguments, and branches
 
@@ -150,7 +149,7 @@ var users = await new[] { Given.UserExists("alice"), Given.UserExists("bob") };
 var more = await Enumerable.Range(1, 3).Select(i => Given.UserExists($"u{i}")).ToArray();
 ```
 
-Tuples support 2–8 steps. Groups support `Task` and `Task<T>`, but not `ValueTask`.
+Tuples support 2 to 8 steps. Groups support `Task` and `Task<T>`, but not `ValueTask`.
 A group returns values only when every step returns `Task<T>`.
 Arguments can construct objects or read earlier results, such as `Then.AppointmentExists(booked.Appointment)`.
 Raun records those dependencies and evaluates arguments when the consuming step starts.
@@ -179,7 +178,7 @@ See the [branch examples](../../samples/AppointmentTests/BookingOutcomeScenarios
 
 Implement `IScenarioWorld<TWorld>.CreateAsync(ScenarioContext)` to create scenario state.
 Raun calls it in each scenario's `Setup` node. Steps access that state through `World` and runtime services through `Context`.
-A failed Setup skips the scenario's steps. Disposable worlds are released during teardown.
+A failed Setup skips the scenario's steps. Raun releases disposable worlds during teardown.
 
 Resolve services from `context.Services` in the factory. Use `context.Scenario` for scenario metadata.
 Parallel steps share one world and step-class instance, so keep references stable and services safe for concurrent use.
@@ -187,8 +186,8 @@ See the [world example](../../samples/AppointmentTests/CancellationScenarios.cs)
 
 ## Tags
 
-Tags are `key=value` pairs. Put `[Tag]` on a scenario, on its class (every scenario in it, nested
-classes included), or on the assembly. It repeats, and one key can have several values:
+Tags are `key=value` pairs. Put `[Tag]` on a scenario, on its class, or on the assembly. A tag on a class applies to every
+scenario in it, nested classes included. `[Tag]` can repeat, and one key can have several values:
 
 ```csharp
 [assembly: Tag("suite", "appointments")]
@@ -203,8 +202,8 @@ public sealed class Scenarios : AppointmentSuite
 }
 ```
 
-To name a set of tags, put them on your own attribute class. Applying the attribute applies them all,
-and such attributes can carry each other:
+To name a set of tags, put them on your own attribute class. Applying the attribute applies all its
+tags. Such an attribute class can itself be marked with another one:
 
 ```csharp
 [Tag("area", "users")]
@@ -214,19 +213,25 @@ public sealed class UserImportAttribute : Attribute;
 ```
 
 The generator reads tags at compile time, so an attribute from a shared library works too. A
-scenario's tags run assembly, classes (outermost first), then the method; a pair reached twice is
-kept once, compared case-insensitively. Tags select runs with `--treenode-filter`
-([running tests](running-tests.md#reports-and-test-selection)), appear as traits in the IDE and as
-properties in the TRX, and filter the HTML report.
+scenario's tags come in this order: assembly, then classes from the outermost, then the method.
+A pair that appears twice is kept once, and the comparison ignores case. Use `--treenode-filter` to
+select runs by tag, as [running tests](running-tests.md#reports-and-test-selection) describes. Tags
+also appear as traits in the IDE and as properties in the TRX report, and they filter the HTML report.
 
-`RAUN037` rejects an empty key or value, leading or trailing whitespace, any of `= [ ] ( ) & | ! / *`
-(filter syntax), `:` in a key (the report writes tags as `key:value`), and the keys `Phase` and
-`Scenario`, which the filter already matches. See the [tag sample](../../samples/AppointmentTests/Tags.cs).
+`RAUN037` rejects these tags:
+
+- an empty key or value
+- leading or trailing whitespace
+- any of `= [ ] ( ) & | ! / *`, which are filter syntax
+- `:` in a key, because the report writes tags as `key:value`
+- the keys `Phase` and `Scenario`, which the filter already matches
+
+See the [tag sample](../../samples/AppointmentTests/Tags.cs).
 
 ## Notes, logs, and attachments
 
 Attach explanations to `Task` or `Task<T>` with `.Note("why")` or `.Note($"why {patient}")`.
-Notes remain on skipped steps when their inputs are available. Inside a step:
+Notes remain on skipped steps when their inputs are available. Inside a step, log and attach text through `Context`:
 
 ```csharp
 Context.Log($"Booked {appointment} for {patient:id}");
@@ -236,7 +241,7 @@ Context.AddAttachment("response.json", responseJson);
 
 Logs belong to the active step and include elapsed time. Text attachments become run artifacts.
 Add `new RaunLoggerProvider()` to application logging to capture its logs under the active step.
-Called code can use `ScenarioContext.Current`.
+Code that a step calls can read the context from `ScenarioContext.Current`.
 
 ## Cleanup and timeouts
 
@@ -258,22 +263,23 @@ Required cleanup still runs after failure, cancellation, or timeout.
 Set limits in milliseconds: `[Scenario("booking", Timeout = 30000)]` or `[StepName("When booking", TimeoutMs = 5000)]`.
 A timeout requests cancellation and allows **60 seconds of grace** for the operation to stop. During grace,
 Raun retains its services and resource ownership and waits before cleanup. Work that stops during grace
-still reports the original timeout failure. Host cancellation uses the same grace period, with cooperative
-cancellation reported as skipped.
+still reports the original timeout failure. Host cancellation uses the same grace period. Raun reports
+work that stops cooperatively after host cancellation as skipped.
 
 Each selected cleanup also has its own **60-second deadline**, independent of the scenario timeout.
-Its `ScenarioContext.CancellationToken` is fresh for that callback. When the deadline expires, Raun
+Each callback gets a fresh `ScenarioContext.CancellationToken`. When the deadline expires, Raun
 requests cancellation and applies the same grace period. Cleanup that stops during grace records a
-callback-specific timeout failure; later callbacks still receive fresh tokens and run in the existing
+timeout failure for that callback. Later callbacks still receive fresh tokens and run in the existing
 reverse dependency/registration order. Scope disposal and resource release wait until cleanup stops.
-Override the positive callback deadline with `--cleanup-timeout-ms 60000`, or pass `cleanupTimeout`
-to `ScenarioScheduler` / `RunLoop`. A callback that survives grace terminates the host before later
-cleanup can run. These are per-callback limits, not one shared budget for the whole teardown.
+Override the callback deadline with `--cleanup-timeout-ms 60000`, which takes a positive value, or pass
+`cleanupTimeout` to `ScenarioScheduler` or `RunLoop`. If a callback still runs after grace, Raun
+terminates the host before later cleanup can run. Each callback has its own limit, and the teardown
+as a whole has no shared budget.
 
-Override grace per run with `--cancellation-grace-ms 60000` (`0` allows no grace), or pass
-`cancellationGracePeriod` to `ScenarioScheduler` / `RunLoop` when hosting the runtime directly.
-If work or its cancellation callbacks remain alive after grace, Raun **terminates the entire test-host
-process**, including other scenarios. This bypasses managed shutdown handlers: required cleanup may not
-run, external resources may remain, and HTML/TRX reports or buffered logs may be incomplete. Grace is
+Override grace per run with `--cancellation-grace-ms 60000`, where `0` allows no grace. When you host
+the runtime yourself, pass `cancellationGracePeriod` to `ScenarioScheduler` or `RunLoop` instead.
+If work or its cancellation callbacks still run after grace, Raun **terminates the entire test-host
+process**, including other scenarios. This bypasses managed shutdown handlers. Required cleanup may not
+run, external resources can remain, and HTML/TRX reports or buffered logs can be incomplete. Grace is
 measured in real time, including when step timing is simulated.
 Pass `Context.CancellationToken` to asynchronous work so it can stop.
